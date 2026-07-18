@@ -1,67 +1,129 @@
 # Improvement Backlog
 
-## Current status (2026-07-12)
+> **This file lists only open work.** Completed items are deleted rather than marked done —
+> shipped history is in `git log` and the merged-PR list, and the full design/scoping docs for
+> delivered or deferred features (the two-tier scripting stack, area fill, the Luau plugin
+> system, the MCP server) are in this file's git history: `git show edf773d:PLAN.md`.
+> Reminder: this repo squash-merges, so `git merge-base --is-ancestor <branch> master` reports
+> merged work as unmerged — use `gh pr list --state merged` to check.
 
-> ⚠️ **Most of this document is already implemented.** It is a long-lived backlog written ahead of
-> the work, so a section describing a feature usually means it *shipped*, not that it is pending.
-> **Verify an item against `master` before treating it as open** (grep for the code; check
-> `gh pr list --state merged`). This repo squash-merges, so `git merge-base --is-ancestor <branch>
-> master` is NOT a valid "is it merged" test — it reports merged work as unmerged.
+*Last compacted: 2026-07-15.*
 
-**Shipped (on `master`):** the two-tier scripting/prefab stack — Tier-1 patterns + Tier-2 Luau
-generation, **Fill Selection + the freehand Fill Brush** (Feature A); the **reachability overlay**
-(editor + headless) on a shared `geck::reachability` core; **`.edg` map-edge round-trip + the
-interactive Map Edges editor**; the **map-analysis / MCP tools** (`describe_map`, `map_graph`,
-`reachability`, `world_map`, FRM inspection, resource inspection, spatial-script viz/select);
-**map name/info editing** (maps.txt round-trip, map.msg); the **hex-accurate light overlay**; and the
-data-path / file-browser / loading-dialog work (reconfiguration fixes, explicit save location, load
-priority, progress-dialog fixes). The 13-WP architecture roadmap is delivered.
+## What's next (priority order)
 
-**Scrapped:** the **Luau plugin system (Feature B)** — deferred indefinitely, see §4 for the
-rationale and PR #122 for the deferral + removal of its dead substrate.
+1. **Cave rim quality** — the known-issues list below; highest-value generation work.
+2. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
+3. **SSL script editing** — unstarted; Phase 1 toolchain glue is the entry point.
+4. **Minimap / overview panel** (feature-gap audit).
+5. **In-game preview mode** — idle animations first.
+6. **Analysis/MCP tail** — small, self-contained items.
+7. **Editor UX** — configurable keybindings + customizable toolbar (share one command/action
+   table); undo residuals; log-panel follow-ups.
 
-**Genuinely pending (candidates for "what's next"):**
-- **Procedural generation → authored wall-adjacency (Wang / edge-constraint tiling)** — replace
-  per-hex wall sampling with an edge-constraint model. The flagged "➡️ Next" and the highest-value
-  generation-quality improvement; *not on master*.
-- **Analysis/MCP roadmap tail** (§"Next capabilities"), **SSL script editing** polish (§"SSL Script
-  Editing Integration"), **in-game preview mode** (idea/scoping), **MCP server hardening**
-  (deferred follow-ups) — check each against `master` first; parts are already done.
-- **Architecture polish residuals** (below) — opportunistic, low value.
+---
 
-## Architecture
+# Procedural generation
 
-The 13-work-package architecture roadmap is delivered.
+**Standing decisions (guard notes — do not re-litigate):**
 
-**Evaluated and intentionally NOT pursued (churn > value):**
-- **PRO/MAP serialization visitor.** SKIP. The clean visitor pattern used for the fixed
-  common/header/trailer blocks does not carry to the type-specific tails (mixed field widths, a
-  `uint8_t soundId`, optional-on-read/unconditional-on-write fields a symmetric visitor cannot
-  express, plus union/subtype dispatch). It would add machinery over the highest-blast-radius code
-  without removing the drift risk; the read->write->read round-trip test net already provides
-  the safety.
-- **`ProFieldFactory` extraction / spacing-token consolidation / `BasePanel` re-parent.** SKIP.
-  Only ~15 LOC is genuinely shared (from a single non-inheriting widget) and it carries a materialId
-  index-vs-value fidelity trap; the spacing sources hold *different* values (not dupes), so
-  consolidation would pixel-shift layouts; `BasePanel` is a grid-browser base that would force stub
-  overrides on the form-inspector panels.
+- **Blind statistical generation is a dead end.** Frequency-weighted scatter still drops
+  structural objects (vault doors, cars) at random hexes — *what* is scatter-able is semantic,
+  not statistical. Curated per-biome palettes are the scatter primitive; an AI agent over the
+  MCP is the intelligence layer; `mapSceneryHistogram` is an analysis tool, not a generator.
+- **Seamless floors shipped as patch quilting** (`FloorSynth`, `api:quiltFloor*`/`quiltObjects`,
+  PRs #125/#126). **Do not rebuild** the `autotile_floor`/`FloorTileSet`/Wang-variant-table
+  design — it was built (A1/A2) and deleted by design in favor of Luau fills + quilting.
+- **Orientation is a variant set** (pre-authored direction-specific art the editor cycles),
+  never geometric rotation — F2 object art is direction-specific.
+- The Tier-2 scripting runtime is **Luau + LuaBridge3** (spike-validated over sol2/PUC-Lua on
+  sandbox safety); decision record in git history.
 
-**Deferred (real but modest, do opportunistically):**
-- **PanelVisibilityController.** Extracting the panel-visibility snapshot/restore/persist state
-  machine (~130 LOC + 3 members) would trim `MainWindow`, but it stays `QDockWidget`/`QAction`-bound
-  with no pure testable core and bidirectional wiring back into `MainWindow`. Fold it into the next
-  change that touches dock/panel behavior rather than doing it as standalone churn.
+## Cave rim quality (improved, NOT hand-authored quality yet)
 
-`src/util/` keeps only genuinely cross-cutting helpers — single-layer utilities now
-live with their library (`src/resource/`, `src/ui/`).
+Current state: `cave.luau` generates the cavern as a metaball field (chambers = radial sources,
+corridors = line sources; walkable interior = the field-≥1 isocontour, noise-warped,
+flood-filled) and lines the rim with a dense 2-cell wall band. Pieces are learned from the
+shipped cave maps, keyed primarily by **rock-neighbour mask** (density-independent;
+cross-validated train cave1–3 / predict cave4: 79% orientation-family accuracy vs 53% for the
+compass bin), with finer face-direction keys and a compass fallback; corner protos
+(ca063/ca032/ca080) are keyed by their bent turn shape. Rim sealed with Secret-Blocking-Hex
+fills, scroll-blocker ring, exit patch + player start; deterministic, reachability-verified.
+Inspect regions with `map render --crop-hex`.
+*Superseded piece-selection models — do not retry:* outward-normal compass bin; edge-constraint
+(Wang) `follow[prev][dir]` sequence; hand-authored per-piece override table.
 
-> **Intentional non-goal (MAP save):** we deliberately do not recompute / auto-prune the
-> per-elevation enable flags at save time (the engine does in `_map_save_file`) — our output is
-> always internally consistent and engine-loadable, and pruning risks silently dropping an
-> elevation the user wants. Revisit only if exact byte-parity with engine-saved maps becomes a
-> requirement.
+**Known issues (screenshot review, 2026-07):**
 
-## Known limitations & follow-ups
+- **Jagged edges** — the learned pieces still don't tile cleanly at the floor/rock boundary;
+  up close the run is messy vs a hand-authored rim (mismatched faces, imperfect corners/tops).
+- **Dead-straight bottom edge** — the shipped reference caves continue off the map edge, so
+  their boundary there is a straight map-edge line the model mimics. Fix: detect and exclude
+  off-map-edge boundary when learning from references, and don't carve generated chambers up
+  to the map edge.
+- **Near-edge lip cover** — shipped maps layer flat `Wall`/`Wall s.t.` fills over the tops of
+  rock walls on the near (down-screen) edges; currently excluded by `isFlatWall`.
+
+**Remaining content (complementary):**
+
+- **Rim scenery** — shipped caves scatter ~70 Rocks/Stalagmites; the generator places 0
+  (floor-quilt + `quiltObjects` transplant, or a curated palette, is a cheap first step).
+- **Stamped rock formations** — extract real multi-hex formations from `cave1..4`
+  (`extract_pattern`/`placeStamp`) to reuse authored composition.
+- **Town/building walls** — straight `Wall s.t.` runs + door openings differ from organic rims.
+- **Roof layer** for enclosed areas.
+
+## Biome script library
+
+`cave.luau` and the quilt generators (`quilt_sampler.luau`, `quilt_biomes.luau`,
+`fills/quilt_desert.luau`) are shipped; expand the `scripts/README.md` table as new ones land.
+
+- **`town.luau`** — needs the straight-wall-run + door-opening model above.
+- **`coast.luau`** — newly practical: quilting reproduces a shoreline's authored blend tiles
+  from a reference map.
+- **Ergonomics (minor):** normalized `[0,1]` coordinate helpers (`hexAt(fx, fy)`) and document
+  the on-screen orientation convention.
+
+## Placement polish
+
+Footprint-aware, iso-diamond-masked placement for the curated scripts/tools; extract recurring
+multi-object clusters as **prefabs** (place a rock formation as one unit).
+
+## Smarter exit placement
+
+Exits should sit where the map actually *leads out*, not on a blind rectangle. The primitive
+(`placeExitGridRect`) + the directional-art mapping are the reusable foundation; feed them
+terrain-derived locations:
+
+- **At the ends of roads/paths** — once the generator lays roads (or a path graph), drop an
+  exit cluster where a road runs off the playable area, oriented along the road. Needs the
+  generator to retain road endpoints + headings (it currently keeps no such structure).
+- **Along the real map edge** — trace the iso playable boundary (the diamond, not an
+  axis-aligned box) and place exits on the edge segments the design wants open. Reuse the
+  screen→hex edge walk from `placeExitGridRect`, following the diamond boundary with a
+  per-edge open/closed mask.
+- **Reachability-aware placement** — the *check* shipped (`generate` runs reachability on every
+  map it writes and warns when an exit grid is unreachable from the player start); still open:
+  having placement consult reachability instead of just reporting after the fact.
+
+## Open questions
+
+- **`findProtos` scope/cost:** scan all proto types into one cached index, or per-type
+  (`findScenery`/`findWall`) to bound the first-call scan? Lean: one cached index, documented.
+- **Coordinate convention:** expose `(col,row)` as the engine's storage layout or remap to
+  match the editor's displayed coordinates? Pick one and document it.
+- **Collision policy** when a generator/stamp targets an occupied hex/tile
+  (overwrite / skip / error).
+- **Multi-elevation prefabs** (store/stamp across the 3 `ELEVATION_COUNT` slots?).
+- **Scripts in patterns** (object scripts via `programIndex`; spatial scripts) — deferred;
+  programIndex is portable, SID/OID re-allocated at stamp.
+- **Freeform selection** (lasso / flood fill / magic wand) — selection is one `FloatRect` +
+  discrete items today; a future selection primitive, prerequisite for non-rect area fills.
+- **Fill-preview cost on huge selections** — bounded today by debounce + the placement cap;
+  open whether to additionally clip the preview to viewport-visible cells.
+
+---
+
+# Editor: known limitations & follow-ups
 
 1. **Undo coverage.** *Remaining:* the pre-existing elevation add/remove
    (`MapInfoPanel` checkboxes) is still a direct mutation; a cascading script-delete when an
@@ -100,29 +162,9 @@ live with their library (`src/resource/`, `src/ui/`).
    category of the existing log panel rather than a second dock. Editor UX only; changes no
    map/format data.
 
-### Generation-side exit placement — current state & smarter follow-up
-
-**Smarter placement (follow-up).** Exits should sit where the map actually *leads out*, not on a
-blind rectangle:
-- **At the ends of roads/paths** — once the generator lays roads (or a path graph), drop an exit
-  cluster where a road runs off the playable area, oriented along the road, so the transition
-  reads naturally. Needs the generator to retain road endpoints + headings (it currently keeps no
-  such structure).
-- **Along the real map edge** — trace the iso playable boundary (the diamond, not an axis-aligned
-  box) and place exits on the edge segments the design wants open, leaving the rest walled. Reuse
-  the screen→hex edge walk from `placeExitGridRect`, but follow the diamond boundary and accept a
-  per-edge open/closed mask.
-- **Reachability-gated** — *partially done:* `generate` now runs the reachability analysis on
-  every map it writes and warns when an exit grid is unreachable from the player start, so a
-  stranded exit is caught at generation time. Still open: placing exits reachability-aware in
-  the first place (the check reports, the placement doesn't consult it).
-
-The primitive (`placeExitGridRect`) and the directional-art mapping are the reusable foundation;
-the follow-up is feeding them terrain-derived locations instead of a centred rectangle.
-
 ---
 
-## SSL Script Editing Integration
+# SSL Script Editing Integration
 
 ### Goal
 Let users view and edit the Fallout 2 SSL script behind a `scripts.lst` entry from inside Gecko, instead of alt-tabbing to an external toolchain. This connects to our existing model: `scripts.lst` is a flat name list whose line index is the *program index* stored in the map header's `script_id` and in each `MapScript.script_id` (see `MapInfoPanel.cpp:397-403`, `ScriptSelectorDialog`, `SpatialScriptDialog`). Today Gecko only *references* scripts by index/name — it cannot open the source. The `.ssl` source compiles to `.int` bytecode (what the engine actually loads), which lives under `scripts/` alongside `scripts.lst`.
@@ -190,481 +232,42 @@ Adopt **C as the core**, structured so **B** falls out for free and **A** remain
 
 ---
 
-# Scripting & Automation Layer (Patterns / Prefabs + Procedural Generation)
-
-> Status: See **§11 (improvement backlog)** for the current
-> state and the remaining procedural-generation work (the generators themselves are still basic).
->
-> **Caveat for the design below:** orientation is a **variant set** (pre-authored
-> direction-specific variants the editor cycles through), **not** geometric rotation — F2
-> object art is direction-specific, so the `rotatable` / rotate-at-stamp design in §4/§9 was
-> superseded by the variant-set model.
-
-## 1. Goals & two use cases
-
-**(1) User patterns / prefabs.** A reusable piece (tent, building wing, room) is a set
-of *relative* placements: objects at hex offsets plus floor/roof tiles at tile offsets.
-The user picks a pattern and stamps / drag-drops it on the map with a rotation
-(0–5, F2's six hex directions). Patterns are authored once, shared as files, and
-combined to assemble larger structures.
-
-**(2) Procedural generation.** The user selects an area and fills it with a seamless
-ground pattern (desert + scattered rocks; acid lake with a shore border that adapts to
-edges). Endgame: a script that generates a full random map from a high-level definition.
-
-The two cases pull in opposite directions: (1) is *fixed data* a non-programmer authors
-in the editor and replays deterministically; (2) is *open-ended computation* (loops,
-noise, conditionals, neighbour queries) that genuinely needs a language. This asymmetry
-is the central design fact and drives the two-tier recommendation below.
-
-## 2. Embedding option comparison (C++20 / Qt6, 2025)
-
-Weighted on: embedding ease, sandboxing/safety, performance at map scale
-(40,000 hexes / 10,000 tiles per elevation), binding ergonomics for our `Map` /
-`HexagonGrid` / placement API, licensing, and modder learning curve.
-
-| Option | Embed ease | Sandboxing | Perf @ 40k hex | Binding ergonomics | License | Learning curve | Verdict |
-|---|---|---|---|---|---|---|---|
-| **Lua 5.4 + sol2/sol3** | Excellent — header-only wrapper, ~25k LOC C core, trivial CMake | Strong: build a custom `_ENV`/sandbox, no default `io`/`os`/`require`; per-call instruction-count hook for timeout | Excellent (sol2 is among the fastest bindings); interpreter loop fine for tens of thousands of host calls | Best-in-class: `usertype`, overloads, `std::function`, containers, automatic shared_ptr handling | MIT (Lua) + MIT (sol2) | Lowest — the de-facto game/modding language; tiny surface area | **Fallback** (lighter dep, but DIY sandbox — see decision below) |
-| LuaJIT + sol2 | Good, but LuaJIT stalled on 5.1 semantics + ARM/Apple-Silicon JIT caveats | Same sandbox story as Lua | Fastest, but we don't need JIT speed for I/O-bound host calls | Same as sol2 | MIT | Same as Lua | Overkill; portability risk on macOS arm64 |
-| **Luau (Roblox)** | Moderate — C++ libs built from source (brew ships only the CLI) | Best-in-class: **safe by default** (no `io`, `os` trimmed, no bytecode loaders) + `luaL_sandbox` read-only globals + interrupt CPU hook | Very good (interpreter rivals LuaJIT's) + gradual typing & `luau-lsp` | Good — **LuaBridge3 binding confirmed acceptable by spike**; `std::vector` auto-converts | MIT | Low (Lua-family) | **Primary (spike-validated)** — see decision below |
-| QuickJS (+ quickjs-ng) | Good — single C file, but you write your own C++ binding glue | Good: no ambient FS/net unless you wire it; interrupt handler for timeouts | Good; ~15% behind Lua-for-speed in micro-benchmarks, fine here | Verbose: manual `JS_NewCFunction`, class IDs, no auto C++ usertypes | MIT | JS is widely known — *broadest* non-gamedev audience | Viable alt if JS familiarity is the priority |
-| duktape | Excellent (two files) | Good | Slower than QuickJS/Lua | Manual, C-style | MIT | JS | Only if footprint trumps speed |
-| V8 | Poor — heavyweight, large build, version churn | Strong but huge surface | Fastest JS, irrelevant here | Complex | BSD | JS | Rejected: disproportionate for an editor plugin |
-| AngelScript | Good — C++-like, registration-based | Strong (statically typed, no ambient access) | Good | Verbose registration; very C++-familiar to *us* | zlib | Medium; small community, niche | Rejected: thin ecosystem, weak modder familiarity |
-| Wren | Good, small | Decent | Good | Manual | MIT | Medium | Rejected: effectively unmaintained |
-| pybind11 / CPython | Embedding CPython is heavy; GIL, packaging, venv hell | Weak — sandboxing Python is notoriously hard | OK | Excellent bindings, but for *exposing C++ to Python apps*, not embedding | PSF/BSD | Python is well known | Rejected: distribution + sandboxing cost too high for a desktop editor |
-| **Pure data-driven (JSON/TOML)** | Trivial (we already parse formats) | Total — data can't execute | N/A (host does the work) | N/A | n/a | Lowest (authored in-editor, no code) | **Tier 1 of the recommendation** |
-
-Precedent worth noting: **Qt Creator 14 (2024) added a first-class plugin system built
-on embedded Lua 5.4**, and sol2 remains the reference C++<->Lua binding. That is a strong
-signal for a Qt6 C++20 app choosing Lua.
-
-### Decision: Luau + LuaBridge3 (spike-validated)
-
-A throwaway spike bound the same 3-method host-API slice + sandbox + ran the same script on
-**both** stacks. Findings:
-
-- **Sandboxing decides it.** Tier 2 exists to run *shared* (untrusted) generator scripts.
-  Luau's stdlib is **safe by default** (no `io`, `os` trimmed, bytecode loaders gone) and
-  `luaL_sandbox` makes globals read-only in one line. The sol2/PUC-Lua path required manually
-  nilling out ~10 dangerous globals (`io os package debug require dofile loadfile load
-  loadstring collectgarbage`) — forgetting one is a silent sandbox escape.
-- **The one feared cost — binding without sol2 — is fine.** LuaBridge3 bound the API and
-  auto-converted `std::vector` cleanly; ~7 lines vs sol2's ~4. Not the blocker the paper
-  table implied.
-- **Only real downside: Luau is a from-source C++ dependency** (~2.1 MB of static libs;
-  brew ships only the CLI) vs sol2+Lua being ready-made brew/FetchContent kegs. Modest and
-  one-time — and mitigated by the compile flag below.
-- Bonus: Luau's faster interpreter + gradual typing / `luau-lsp` help an in-editor script editor.
-
-This **reverses the earlier "sol2 primary" lean** on evidence. Keep **sol2 + Lua 5.4 (with a
-hardened, audited sandbox)** as the documented fallback if minimising the build footprint ever
-outranks untrusted-script safety.
-
-## 3. Recommendation — TWO-TIER design
-
-Do **not** pick a single mechanism. Split by use case:
-
-- **Tier 1 — Declarative JSON prefab/pattern format** for *stamping* (use case 1, and the
-  "fill area with this ground/border ruleset" parts of use case 2). No code executes;
-  fully data. Authored in-editor ("Save selection as pattern"), diffable, shareable,
-  safe by construction, instantly replayable, and trivially undoable. This covers the
-  overwhelming majority of what users want and needs **zero** scripting runtime.
-
-- **Tier 2 — Embedded Luau (via LuaBridge3)** for *generation* (use case 2's noise,
-  neighbour rules, randomness, and the eventual full-map generator). Scripts are the only
-  place arbitrary computation lives, and they reach the map **only** through the same narrow
-  host API that Tier 1 uses — see the spike-validated decision above.
-
-Rationale: Tier 1 keeps the common, user-facing path safe and code-free (a level designer
-should never write a script to stamp a tent). Tier 2 confines the security/perf surface of
-"real code" to the genuinely procedural cases, behind one audited façade. Both tiers funnel
-through the **identical** host API and therefore through `ObjectCommandController`, so
-**everything is undoable through one code path**.
-
-### Why the Lua family over JS/AngelScript here
-
-Lowest modder learning curve (Lua *is* the modding lingua franca), strong C++ binding
-ergonomics (sol2 for PUC-Lua, LuaBridge3 for Luau — both map cleanly onto our `MapObject` /
-`Hex` model), MIT throughout, and — with Luau — **turnkey sandboxing built for untrusted
-code**. JS engines add a heavier runtime for no gain here; AngelScript has a thin modder
-ecosystem.
-
-### Optional, compile-flag-gated (`GECK_ENABLE_SCRIPTING`)
-
-Tier 2 is an **opt-in** feature so users who don't script never download or build Luau. The
-split that keeps this low-complexity:
-
-- **`MapScriptApi`** — the C++ façade over `ObjectCommandController` — is **Luau-free** and
-  always compiled. Tier 1 and headless unit tests use it without any scripting runtime.
-- **The Luau runtime + binding + sandbox + script UI** live behind `GECK_ENABLE_SCRIPTING`
-  (one CMake `option()` + one `if()` block), which also gates the `FetchContent(luau,
-  LuaBridge3)`. A default build never sees Luau.
-
-**Defaults:** `GECK_ENABLE_SCRIPTING` is **OFF** for end-user builds, but **every CI build
-enables it** (`-DGECK_ENABLE_SCRIPTING=ON` on the Linux, macOS and Windows jobs in
-`.github/workflows/ci.yml`) so the scripting path and the from-source Luau build are tested
-on all platforms and kept from rotting.
-
-## 4. Pattern/prefab JSON format (Tier 1)
-
-A pattern is captured from a selection, anchored at an origin hex, storing **relative**
-offsets. Object offsets are in hex space; tile offsets in tile space (per the
-TILES vs HEXES distinction in CLAUDE.md — never validate one against the other's range).
-
-```jsonc
-{
-  "name": "small_tent",
-  "version": 1,
-  "anchorHex": 19998,            // authoring origin; offsets are relative to this
-  "size": { "hexW": 6, "hexH": 5 },
-  "rotatable": true,
-  "objects": [
-    { "dxHex": 0,  "dyHex": 0, "proPid": 33555201, "frmPid": 16777345,
-      "direction": 0, "flags": 0 },           // walls/scenery; pro/frm PIDs preserved verbatim
-    { "dxHex": 2,  "dyHex": 0, "proPid": 33555201, "frmPid": 16777345, "direction": 2 }
-  ],
-  "floor": [ { "dxTile": 0, "dyTile": 0, "tileId": 271 },
-             { "dxTile": 1, "dyTile": 0, "tileId": 271 } ],
-  "roof":  [ { "dxTile": 0, "dyTile": 0, "tileId": 4096 } ]
-}
-```
-
-Notes:
-- PIDs (`pro_pid`, `frm_pid`) and `direction` are stored **verbatim** — engine IDs are
-  preserved exactly, per the Engine Data Fidelity rule. The format stores no display labels.
-- **Rotation** at stamp time maps both the offset vectors and each object's `direction`
-  field by the chosen 0–5 step. Hex-grid rotation is not a trivial (x,y) swap; implement a
-  tested `rotateHexOffset(dx, dy, steps)` against the F2 odd/even-row hex layout
-  (`Hex::HEX_WIDTH=16`, `HEX_HEIGHT=12`) and `direction = (direction + steps) % 6`.
-- Tier 1 needs **no scripting engine**: a C++ `PatternStamper` reads JSON and calls the
-  host API directly. Lua is never required to place a prefab.
-
-## 5. Host API (the single façade for both tiers)
-
-One C++ class — call it `MapScriptApi` (a.k.a. the "host API") — wraps a live editing
-session and is the *only* surface either tier touches. It is registered into the Lua state
-as a global table for Tier 2 and called directly by `PatternStamper` for Tier 1. Every
-mutator routes through `ObjectCommandController`, so undo is automatic and uniform.
-
-Proposed surface (Lua-facing names; C++ methods mirror them):
-
-```lua
--- Queries (no mutation)
-local h    = api.getHex(x, y)              -- -> hex position (0..39999) or nil if off-map
-local x,y  = api.hexToXY(pos)              -- HexagonGrid::coordinatesForPosition
-local t    = api.getFloor(tilePos)         -- -> tileId ; api.getRoof(tilePos)
-local pid  = api.objectAt(hexPos)          -- nil or pro_pid of an object on that hex
-local r    = api.rng(seed)                 -- -> deterministic stream object: r:int(a,b), r:float(), r:chance(p)
-
--- Iteration over a user-selected area (rectangular or selection mask)
-api.forEachHexInArea(area, function(hexPos, x, y) ... end)
-api.forEachTileInArea(area, function(tilePos, tx, ty) ... end)
-
--- Mutators (each becomes an undoable step, auto-batched into one macro -- see 6)
-api.placeObject(proPid, hexPos, { direction = 0, frmPid = ..., flags = 0 })
-api.removeObjectAt(hexPos)
-api.paintFloor(tileId, area)               -- or single tilePos
-api.paintRoof(tileId, area)
-api.stampPattern(name, hexPos, rotation)   -- loads a Tier-1 JSON prefab and replays it here
-```
-
-`area` is a host-side value (rectangle from the current selection, or a positions list),
-constructed by the editor and handed to the script — scripts cannot fabricate arbitrary
-file/RAM handles. `rng(seed)` is a host-provided deterministic generator (PCG/xoshiro)
-so generation is reproducible and never reaches into ambient randomness.
-
-`placeObject` mirrors the existing creation path in `EditorWidget.cpp` (~line 1396):
-construct `std::make_shared<MapObject>()`, set `position`/`elevation`/`x`/`y` from the
-target `Hex`, copy `pro_pid`/`frm_pid` verbatim from the PRO/ObjectInfo lookup, build the
-visual `Object` + sprite, then register it — see §6.
-
-## 6. Routing through ObjectCommandController for undo
-
-The host API never mutates `Map` directly; it calls the same controller the UI uses:
-
-- **`placeObject`** -> build `MapObject` + visual `Object` (the §5/EditorWidget pattern),
-  then `ObjectCommandController::registerObjectPlacement(mapObject, object)`.
-- **`stampPattern`** -> for each object entry, `MapObject::cloneDeep()` from a cached
-  prototype (or build fresh), rotate, then `registerObjectPlacement`. cloneDeep is
-  mandatory because `MapObject` is non-copyable (its `inventory` holds `unique_ptr`s);
-  it deep-clones inventory so stamped containers keep their contents.
-- **`paintFloor` / `paintRoof`** -> accumulate `TileChange{ elevation, tileIndex, isRoof,
-  before, after }` (`src/ui/core/TileChange.h`) and call
-  `ObjectCommandController::registerTileEdit(description, changes)`.
-- **`removeObjectAt`** -> collect (mapObject, object) pairs and
-  `registerObjectDeletion(...)`.
-
-### Critical constraint — batch into ONE undo command
-
-`UndoStack` (`src/util/UndoStack.h`) is a **flat `std::function`-based list with no macro
-nesting and a hard `maxCommands` cap (default 100)**. A procedural fill that registers one
-command per hex would (a) blow the cap and silently evict earlier history, and (b) force
-the user to press Ctrl-Z thousands of times. Therefore:
-
-- A whole stamp / area-fill / generation run **must** collapse to a **single**
-  `UndoCommand` whose `undo`/`redo` closures replay the entire batch.
-- Concretely: open a "scripted operation" scope, have the host API **buffer** its object
-  placements/deletions and `TileChange`s instead of pushing each immediately, then on
-  scope close build **one** `UndoCommand` (or extend `ObjectCommandController` with a
-  `beginBatch()/endBatch(description)` that wraps `pushCommand` once). `registerTileEdit`
-  already takes a *vector* of changes — that is the model to follow for objects too.
-- This also bounds the redo path: one closure re-applies, one reverts. `rng(seed)` being
-  deterministic means redo reproduces identical generated content.
-
-> Action item: add `ObjectCommandController::beginBatch()/endBatch(desc)` (or an RAII
-> `ScopedUndoBatch`) so script-driven multi-edits land as one history entry. Without it the
-> 100-command cap makes generation unusable.
-
-## 7. Sandboxing & limits (Tier 2 only)
-
-- Fresh `sol::state` per run with a restricted `_ENV`: expose `api`, `math`, `string`,
-  `table`, `ipairs/pairs/select/...`; **omit** `io`, `os`, `package`/`require`,
-  `dofile`/`loadfile`, `debug`. No filesystem, no network, no process access.
-- Instruction-count `lua_sethook` (or quota in the iteration callbacks) to abort runaway
-  loops over 40,000 hexes with a clear error rather than freezing the UI.
-- Run generation **off the Qt UI thread** or chunked, surfacing progress; never block the
-  event loop during a full-map generate.
-- Cap total buffered edits and surface failures explicitly (per the "no silent fallback"
-  rule) rather than partially applying.
-
-## 8. Suggested sequencing
-
-3. ➡️ **Curated generators + the MCP as the intelligence layer** — §11. Blind statistical
-   generation was tried and abandoned (it scatters structural objects). Curated palettes + clumped
-   `noise2d` placement and the unified error model are in; the open items are the **seamless
-   multi-tile floor** (`autotile_floor`, P2 §4) and the **MCP server** with high-level tools
-   (P4 §12) that lets an agent curate and place with judgment.
-
-## 9. Open questions
-
-- Multi-elevation prefabs (store/stamp across the 3 `ELEVATION_COUNT` slots?).
-- Collision policy on stamp (overwrite vs skip vs error when target hexes are occupied).
-- Scripts in patterns (object scripts via `programIndex`; spatial scripts) — deferred; see
-  the script-model notes (programIndex is portable, SID/OID re-allocated at stamp).
-
-## 11. Improvement backlog (procedural generation & scripting)
-
-Ordered by value; the lower tiers build on the upper ones. None requires Qt, and only the
-last item needs a GL context.
-
-### Procedural generation — direction (revised after the blind-generation dead end)
-
-**Blind statistical generation is a dead end for coherent maps.** The first desert generator looked
-right because it was *curated* (a hand-picked list of small vegetation PIDs over sand). Generalising
-to "scatter whatever a reference map uses" — even **weighted by real frequency** (`mapSceneryHistogram`)
-— still drops structural objects (a vault door, a car, rock-formation pieces) at random hexes,
-because the gap is **semantic**: *which* objects are scatter-able and *where* they belong is authorial
-intent statistics can't reverse-engineer. Frequency only lowers a structural object's count, never to
-zero, and "place at a random hex" has no notion that a vault door is an entrance. So clustering/WFC
-would only fix *the arrangement of the right objects*, never *wrong objects appearing at all*.
-
-The direction instead:
-
-1. **Curated palettes are the reliable scatter primitive.** Curation *is* the semantic knowledge
-   ("these are decorations"), encoded cheaply. Per-biome hand-picked lists, like the shipped
-   `scripts/editor/terrain.luau`.
-2. **An AI agent over MCP is the intelligence layer.** Coherent authoring needs judgment — which
-   objects, density, clearings, where the structural pieces go — which an LLM agent supplies and a
-   blind algorithm can't. The MCP exposes the map model + analyze/generate so the agent curates and
-   places with world knowledge, and iterates against feedback.
-3. **The MCP must expose high-level tools, not just `place_object`.** The agent shouldn't place
-   10 000 floor tiles or 250 bushes one call at a time. Tools: `autotile_floor(from_reference)` /
-   `paint_region` (floor seamlessness still needs a real algorithm — WFC / patch-sampling — as a
-   tool the agent *drives*), `scatter(palette, area, density, clustering)`, `place_feature(pid, hex)`,
-   plus analyze/inspect (`mapSceneryHistogram`, `protoName`, …) so the agent *understands* a
-   reference before curating.
-
-**Still open.**
-- **Seamless multi-tile floor** — the headline visual gap. A C++ terrain synthesiser
-  (image-quilting / patch-sampling from a reference grid first, WFC with learned adjacency later)
-  exposed as `autotile_floor` — the principled form of the autotiling item (**P2 §4**). Naive
-  per-cell weighted-random is *not* this; arbitrary FO2 tiles don't blend.
-- **The MCP server** (the intelligence layer) with the high-level tool surface above — see the MCP
-  section and **P4 §12**.
-- Placement polish for the curated scripts/tools: footprint-aware, iso-diamond-masked placement;
-  recurring multi-object clusters extracted as **prefabs** (place a rock formation as one unit).
-
-### P1 — Ergonomics: make scripts human-writable
-
-2. **Human coordinates.** *(mostly done.)* `(col, row)` variants and the index↔(col,row)
-   converters shipped earlier; the **tile↔hex bridge is now exact**: `hexTile(hex)`/
-   `tileHexes(tile)` project through the renderer's own screen geometry (NOT the naive col/2
-   halving, which drifts a tile near block boundaries) — this is what lets `cave.luau` place
-   walls/blockers that hug a floor boundary. *Remaining (minor):* normalized `[0,1]` helpers
-   (`hexAt(fx, fy)`) and documenting the on-screen orientation convention.
-
-### P2 — Generation quality
-
-4. **Analyze → generate model (autotiling).** `edg*` is a hand-authored *blend set* (~49 variants
-   per desert map for edges/corners), not one flat texture. Extend `map analyze` to record tile
-   **adjacency** (which tiles border which), and have the generator pick the right edge/corner
-   variant at biome boundaries (Wang/blob tiling) instead of a uniform fill. Biggest visual jump,
-   pure data, derived from the shipped maps — closes the analyze→generate loop (analyze currently
-   *learns* the palette but the generator *hardcodes* it).
-5. **Statistical scatter.** ⚠️ *Superseded — see "Procedural generation — direction" above.*
-   Frequency-weighting (`mapSceneryHistogram`) was tried and still scattered structural objects
-   (vault doors, cars), because choosing *what* is scatter-able is semantic, not statistical. The
-   reliable path is **curated palettes** + an MCP agent's judgment; the histogram lives on as an
-   *analysis* tool, not the generator.
-7. **Enclosures / autowalling + roofs.** — **Cave autowalling SHIPPED, but the wall run still needs
-   improvement.** `cave.luau` now generates the cavern as a smooth **metaball field** (chambers =
-   radial sources, corridors = line sources; walkable interior = the field-≥1 isocontour, noise-warped
-   for organic erosion, flood-filled so no stray pockets) and lines the rim with a dense 2-cell **wall
-   band** — every hex that straddles the isocontour, classed by the field **gradient** (outward normal
-   → compass class), drawing each piece from a per-orientation palette *learned* from the shipped cave
-   maps (`mapFloorAt`/`mapObjectsAt`/`hexTile`/`tileHexes`/`protoFlat`, faces only). This fixed the
-   **shape** ceiling — smooth curves at hex resolution, no tile stair-steps, gap-free (history:
-   learned tile-mask replay → connection-shape → compass class → smoothed-normal 2-cell band → metaball
-   field). Rim sealed with Secret-Blocking-Hex fills (reachable set == floor), scroll-blocker ring,
-   exit patch + player start; deterministic, reachability-verified.
-
-   ⚠️ **PARTIAL — much improved (orientation is now learned from the shipped rims' LOCAL GEOMETRY),
-   but the rim still does NOT reach hand-authored quality. Do not treat as done.** History of the
-   piece-selection: outward-normal compass bin → edge-constraint (Wang) `follow[prevPiece][dir]`
-   sequence → hand-authored per-piece override table → the current model. `cave.luau` now keys each
-   rim hex primarily by its **rock-neighbour mask** (density-independent, so it transfers to the
-   generated band whatever the spacing), with finer face-direction keys and the compass bin as
-   fallbacks, learned from **every shipped face on BOTH sides** of a 2-cell band (the shipped rim
-   structure: cave1 = 327 walkable + 175 rock faces, ~30–50% contour coverage, wide overlapping
-   sprites). Cross-validated (train cave1–3, predict cave4): this key gets the orientation family
-   right **79% vs 53%** for the compass bin. Reviewer-named corner protos (ca063/ca032/ca080) are
-   pulled out of the pools and keyed by their bent turn shape so they stop sprinkling across edges.
-   Deterministic, reachability-clean. Verified with the new `map render --crop-hex` zoom (shipped as
-   its own tool, PR #124).
-
-   **KNOWN ISSUES — this feature still does not work as expected (screenshot review, 2026-07):**
-   - **Jagged edges.** The learned pieces still do not tile cleanly at the floor/rock boundary; up
-     close the run is messy vs. a hand-authored rim (mismatched faces, imperfect corners/tops).
-   - **Dead-straight bottom edge.** The generated rim is sometimes perfectly straight along one side,
-     almost certainly because the shipped reference caves **continue off the map edge** there — their
-     boundary at the map edge is a straight map-edge line, and the model mimics that instead of a
-     natural rock edge. Fix: detect and exclude off-map-edge boundary in the reference maps, and don't
-     carve generated chambers up to the map edge.
-   - **Near-edge lip cover.** The tops of the rock walls on the near (down-screen) edges should be
-     covered by filled sections the way the shipped maps layer them — they also place the flat
-     `Wall`/`Wall s.t.` fill, currently excluded by `isFlatWall`. Not yet done.
-   - Overall: an improvement over the previous compass model, not a finished feature — needs more
-     iteration against the shipped maps, ideally with the crop tool for per-region verification.
-
-   **Also remaining (content, complementary):** rim **scenery** (shipped caves scatter ~70
-   Rocks/Stalagmites; the generator places 0) and **stamped rock formations** (extract real multi-hex
-   formations from `cave1..4` via `extract-pattern`/`placeStamp`) to reuse authored composition;
-   **town/building** walls (straight `Wall s.t.` runs + door openings differ from organic cave rims);
-   and generating a **roof** layer for enclosed areas.
-
-### P3 — Reach & tooling
-
-8. ~~**`--in <map>`** for `generate`~~ — **DONE.** `--in` (CLI) / `in` (MCP) loads an existing map
-   (VFS path or file on disk) for the script to decorate; the requested elevation is validated
-   against the input's enabled elevations.
-9. ~~**Fill/region/query helpers**~~ — **DONE**: `tilesByPrefix("cav")` (name→id for a tile
-   family), `tilesInRect`, `fillFloorRect`/`fillRoofRect`, and `fillRegion` (4-connected flood
-   fill / paint-bucket) joined the `api:` surface; all route through the paint chokepoint, so
-   they respect the plan sink and undo batching. (`hexNeighbors` already covered the neighbour
-   query.) Also fixed: the run's resolved seed now seeds `api:rng()`/`rngInt()` in every host
-   (LuaScriptRuntime), not just the GUI fill preview.
-10. **Biome script library** — `cave.luau` **shipped** (the worked example of the region/fill
-    helpers: chambers + corridors via `fillFloorRect`, `fillRegion` connectivity repair,
-    `tilesByPrefix` family retexture). `town.luau` and `coast.luau` remain; expand the
-    `scripts/README.md` table as they land.
-11. ~~**Batch generation**~~ — **DONE.** `--count N` (CLI) / `count` (MCP): the script runs once
-    per map against a fresh copy (empty or `--in`), writing `<out>_1.map`…`<out>_N.map` with
-    consecutive seeds from the base (`--arg seed=N` or a reported random base), so the batch
-    varies AND reproduces.
-
-### Open questions
-
-- **`findProtos` scope/cost:** scan all proto types into one cached index, or per-type
-  (`findScenery`/`findWall`) to bound the first-call scan? Lean: one cached index, documented.
-- **Coordinate convention:** expose `(col,row)` as the engine's storage layout or remap to
-  match the editor's on-screen/displayed coordinates? Pick one and document it.
-- **Collision policy** when a generator targets an occupied hex/tile (overwrite / skip / error).
-- ~~**Multi-elevation generation**~~ — **DONE**: `api:setElevation(e)` switches which elevation
-  subsequent queries/edits target (validated against the map's enabled elevations; tile/object
-  data route by the recorded elevation, so it is safe mid-run).
-
----
-
-# Map semantics & intelligence (analysis MCP roadmap)
-
-> Goal: let an agent reason about a map's **purpose**, its **critters' AI**, and its
-> **scripts** from engine data, without inventing editor-only semantics.
->
-> Status: the capability list is done — critters + AI (`reader/ai/AiTxtReader` feeding the `critters`
-> block of `analyze`), `describe_script`, `reachability`, the `describe_map` digest, and the semantic
-> render overlay (**View › Highlight Unreachable Areas**, also headless via `map render
-> --show-unreachable` / `render_map showUnreachable`). What remains is the corpus angle and the
-> next capabilities below.
-
-**Guiding principle.** Don't hardcode classification heuristics ("N critters ⇒ a fight"). Surface
-the engine's own semantic sources faithfully and **cross-referenced**, and let the model infer
-purpose from the evidence — the same data a designer reads. This is MCP best practice (small
-composable tools + one orchestrator, structured join-able output) and the repo's engine-fidelity
-rule (no invented label tables). Every result should carry the join keys (`pid`↔proto.msg,
-`script_id`↔`scripts.lst`↔`.ssl`↔`.msg`, `ai_packet`↔`ai.txt`) and cite which file each fact came
-from. Keep all new readers Qt-free (vault/cli) so the server stays headless.
-
-**Corpus angle (multiplier):** index `analyze` + these semantic facts across all shipped maps so
-the agent can query *examples* ("how do shipped towns place and wire shopkeepers?") — improving
-generation, not just analysis.
-
-## Next capabilities (post-`describe_map`)
-
-These extend the roadmap above and all follow one **data-fidelity + layering rule**: parse engine
-data in the **vault** library (a `format/…` object + a `reader/…`, like `MapsTxt` and `AiTxt`),
-never inline in the cli/MCP layer. The MCP composes the structured objects into JSON; it does no
-file parsing of its own. (`maps.txt` was moved into vault as `MapsTxt` to set this precedent.)
-
-6. **Exit-grid connectivity graph — `map_graph`.**
-   Follow-up: cross with `reachability` to flag one-way edges.
-
-6b. **Worldmap layer — `world_map` (city.txt).** **Remaining:** the `worldmap.txt`
-   `[Tile NN]` sub-tile grid (per-position terrain → terrain-weighted travel cost, geographic
-   encounter placement) and `worldmap.msg` encounter descriptions (area/city labels are map.msg, now
-   surfaced as `world_map`'s `displayName`).
-
-7. **Corpus / world index — evidence, not a solver.** The evidence layer now largely exists: the
-   `map_graph`↔`world_map` join (`area`/`mapFile`/`lookupName`), the `quests` tool (each quest's area +
-   tracking gvar + thresholds + text) and the `gvars` dictionary (gvar index → `GVAR_*` name) — so an
-   agent can already *reason* about progression ("which script sets the gvar that gates quest Y?": read
-   the quest's gvar → name via `gvars`, then `describe_script` for the scripts that touch it).
-   Deliberately still **not** a computed "critical path to the ending": `.ssl` is imperative quest
-   logic and static extraction of a win-path would be brittle. The MCP supplies ground truth; the
-   model infers the route. The `endings` tool (endgame.txt: gvar==value → ending slide) supplies the
-   win-conditions, `world_map.start` marks the entry map (artemple.map / Arroyo), and `find_gvar` gives
-   the causal link — a quest's gvar → the .ssl scripts that set it (the action that advances it) vs
-   check it — so the start→objectives→ending loop is readable end to end (quest → gvar → find_gvar →
-   describe_script).
-
-### Data-extraction roadmap (engine data files → vault readers)
-
-Surveyed from `fallout2-ce` (`configRead` / `messageListLoad`). Each becomes a vault reader + object,
-then surfaces through `analyze`/`describe_map` or a dedicated tool. Priority order:
-
-- **`data/worldmap.txt`** — **Follow-up (minor):** per-position *encounter* placement (the subtile
-  encounter chances) is still unparsed — only the terrain field is kept.
-- **`game/worldmap.msg`** *(follow-up — narrowed)* — area/city labels turned out to live in **map.msg**
-  (`[1500 + areaIndex]`, now surfaced as `world_map`'s `displayName`) and terrain names are already
-  readable in worldmap.txt, so the only names genuinely in worldmap.msg are the random-encounter
-  **descriptions** (`worldmap.msg[3000 + 50*tableId + entryId]`, fallout2-ce worldmap.cc:3595) — and
-  those are runtime-index-tied to the encounter table/entry ordering, not a small add. Just that
-  encounter-description join remains.
-- **`data/endgame.txt`** — **Follow-ups:** `enddeath.txt` death endings (in master.dat) and the narration subtitle text
-  (`text/<lang>/cuts/<narrator>.txt`).
-- **`data/party.txt`** (companions), **`holodisk.txt`**, **`karmavar.txt`** — lore/state, lower
+# Map semantics & analysis — remaining tail
+
+**Guiding principles (standing):** don't hardcode classification heuristics ("N critters ⇒ a
+fight") — surface the engine's own semantic sources faithfully and cross-referenced (join keys:
+`pid`↔proto.msg, `script_id`↔`scripts.lst`↔`.ssl`↔`.msg`, `ai_packet`↔`ai.txt`) and let the
+model infer purpose. Parse engine data in the **vault** library (a `format/…` object + a
+`reader/…`, like `MapsTxt`/`AiTxt`), never inline in the cli/MCP layer; keep new readers Qt-free.
+Deliberately **not** building a computed "critical path to the ending" — `.ssl` is imperative
+quest logic and static win-path extraction would be brittle; the MCP supplies ground truth
+(quest → gvar → `find_gvar` → `describe_script`), the model infers the route.
+
+Open items:
+
+- **Corpus / world index** — index `analyze` + the semantic facts across all shipped maps so an
+  agent can query *examples* ("how do shipped towns place and wire shopkeepers?") — improves
+  generation, not just analysis.
+- **`worldmap.txt`** — the per-position sub-tile *encounter* chances are still unparsed (only
+  the terrain field is kept).
+- **`worldmap.msg`** — random-encounter descriptions (`[3000 + 50*tableId + entryId]`,
+  fallout2-ce worldmap.cc:3595); runtime-index-tied to the encounter table/entry ordering, so
+  not a small add. (Area/city labels turned out to live in map.msg and are already surfaced.)
+- **Endgame follow-ups** — `enddeath.txt` death endings (in master.dat) and the narration
+  subtitle text (`text/<lang>/cuts/<narrator>.txt`).
+- **`party.txt`** (companions), **`holodisk.txt`**, **`karmavar.txt`** — lore/state, lower
   priority.
+
+*(MCP server guard note: per-call cancellation / progress notifications are deliberately not
+planned — the stdio loop is synchronous and tool calls are short.)*
 
 ---
 
 # Feature-gap audit vs the reference mappers
 
 Full parity catalogue: [`docs/feature-gap-audit.md`](docs/feature-gap-audit.md), from a read-only
-audit of the fallout2-ce built-in mapper (`src/mapper/`) and the legacy Dims mapper
-(`reference/F2_Mapper_Dims-master/`) against Gecko.
+audit of the fallout2-ce built-in mapper and the legacy Dims mapper against Gecko.
 
-**Surfaced backlog (adopt, prioritized — match the engine's behaviour, don't invent):**
 1. **Minimap / overview** *(M)* — click-to-navigate + elevation switch, with a viewport rectangle
    (improving on Dims' cursor-sprite locator).
 
@@ -681,556 +284,69 @@ TODO-claim table are in the audit doc.
 > the editor chrome dims — so a designer can sanity-check "does this scene feel right?"
 > without launching Fallout 2.
 
-## What it would involve, by piece (rough effort)
-
-- **Idle animations — Medium.** We already decode FRM frames (the PRO dialog previews them)
-  and `Object::setDirection` sets a frame's texture rect; `TextureManager` stitches FRM frames
-  into sheets. The core work is a preview clock that advances each animated object's frame
-  index over time (honouring the FRM `fps` / `framesPerDirection`, looping idle anims), plus
-  per-object animation state and only animating culled/on-screen objects for perf at map scale.
-  The per-frame FRM offset handling this needs is already correct (the PRO-dialog animation preview
-  was fixed to anchor frames by their `shiftX/shiftY`), so idle playback won't wobble. No new assets
-  needed.
+- **Idle animations — Medium.** We already decode FRM frames and `Object::setDirection` sets a
+  frame's texture rect; `TextureManager` stitches FRM frames into sheets. The core work is a
+  preview clock advancing each animated object's frame index (honouring FRM `fps` /
+  `framesPerDirection`, looping idle anims), per-object animation state, and only animating
+  on-screen objects for perf at map scale. Per-frame offset handling is already correct
+  (frames anchor by `shiftX/shiftY`), so playback won't wobble. No new assets needed.
 - **Lighting / darkness — Medium.** Render honouring `header.darkness` and per-object light
-  (`light_radius` / `light_intensity`, already in the model) — an additive light pass / ambient
+  (`light_radius`/`light_intensity`, already in the model) — an additive light pass / ambient
   tint in `RenderingEngine`. The data already exists; it's a rendering feature.
 - **Ambient sound — Large.** SFML audio is currently **disabled** (`SFML_BUILD_AUDIO=FALSE`,
-  `cmake/dependencies.cmake`), so step one is enabling it. F2 sounds are **ACM** files (a custom
-  ADPCM-style codec) needing a decoder, and ambient/background audio isn't stored in the `.map`
-  (it's script/worldmap-driven), so "what plays here" has to come from the map script or a
+  `cmake/dependencies.cmake`), so step one is enabling it. F2 sounds are **ACM** files (custom
+  ADPCM-style codec) needing a decoder, and ambient audio isn't stored in the `.map`
+  (script/worldmap-driven), so "what plays here" has to come from the map script or a
   convention. Biggest, most independent lift.
 - **"Game-like" chrome — Small.** A mode toggle that hides grid/overlays/selection, dims the
   panels, and centres on the player start. Cheap polish once the above exist.
 
-## Recommendation / sequencing
-
-Value is front-loaded, cost is back-loaded — so tier it:
-1. **Idle-animation preview** (Medium) — highest value, reuses existing FRM decode + render;
-   gated on fixing the frame-offset bug. Ship as a "Play animations" toggle first.
-2. **Lighting / darkness** (Medium) — independent, data already present.
-3. **Ambient sound** (Large) — only if worth enabling SFML audio + writing an ACM decoder; the
-   long pole and least essential for an editor.
-
-Bottom line: an "idle animations + lighting" preview is a **Medium** effort on top of what
-exists; full parity with the running game (sound, day/night, critter wander/AI) is **Large**
-and probably not worth chasing for a map editor.
+Sequencing: idle animations first (highest value, reuses existing FRM decode + render), then
+lighting (independent, data present), sound only if ever worth the ACM decoder. Full parity with
+the running game (day/night, critter wander/AI) is **Large** and probably not worth chasing.
 
 ---
 
-# MCP server for AI-assisted map analysis & editing (future)
+# Architecture (residuals & guard notes)
 
-> Status: idea / scoping — **now substantially de-risked.** Expose the editor's map model as an
-> MCP (Model Context Protocol) server so an AI assistant can analyze a map, describe it, add/move
-> objects, change scripts, and (eventually) understand it visually and via its scripts/NPC dialogs.
->
-> **Foundations already in place** (see the scripting §10): the Qt-free **`gecko_editing`** library
-> (controller + script API + Luau runtime) and a headless **`gecko-cli`** with `map analyze` and
-> `map generate`. The "build a headless CLI over the libs first, then wrap it in MCP" plan below is
-> now half-done — the MCP server is largely a JSON-RPC shim over `gecko_cli`'s existing entry points
-> plus the read/describe tools.
+The 13-work-package architecture roadmap is delivered.
 
-## MCP server hardening — deferred follow-up
+**Deferred (real but modest, do opportunistically):**
+- **PanelVisibilityController.** Extracting the panel-visibility snapshot/restore/persist state
+  machine (~130 LOC + 3 members) would trim `MainWindow`, but it stays `QDockWidget`/`QAction`-
+  bound with no pure testable core. Fold it into the next change that touches dock/panel
+  behavior rather than doing it as standalone churn.
 
-**Deferred — richer tool output/metadata (MCP 2025-06).** Worth doing some day, not now:
-- **`structuredContent`** on the JSON-emitting tools (analyze/describe_map/palette/proto_info/…) —
-  return the parsed object alongside the text block, so clients get typed data instead of re-parsing
-  a string.
-- ~~**Tool annotations**~~ — **DONE.** Every `tools/list` entry now carries `annotations`:
-  `readOnlyHint` (true for the whole inspection group, false for generate/render_map/render_frm/
-  extract_pattern), `destructiveHint:false` (the mutating tools only write new output files) and
-  `openWorldHint:false` (all data is local).
-- **`render_map` as an image/resource** — return an embedded image or a resource link rather than the
-  written path (more idiomatic; the path works fine for a local agent).
-- *(Not planned: per-call cancellation / progress notifications — the stdio loop is deliberately
-  synchronous and tool calls are short, so the threading cost isn't justified.)*
+**Evaluated and intentionally NOT pursued (guard — churn > value):**
+- **PRO/MAP serialization visitor** — the type-specific tails (mixed field widths, optional-on-
+  read/unconditional-on-write fields, union/subtype dispatch) can't be expressed symmetrically;
+  the read→write→read round-trip test net already provides the safety.
+- **`ProFieldFactory` extraction / spacing-token consolidation / `BasePanel` re-parent** — only
+  ~15 LOC genuinely shared, a materialId index-vs-value fidelity trap, and the spacing sources
+  hold *different* values (consolidation would pixel-shift layouts).
 
-## Why it's cheap here
-
-The four-library split already makes the model, formats, and resources **Qt-free and
-headless-linkable** (`vault` → `gecko_resource` → `gecko_core`; the test suite links them with
-no GUI). So an MCP server **reuses `MapReader`/`MapWriter`, `MapObject`/`MapScript`
-(+ `cloneDeep`, the `makeObjectScript`/`makeSpatialScript` factories), and PID→name resolution
-via the resource layer** — zero format re-implementation, guaranteed fidelity, same validation
-rules (hex 0–39999, 3-elevation framing, exit-grid PIDs 16–23).
-
-## Tool surface (tiers)
-
-- **Read / describe — Small–Medium.** `describe_map` (header, enabled elevations, object/script
-  counts), `list_objects(elevation)` with resolved names, `list_scripts`, `get_hex(pos)`,
-  `find_objects(pid|type)`, exit-grid/transition connectivity. This is the bulk of "analyze the
-  map completely" and is the easy half.
-- **Write — Medium.** `add_object(pid, hex)`, `remove_object`, `edit_object_fields`,
-  `attach_script`/`detach_script`, `place_spatial_script`, `paint_floor/roof`,
-  `clear/copy_elevation`, `save`. Mirrors logic now centralized in `ObjectCommandController` /
-  `MapScript`; headless needs no undo, just model mutation + the existing writer.
-- **Transport — Small.** MCP is JSON-RPC over stdio (`initialize`, `tools/list`, `tools/call`).
-  Lowest-risk: build a headless **`gecko-cli`** (JSON in/out) over the existing libs first
-  (independently testable, reuses the round-trip tests), then wrap it with an MCP server in any
-  language. Alternatively a C++ MCP server linking the libs directly.
-
-## Deeper understanding (the longer-term goals)
-
-- **Script & NPC-dialog analysis — Medium.** "Understand the scripts" means reading the **real
-  `.ssl` source** the map's scripts compile from (we usually have it — see the deep-understanding
-  section below), indexed by the **`.int` metadata reader** (procedure names, exported/imported
-  procs, string table — see the SSL/INT notes) and paired with the **`.msg`** file of the same
-  basename (we already have an `Msg` reader), which holds the NPC's dialogue/display lines. So
-  `describe_script(index)` → SSL source + proc list + the linked `.msg` text gives an AI the actual
-  behaviour and conversation tree without running the game. Cross-reference `scripts.lst`
-  (index→name) and the map's `MapScript`/object `sid` to answer "what does the NPC on this hex
-  say/do?".
-- **Visual analysis — Small–Medium (a refactor, not a rewrite).** To let the AI *see* the map
-  (rendered screenshot per elevation/region), reuse the **existing** SFML renderer:
-  `RenderingEngine`/`MapSpriteLoader` already have **zero Qt includes** and `render()` already
-  takes a generic `sf::RenderTarget&`. They just live in the Qt CMake target (`gecko_app`). The
-  clean move is to **extract a Qt-free `gecko_render` library** (renderer + sprite loader +
-  hex/viewport math; CMake-target move, not a code change) that both `gecko_app` (window target)
-  and the headless MCP/CLI use. The CLI renders to an **`sf::RenderTexture`** (offscreen) and does
-  `copyToImage()` → PNG — the same draw code the editor runs each frame, **no duplication**.
-  *Caveat:* `sf::RenderTexture` needs an OpenGL context — automatic on a desktop, but a headless
-  box (Docker/CI) needs `xvfb`/EGL. No Qt event loop is involved.
-
-## Deep map understanding (the powerful-server goal)
-
-The end state is a server that can answer *"what is on this map, what is each thing for, and how
-does it all connect?"* — not just dump object rows. That means walking every layer of the data the
-engine itself uses, all of which `vault`/`gecko_resource` can already read (or read with a small
-addition). Each item below is a tool (or a field on `describe_map`) and the data path it stands on:
-
-- **Per-object semantic dump (all types) — Small.** For every `MapObject`, resolve `pro_pid` →
-  the `.pro` (already loaded for analyze), and emit the *type-specific* proto body, not just the
-  display name: flags (`OBJECT_FLAT`, `NO_BLOCK`, shootable, light-emitting + radius/intensity),
-  the `script_id`/`sid` link, frame/orientation, and elevation. PID encoding (`(type<<24)|id`) and
-  the `.lst`/`.msg` lookups are already done in `map analyze`; this just stops collapsing them to a
-  count. Output keyed by `[Item]/[Critter]/[Scenery]/[Wall]/[Misc]` so the AI sees the inventory of
-  the world by role.
-- **Critters & their purpose — Medium.** A critter's purpose lives in its **critter `.pro`** plus
-  its **script**. From the proto: base **SPECIAL** stats, HP/AC/derived stats, **team** and
-  **kill-type**, the **AI packet number**, body type, and the **inventory** (`MapObject` carries
-  child objects — guns/ammo/armor the NPC spawns with). The AI packet number indexes
-  **`data/ai.txt`** (aggression, morale, `run_away_mode`, preferred-weapon distance, chem use,
-  area-attack flags) — a new but tiny INI-style reader gives "this critter is a cowardly melee
-  raider who flees at 25% HP." Team + kill-type + AI packet together answer *"is this a friendly,
-  a guard, or an ambush?"* without running the game.
-- **Scripts, AI behaviour & dialogue — Medium.** The goal is the **real SSL source**, not a
-  metadata summary. In practice we usually *have* the `.ssl` source for the compiled `.int` a map
-  references (it ships alongside `scripts/`, or is fetched from the script source tree), so the
-  server should **resolve `sid`/`script_id` → `scripts.lst` row → basename → the `.ssl` file** and
-  hand the AI the actual code — the authoritative behaviour, comments and original names intact.
-  The `.int` and friends are the **index and fallback** around that source: the **`.int` metadata
-  reader** (procedure table — `start`/`map_enter_p_proc`/`talk_p_proc`/`destroy_p_proc`, plus
-  imported/exported procs and the string table) confirms which proc hooks exist and *when* they
-  run; the **`.msg`** of the same basename (existing `Msg` reader) supplies the NPC's dialogue
-  lines; and only when the source is genuinely missing does the server fall back to **`int2ssl`
-  decompilation** (lossy — see "SSL Script Editing Integration" for the toolchain/licensing). So
-  `describe_script(sid)` returns the SSL source + proc hooks + linked dialogue, letting the AI read
-  and reason about what an NPC actually does, not just summarize it.
-- **Pathing, blocking & reachability — Medium.** Build a walkability view of each elevation: a hex
-  is blocked if it holds a `NO_BLOCK`-clear object, with the **invisible movement blockers**
-  (`OBJECT_FLAT` scenery over `block.frm`, the same signal the generator filters on) called out
-  separately from real cover. Surface the **exit grids** (scenery PIDs **16–23**) and their
-  destination map/elevation/hex as the map's connectivity graph, and flood-fill from each exit /
-  player-start to report **reachable vs. walled-off regions** and orphaned objects. This is what
-  turns "a list of hexes" into "you enter here, the locked room in the NE is unreachable without the
-  key, and this exit leads to the world map."
-- **Map framing & globals — Small.** Header-level context the AI needs to reason about the rest:
-  enabled elevations, **player start position/elevation/orientation**, map flags
-  (save/`pipboy`/elevation flags), **local/map variables** (`.gam`/`MAP_VARS` counts and the LVAR
-  block), and the map's own script. Cheap — it's all in the `MAP` header already parsed.
-
-Together these let the server answer open-ended questions ("who guards the entrance?", "can the
-player reach the vault?", "what does this terminal say?") by cross-referencing **proto + SSL
-source + `.msg` + `ai.txt` + exit graph** — the same sources the engine (and a script author)
-consults. Every reader needed is either already in `vault` (`Pro`, `Msg`, `Map`, `.lst`), the
-plain-text `.ssl` source itself, or a small INI/metadata addition (`ai.txt`, `.int` header); none
-requires the Qt layer or a running game.
-
-## Estimate
-
-A read-only "describe/analyze" server is a **few days**; adding write tools is **another few
-days** (~**1–2 weeks** for a solid read+write server), mostly tool-surface design + a JSON-RPC/CLI
-shim, not format work. Script/dialog understanding reuses the `Msg` reader + the proposed `.int`
-metadata reader. Visual analysis becomes a **Small–Medium** add-on once the Qt-free `gecko_render`
-extraction is done (the renderer is already Qt-free; it just needs to move to a shared library +
-an offscreen `sf::RenderTexture` wrapper). Start with `gecko-cli` + read tools, since that's
-immediately useful and de-risks the rest.
+**Intentional non-goal (MAP save):** we deliberately do not recompute / auto-prune the
+per-elevation enable flags at save time (the engine does in `_map_save_file`) — our output is
+always internally consistent and engine-loadable, and pruning risks silently dropping an
+elevation the user wants. Revisit only if exact byte-parity with engine-saved maps becomes a
+requirement.
 
 ---
 
-# Area-Fill + Luau Plugins — Unified Design Proposal
-
-> **Status (2026-07-12):** **Feature A is done** (Fill Selection + the A5 freehand Fill Brush).
-> **Feature B — the Luau plugin system — is DEFERRED indefinitely** (parked as a far-off
-> possibility, not on the near-term roadmap). See the deferral note under §4 for the rationale and
-> for what was kept vs. scrapped. The design below is retained only as reference should the plugin
-> system ever be revived.
-
-This proposal specifies two features that share one substrate: **Feature A**, a Luau-and-data-driven *area fill* ("Fill Selection") that closes the `autotile_floor` / "paint a pattern of tiles" gap; and **Feature B**, a *Luau plugin system* that lets third parties add tools, panels, menus, and event handlers. The decision throughout is to **build one set of seams and exercise it twice**: area-fill is the first first-party consumer of the same selection-projection, ghost-preview, `ITool`, and `MapScriptApi`-over-a-batch machinery that the plugin system opens to third parties. Engine-data-fidelity is non-negotiable: PIDs/directions/flags/tile-ids stored and replayed verbatim, no fallback label tables, no rotation math, validated readers with no silent fallback.
-
----
-
-## 1. Where things stand
-
-Gecko already ships a coherent two-tier authoring stack. Both features extend it; neither replaces it.
-
-**Tier-1 — declarative patterns (`src/pattern/`), always compiled.** `pattern::Pattern` is a POD with one-or-more pre-authored `PatternVariant`s (orientation is a variant set, never a rotation transform — `Pattern.h:30-33`). `PatternStamper` has a clean **pure `plan()` / impure `stamp()`** split (`PatternStamper.cpp:22-77` vs `146-168`): `stamp()` wraps N object placements + tile edits in one `ScopedUndoBatch`. Capture (`PatternBuilder::fromSelection`), serialize (`PatternSerializer` Qt-side / `cli/PatternJson` nlohmann-side, wire-identical, validated, no silent fallback), thumbnail (`PatternThumbnail` reusing `plan()` at identity anchor), and click-to-stamp (`EditorMode::StampPattern` + live ghost at `DRAG_PREVIEW_ALPHA`) all converge on this one POD. The library lives at `PatternLibrary::rootDir()` (`<ConfigLocation>/gecko/patterns`).
-
-**Tier-2 — Luau scripting (`src/scripting/`), gated `GECK_SCRIPTING_ENABLED`.** `LuaScriptRuntime::run` is **fresh-VM-per-run** (`luaL_newstate` `:51` → `lua_close` `:134/:149`), synchronous on the UI thread, with the binding/`args`/`print` set **before** `luaL_sandbox(L)` (`:110`) so they freeze as read-only globals. There is **no interrupt, no timeout, no memory cap** today. `MapScriptApi` is the host façade (queries, coordinate helpers, `placeProto/placeObject/paintFloor/paintRoof`, `placeStamp`, `placeExitGrid*`, `newMap`, `setPlayerStart`), bound via the `GECK_SCRIPT_API` X-macro whose shared `&MapScriptApi::name` reference is the anti-drift guard (`LuaScriptRuntime.cpp:66`). Convention: **errors raise, "not applicable" stays a value** (off-grid place → `false`, unknown tile → `-1`). `MapScriptApi` holds map/elevation **by reference at construction** (`MapScriptApi.h:211-214`) and is rebuilt per run.
-
-**Headless — CLI/MCP, always compiled façade.** `MapScriptApi`/`ScriptApiReference` compile without Lua; `gecko-cli generate` / MCP `generate` drive the same façade with `buildSprites=false` over a `CallbackCommandHost` (`MapGenerator.cpp:50-105`). `--stamp name=file.json` loads Tier-1 patterns into `addStamp`.
-
-**Mapping the two asks onto what exists:**
-
-| Ask | Already covered | Net-new |
-|---|---|---|
-| **A. Area fill** | The *commit* primitive (`PatternStamper`'s pure-plan + one-`ScopedUndoBatch`), the *preview* primitive (`PatternSprite` ghosts + a typed `RenderData` field), the *library/serialize* discipline, headless `MapScriptApi` | A **selection→area** value object; a **plan-sink** inside `MapScriptApi` mutators (preview-then-replay); a **seamless-floor (`autotileFloor`) primitive**; a **`FillRecipe`** declarative format + C++ runner; seeded scatter (weight/noise/density/spacing/jitter); a Fill dialog/preview; CLI/MCP `fill` |
-| **B. Plugin system** | `MapScriptApi`+`ScopedUndoBatch` as a UI-free undoable mutation API; narrow `*Context` host interfaces (`ExitGridContext.h`) as the decoupling shape; `GameResources&` injection; the Luau VM bring-up code | **`ITool`+`ToolRegistry`** replacing the closed `EditorMode` enum + scattered switches; a **persistent per-plugin VM** with persistent print capture; **`MapScriptApi::retarget`**; **capability-gated binding**; manifest + permission model; declarative `Gui.*`; lifecycle/discovery; resource limits |
-
-The architecture brief is explicit: **there is no tool/panel/menu registration seam today** — every tool is an `EditorMode` value wired through hand-written `switch`es in `InputHandler`, `EditorWidget::setMode`, and `MainWindow::syncToolModeActions`. Feature B's first job is to add that seam; Feature A is what proves it.
-
----
-
-## 2. Dims-mapper benchmark
-
-Read from the Dims source vendored at `reference/F2_Mapper_Dims-master/Mapper/` and web-confirmed for the official BIS mapper:
-
-- **F2_Mapper_Dims.** Single-tile pen (one tile per click, ghost preview, *no* drag-paint, *no* brush size). Rectangular **single-tile** region fill (`SetFloorRegion`/`SetRoofRegion`, `tileset.cpp:52-70`) — not flood fill, not a pattern. A **random-object scatter brush**: 7 INI-defined sets (`DrawObject.ini`: Tree/Grass/Rock/Small Rock/Dirt/Corn #1/Corn #2), `CRandomObj::GetObjectID()` returns `objPid[random(count)]` — **uniform** random, one object per click, re-rolled each click. **No density, radius, jitter, rotation, weighting, or area fill.** Templates/prefabs were **stubbed and never built** (`objtempl.h` empty).
-- **Official BIS mapper2.exe.** "Use Pattern" (Alt-Y): pick a pre-made **tile** pattern, stamp it, Plus/Minus change stamp size (2×2…N×N), right-click exits. A genuine resizable pattern stamp — but **tiles only**, fixed built-in list, no random object scatter, no user-authored prefabs.
-
-**How this proposal beats both, by construction:**
-
-1. **Weighted, noise-clumped, density-controlled area scatter** — Dims has uniform per-click selection only; the BIS mapper has none. `FillRecipe.scatter` carries a cumulative-weight palette, value-noise clumping/thresholding, density, spacing, direction jitter, and occupancy — applied across an arbitrary selection in **one undo step**.
-2. **Seamless multi-tile floor** (`autotileFloor`) — neither legacy tool repeats a multi-tile floor *material*; Dims fills a rect with one id, the BIS mapper stamps a fixed pattern. We pick each cell's tile from its neighbour mask against a data-driven `FloorTileSet`.
-3. **Real saved prefabs in the fill** — scatter palette entries may be `"stamp":"name"` → `placeStamp`, so a captured "bush+rock cluster" scatters as a unit. This is the feature Dims stubbed.
-4. **Live ghost preview + locked seed reproducibility** — preview *is* the apply (plan-capture → replay), even for nondeterministic scripts.
-5. **INI parity, upgraded** — we keep Dims' best idea (data-defined sets, low-friction extensibility) but as validated JSON with **weights**, and shared with the Tier-1 library, CLI/MCP, and Luau.
-
-The one Dims/BIS idea we *also* deliver and they lack: **drag-to-paint with an adjustable footprint** (the freehand Fill Brush, §3 Phase F).
-
----
-
-## 3. Feature A — Luau-driven area fill
-
-### 3.1 Execution model (the heart)
-
-Both tiers drive **one** `MapScriptApi`; a `FillPlan*` sink sits inside its mutators.
-
-```
- Tier-1 FillRecipe ─┐                         ┌─ sink active? RECORD into FillPlan
- (C++ runner)       ├─▶ MapScriptApi mutators ─┤
- Tier-2 Luau fill ──┘   paintFloor/placeProto  └─ else COMMIT live via controller
-                        autotileFloor/placeStamp
-        preview: run with FillPlan* installed ─▶ ghosts (DRAG_PREVIEW_ALPHA)
-        apply:   PlacementBatch.replay(plan)  ─▶ ONE ScopedUndoBatch
-```
-
-- **Preview** runs the fill with a `FillPlan*` installed. Mutators resolve art/tile-ids at full fidelity but **record** rather than commit. Rendered as semi-transparent ghosts.
-- **Apply** is `PlacementBatch::replay(plan)` inside one `ScopedUndoBatch` — **no re-run**, so preview == apply byte-for-byte even for nondeterministic Tier-2 scripts.
-- The plan-sink is the single place that enforces **clip-to-area** and the **placement cap**.
-
-**Capture coverage — the two real chokepoints, plus the stamp fix.** Insert the sink at exactly two points: `registerObject` (`MapScriptApi.cpp:288-330`, funnels `placeProto/placeObject/…XY/placeExitGrid*`) and `paintTile` (`:361-371`, funnels `paintFloor/paintRoof/autotileFloor`). **`placeStamp` does *not* route through these** — `MapScriptApi::placeStamp` (`:432-448`) builds its own `PatternStamper` and calls `stamp()`, which opens its **own** `ScopedUndoBatch`. Left unfixed, a stamp palette entry would mutate the live map and push a real undo entry *during preview*. **Fix (folded in):** add a sink-aware planning entry to `PatternStamper` — `void planInto(FillPlan&, const PatternVariant&, int targetHex, int elevation)` that runs the existing pure `plan()` and resolves its `ObjectPlacement`/`TilePlacement`s into the `FillPlan` (building sprites when `_buildSprites`), committing nothing. `MapScriptApi::placeStamp` becomes: `if (_planSink) stamper.planInto(*_planSink, …); else stamper.stamp(…);`. This preserves the pure/impure split and makes stamp scatter capturable. Factoring `PlacementBatch` out of `PatternStamper::stamp` fixes the *commit* side; `planInto` fixes the *capture* side — both are required.
-
-### 3.2 Data model (new C++, always compiled unless marked)
-
-- `src/scripting/EditArea.h` — `{ std::vector<int> hexes, floorTiles, roofTiles; }`, each **sorted ascending** (canonical order is contractual so seeded draws reproduce). Built by the host from `SelectionManager::getHexesInArea`/`getTilesInAreaIncludingEmpty`/`getObjectsInArea` (a `sf::FloatRect`) **or** — when the committed selection has no rect — from the discrete `SelectionState` getters (`getHexIndices/getFloorTileIndices/getRoofTileIndices/getObjects`), then `std::sort`ed. *(Folded in: `selectionArea` is `std::optional` and a discrete object/hex selection has no rect; never assume a rect exists.)*
-- `src/scripting/FillPlan.h` — `{ std::vector<TileChange> tiles; std::vector<std::pair<std::shared_ptr<MapObject>,std::shared_ptr<Object>>> objects; int dropped; }`.
-- `src/pattern/FloorTileSet.{h,cpp}` (+ Qt `FloorTileSetSerializer`, Qt-free `cli/FloorTileSetJson`) — the autotile material (§3.4).
-- `src/pattern/FillRecipe.h` + `FillRecipeSerializer.{h,cpp}` (Qt) + `src/cli/FillRecipeJson.{h,cpp}` (nlohmann) — wire-compatible, validated, no silent fallback, same split and `checkInt` range discipline as `PatternSerializer.cpp:62-78`.
-- `src/pattern/FillRecipeRunner.{h,cpp}` — Tier-1 interpreter; ctor `(MapScriptApi&, const FillRecipe&, uint32_t seed)`, holds `std::mt19937`; `FillResult run()` (floor first, then scatter). **Bounded by construction → no sandbox.**
-- `src/pattern/PlacementBatch.{h,cpp}` — factored out of `PatternStamper::stamp` (`:146-168`): one `ScopedUndoBatch`, replays objects via `registerObjectPlacement` (GUI) / `registerObjectData` (headless) + tiles via `applyTileChanges`+`registerTileEdit`. `PatternStamper` is refactored to use it, so stamp and fill share one tested commit path.
-- GUI: `src/ui/dialogs/FillDialog.{h,cpp}`; `src/pattern/FillThumbnail.{h,cpp}` (reuses `ThumbnailComposer`/`PatternSprite`); a **generic ghost-overlay field** on `RenderingEngine::RenderData` (see §5 — shared with plugin tool previews, not a fill-specific field).
-- *Gated:* the Tier-2 prelude/run wiring + "Edit as Script". CLI `gecko-cli fill` + MCP `fill` are **always-on for recipes** (`buildSprites=false`, the `MapGenerator.cpp:50-105` context).
-
-### 3.3 New Luau / `MapScriptApi` surface
-
-Host-only (not script-bound, like `addStamp`): `void setArea(const EditArea*)`, `void setPlanSink(FillPlan*)`, `void registerFloorSet(std::string, FloorTileSet)`.
-
-Script-bound — add to `GECK_SCRIPT_API` (`ScriptApiReference.h:13-50`), each backed by a real `MapScriptApi::name` (the `&MapScriptApi::name` reference is the drift guard). `noise2d`, `paintFloor[XY]`, `placeProto[XY]`, `placeStamp`, `proto`, `tileId`, `hexCol/hexRow`, `tileCol/tileRow`, `mapSceneryHistogram` **already exist**:
-
-```c
-/* selection / area (input; EditArea borrowed, host-set per run) */
-X(hasArea,           "() -> bool",                  "True if a selection area is bound to this run.")
-X(areaHexes,         "() -> {hex,...}",             "Hex indices in the selection, ascending.")
-X(areaFloorTiles,    "() -> {tileIndex,...}",       "Floor-tile indices in the selection, ascending.")
-X(areaRoofTiles,     "() -> {tileIndex,...}",       "Roof-tile indices in the selection, ascending.")
-X(areaContainsHex,   "(hex) -> bool",               "Is hex inside the selection?")
-X(areaContainsTile,  "(tileIndex) -> bool",         "Is tile inside the selection?")
-X(areaFloorEdgeMask, "(tileIndex) -> int",          "8-neighbour selection-membership mask of a floor tile.")
-/* seamless multi-tile floor */
-X(autotileFloor,     "(setName) -> int",            "Paint the selection's floor from a FloorTileSet by neighbour mask. Returns tiles painted.")
-X(autotileFloorAt,   "(setName, tileIndex) -> tileId","Tile autotile WOULD choose for one cell; paints nothing.")
-/* deterministic seeded helpers */
-X(rng,               "() -> [0,1)",                 "Deterministic PRNG draw seeded from args.seed.")
-X(rngInt,            "(lo, hi) -> int",             "Deterministic integer in [lo,hi].")
-X(weightedPick,      "(values, weights, r) -> value","Pick values[i] by weight using r in [0,1).")
-X(objectAt,          "(hex) -> pid",                "PID of a blocking object at hex in the COMMITTED map, else 0.")
-X(noise3d,           "(x, y, z) -> [0,1]",          "Coherent value noise with a third (seed/octave) axis.")
-```
-
-`area.forEachHex/forEachFloorTile` ship as a **bundled trusted prelude** `resources/scripts/lib/fill.luau`, prepended to Tier-2 source (fresh-VM-per-run makes concatenation correct; frozen by the same `luaL_sandbox`):
-
-```lua
-local area = {}
-function area.forEachHex(f)       for _,h in ipairs(api:areaHexes())      do f(h, api:hexCol(h), api:hexRow(h)) end end
-function area.forEachFloorTile(f) for _,t in ipairs(api:areaFloorTiles()) do f(t, api:tileCol(t), api:tileRow(t)) end end
-area.hexes = function() return api:areaHexes() end
-return area
-```
-
-**`objectAt` is a committed-map query, not a pending-plan query** *(folded in)*. Because apply is replay, the script runs once into the sink; `objectAt(hex)` reads `_map` and **never sees placements already recorded in this run's `FillPlan`**. Intra-fill de-dup/spacing must be tracked by `FillRecipeRunner` (which already maintains a touched-cell set) or by the Tier-2 script itself. This is documented in the `objectAt` doc string and the fill-authoring guide; a script that relies on `objectAt` for self-occupancy will silently stack objects. The "errors raise, N/A is a value" contract holds throughout (`objectAt`→0 when free; unknown set/tile → `ScriptError`).
-
-### 3.4 The `autotileFloor` primitive (closes the gap)
-
-A `FloorTileSet` is a data-driven **mask → authored tile** table — no rotation (FO2 `edg*` art is edge-specific; same ethos as `Pattern.h:30-33`). Floor is a plain 100×100 square grid (`PatternStamper.cpp:60-72` notes "no parity offset"), so 4/8-neighbour masks are trivial.
-
-```jsonc
-// resources/scripts/fills/sets/desert_sand.json  (bundled; users override under .../fills/sets/)
-{ "name":"desert_sand", "version":1, "center":"edg5000",
-  "neighborhood":"blob8",                 // "edges4" (16 masks) | "blob8" (47-tile reduction)
-  "variants": { "0":"edg5001", "255":"edg5000", "17":"edg5010" },  // mask -> tile FRM name
-  "fallback":"center" }                   // mask not listed => center (explicit, never PID-0)
-```
-
-`autotileFloor(set)`: for each `t` in `areaFloorTiles()`, build the mask from **in-area** neighbours (`blob8` counts a diagonal only if both flanking cardinals are set, reducing 256→47), look up `variants[mask]` else `center`, resolve via `tileId` (−1 → `ScriptError`, never PID-0), `paintFloor(t,id)`. Because it routes through `paintTile`, it is **captured by the plan sink for free** — autotile previews automatically. `areaFloorEdgeMask` exposes the raw mask so advanced Tier-2 scripts can autotile by hand or blend into pre-existing terrain via `getFloorXY` (an optional advanced flag; MVP masks against selection membership only). Registered exactly like stamps: `registerFloorSets()` scans bundled `resources/scripts/fills/sets/*.json` first, then user `.../fills/sets/` last (user wins), mirroring `registerLibraryStamps` (`EditorWidget.cpp:384-419`).
-
-### 3.5 `FillRecipe` (Tier-1) and Tier-2 brushes
-
-```jsonc
-// .../gecko/patterns/fills/desert_scrub.fill.json   ("kind":"fill" distinguishes it in the shared library)
-{ "name":"Desert scrub", "version":1, "kind":"fill",
-  "floor":  { "mode":"autotile", "set":"desert_sand" },   // none | single | scatter | autotile
-  "roof":   { "mode":"none" },
-  "scatter":{ "palette":[ {"proto":["scenery",102],"weight":5},
-                          {"proto":["scenery",116],"weight":1},
-                          {"stamp":"small_bush_cluster","weight":2} ],   // Tier-1 prefab via placeStamp
-              "paletteFromMap":"maps/desert1.map",        // optional: seed palette via mapSceneryHistogram
-              "density":0.25, "noiseScale":0.08, "noiseThreshold":0.45,
-              "jitterDirection":true, "spacing":1, "respectOccupancy":true },
-  "clipToSelection":true, "seed":null }                   // null => per-run; int => locked
-```
-
-`FillRecipeRunner::run()` paints floor (`single`→`paintFloorXY`; `scatter`→weighted+`noise2d`; `autotile`→`autotileFloor`), then scatter: cumulative-weight palette; per hex sample `noise2d((col+ox)*scale,(row+oy)*scale)`; below `noiseThreshold`→clearing; else with prob `density`, `weightedPick`→`placeProtoXY`/`placeStamp`, honouring `spacing`/`jitterDirection` and a **runner-maintained occupancy set** (not `objectAt`, per §3.3). Validation reuses `checkInt`; `proto` types validated through `MapScriptApi::proto` (raises on bad type), tile names through `tileId` (−1 → reject) — engine values verbatim, no fallback table.
-
-A **Tier-2 brush** is a Luau script plus a thin `*.fill.json` manifest (`"script":"x.luau"` + a typed `params:[{id,type,role,…}]` array) whose params drive generated dialog controls **and** are passed as `args` (closing the "Console passes no args" gap, `EditorWidget.cpp:431`). The dialog's "Edit as Script…" lowers a `FillRecipe` to an equivalent Luau script and drops it into `ScriptConsoleWidget::setSource` (`MainWindow.cpp:1020-1027`) — the Tier-1→Tier-2 graduation path (scripting builds only).
-
-### 3.6 UX
-
-**Core MVP — an action on the selection, no new `EditorMode`.** Edit-menu "Fill Selection…" + toolbar button (`addMenuAction`/`addToolAction`), enabled only when the selection is non-empty **and the relevant layer is present** (an `autotile`/floor fill requires `floorTiles`; gate it so a pure object/hex selection can't run a no-op floor fill — folded in from the `EditArea` rect-less correction). `FillDialog` (structure modelled on `PatternBrowserDialog`): left, a Fills browser over `PatternLibrary::rootDir()/fills` + bundled, thumbnails via `FillThumbnail`; right, auto-generated controls (floor on/off+mode, scatter on/off, density/spacing/jitter/clip, a **seed field** defaulted random, shows the resolved seed after a run, lockable); bottom, Live-preview toggle, "Edit as Script…" (gated), Apply/Cancel. Live preview runs the fill into a `FillPlan`, converts to ghosts at `DRAG_PREVIEW_ALPHA`, **recomputed only on parameter change (debounced), never per frame**. Apply commits the previewed plan; Cancel discards (nothing was committed). Post-apply runs the existing `mutated()` resync (clear selection/visualizer, refresh Map Info, emit `mapModifiedByScript()`, `EditorWidget.cpp:435-447`).
-
-**Freehand Fill Brush (final phase) — built as a native `ITool`, not a bespoke `EditorMode`** (see §5). Footprint = tile/hex disc of radius `size`; one `beginBatch("Fill: <name>")` on press, `endBatch()` on release; track touched cells to de-dup and respect occupancy across overlapping footprints; footprint ghost via the shared overlay. Reuses `FillRecipe`/`FillRecipeRunner`/`PlacementBatch` wholesale — only the area source differs (footprint vs selection), so freehand applies incrementally inside the manual batch rather than via plan-replay.
-
-### 3.7 Undo as one step
-
-Always one entry. Selection fill: `PlacementBatch::replay` wraps everything in one `ScopedUndoBatch` (`ObjectCommandController.h:172-197`); tile paints and object placements interleave and revert in reverse, identical to `PatternStamper::stamp`. Freehand: one manual `beginBatch`/`endBatch` per stroke; nested batches are safe (only the outermost `endBatch` flushes, `:71`). **Mandatory, not cosmetic:** `UndoStack` caps at `maxCommands=100` and evicts oldest (`UndoStack.h:17,31-33`) — a 5,000-tile fill unbatched wipes all history; batched it is one Ctrl-Z. Preview never enters undo (the sink never calls the controller).
-
-### 3.8 Pattern-library reuse
-
-Fills live in `fills/` under the existing `PatternLibrary::rootDir()`; one browser with a Patterns/Fills filter. Scatter palette `"stamp":"name"` entries route to `placeStamp` (`MapScriptApi.cpp:432-448`), so a prefab captured via "Save Selection as Pattern" or `extract_pattern` scatters as a cluster. A captured selection's `mapSceneryHistogram` seeds a starter palette. Fills and prefabs share library, browser, thumbnail, and `placeStamp`/`addStamp` plumbing.
-
-### 3.9 Remaining phased plan (A)
-
-- ~~**A5 — Freehand Fill Brush**~~ — **DONE.** A native `ITool` (`src/ui/tools/FillBrushTool.h`)
-  on the registry: toolbar toggle loads the tile palette's selection, hold-left-and-drag paints
-  every tile the cursor crosses (deduped per stroke), one stroke = one undo entry (batch opens on
-  press, flushes on release — or on deactivation, so Esc mid-stroke can't strand the batch). Its
-  hover ghost is the first real consumer of the `ToolPreviewSpec`→sprites channel, it relies on the
-  host's Esc/right-click cancel guarantee instead of bespoke cancel code, and picking a new palette
-  tile mid-session re-loads the brush in place. The stroke mechanics are unit-tested host-free
-  (callback-injected).
-
-> A0–A4 shipped. A1's declarative `FillRecipe` and A2's `autotileFloor`/`FloorTileSet` were built and
-> then **removed by design** — the Luau fills replaced them, so the `autotile_floor` gap is closed by
-> scripting rather than a set primitive. Don't rebuild them.
-
-### 3.10 Sandbox dependency — CLOSED
-
-`LuaScriptRuntime::run` takes a `timeBudgetMs`, and `LuaSandboxHost` arms a safepoint interrupt +
-deadline whenever it is non-zero — the fill preview passes `FILL_SCRIPT_BUDGET_MS`, the **Script
-Console now passes `CONSOLE_SCRIPT_BUDGET_MS` (30 s)**, and a script cannot `pcall` its way past
-the deadline. The **plan-sink placement cap** is in: while a sink AND an area are bound, each list
-(objects, tiles) refuses entries past `kSinkCapFactor (8) × the area's footprint` — refused
-placements return false like off-grid ones, `placeStamp`'s bulk append is trimmed, and the surplus
-lands in `FillPlan::dropped`, surfaced by the fill UI as "skipped". A sink with no bound area
-(programmatic use) stays uncapped. gecko-cli batch generation stays untimed by design. What B2
-still owes on top: wiring this cap into the per-dispatch budget for resident `map.write` plugins.
-
----
-
-## 4. Feature B — Luau plugin system  *(DEFERRED — far-off possibility, not planned)*
-
-> **Deferral decision (2026-07-12).** The plugin system is **parked indefinitely**. Rationale:
-> its marginal value over what already exists — the Script Console runs Luau that reads and edits
-> the map, and first-party tools/scripts cover the concrete use cases — is narrow (persistent
-> interactive tools + third-party distribution without recompiling), while its ongoing cost is
-> real and permanent: it runs **untrusted third-party code on the UI thread**, turns the `api:`
-> surface into a **compatibility contract**, and adds a large surface (permissions, declarative
-> `Gui.*`, event bus, packaging/signing) for a **niche editor with a small author pool**. If a
-> concrete need for third-party extensions appears, revive from here.
->
-> **What was kept (dual-use, already pays off without plugins):** the `ITool`/`ToolRegistry` seam
-> (B1 — powers the native Fill Brush), `MapScriptApi`/`ScriptApiReference` (the Console + headless
-> CLI/MCP generation), the `LuaSandboxHost` extraction, and the plan-sink placement cap + Script
-> Console budget. These stay on `master`.
->
-> **What was scrapped:** the resident-plugin work specific to Feature B. Unmerged PRs **#120**
-> (read-only `api` READ/WRITE split) and **#121** (`PluginManager` + `PluginManifest` + Plugin
-> Manager dialog + bundled `hello` example) were **closed, not merged**; their branches remain if
-> revived. The already-merged resident-VM substrate — `PluginVm` (+ its test) and the
-> `LuaSandboxHost::Options` heap cap / persistent-env thread — is **removed here** (`LuaSandboxHost`
-> reverts to the plain extraction; the Console/CLI/MCP runtime is unaffected). `MapScriptApi::retarget`/
-> `detach` are **left in place**: they are inert without a resident owner, but reverting the
-> pointer-internals refactor would churn a class the Console, CLI, MCP and fills all share for no
-> functional gain — a candidate for a later cleanup, not worth the risk now.
->
-> **The rest of this section (B3–B6, capability model, `Gui.*`, etc.) is reference-only** for a
-> possible future revival, not an active plan.
-
-Plugins add **tools, panels, menus/toolbar buttons, and event handlers**. They need a **broader, capability-gated trust model than the generation sandbox** — and this must be stated plainly: the Tier-2 generation runtime is *safe-by-default-and-ephemeral* (fresh VM, run once, discarded), so it can afford zero limits; a plugin is **resident** (it must answer `QAction::triggered`, tool mouse events, and `on(event)` callbacks for the life of the session) and runs **untrusted third-party code on the UI thread**, so it requires per-plugin isolation, resource limits, and an explicit permission grant. These are different requirements, not a stricter version of the same thing.
-
-### 4.1 Abstraction seams to add (named)
-
-The architecture brief identifies the hard couplings; the plugin layer adds these seams (all **always compiled, no Lua dependency**, so native tools can adopt them and they are testable with plugins off):
-
-1. **`ITool` + `ToolRegistry`** — **SHIPPED** (`src/ui/tools/ITool.h`, `ToolRegistry.{h,cpp}`): dynamic dispatch to an active tool with `id()`, `onActivate/onDeactivate`, `statusHint()` (the status-bar hint items the host renders), `onMousePressed/Moved/Released(const ToolMouseEvent&)`, `onKeyPressed(const ToolKeyEvent&)`, and `ToolPreviewSpec buildPreview(...)`. **Engine coordinates are resolved by the host** (`hexIndex/tileIndex` in `ToolMouseEvent`); `buildPreview` returns a *spec* (tile ids / PIDs / hexes) that the host lowers to sprites via `pattern::buildTileSprite`/`buildSpriteObject` + `DRAG_PREVIEW_ALPHA`, never SFML draws. One deliberate deviation: `ToolMouseEvent` also carries `worldPos` for **native** tools that need sub-hex precision (the placement cursor ghost); the future Lua binding exposes only the engine coordinates. Validated by porting **object placement** (the eyedropper's click-to-place — chosen over tile placement, whose area-fill/replace sub-modes entangle the palette) onto `ITool` with no UX change; the old `EditorMode::PlaceObject` path was deleted with the port. The host guarantees cancel: an Esc / right-click the tool does not consume leaves the tool, so tools need not implement their own exit.
-2. **`EditorMode::PluginTool` + one generic `InputHandler` branch** — `onPluginTool{Pressed,Moved,Released,Key}` added **once**, forwarding to `ToolRegistry::active()`. Not per-tool callbacks.
-3. **One generic ghost-overlay `RenderData` field** — populated by the active tool's `buildPreview` (and reused by Feature A's fill preview, §5). Replaces the bespoke-typed-field-per-preview pattern.
-4. **MainWindow registration APIs** — `addPluginMenuItem/addPluginToolButton/addPluginDock/removePluginUi`, and relaxation of the fixed `std::array<QDockWidget*,6>` (`MainWindow.h:167-168`) into a `std::vector<QDockWidget*> _pluginDocks`. One `syncToolModeActions` case for `PluginTool`.
-5. **`PluginToolHost`** — implements the **union** of the existing `*Context` methods (`getMap/getViewportController/getCurrentElevation/getSelectionManager/register*`, modelled on `ExitGridContext.h`) so plugin tools commit through `_controller.commandController()` exactly like native tools.
-
-### 4.2 Persistent VM, print, and `retarget` (the three load-bearing host changes)
-
-These are net-new and more invasive than "refs→pointers"; they land early with focused tests.
-
-- ~~**Phase-0 refactor `LuaSandboxHost`**~~ — **DONE.** Shared VM bring-up moved out of `LuaScriptRuntime` into `src/scripting/LuaSandboxHost.{h,cpp}` (`luaL_openlibs`, the `capturePrint` closure, `luau_compile`/`luau_load`, the time-budget watchdog, and the critical **`luaL_sandbox` after binding** ordering); `ScriptArgs`/`ScriptResult` moved to `ScriptTypes.h`. No behavior change to `LuaScriptRuntime::run`. Two **pre-existing** sandbox bugs surfaced and were fixed in the same change: the watchdog could be disarmed permanently by a script-level `pcall` catching its error, and a non-string error object (`error({})`) crashed the host on `strlen(nullptr)`.
-- ~~**Persistent print capture.**~~ — **DONE.** `PluginVm` (`src/scripting/PluginVm.{h,cpp}`) owns the bounded per-VM console (tail-trimmed at `consoleCapBytes`, never starting mid-line) that the host's print closure writes into across dispatches; only the console dock UI remains (B4). The rest of the VM core shipped with it: `LuaSandboxHost::Options` adds a **Lua-heap cap** (tracking allocator; growth past the limit fails the allocation and Luau raises "not enough memory" — the state survives) and a **persistent writable environment** (`luaL_sandboxthread`: chunks run on a thread whose env is a private writable proxy over the frozen shared globals, so plugin globals persist across dispatches while per-run generation scripts keep readonly globals). `PluginVm` layers per-dispatch budgets, pcall fault isolation, consecutive-fault **auto-disable**, and re-enable-with-a-fresh-state (a faulting state's globals may be wreckage; re-enable means known-good). A dispatch against a `retarget(nullptr)`/detached api faults cleanly and recovers on re-point, tested.
-- ~~**`MapScriptApi::retarget`**~~ — **DONE** (landed ahead of the rest of B2, being the single riskiest change). Internals are pointers; the value constructor keeps its reference signature (per-run callers — generation runtime, CLI/MCP, fills — unchanged and null-free). `retarget(resources, hexgrid, controller, Map*, elevation, buildSprites)` re-points a long-lived api; `map` may be null ("host alive, no map open"). `detach()` nulls everything for editor teardown. The null-safe audit's contract: every map/host access goes through throwing guards (`mapRef()` → "no map is open", `controllerRef()/hexgridRef()/resourcesRef()` → "detached"), so stale calls raise catchable `ScriptError`s instead of dereferencing — including the subtle case where a placement would otherwise write through the *controller's own* map reference with the api's map null (caught by the audit tests). Pure geometry (`isValidHex`, `hexNeighbors`) stays host-free. Queries raise rather than return fake N/A values — placeholder data would silently corrupt plugin logic.
-
-### 4.3 Manifest + capability/trust model
-
-**Manifest is C++-parsed JSON, never executed Lua** — permissions/identity must be known before any plugin code runs. Validated, no-silent-fallback, same discipline as `PatternSerializer::deserialize`. **Capability gating is by *binding*, not runtime check** (defense-in-depth): a denied capability's function is simply **absent** from the VM (`attempt to call a nil value`), bound only when granted, *before* `luaL_sandbox` freezes globals. A `GECK_PLUGIN_API` X-macro mirrors `GECK_SCRIPT_API`, each entry carrying its required `Capability`.
-
-**Enforcement invariant (folded in):** this works *only* because there is **one `lua_State` per plugin**. LuaBridge registers the class on `getGlobalNamespace(L)` per state, so a `map.read` plugin's VM does `beginClass` with the `GECK_SCRIPT_API_READ` subset and the write methods are **genuinely absent from that VM's metatable**. Split `GECK_SCRIPT_API` into `GECK_SCRIPT_API_READ` + `GECK_SCRIPT_API_WRITE` (with `GECK_SCRIPT_API = READ+WRITE`, so the generation runtime is byte-for-byte unchanged), and the binder selects which method set to register at bind time. It is all-or-nothing per VM — you cannot downgrade a single shared `api` object — which is fine given per-plugin VMs.
-
-Coarse capability set:
-
-| Capability | Tier | Grants | Cannot touch |
-|---|---|---|---|
-| `ui` | Standard | register menu/toolbar/dock/tool, status/notify, declarative widgets | raw Qt, other plugins' widgets, MainWindow internals |
-| `map.read` | Standard | `api:` queries + coordinates + `editor:selection()` | other maps on disk |
-| `map.write` | Standard | `api:` undoable mutators (place/paint/stamp/exit-grid) | non-undoable internals |
-| `events` | Standard | subscribe to the fixed event list | post fake / cancel host events |
-| `storage` | Standard | JSON KV under `plugins/<id>/storage.json` | other plugins' / global settings |
-| `fs.read` | **Sensitive** | read files canonicalized + confined to plugin dir | writes; `..`/symlink escape |
-| `net`, `fs.write` | — | **never bound in v1** | everything |
-
-**Trust model, deliberately minimal for v1** *(folded in — the heavy machinery is over-built for hand-installed plugins).* v1 ships a **single install-time `PluginPermissionDialog`** (Standard vs Sensitive grouping, plain-language descriptions, per-cap toggles for Sensitive), persisted as a `PluginGrant`. **Deferred to a later phase, not v1:** SHA-256 package pinning, re-prompt-on-capability-widening, quarantine, the `manifest_version`/`apiVersion`/`plugin_abi` triple, `.gplug` packaging, and ed25519 signing. Until ABI 1 is frozen, gate real third-party *distribution*; hand-installed plugins are the v1 audience. `fs.read` is path-confined (canonicalized, symlinks resolved and re-checked, `..` rejected); `net`/`fs.write`/process-spawn/FFI are not bindable regardless of trust.
-
-### 4.4 The Luau API (three namespaces)
-
-`api:` is the **existing `MapScriptApi`** bound by capability (`map.read`→READ subset, `map.write`→READ+WRITE). No new map verbs.
-
-```lua
--- editor:  app integration --------------------------------------------------
-h = editor:addMenuItem{ menu="Edit", text="…", shortcut="Ctrl+Shift+G", icon="a.png", onTrigger=fn } -- ui
-h = editor:addToolButton{ text="Scatter Brush", icon="a.png", onTrigger=fn }                          -- ui
-h = editor:addDockPanel{ id="scatter.panel", title="…", area="right", ui = Gui.Column{...} }          -- ui
-t = editor:registerTool{ id="scatter", title="…", icon="a.png",
-       onActivate=fn,onDeactivate=fn,onMouseDown=fn,onMouseMove=fn,onMouseUp=fn,onKey=fn,
-       preview=function(ev) return {tiles=..., objects=...} end }                                     -- ui
-editor:activateTool(t)
-editor:setWidget(id, props)   editor:getWidget(id) -> props   editor:removeUi(h)                      -- ui
-editor:status(text)           editor:notify("warn", text)                                             -- no cap
-editor:hasSelection() -> bool                                                                          -- map.read
-editor:selection() -> { rect=, hexes={}, floorTiles={}, roofTiles={}, objects={ {hex,pid} } }         -- map.read
-editor:currentElevation() -> int   editor:currentMapPath() -> string|nil                              -- map.read
-editor:undoBatch(desc, function() ... end)                                                            -- map.write
-sub = editor:on(event, fn)   editor:off(sub)                                                          -- events
--- plugin:  self + sandboxed services ---------------------------------------
-plugin.id, plugin.version, plugin.dir   plugin:log(level,msg)   plugin:capabilities() -> {...}
-plugin:asset(rel) -> path               -- bundled assets always readable, NO fs.read
-plugin:require("submodule")             -- resolved INSIDE plugin.dir only
-plugin:store(k,v)  plugin:load(k)  plugin:keys()  plugin:delete(k)                                    -- storage
-plugin:readFile(rel)  plugin:listDir(rel)  plugin:exists(rel)                                         -- fs.read
-editor:registerStamp(name, "assets/hut.json")   -- PatternSerializer + addStamp (no fs cap)
-```
-
-`editor:selection()` is the **same `SelectionManager`→tables projection** Feature A uses for `EditArea` (§5). Objects surface as `{hex, pid}` — **no `Object`/`QObject` ever crosses to Lua**.
-
-**Declarative UI (`Gui.*`) — the only way a plugin builds widgets.** A closed vocabulary (`Column/Row/Group/Label/Spacer/Button/Combo/Checkbox/Slider/SpinBox/List/LineEdit/IconButton`), materialized by `DeclarativeUiBuilder` into real `QWidget`s themed via `ui::theme`. No `findChild`, no metaobject reflection, no raw widget pointer. Live updates by opaque string `id` (`editor:setWidget`). Mirrors Qt Creator 14's constrained `Gui` module.
-
-**Three enforced Qt-safety rules:** (1) no Qt pointer enters Lua — registration returns **opaque string handles**; the real `QAction`/`QDockWidget` lives in `Plugin::uiHandles` as `QPointer`, validated against the calling plugin. (2) UI is data, not imperative Qt. (3) every boundary is `pcall`-wrapped with a per-plugin `debug.traceback` and the interrupt deadline armed — an error or `ScriptError` is caught at the edge and **never** reaches the Qt event loop.
-
-### 4.5 Interactive tools, end to end
-
-`editor:registerTool{...}` → `PluginManager` builds a `LuaTool : ITool`, registers it in `ToolRegistry`, calls `MainWindow::addPluginToolButton` (checkable, exclusive with native tools). Click → `setMode(EditorMode::PluginTool)` + `ToolRegistry::setActive(id)`. Mouse events → the one generic `InputHandler` branch → `EditorWidget` resolves world→hex via `viewport().worldPosToHexIndex` (the `stampPatternAt` path, `EditorWidget.cpp:1255`) → the active `LuaTool` → `PluginInvoker::call` into Lua with the **engine-coordinate** event. Hover → `buildPreview` returns a ghost spec → the shared overlay field → rendered next frame via `PatternSprite::buildSpriteObject`/`buildTileSprite` + `DRAG_PREVIEW_ALPHA`. Commit → `api:` mutators inside one undo batch → post-mutation resync.
-
-### 4.6 Undo, threading, error containment
-
-**Undo.** All plugin mutation goes through `MapScriptApi`→`ObjectCommandController`. `PluginInvoker` opens a `ScopedUndoBatch("<Plugin>: <action>")` around each dispatched `map.write` callback (one menu click / event = one Ctrl-Z), structurally identical to `LuaScriptRuntime::run` wrapping a whole run. Drag tools open the batch on `onMousePressed` and flush on `onMouseReleased` (one stroke = one entry). `editor:undoBatch`/`api:beginBatch/endBatch` allow explicit grouping; nested batches are safe. Mandatory because `UndoStack` caps at 100. `ScopedUndoBatch`'s destructor flushes even on a raised callback.
-
-**Threading.** All plugin code runs on the UI thread; **the host builds `buildSprites=true`** like `EditorWidget::runScript`. No thread spawning escape exists. **Honest scope of the watchdog *(folded in):* the interrupt watchdog bounds runaway *Lua loops*, not heavy *host calls*.** `lua_callbacks(L)->interrupt` fires at Lua instruction boundaries only; a single long bound C++ call invoked from Lua — `mapSceneryHistogram`/`loadReferenceMap` over a big map, a `placeStamp` of a large prefab, or building thousands of sprites with `buildSprites=true` — is not preemptible and will blow the deadline and stutter the ~60 fps loop. The watchdog makes infinite Lua loops catchable; it does not make every host call cheap.
-
-**Memory + placement caps *(folded in):*** the tracking allocator on `lua_newstate(allocf)` bounds **only the Lua heap**. The `Object`/`MapObject`/`sf::Sprite`/`std::vector` results created **C++-side** by `api:` calls are invisible to it — a `map.write` plugin can exhaust host memory while under the Lua cap. Therefore `map.write` plugins also get the **placement/result cap** Feature A introduces in the plan-sink (refuse beyond `k × area.size()`/per-dispatch budget; surplus → reported `dropped`), not just the allocator.
-
-**Error containment.** Every boundary `pcall` + traceback; the C++ caller is `noexcept` at the edge. Fault accounting: consecutive errors/timeouts increment `faultCount`; after a threshold the host auto-disables the plugin, tears down its UI, and shows a dismissible banner with Re-enable + traceback. A sandboxed Luau plugin cannot segfault (no FFI/raw memory), so "crash" reduces to error/timeout/OOM — all contained. **Teardown is total:** `Plugin` owns every `UiHandle`/`EventSub`/`toolId`, so disable/quarantine/reload removes every `QAction`/`QDockWidget`/tool/subscription, `editor:off`s all subs, and `lua_close`es the VM — leak-free, which is what makes hot-reload safe.
-
-### 4.7 Discovery, lifecycle, hot-reload
-
-Scan `<ConfigLocation>/gecko/plugins/*/plugin.json` (user, writable) and bundled `resources/plugins/*/` (read-only), dedupe by `id` with **user shadowing bundled** — the same precedence as `registerLibraryStamps`. Invalid manifests become `Faulted` rows with a reason, never silently dropped. **Enable:** resolve grant (prompt if incomplete) → build `PluginVm` (tracking allocator, openlibs, persistent print ring, capability-gated `PluginBinder::bind`, interrupt watchdog, `luaL_sandbox`, seed) → compile+load entry, run once to capture callbacks as registry refs → register UI/tools/events → `Enabled`. **Disable:** optional `onDisable` (pcall) → total teardown → `lua_close`. **Hot-reload (dev-mode toggle):** `QFileSystemWatcher` debounced → disable → re-scan → enable; `storage` persists, UI rebuilds from scratch.
-
-### 4.8 CMake gating
-
-`option(GECK_ENABLE_PLUGINS … OFF)` that **requires** `GECK_ENABLE_SCRIPTING` (configure error otherwise). The **seam is always compiled** (`ITool`, `ToolRegistry`, `EditorMode::PluginTool`, the overlay field, MainWindow `addPlugin*`). The **Lua host is gated** behind `GECK_PLUGINS_ENABLED`: all of `src/plugin/*` and `src/ui/plugin/*`, with MainWindow's Plugins menu/discovery `#ifdef`-guarded exactly as `GECK_SCRIPTING_ENABLED` guards the console today.
-
-### 4.9 Phased plan (B)  *(DEFERRED — see the deferral note at the top of §4)*
-
-- ~~**B1 — The seam**~~ — **DONE & KEPT** (pure C++, no Lua, dual-use — powers the native Fill Brush): `ITool`+`ToolRegistry`; `EditorMode::PluginTool` + one `setMode`/`syncToolModeActions` case; one generic `InputHandler` branch; the shared `ToolPreviewSpec`→sprites overlay field; MainWindow `addPlugin*`/`removePluginUi`. Validated by porting **object placement** onto `ITool` with no UX change; the legacy `EditorMode::PlaceObject` path was deleted with the port.
-- **B2 — Persistent VM + lifecycle + manifest.** Built (`PluginVm`, `MapScriptApi::retarget`/`detach`, read-only `api` split, `PluginManager`/`PluginManifest`/dialog) then **DEFERRED**: the resident-VM substrate is merged and inert, the `PluginManager` MVP (PRs #120/#121) was **closed unmerged**. Not the active plan.
-- **B3–B6 — PARKED, not planned.** `editor:` registration + `map.write` + permission prompt + `storage` (B3); `Gui.*` panels (B4); `LuaTool` + events (B5); reference plugin, `fs.read`, hot-reload, scaffold, `plugin_api` (B6). Reference only, for a possible future revival.
-
----
-
-## 5. How A and B fit together
-
-**Area-fill brushes are the first first-party "plugins."** Build the seams once, exercise them with first-party fill, then open them to third parties. Four shared mechanisms — do not build them twice:
-
-1. **Selection → plain data.** `EditArea` (Feature A) and `editor:selection()` (Feature B) are the **same `SelectionManager`→tables/vectors projection** (`getHexesInArea`/`getTilesInAreaIncludingEmpty`/`getObjectsInArea` from a rect; the discrete `SelectionState` getters otherwise; objects as `{hex,pid}`, no `Object` crossing to Lua). One implementation, two thin adapters (a borrowed `EditArea*` bound per fill-run vs a live `editor:selection()` query).
-
-2. **One ghost-overlay `RenderData` field.** Feature B introduces a single generic overlay (populated by `ITool::buildPreview`). Feature A's fill preview and the freehand Fill Brush populate the *same* field rather than a bespoke `fillPreview`/`stampPreview`/`pluginToolPreview` triple. All three render through `PatternSprite::buildSpriteObject`/`buildTileSprite` + `DRAG_PREVIEW_ALPHA`.
-
-3. **One `ITool`/`ToolRegistry`.** The **freehand Fill Brush is a native `ITool`** (Feature A Phase A5), *not* a bespoke `EditorMode::FillBrush`+manager. It is the native tool that **validates the `ITool` seam (B1)** before any Lua `LuaTool` exists — exactly the "port one native tool" validation the seam needs. This deletes the duplicate tool plumbing the two original designs each proposed.
-
-4. **One commit/scatter engine.** `PatternStamper` (refactored onto `PlacementBatch`, with `planInto` for sink capture), `FillRecipeRunner` (the weighted+noise+density+spacing+jitter scatter engine), and the seeded primitives (`rng/rngInt/weightedPick/noise2d/noise3d/objectAt`) are shared. A third-party Scatter Brush plugin scatters with the **same primitives**; it does not reimplement scatter from scratch, and the first-party "Fill Selection" is the canonical worked example that proves the API surface is sufficient.
-
-**The one deliberate divergence:** the first-party fill builds a **fresh `MapScriptApi` per run** (like `EditorWidget::runScript`) and so **never needs `retarget`**; only the resident plugin VM does. This keeps the invasive `retarget`/persistent-VM/persistent-print work entirely inside Feature B, off the critical path of shipping area fill.
-
----
-
-## 6. Sequencing & effort
-
-Remaining phases, ordered by dependency and value. "Always compiled" phases work in the default
-`GECK_ENABLE_SCRIPTING=OFF` build.
-
-| # | Phase | Depends on | Effort | Ships |
-|---|---|---|---|---|
-| 1 | ~~**B1** `ITool`+`ToolRegistry`+`PluginTool`+generic input+overlay field+MainWindow `addPlugin*`~~ **DONE** | — | L | The seam, validated by porting object placement |
-| 2 | ~~**A5** freehand Fill Brush as native `ITool`~~ **DONE** | B1 | S | Drag-to-paint; proves `ITool` for real |
-| 3 | ~~**Plugin sandbox limits** placement cap + a default budget for the Script Console~~ **DONE** (see §3.10) | — | S | Prereq for resident plugin callbacks |
-| 4 | ~~**B2** persistent VM + manifest + lifecycle + retarget + read-only `api`~~ **DEFERRED** (substrate merged & inert; MVP PRs #120/#121 closed unmerged) | #3 | L | — |
-| 5 | ~~**B3** `editor:` register + `map.write` + permission + `storage`~~ **PARKED** | B2 | L | — |
-| 6 | ~~**B4/B5** `Gui.*` panels; `LuaTool` tools + events~~ **PARKED** | B3 | L | — |
-| 7 | ~~**B6** reference plugin, `fs.read`, hot-reload, scaffold, `plugin_api`~~ **PARKED** | B5 | M | — |
-
-Effort: S ≈ days, M ≈ 1–2 weeks, L ≈ 3–4 weeks for one developer. The plugin system is the
-strictly larger effort; A5 should follow once the seam is paid for.
-
-**Risks & open questions (decisions taken inline above):**
-
-- **`MapScriptApi::retarget` null-safety** is the single riskiest change — it touches a class shared by the generation runtime and CLI/MCP. Audit `_map == nullptr` across **every** method, keep the value ctor, land in B2 with focused tests. *Decision:* Feature A avoids it entirely by building fresh per run.
-- **Watchdog ≠ host-call preemption.** Document and accept that a heavy bound call (`mapSceneryHistogram`, large `placeStamp`, mass sprite build) can stutter the loop; bound it instead with the placement/result cap and by keeping such calls out of `preview`/event hot paths. Off-thread plugin work (pure-data `buildSprites=false` over `CommandHost`) is a *later* possibility, out of v1 scope (GL + sprite building are UI-thread-only).
-- **Preview cost on huge selections (40k hexes).** Bounded by debounce + placement cap + once-per-tweak plan; open whether to additionally clip preview to viewport-visible cells.
-- **Two scatter implementations** (C++ `FillRecipeRunner` + Lua). *Decision:* the runner is the source of truth; "Edit as Script" lowers a recipe to Lua that calls the same primitives, so the algorithm is defined once.
-- **Selection has no freeform region** (`SelectionState.h:69` is one `FloatRect` + discrete items). v1 area-fill and plugin area-fill are rect/discrete-set only; lasso/flood-fill/magic-wand is a separate future selection primitive.
-- **Autotile across the selection boundary** masks against selection membership in MVP; blending into pre-existing terrain via `getFloorXY` is a deferred advanced flag.
-- **`blob8` authoring burden** (47 entries). Support both `edges4` and `blob8`; ship `edges4` examples first.
-- **Trust beyond hand-installed plugins.** v1 deliberately ships only the install-time prompt; SHA pinning, re-prompt-on-widening, quarantine, the version triple, `.gplug`, and ed25519 signing are deferred until ABI 1 is frozen and a distribution channel exists. Gate third-party *distribution* until then.
+# Luau plugin system (Feature B) — DEFERRED indefinitely
+
+Parked 2026-07-12 (PR #122). Rationale: its marginal value over what exists — the Script Console
+runs Luau that reads and edits the map, and first-party tools cover the concrete use cases — is
+narrow (persistent interactive tools + third-party distribution), while its cost is permanent:
+untrusted third-party code on the UI thread, the `api:` surface becoming a compatibility
+contract, and a large permissions/`Gui.*`/event/packaging surface for a niche editor with a
+small author pool. If a concrete third-party need appears, revive from the full design in git
+history (`git show edf773d:PLAN.md`, §"Feature B").
+
+**Kept on master (dual-use, pays off without plugins):** the `ITool`/`ToolRegistry` seam
+(powers the native Fill Brush), `MapScriptApi`/`ScriptApiReference` (Console + headless
+CLI/MCP), the `LuaSandboxHost` extraction, the plan-sink placement cap + Console time budget,
+and the inert `MapScriptApi::retarget`/`detach` (reverting would churn a class the Console,
+CLI, MCP and fills all share).
+**Scrapped:** the `PluginManager` MVP (PRs #120/#121 closed unmerged; branches remain) and the
+resident-VM substrate (`PluginVm`, heap cap, persistent env — removed in #122).

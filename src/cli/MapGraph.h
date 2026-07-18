@@ -21,6 +21,15 @@ struct MapGraphOptions {
 /// kept and tagged by `kind`. `stats` flags dead-ends (no outgoing map edge) and maps with no
 /// incoming map edge (a location's entry points / orphans).
 ///
+/// Each map-kind edge is additionally crossed with the `geck::reachability` model to flag
+/// **one-way** links: `oneWay` is true when the player cannot walk back (`oneWayReason` =
+/// "no-return-edge" when the destination has no exit grid targeting the source, or
+/// "return-unreachable" when return exits exist but none shares a walkable component with the
+/// arrival hexes on the arrival elevation), false when a return path exists, and null when
+/// undeterminable (destination never analysed, or a return might run through another elevation —
+/// stairs are not traced, so "return-unreachable" is claimed only when every return exit lies on
+/// an arrival elevation). `stats.oneWayEdges` lists the flagged edges.
+///
 /// IMPORTANT: this is only the exit-grid layer — how a location's maps link to each other (intramap
 /// elevation changes + intermap edges within a town) and where they hand off to the world map. It is
 /// NOT the inter-city travel graph: cities are reached across the world map, so this graph is
