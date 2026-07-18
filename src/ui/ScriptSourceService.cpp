@@ -231,6 +231,14 @@ void ScriptSourceService::compileScript() {
 
     const std::string baseName
         = resource::scriptBaseName(QFileInfo(sslPath).fileName().toStdString());
+    if (baseName.empty()) {
+        // e.g. a file literally named ".ssl" — without a program name there is nothing to derive
+        // the scripts/<name>.int target from.
+        QtDialogs::showError(_dialogParent, "Compile Script",
+            QString("\"%1\" has no usable script name to derive the compiled .int from.")
+                .arg(QFileInfo(sslPath).fileName()));
+        return;
+    }
     compileFileForProgram(sslPath, baseName);
 }
 

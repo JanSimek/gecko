@@ -12,6 +12,7 @@
 #include <QPushButton>
 #include <QStandardPaths>
 #include <QStyle>
+#include <QVBoxLayout>
 
 namespace geck {
 

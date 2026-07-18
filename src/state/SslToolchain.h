@@ -28,9 +28,10 @@ public:
         bool success() const { return started && !timedOut && exitCode == 0; }
     };
 
-    /// Compile `sslPath` to `intPath` with the sslc binary at `compilerPath`.
-    /// Invocation: compile -q -l -p <ssl> -o <int> (-q: never block waiting for a keypress on
-    /// error, -l: no logo, -p: run the bundled mcpp preprocessor so #include/#define work). The
+    /// Compile `sslPath` to `intPath` with the sslc binary at `compilerPath` ("compile.exe" is
+    /// the binary's own upstream name, not a subcommand — `compilerPath` points straight at it).
+    /// Arguments: -q -l -p <ssl> -o <int> (-q: never block waiting for a keypress on error,
+    /// -l: no logo, -p: run the bundled mcpp preprocessor so #include/#define work). The
     /// working directory is the source file's folder so relative includes resolve.
     static RunResult compile(const QString& compilerPath, const std::filesystem::path& sslPath,
         const std::filesystem::path& intPath);
