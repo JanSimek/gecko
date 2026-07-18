@@ -13,7 +13,9 @@
 
 1. **Cave rim quality** — the known-issues list below; highest-value generation work.
 2. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
-3. **SSL script editing** — unstarted; Phase 1 toolchain glue is the entry point.
+3. **SSL script editing** — toolchain glue shipped (sslc/int2ssl wrappers, Script Tools
+   settings, Edit Script Source / Compile / Decompile UI); next is the built-in editor
+   (Phase 2 below).
 4. **Minimap / overview panel** (feature-gap audit).
 5. **In-game preview mode** — idle animations first.
 6. **Analysis/MCP tail** — small, self-contained items.
@@ -219,8 +221,15 @@ A simple Gecko-native editor: `QPlainTextEdit` (or QScintilla) + **KSyntaxHighli
 
 Adopt **C as the core**, structured so **B** falls out for free and **A** remains a future upgrade.
 
-- **Phase 1 — Toolchain glue (S/M).** `QProcess` wrappers for sslc (compile `.ssl`→`.int`, place into `scripts/`) and int2ssl (decompile `.int`→`.ssl`); tool-path Settings + first-run "locate binary" UX; output panel for compiler errors/warnings. Wire into the existing `scripts.lst`/`MapScript` flow: from `ScriptSelectorDialog`/`SpatialScriptDialog`/`MapInfoPanel`, given a program index, resolve `scripts.lst[index]` → `scripts/<name>.int`, and offer "Edit script."
-- **Phase 2 — Built-in editor (M).** `QPlainTextEdit`/QScintilla + KSyntaxHighlighting SSL highlighting. Open the `.ssl` if present, else int2ssl-decompile the `.int` (clearly flagged "decompiled, lossy"); Save → Phase-1 compile → place `.int`. Add "Open in external editor (VS Code)" detection as the escape hatch (this *is* Option B, now a menu item).
+- **Phase 1 — Toolchain glue: SHIPPED.** `SslToolchain` (sslc/int2ssl `QProcess` wrappers, output
+  mirrored into the Log panel tagged `[sslc]`/`[int2ssl]`), `ScriptSourceLocator` +
+  `SslOutputParser` (Qt-free), Script Tools settings page + locate-binary prompts, and
+  `ScriptSourceService` behind "Edit Script Source…" (Scripts panel context menu, Map Info
+  map-script row, spatial dialog) plus Scripts › Compile/Decompile. DAT-resident sources are
+  extracted via `ensureWritableCopy`; missing sources decompile on confirm (flagged lossy).
+  *Not built (deliberate):* registering a brand-new script name into `scripts.lst` at compile
+  time — needs an Lst writer + override semantics; do it with Phase 2.
+- **Phase 2 — Built-in editor (M).** `QPlainTextEdit`/QScintilla + KSyntaxHighlighting SSL highlighting. Open the `.ssl` if present, else int2ssl-decompile the `.int` (clearly flagged "decompiled, lossy"); Save → compile via the shipped `SslToolchain` → place `.int`. Add "Open in external editor (VS Code)" detection as the escape hatch (this *is* Option B, now a menu item).
 - **Phase 3 — Optional LSP upgrade (L, gated on demand + MLS licensing).** Reuse the Phase-2 widget as an LSP client to `@bgforge/mls-server` for completion/hover/diagnostics, **only if** a Node runtime is acceptable and MLS's license is clarified so we can guide installation. Do not bundle the server.
 
 ### Ties to scripts.lst + MapScript model

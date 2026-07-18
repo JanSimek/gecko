@@ -91,6 +91,12 @@ public:
     QString getCustomEditorPath() const;
     void setCustomEditorPath(const QString& path);
 
+    // External SSL script toolchain (user-provided binaries; see SslToolchain)
+    QString getSslCompilerPath() const;
+    void setSslCompilerPath(const QString& path);
+    QString getSslDecompilerPath() const;
+    void setSslDecompilerPath(const QString& path);
+
     // Selection highlight colours (preferences). Keys: "object", "wall", "critter", "tile".
     // Returns @p fallback when the colour has not been configured.
     QColor getSelectionColor(const QString& key, const QColor& fallback) const;
@@ -143,6 +149,10 @@ private:
     // Text editor configuration
     TextEditorMode _textEditorMode = TextEditorMode::SYSTEM_DEFAULT;
     QString _customEditorPath;
+
+    // External SSL script toolchain (sslc compiler / int2ssl decompiler)
+    QString _sslCompilerPath;
+    QString _sslDecompilerPath;
 
     // Selection highlight colour overrides (empty = use the renderer defaults).
     QMap<QString, QColor> _selectionColors;

@@ -46,6 +46,7 @@
 #include "ui/Settings.h"
 #include "ui/QtDialogs.h"
 #include "ui/ExternalEditorLauncher.h"
+#include "ui/ScriptSourceService.h"
 #include "reader/lst/LstReader.h"
 #include "format/lst/Lst.h"
 #include "format/map/MapObject.h"
@@ -130,6 +131,7 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
     _gameLauncher = std::make_unique<GameLauncher>(*_resourcesShared, _settings, this, [this](const QString& message) { showStatusMessage(message); }, nullptr);
 
     _externalEditorLauncher = std::make_unique<ExternalEditorLauncher>(*_resourcesShared, _settings, this);
+    _scriptSourceService = std::make_unique<ScriptSourceService>(*_resourcesShared, _settings, *_externalEditorLauncher, this);
 
     restoreDockWidgetState();
 
@@ -518,6 +520,12 @@ void MainWindow::setupMenuBar() {
 
     updateUndoRedoActions();
     updateFillSelectionAction();
+
+    // File-level SSL toolchain actions (sslc / int2ssl). Per-script "Edit Script Source" lives on
+    // the Scripts panel rows, the Map Info map-script row and the spatial-script dialog.
+    _scriptsMenu = _menuBar->addMenu("&Scripts");
+    addMenuAction(_scriptsMenu, ":/icons/actions/save.svg", "&Compile Script...", &MainWindow::showCompileScriptDialog, QKeySequence(), "Compile an SSL source file to the .int bytecode the engine loads");
+    addMenuAction(_scriptsMenu, ":/icons/actions/open.svg", "&Decompile Script...", &MainWindow::showDecompileScriptDialog, QKeySequence(), "Recover best-effort SSL source from a compiled .int script");
 
     _viewMenu = _menuBar->addMenu("&View");
     struct ViewToggleSpec {
@@ -1893,6 +1901,12 @@ void MainWindow::connectPanelSignals() {
         // Editing a global variable value edits the map's .gam (MAP_GLOBAL_VARS); flag the map modified
         // so persistMapVars() writes the .gam alongside the .map on save (see the saveMap handlers).
         connect(_mapInfoPanel, &MapInfoPanel::mapVariablesChanged, this, [this]() { setMapModified(true); });
+        // "Edit Source..." next to the map-script row opens the header script's .ssl.
+        connect(_mapInfoPanel, &MapInfoPanel::mapScriptSourceEditRequested, this, [this](int programIndex) {
+            if (_scriptSourceService) {
+                _scriptSourceService->editScriptSource(programIndex);
+            }
+        });
     }
 
     // ScriptsPanel signals → current editor widget. Double-clicking an object-owned script row jumps to
@@ -1923,6 +1937,12 @@ void MainWindow::connectPanelSignals() {
         connect(_scriptsPanel, &ScriptsPanel::spatialScriptDeleteRequested, this, [this](uint32_t sid) {
             if (_currentEditorWidget) {
                 _currentEditorWidget->deleteSpatialScript(sid);
+            }
+        });
+        // "Edit Script Source..." on any row: open the .ssl behind the row's program index.
+        connect(_scriptsPanel, &ScriptsPanel::scriptSourceEditRequested, this, [this](int programIndex) {
+            if (_scriptSourceService) {
+                _scriptSourceService->editScriptSource(programIndex);
             }
         });
     }
@@ -2041,6 +2061,11 @@ void MainWindow::openSpatialScriptDialog(std::optional<uint32_t> editSid) {
         dialog->setRadius(info->radius);
     }
 
+    dialog->setSourceEditRequester([this](int programIndex) {
+        if (_scriptSourceService) {
+            _scriptSourceService->editScriptSource(programIndex);
+        }
+    });
     connect(dialog, &SpatialScriptDialog::pickPositionRequested, this, &MainWindow::pickSpatialScriptPosition);
     connect(dialog, &QDialog::accepted, this, &MainWindow::applySpatialScriptDialog);
     connect(dialog, &QObject::destroyed, this, [this]() { _spatialScriptDialog = nullptr; });
@@ -2661,6 +2686,18 @@ void MainWindow::showMapBrowserDialog() {
     const QString mapPath = dialog.selectedMapPath();
     if (!mapPath.isEmpty()) {
         handleMapLoadRequest(mapPath.toStdString(), false);
+    }
+}
+
+void MainWindow::showCompileScriptDialog() {
+    if (_scriptSourceService) {
+        _scriptSourceService->compileScript();
+    }
+}
+
+void MainWindow::showDecompileScriptDialog() {
+    if (_scriptSourceService) {
+        _scriptSourceService->decompileScript();
     }
 }
 

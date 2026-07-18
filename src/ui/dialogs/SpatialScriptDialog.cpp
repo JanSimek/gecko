@@ -26,8 +26,13 @@ SpatialScriptDialog::SpatialScriptDialog(const std::vector<ScriptSelectorDialog:
     auto* scriptRow = new QHBoxLayout();
     _scriptLabel = new QLabel("None");
     auto* chooseButton = new QPushButton("Choose...");
+    _editSourceButton = new QPushButton("Edit Source...");
+    _editSourceButton->setToolTip("Open the chosen script's SSL source in the configured editor");
+    _editSourceButton->setVisible(false); // shown once a host wires setSourceEditRequester
+    _editSourceButton->setEnabled(false); // needs a chosen script
     scriptRow->addWidget(_scriptLabel, 1);
     scriptRow->addWidget(chooseButton);
+    scriptRow->addWidget(_editSourceButton);
     formLayout->addRow("Script:", scriptRow);
 
     _tileSpin = new QSpinBox(this);
@@ -58,6 +63,11 @@ SpatialScriptDialog::SpatialScriptDialog(const std::vector<ScriptSelectorDialog:
     _okButton->setEnabled(false); // need a script first
     connect(chooseButton, &QPushButton::clicked, this, &SpatialScriptDialog::onChooseScript);
     connect(pickButton, &QPushButton::clicked, this, &SpatialScriptDialog::pickPositionRequested);
+    connect(_editSourceButton, &QPushButton::clicked, this, [this]() {
+        if (_sourceEditRequester && _programIndex >= 0) {
+            _sourceEditRequester(_programIndex);
+        }
+    });
     mainLayout->addWidget(buttonBox);
 }
 
@@ -86,6 +96,12 @@ void SpatialScriptDialog::selectProgram(int index) {
         _scriptLabel->setText(QString("Script #%1").arg(index));
     }
     _okButton->setEnabled(index >= 0);
+    _editSourceButton->setEnabled(index >= 0);
+}
+
+void SpatialScriptDialog::setSourceEditRequester(std::function<void(int)> requester) {
+    _sourceEditRequester = std::move(requester);
+    _editSourceButton->setVisible(static_cast<bool>(_sourceEditRequester));
 }
 
 void SpatialScriptDialog::setProgramIndex(int index) {

@@ -3,6 +3,7 @@
 #include "ui/common/BaseDialog.h"
 #include "ui/dialogs/ScriptSelectorDialog.h"
 
+#include <functional>
 #include <vector>
 
 class QLabel;
@@ -36,6 +37,10 @@ public:
 
     static constexpr int MAX_RADIUS = 50; // engine win_get_num_i range in map_scr_add_spatial
 
+    // Host-provided hook behind the "Edit Source..." button (MainWindow routes it to
+    // ScriptSourceService). The button stays hidden until a hook is set.
+    void setSourceEditRequester(std::function<void(int programIndex)> requester);
+
 signals:
     /// The user clicked "Pick on map"; the host should let them click a hex and feed it back via
     /// setTile()/setElevation(). The dialog is non-modal so the map stays interactive.
@@ -49,8 +54,10 @@ private:
     void selectProgram(int index);
     std::vector<ScriptSelectorDialog::Entry> _scripts;
     int _programIndex = -1;
+    std::function<void(int)> _sourceEditRequester;
 
     QLabel* _scriptLabel;
+    QPushButton* _editSourceButton;
     QSpinBox* _tileSpin;
     QComboBox* _elevationCombo;
     QSpinBox* _radiusSpin;

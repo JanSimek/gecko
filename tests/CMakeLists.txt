@@ -60,6 +60,8 @@ add_executable(general_tests
     general/test_map_completeness.cpp
     general/test_resource_repository.cpp
     general/test_script_names.cpp
+    general/test_script_source_locator.cpp
+    general/test_ssl_output_parser.cpp
     general/test_object_visibility.cpp
     general/test_dat_concurrency.cpp
     general/test_map_renderer.cpp
@@ -122,6 +124,8 @@ add_executable(qt_tests
     qt/test_settings_writable_path.cpp
     # CI-failing ceilings on operations that have regressed catastrophically before.
     qt/test_performance_guards.cpp
+    # SslToolchain QProcess wrapper driven against fake shell-script tools (POSIX-only cases).
+    qt/test_ssl_toolchain.cpp
 )
 
 # Round-trip the headless pattern writer (gecko_cli) through the editor's Qt PatternSerializer.

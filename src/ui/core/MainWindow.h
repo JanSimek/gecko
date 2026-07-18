@@ -39,6 +39,7 @@ namespace resource {
 class Settings;
 class GameLauncher;
 class ExternalEditorLauncher;
+class ScriptSourceService;
 class SFMLWidget;
 class EditorWidget;
 class LoadingWidget;
@@ -160,6 +161,8 @@ private slots:
     void showStampPatternDialog();
     void showFillDialog();
     void showMapBrowserDialog();
+    void showCompileScriptDialog();
+    void showDecompileScriptDialog();
 
 public slots:
     void showStatusMessage(const QString& message);
@@ -271,6 +274,7 @@ private:
     std::shared_ptr<Settings> _settings;
     std::unique_ptr<GameLauncher> _gameLauncher;
     std::unique_ptr<ExternalEditorLauncher> _externalEditorLauncher;
+    std::unique_ptr<ScriptSourceService> _scriptSourceService;
 
     // Current widgets
     EditorWidget* _currentEditorWidget;
@@ -280,6 +284,7 @@ private:
     QMenuBar* _menuBar;
     QMenu* _fileMenu;
     QMenu* _editMenu;
+    QMenu* _scriptsMenu = nullptr;
     QMenu* _viewMenu;
     QMenu* _panelsMenu;
     QMenu* _elevationMenu;

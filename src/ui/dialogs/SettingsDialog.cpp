@@ -2,6 +2,7 @@
 #include "ui/widgets/DataPathsWidget.h"
 #include "ui/widgets/GameLocationWidget.h"
 #include "ui/widgets/TextEditorWidget.h"
+#include "ui/widgets/ScriptToolsWidget.h"
 #include "ui/UIConstants.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/Settings.h"
@@ -76,6 +77,7 @@ void SettingsDialog::setupTabs() {
     setupGeneralTab();
     setupViewportTab();
     setupEditorTab();
+    setupScriptToolsTab();
     setupColorsTab();
 
     _mainLayout->addWidget(_tabWidget);
@@ -199,6 +201,21 @@ void SettingsDialog::setupEditorTab() {
     connect(_textEditorWidget, &TextEditorWidget::configurationChanged, this, &SettingsDialog::onWidgetChanged);
 }
 
+void SettingsDialog::setupScriptToolsTab() {
+    _scriptToolsTab = new QWidget();
+    auto* layout = new QVBoxLayout(_scriptToolsTab);
+    layout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
+    layout->setSpacing(SPACING_LOOSE);
+
+    _scriptToolsWidget = new ScriptToolsWidget();
+    layout->addWidget(_scriptToolsWidget);
+    layout->addStretch();
+
+    _tabWidget->addTab(_scriptToolsTab, "Script Tools");
+
+    connect(_scriptToolsWidget, &ScriptToolsWidget::configurationChanged, this, &SettingsDialog::onWidgetChanged);
+}
+
 void SettingsDialog::setupButtonBox() {
     _buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 
@@ -228,6 +245,9 @@ void SettingsDialog::loadSettings() {
 
     _textEditorWidget->setEditorMode(settings.getTextEditorMode());
     _textEditorWidget->setCustomEditorPath(settings.getCustomEditorPath());
+
+    _scriptToolsWidget->setCompilerPath(settings.getSslCompilerPath());
+    _scriptToolsWidget->setDecompilerPath(settings.getSslDecompilerPath());
 
     _gameLocationWidget->setExecutableLocation(settings.getExecutableGameLocation());
     _gameLocationWidget->setDataDirectory(settings.getGameDataDirectory());
@@ -270,6 +290,9 @@ void SettingsDialog::saveSettings() {
 
     settings.setExecutableGameLocation(_gameLocationWidget->getExecutableLocation());
     settings.setGameDataDirectory(_gameLocationWidget->getDataDirectory());
+
+    settings.setSslCompilerPath(_scriptToolsWidget->getCompilerPath());
+    settings.setSslDecompilerPath(_scriptToolsWidget->getDecompilerPath());
 
     for (auto it = _selectionColors.constBegin(); it != _selectionColors.constEnd(); ++it) {
         settings.setSelectionColor(it.key(), it.value());
