@@ -63,18 +63,19 @@ namespace {
         std::string oneWayReason; ///< "no-return-edge" or "return-unreachable" when oneWay is true
     };
 
-    using Nodes = std::map<std::string, NodeInfo>;
+    using Nodes = std::map<std::string, NodeInfo, std::less<>>;
     using Edges = std::map<std::pair<std::string, std::string>, EdgeInfo>;
+    using StringMap = std::map<std::string, std::string, std::less<>>;
 
     // .map filename -> owning worldmap area name, from city.txt entrances (resolved lookup_name ->
     // file). Gives each map_graph node its area, the reverse of world_map's area.maps[].mapFile.
-    std::map<std::string, std::string> mapToArea(const CityTxt& city, const resource::MapNameResolver& names) {
-        std::map<std::string, std::string> areaOf;
+    StringMap mapToArea(const CityTxt& city, const resource::MapNameResolver& names) {
+        StringMap areaOf;
         for (const CityArea& area : city.areas) {
             for (const CityEntrance& entrance : area.entrances) {
                 const std::string file = names.fileNameOfLookup(entrance.map);
                 if (!file.empty()) {
-                    areaOf.emplace(file, area.name); // first area wins if a map is shared
+                    areaOf.try_emplace(file, area.name); // first area wins if a map is shared
                 }
             }
         }
@@ -121,8 +122,7 @@ namespace {
     // Load each map and fold its exit grids into the node/edge maps; returns how many maps loaded.
     // `pathOf` records each analysed node's full path so the one-way join can re-load it.
     int buildGraph(resource::GameResources& resources, const resource::MapNameResolver& names,
-        const std::vector<std::string>& mapPaths, Nodes& nodes, Edges& edges,
-        std::map<std::string, std::string>& pathOf) {
+        const std::vector<std::string>& mapPaths, Nodes& nodes, Edges& edges, StringMap& pathOf) {
         int analysed = 0;
         for (const auto& mapPath : mapPaths) {
             const std::unique_ptr<Map> map = loadMap(resources, mapPath);
@@ -136,7 +136,7 @@ namespace {
             if (fromNode.displayName.empty() && fromIndex >= 0) {
                 fromNode.displayName = names.displayName(fromIndex, 0);
             }
-            pathOf.emplace(fromFile, mapPath);
+            pathOf.try_emplace(fromFile, mapPath);
             ++analysed;
             for (const MapExit& exit : collectMapExits(*map)) {
                 addExit(names, fromFile, exit, nodes, edges);
@@ -174,8 +174,8 @@ namespace {
     // reachability tool (doors passable), so a "return-unreachable" verdict is a real seal, not a
     // locked door.
     void evaluateReturnWalkability(resource::GameResources& resources, EdgeInfo& edge,
-        const EdgeInfo& returnEdge, const std::string& toFile,
-        const std::map<std::string, std::string>& pathOf, std::map<std::string, DestReachability>& reach) {
+        const EdgeInfo& returnEdge, const std::string& toFile, const StringMap& pathOf,
+        std::map<std::string, DestReachability, std::less<>>& reach) {
         DestReachability& dest = reach[toFile];
         if (!dest.map && !dest.loadFailed) {
             const auto path = pathOf.find(toFile);
@@ -220,14 +220,13 @@ namespace {
     // townmap/unknown) have no "return" concept and stay unset, as do edges into maps that were
     // never analysed.
     void annotateReturnPaths(resource::GameResources& resources, const Nodes& nodes, Edges& edges,
-        const std::map<std::string, std::string>& pathOf) {
-        std::map<std::string, DestReachability> reach;
+        const StringMap& pathOf) {
+        std::map<std::string, DestReachability, std::less<>> reach;
         for (auto& [key, edge] : edges) {
             if (edge.kind != "map") {
                 continue;
             }
-            const auto toNode = nodes.find(key.second);
-            if (toNode == nodes.end() || !toNode->second.analysed) {
+            if (const auto toNode = nodes.find(key.second); toNode == nodes.end() || !toNode->second.analysed) {
                 continue; // never loaded the destination -> its exits are unknown
             }
             const auto reciprocal = edges.find({ key.second, key.first });
@@ -275,7 +274,7 @@ namespace {
     }
 
     ordered_json graphToJson(const Nodes& nodes, const Edges& edges, int analysed,
-        const resource::MapNameResolver& names, const std::map<std::string, std::string>& areaOf) {
+        const resource::MapNameResolver& names, const StringMap& areaOf) {
         auto nodesJson = ordered_json::array();
         for (const auto& [file, info] : nodes) {
             const std::string lookupName = names.lookupNameOf(file); // maps.txt key (world_map's entrance name)
@@ -313,10 +312,10 @@ int buildMapGraph(resource::GameResources& resources, const MapGraphOptions& opt
 
     const CityTxt city = loadConfig<CityTxt>(resources, { "data/city.txt", "city.txt" },
         [](const std::string& text) { return parseCityTxt(text); });
-    const std::map<std::string, std::string> areaOf = mapToArea(city, names);
+    const StringMap areaOf = mapToArea(city, names);
     Nodes nodes;
     Edges edges;
-    std::map<std::string, std::string> pathOf;
+    StringMap pathOf;
     const int analysed = buildGraph(resources, names, mapPaths, nodes, edges, pathOf);
     annotateReturnPaths(resources, nodes, edges, pathOf);
     out << graphToJson(nodes, edges, analysed, names, areaOf).dump(2, ' ', false, ordered_json::error_handler_t::replace) << "\n";

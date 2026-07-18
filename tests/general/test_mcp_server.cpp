@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "mcp/Base64.h"
@@ -286,7 +287,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
 
 // The base64 encoder feeds MCP image content blocks; padding and binary bytes must match RFC 4648.
 TEST_CASE("encodeBase64 produces RFC 4648 output with padding", "[mcp]") {
-    const auto encode = [](const std::string& text) {
+    const auto encode = [](std::string_view text) {
         return mcp::encodeBase64(reinterpret_cast<const unsigned char*>(text.data()), text.size());
     };
     CHECK(encode("").empty());
