@@ -7,6 +7,7 @@
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
 #include "resource/ScriptSourceLocator.h"
+#include "reader/ReaderExceptions.h"
 #include "resource/WritableDataRoot.h"
 #include "state/SslToolchain.h"
 #include "util/FileIo.h"
@@ -41,7 +42,7 @@ std::string ScriptSourceService::resolveBaseName(int programIndex) {
                 return baseName;
             }
         }
-    } catch (const std::runtime_error& e) {
+    } catch (const FileReaderException& e) {
         spdlog::warn("scripts.lst not available: {}", e.what());
     }
     QtDialogs::showError(_dialogParent, "Edit Script",
@@ -134,7 +135,7 @@ void ScriptSourceService::editScriptSource(int programIndex) {
                 = resource::ensureWritableCopy(files, *writableRoot, source->vfsPath.generic_string());
             files.refresh(); // the loose copy must shadow the DAT on the next lookup
             _editorLauncher.openFile(QString::fromStdString(copy.string()));
-        } catch (const std::runtime_error& e) {
+        } catch (const resource::WritableCopyError& e) {
             QtDialogs::showError(_dialogParent, "Edit Script",
                 QString("Extracting the source failed: %1").arg(e.what()));
         }

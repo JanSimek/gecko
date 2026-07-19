@@ -52,13 +52,13 @@ std::filesystem::path ensureWritableCopy(const DataFileSystem& files,
 
     const auto bytes = files.readRawBytes(vfsRelPath);
     if (!bytes.has_value()) {
-        throw std::runtime_error("ensureWritableCopy: cannot read '" + vfsRelPath + "' from the mounted data");
+        throw WritableCopyError("ensureWritableCopy: cannot read '" + vfsRelPath + "' from the mounted data");
     }
 
     std::filesystem::create_directories(dest.parent_path());
     std::ofstream out(dest, std::ios::binary | std::ios::trunc);
     if (!out) {
-        throw std::runtime_error("ensureWritableCopy: cannot write " + dest.string());
+        throw WritableCopyError("ensureWritableCopy: cannot write " + dest.string());
     }
     out.write(reinterpret_cast<const char*>(bytes->data()), static_cast<std::streamsize>(bytes->size()));
     return dest;
