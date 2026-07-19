@@ -10,15 +10,15 @@ namespace geck::resource {
 namespace {
 
     std::optional<ScriptFileLocation> locateFirstExisting(const DataFileSystem& files,
-        std::initializer_list<std::string> vfsCandidates) {
-        for (const std::string& vfsPath : vfsCandidates) {
+        std::initializer_list<std::filesystem::path> vfsCandidates) {
+        for (const std::filesystem::path& vfsPath : vfsCandidates) {
             if (!files.exists(vfsPath)) {
                 continue;
             }
             ScriptFileLocation location;
             location.vfsPath = vfsPath;
-            const auto info = files.sourceInfo(vfsPath);
-            if (info && info->kind == MountedSourceInfo::Kind::Directory) {
+            if (const auto info = files.sourceInfo(vfsPath);
+                info && info->kind == MountedSourceInfo::Kind::Directory) {
                 // sourceInfo() reports the winning mount's root; the file itself sits at
                 // root/<vfs path>.
                 location.diskPath = info->sourcePath / vfsPath;
@@ -42,14 +42,14 @@ std::string scriptBaseName(const std::string& lstEntry) {
     }
 
     const auto isSpace = [](unsigned char c) { return std::isspace(c) != 0; };
-    name.erase(name.begin(), std::find_if_not(name.begin(), name.end(), isSpace));
+    name.erase(name.begin(), std::ranges::find_if_not(name, isSpace));
     name.erase(std::find_if_not(name.rbegin(), name.rend(), isSpace).base(), name.end());
 
     if (const std::size_t dot = name.rfind('.'); dot != std::string::npos) {
         name.erase(dot);
     }
 
-    std::transform(name.begin(), name.end(), name.begin(),
+    std::ranges::transform(name, name.begin(),
         [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return name;
 }

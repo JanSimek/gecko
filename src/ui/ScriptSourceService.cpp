@@ -17,7 +17,6 @@
 #include <spdlog/spdlog.h>
 
 #include <filesystem>
-#include <functional>
 
 namespace geck {
 
@@ -42,7 +41,7 @@ std::string ScriptSourceService::resolveBaseName(int programIndex) {
                 return baseName;
             }
         }
-    } catch (const std::exception& e) {
+    } catch (const std::runtime_error& e) {
         spdlog::warn("scripts.lst not available: {}", e.what());
     }
     QtDialogs::showError(_dialogParent, "Edit Script",
@@ -55,16 +54,17 @@ namespace {
 
     // The tool path stored in Settings when it exists, prompting a locate dialog otherwise.
     // Shared shape for both binaries; `describe` names the tool in the prompts.
+    template <typename PersistFn>
     QString ensureToolPath(QWidget* parent, const QString& configured, const QString& describe,
-        const std::function<void(const QString&)>& persist) {
+        PersistFn persist) {
         if (!configured.isEmpty() && QFileInfo::exists(configured)) {
             return configured;
         }
 
-        const QString reason = configured.isEmpty()
-            ? QString("%1 is not configured.").arg(describe)
-            : QString("The configured %1 no longer exists:\n%2").arg(describe, configured);
-        if (!QtDialogs::showQuestion(parent, "Script Tools",
+        if (const QString reason = configured.isEmpty()
+                ? QString("%1 is not configured.").arg(describe)
+                : QString("The configured %1 no longer exists:\n%2").arg(describe, configured);
+            !QtDialogs::showQuestion(parent, "Script Tools",
                 reason + "\n\nLocate the executable now? (It can also be set later in "
                          "Preferences › Script Tools.)")) {
             return {};
@@ -130,10 +130,11 @@ void ScriptSourceService::editScriptSource(int programIndex) {
             return;
         }
         try {
-            const fs::path copy = resource::ensureWritableCopy(files, *writableRoot, source->vfsPath);
+            const fs::path copy
+                = resource::ensureWritableCopy(files, *writableRoot, source->vfsPath.generic_string());
             files.refresh(); // the loose copy must shadow the DAT on the next lookup
             _editorLauncher.openFile(QString::fromStdString(copy.string()));
-        } catch (const std::exception& e) {
+        } catch (const std::runtime_error& e) {
             QtDialogs::showError(_dialogParent, "Edit Script",
                 QString("Extracting the source failed: %1").arg(e.what()));
         }
@@ -180,7 +181,7 @@ void ScriptSourceService::editScriptSource(int programIndex) {
         if (!bytes) {
             QtDialogs::showError(_dialogParent, "Edit Script",
                 QString("Reading %1 from the mounted data failed.")
-                    .arg(QString::fromStdString(compiled->vfsPath)));
+                    .arg(QString::fromStdString(compiled->vfsPath.generic_string())));
             return;
         }
         const fs::path tempInt = fs::path(
@@ -209,9 +210,14 @@ bool ScriptSourceService::runDecompiler(const QString& decompilerPath, const std
         return true;
     }
 
-    const QString detail = !result.started ? QString("int2ssl could not be started.")
-        : result.timedOut                  ? QString("int2ssl timed out.")
-                                           : QString("int2ssl exited with code %1.").arg(result.exitCode);
+    QString detail;
+    if (!result.started) {
+        detail = QString("int2ssl could not be started.");
+    } else if (result.timedOut) {
+        detail = QString("int2ssl timed out.");
+    } else {
+        detail = QString("int2ssl exited with code %1.").arg(result.exitCode);
+    }
     QtDialogs::showError(_dialogParent, "Decompile Script",
         detail + "\nSee the Log panel ([int2ssl]) for the tool output.");
     return false;

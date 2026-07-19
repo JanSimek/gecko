@@ -34,6 +34,33 @@ namespace {
         return true;
     }
 
+    // Consume ":line[:col]:" from the front of `rest` into the diagnostic; false (leaving
+    // `rest` untouched) when it doesn't start with a line number.
+    bool consumeLocationNumbers(std::string_view& rest, Diagnostic& diagnostic) {
+        if (rest.empty() || rest.front() != ':') {
+            return false;
+        }
+        std::string_view afterColon = rest.substr(1);
+        int line = 0;
+        if (!consumeNumber(afterColon, line)) {
+            return false;
+        }
+        diagnostic.line = line;
+        if (!afterColon.empty() && afterColon.front() == ':') {
+            std::string_view afterSecond = afterColon.substr(1);
+            int column = 0;
+            if (consumeNumber(afterSecond, column)) {
+                diagnostic.column = column;
+                afterColon = afterSecond;
+            }
+        }
+        if (!afterColon.empty() && afterColon.front() == ':') {
+            afterColon.remove_prefix(1);
+        }
+        rest = afterColon;
+        return true;
+    }
+
     // Parse the "<file>:line:col: message" tail after the severity tag. The angle brackets and
     // the ":col" part are treated as optional so minor upstream format drift stays parseable.
     void parseLocationAndMessage(std::string_view tail, Diagnostic& diagnostic) {
@@ -46,25 +73,7 @@ namespace {
             }
         }
 
-        if (!rest.empty() && rest.front() == ':') {
-            std::string_view afterColon = rest.substr(1);
-            int line = 0;
-            if (consumeNumber(afterColon, line)) {
-                diagnostic.line = line;
-                if (!afterColon.empty() && afterColon.front() == ':') {
-                    std::string_view afterSecond = afterColon.substr(1);
-                    int column = 0;
-                    if (consumeNumber(afterSecond, column)) {
-                        diagnostic.column = column;
-                        afterColon = afterSecond;
-                    }
-                }
-                if (!afterColon.empty() && afterColon.front() == ':') {
-                    afterColon.remove_prefix(1);
-                }
-                rest = afterColon;
-            }
-        }
+        consumeLocationNumbers(rest, diagnostic);
 
         diagnostic.message = std::string(trimmed(rest));
         if (diagnostic.message.empty() && diagnostic.file.empty()) {
@@ -105,7 +114,7 @@ std::vector<Diagnostic> parseSslcOutput(std::string_view output) {
 }
 
 std::size_t countDiagnostics(const std::vector<Diagnostic>& diagnostics, DiagnosticSeverity severity) {
-    return static_cast<std::size_t>(std::count_if(diagnostics.begin(), diagnostics.end(),
+    return static_cast<std::size_t>(std::ranges::count_if(diagnostics,
         [severity](const Diagnostic& diagnostic) { return diagnostic.severity == severity; }));
 }
 

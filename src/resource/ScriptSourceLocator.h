@@ -11,7 +11,7 @@ class DataFileSystem;
 /// A script file resolved through the VFS: where its winning copy lives and whether it can be
 /// edited/overwritten in place.
 struct ScriptFileLocation {
-    std::string vfsPath;            // forward-slashed VFS path, e.g. "scripts/artemple.ssl"
+    std::filesystem::path vfsPath;  // VFS path with generic separators, e.g. "scripts/artemple.ssl"
     std::filesystem::path diskPath; // native path when the winning mount is a directory, else empty
     bool insideDat = false;         // the winning mount is a DAT archive (read-only)
 };

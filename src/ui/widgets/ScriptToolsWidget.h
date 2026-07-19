@@ -2,6 +2,7 @@
 
 #include <QGroupBox>
 
+class QFormLayout;
 class QLineEdit;
 class QPushButton;
 
@@ -29,6 +30,10 @@ signals:
     void configurationChanged();
 
 private:
+    // One "<label>: [path edit] [Browse...]" form row; returns the created path edit.
+    QLineEdit* addPathRow(QFormLayout* form, const QString& label, const QString& placeholder,
+        const QString& dialogTitle);
+
     QLineEdit* _compilerPathEdit = nullptr;
     QLineEdit* _decompilerPathEdit = nullptr;
 };

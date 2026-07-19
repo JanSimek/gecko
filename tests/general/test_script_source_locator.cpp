@@ -36,7 +36,7 @@ TEST_CASE("locateScriptSource and locateCompiledScript resolve loose files to di
     SECTION("scripts/<base>.ssl wins and reports its native path") {
         const auto location = resource::locateScriptSource(files, "test1");
         REQUIRE(location.has_value());
-        CHECK(location->vfsPath == "scripts/test1.ssl");
+        CHECK(location->vfsPath.generic_string() == "scripts/test1.ssl");
         CHECK_FALSE(location->insideDat);
         CHECK(fs::equivalent(location->diskPath, dataRoot / "scripts" / "test1.ssl"));
     }
@@ -44,7 +44,7 @@ TEST_CASE("locateScriptSource and locateCompiledScript resolve loose files to di
     SECTION("scripts/source/<base>.ssl is the fallback probe") {
         const auto location = resource::locateScriptSource(files, "test2");
         REQUIRE(location.has_value());
-        CHECK(location->vfsPath == "scripts/source/test2.ssl");
+        CHECK(location->vfsPath.generic_string() == "scripts/source/test2.ssl");
         CHECK(fs::equivalent(location->diskPath, dataRoot / "scripts" / "source" / "test2.ssl"));
     }
 
@@ -57,7 +57,7 @@ TEST_CASE("locateScriptSource and locateCompiledScript resolve loose files to di
     SECTION("the compiled .int resolves like the source does") {
         const auto location = resource::locateCompiledScript(files, "test1");
         REQUIRE(location.has_value());
-        CHECK(location->vfsPath == "scripts/test1.int");
+        CHECK(location->vfsPath.generic_string() == "scripts/test1.int");
         CHECK(fs::equivalent(location->diskPath, dataRoot / "scripts" / "test1.int"));
     }
 

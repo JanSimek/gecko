@@ -32,39 +32,39 @@ ScriptToolsWidget::ScriptToolsWidget(QWidget* parent)
     auto* form = new QFormLayout();
     form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
-    const auto addPathRow = [this, form](const QString& label, const QString& placeholder,
-                                const QString& dialogTitle) {
-        auto* pathEdit = new QLineEdit(this);
-        pathEdit->setPlaceholderText(placeholder);
-        connect(pathEdit, &QLineEdit::textChanged, this, &ScriptToolsWidget::configurationChanged);
-
-        auto* browseButton = new QPushButton("Browse...", this);
-        browseButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogOpenButton));
-        connect(browseButton, &QPushButton::clicked, this, [this, pathEdit, dialogTitle]() {
-            const QString currentPath = pathEdit->text();
-            const QString startPath = currentPath.isEmpty()
-                ? QStandardPaths::writableLocation(QStandardPaths::HomeLocation)
-                : QFileInfo(currentPath).absolutePath();
-            const QString chosen = QFileDialog::getOpenFileName(this, dialogTitle, startPath,
-                "Executable Files (*.exe *);;All Files (*)");
-            if (!chosen.isEmpty()) {
-                pathEdit->setText(chosen);
-            }
-        });
-
-        auto* row = new QHBoxLayout();
-        row->addWidget(pathEdit, 1);
-        row->addWidget(browseButton);
-        form->addRow(label, row);
-        return pathEdit;
-    };
-
-    _compilerPathEdit = addPathRow("sslc compiler:", "Path to compile / sslc executable...",
+    _compilerPathEdit = addPathRow(form, "sslc compiler:", "Path to compile / sslc executable...",
         "Select the sslc Compiler Executable");
-    _decompilerPathEdit = addPathRow("int2ssl decompiler:", "Path to int2ssl executable...",
+    _decompilerPathEdit = addPathRow(form, "int2ssl decompiler:", "Path to int2ssl executable...",
         "Select the int2ssl Decompiler Executable");
 
     layout->addLayout(form);
+}
+
+QLineEdit* ScriptToolsWidget::addPathRow(QFormLayout* form, const QString& label,
+    const QString& placeholder, const QString& dialogTitle) {
+    auto* pathEdit = new QLineEdit(this);
+    pathEdit->setPlaceholderText(placeholder);
+    connect(pathEdit, &QLineEdit::textChanged, this, &ScriptToolsWidget::configurationChanged);
+
+    auto* browseButton = new QPushButton("Browse...", this);
+    browseButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogOpenButton));
+    connect(browseButton, &QPushButton::clicked, this, [this, pathEdit, dialogTitle]() {
+        const QString currentPath = pathEdit->text();
+        const QString startPath = currentPath.isEmpty()
+            ? QStandardPaths::writableLocation(QStandardPaths::HomeLocation)
+            : QFileInfo(currentPath).absolutePath();
+        const QString chosen = QFileDialog::getOpenFileName(this, dialogTitle, startPath,
+            "Executable Files (*.exe *);;All Files (*)");
+        if (!chosen.isEmpty()) {
+            pathEdit->setText(chosen);
+        }
+    });
+
+    auto* row = new QHBoxLayout();
+    row->addWidget(pathEdit, 1);
+    row->addWidget(browseButton);
+    form->addRow(label, row);
+    return pathEdit;
 }
 
 QString ScriptToolsWidget::getCompilerPath() const {

@@ -18,7 +18,8 @@ namespace geck {
 
 SpatialScriptDialog::SpatialScriptDialog(const std::vector<ScriptSelectorDialog::Entry>& scripts, QWidget* parent)
     : BaseDialog("Add Spatial Script", parent)
-    , _scripts(scripts) {
+    , _scripts(scripts)
+    , _editSourceButton(new QPushButton("Edit Source...")) {
 
     auto* mainLayout = new QVBoxLayout(this);
     auto* formLayout = new QFormLayout();
@@ -26,7 +27,6 @@ SpatialScriptDialog::SpatialScriptDialog(const std::vector<ScriptSelectorDialog:
     auto* scriptRow = new QHBoxLayout();
     _scriptLabel = new QLabel("None");
     auto* chooseButton = new QPushButton("Choose...");
-    _editSourceButton = new QPushButton("Edit Source...");
     _editSourceButton->setToolTip("Open the chosen script's SSL source in the configured editor");
     _editSourceButton->setVisible(false); // shown once a host wires setSourceEditRequester
     _editSourceButton->setEnabled(false); // needs a chosen script
