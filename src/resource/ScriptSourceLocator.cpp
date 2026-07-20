@@ -4,6 +4,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <string>
+#include <system_error>
+#include <vector>
 
 namespace geck::resource {
 
@@ -81,6 +84,61 @@ std::optional<std::filesystem::path> compiledScriptTarget(const DataFileSystem& 
     if (writableRoot) {
         return *writableRoot / "scripts" / (baseName + ".int");
     }
+    return std::nullopt;
+}
+
+std::optional<ScriptSourceInRoot> findScriptSourceInRoots(const std::vector<std::filesystem::path>& sourceRoots,
+    const std::string& baseName, bool* ambiguous) {
+    if (ambiguous != nullptr) {
+        *ambiguous = false;
+    }
+    if (baseName.empty()) {
+        return std::nullopt;
+    }
+
+    std::string wanted = baseName;
+    std::transform(wanted.begin(), wanted.end(), wanted.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    wanted += ".ssl";
+
+    for (const std::filesystem::path& root : sourceRoots) {
+        std::error_code ec;
+        if (!std::filesystem::is_directory(root, ec)) {
+            continue;
+        }
+
+        // Collect every matching file, then pick the lexicographically smallest so the result is
+        // stable across filesystems (recursive_directory_iterator order is unspecified). The RP has
+        // exactly one colliding stem (waypnt: vault13 vs ncr), so this only bites there.
+        std::vector<std::filesystem::path> matches;
+        std::filesystem::recursive_directory_iterator it(root,
+            std::filesystem::directory_options::skip_permission_denied, ec);
+        const std::filesystem::recursive_directory_iterator end;
+        for (; it != end; it.increment(ec)) {
+            if (ec) {
+                break;
+            }
+            if (!it->is_regular_file(ec)) {
+                continue;
+            }
+            std::string name = it->path().filename().string();
+            std::transform(name.begin(), name.end(), name.begin(),
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (name == wanted) {
+                matches.push_back(it->path());
+            }
+        }
+
+        if (matches.empty()) {
+            continue;
+        }
+        std::sort(matches.begin(), matches.end());
+        if (ambiguous != nullptr && matches.size() > 1) {
+            *ambiguous = true;
+        }
+        return ScriptSourceInRoot{ root, matches.front() };
+    }
+
     return std::nullopt;
 }
 

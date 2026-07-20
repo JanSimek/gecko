@@ -104,6 +104,9 @@ QJsonObject Settings::toJson() const {
     if (!_writableDataPath.empty()) {
         json["writableDataPath"] = QString::fromStdString(_writableDataPath.string());
     }
+    if (!_scriptSourcePaths.empty()) {
+        json["scriptSourcePaths"] = pathVectorToJsonArray(_scriptSourcePaths);
+    }
 
     QJsonObject ui;
     if (!_windowGeometry.isEmpty()) {
@@ -184,6 +187,18 @@ void Settings::fromJson(const QJsonObject& json) {
     if (json.contains("writableDataPath")) {
         setWritableDataPath(std::filesystem::path(json["writableDataPath"].toString().toStdString()));
         clearWritableDataPathIfUnlisted();
+    }
+
+    // Script-source roots are a subset of the data paths; drop any that are no longer listed (a
+    // hand-edited settings file, or a folder removed since — mirrors the writable-marker handling).
+    _scriptSourcePaths.clear();
+    if (json.contains("scriptSourcePaths")) {
+        for (const auto& path : jsonArrayToPathVector(json["scriptSourcePaths"].toArray())) {
+            const auto normalized = normalizeDataPath(path);
+            if (std::find(_dataPaths.begin(), _dataPaths.end(), normalized) != _dataPaths.end()) {
+                _scriptSourcePaths.push_back(normalized);
+            }
+        }
     }
 
     if (json.contains("ui")) {
@@ -329,6 +344,23 @@ std::filesystem::path Settings::getWritableDataPath() const {
 
 void Settings::setWritableDataPath(const std::filesystem::path& path) {
     _writableDataPath = path.empty() ? std::filesystem::path{} : normalizeDataPath(path);
+}
+
+std::vector<std::filesystem::path> Settings::getScriptSourcePaths() const {
+    return _scriptSourcePaths;
+}
+
+void Settings::setScriptSourcePaths(const std::vector<std::filesystem::path>& paths) {
+    _scriptSourcePaths.clear();
+    for (const auto& path : paths) {
+        if (path.empty()) {
+            continue;
+        }
+        const auto normalized = normalizeDataPath(path);
+        if (std::find(_scriptSourcePaths.begin(), _scriptSourcePaths.end(), normalized) == _scriptSourcePaths.end()) {
+            _scriptSourcePaths.push_back(normalized);
+        }
+    }
 }
 
 std::optional<std::filesystem::path> Settings::resolveWritableDataPath() const {

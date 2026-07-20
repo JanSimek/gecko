@@ -5,6 +5,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
+#include <algorithm>
 #include <filesystem>
 
 #include "ui/Settings.h"
@@ -118,6 +119,61 @@ TEST_CASE("Settings save-location marker: resolution, invariant, persistence", "
         CHECK(reloaded.getWritableDataPath().empty());
         REQUIRE(reloaded.resolveWritableDataPath().has_value());
         CHECK(*reloaded.resolveWritableDataPath() == dirB);
+    }
+
+    removeSettingsFile();
+}
+
+TEST_CASE("Settings script-source markers: subset invariant and persistence", "[settings][ssl]") {
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+    const fs::path dirA = fs::path(temp.path().toStdString()) / "a";
+    const fs::path dirB = fs::path(temp.path().toStdString()) / "b";
+    fs::create_directories(dirA);
+    fs::create_directories(dirB);
+
+    removeSettingsFile();
+
+    SECTION("markers round-trip through save() and load(), de-duplicated") {
+        {
+            geck::Settings settings;
+            settings.setDataPaths({ dirA, dirB });
+            settings.setScriptSourcePaths({ dirB, dirB, dirA }); // duplicate collapses
+            settings.save();
+        }
+
+        geck::Settings reloaded;
+        reloaded.load();
+        const auto sources = reloaded.getScriptSourcePaths();
+        REQUIRE(sources.size() == 2);
+        CHECK(std::find(sources.begin(), sources.end(), dirA) != sources.end());
+        CHECK(std::find(sources.begin(), sources.end(), dirB) != sources.end());
+    }
+
+    SECTION("loading drops a marker that is not among the data paths (e.g. a hand-edited file)") {
+        {
+            geck::Settings settings;
+            settings.setDataPaths({ dirA });               // only dirA is a data path...
+            settings.setScriptSourcePaths({ dirA, dirB }); // ...but dirB is (wrongly) marked too
+            settings.save();
+        }
+
+        geck::Settings reloaded;
+        reloaded.load(); // prune against the file's data paths -> dirB is dropped
+        const auto sources = reloaded.getScriptSourcePaths();
+        CHECK(sources.size() == 1);
+        CHECK(sources.front() == dirA);
+    }
+
+    SECTION("an empty marker set is not written and loads empty") {
+        {
+            geck::Settings settings;
+            settings.setDataPaths({ dirA, dirB });
+            settings.save();
+        }
+        geck::Settings reloaded;
+        reloaded.load();
+        CHECK(reloaded.getScriptSourcePaths().empty());
     }
 
     removeSettingsFile();

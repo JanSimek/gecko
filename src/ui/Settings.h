@@ -48,6 +48,13 @@ public:
     std::filesystem::path getWritableDataPath() const;
     void setWritableDataPath(const std::filesystem::path& path);
 
+    // Data-path folders marked (Settings > Data Paths "Mark as Script Source") as holding SSL script
+    // source trees — e.g. the Fallout 2 Restoration Project's scripts_src. Gecko searches these for a
+    // script's <name>.ssl (matched by base name from scripts.lst) so "Edit Script Source" can open it.
+    // A subset of the data paths; entries that leave the data paths are dropped so they can't dangle.
+    std::vector<std::filesystem::path> getScriptSourcePaths() const;
+    void setScriptSourcePaths(const std::vector<std::filesystem::path>& paths);
+
     // The folder map saves / maps.txt name edits / .gam edits are written to: the marked folder if
     // it is still a listed, existing directory, otherwise the positional fallback (nullopt if the
     // data paths hold no directory at all).
@@ -137,7 +144,8 @@ private:
 
     // Settings data
     std::vector<std::filesystem::path> _dataPaths;
-    std::filesystem::path _writableDataPath; // empty = unset (positional fallback applies)
+    std::filesystem::path _writableDataPath;               // empty = unset (positional fallback applies)
+    std::vector<std::filesystem::path> _scriptSourcePaths; // subset of _dataPaths marked as SSL source roots
     QByteArray _windowGeometry;
     QByteArray _dockState;
     bool _windowMaximized = true;        // Default to maximized

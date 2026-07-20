@@ -39,13 +39,21 @@ void TextEditorWidget::setupUI() {
     _layout->addWidget(_systemEditorRadio);
 
     _customEditorRadio = new QRadioButton("Use custom editor:");
+    _customEditorRadio->setToolTip(
+        "Set this to VS Code (the \"code\" binary) and install the BGforge MLS extension to get SSL "
+        "syntax highlighting, diagnostics, and compilation. \"Edit Script Source\" opens the script's "
+        "folder as a VS Code workspace so BGforge MLS can resolve its headers and compile.");
     _layout->addWidget(_customEditorRadio);
 
     _customEditorLayout = new QHBoxLayout();
     _customEditorLayout->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 0, 0, 0); // Indent under radio button
 
     _customEditorPathEdit = new QLineEdit();
-    _customEditorPathEdit->setPlaceholderText("Path to editor executable...");
+    _customEditorPathEdit->setPlaceholderText("Path to editor executable (e.g. VS Code's \"code\")...");
+    _customEditorPathEdit->setToolTip(
+        "For editing and compiling Fallout SSL scripts, point this at VS Code and install the "
+        "BGforge MLS extension (https://github.com/BGforgeNet/BGforge-MLS) — it bundles the compiler "
+        "and resolves headers from the opened workspace folder.");
     _customEditorPathEdit->setEnabled(false);
     _customEditorLayout->addWidget(_customEditorPathEdit);
 

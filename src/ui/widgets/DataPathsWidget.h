@@ -38,6 +38,11 @@ public:
     std::filesystem::path getWritableDataPath() const;
     void setWritableDataPath(const std::filesystem::path& path);
 
+    // Folders marked as SSL script-source trees (a subset of the data paths). Kept as paths, not
+    // rows, so reordering never moves a marker.
+    std::vector<std::filesystem::path> getScriptSourcePaths() const;
+    void setScriptSourcePaths(const std::vector<std::filesystem::path>& paths);
+
     // Validation
     void validatePaths();
 
@@ -56,6 +61,7 @@ private slots:
     void onSelectionChanged();
     void onCellDoubleClicked(int row, int column);
     void onToggleSaveLocation(); // mark the selected folder as the save location (or clear it)
+    void onToggleScriptSource(); // mark the selected folder as an SSL script-source tree (or clear it)
 
 private:
     void setupUI();
@@ -79,6 +85,11 @@ private:
     // Re-derive each row's save-location badge (bold + save icon for the explicit marker, italic for
     // the positional default) from the current rows + marker. Called whenever either changes.
     void refreshSaveLocationMarkers();
+    // True when the selected row is a real folder that can hold a script-source tree (same rule as a
+    // save location: a directory, not a .dat, not the protected built-in path).
+    bool isScriptSourceRow(int row) const;
+    // Drop any script-source marker whose folder is no longer among the rows.
+    void pruneScriptSourceMarkers();
 
     // Highest priority is the top row; the stored order is lowest-priority-first, so the table
     // displays it reversed (see getDataPaths/setDataPaths). Columns:
@@ -96,11 +107,13 @@ private:
     QPushButton* _moveUpButton;
     QPushButton* _moveDownButton;
     QPushButton* _saveLocationButton;
+    QPushButton* _scriptSourceButton;
     QPushButton* _autoDetectButton;
     QProgressBar* _progressBar;
 
     std::shared_ptr<Settings> _settings;
-    std::filesystem::path _writableDataPath; // local copy; persisted by SettingsDialog on save
+    std::filesystem::path _writableDataPath;               // local copy; persisted by SettingsDialog on save
+    std::vector<std::filesystem::path> _scriptSourcePaths; // local copy; persisted by SettingsDialog on save
 };
 
 } // namespace geck

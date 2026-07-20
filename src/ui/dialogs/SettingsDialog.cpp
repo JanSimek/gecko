@@ -240,6 +240,7 @@ void SettingsDialog::loadSettings() {
 
     _dataPathsWidget->setDataPaths(_originalDataPaths);
     _dataPathsWidget->setWritableDataPath(settings.getWritableDataPath());
+    _dataPathsWidget->setScriptSourcePaths(settings.getScriptSourcePaths());
 
     _edgeScrollCheckBox->setChecked(settings.getEdgeScrollEnabled());
 
@@ -278,6 +279,9 @@ void SettingsDialog::saveSettings() {
     // pathsHaveChanged: moving the save target changes where writes land, not what is mounted,
     // so it must not trigger the data-path reload.
     settings.setWritableDataPath(_dataPathsWidget->getWritableDataPath());
+    // Script-source markers only change where "Edit Script Source" looks, not what's mounted, so
+    // (like the save-location marker) they are deliberately not part of pathsHaveChanged.
+    settings.setScriptSourcePaths(_dataPathsWidget->getScriptSourcePaths());
 
     settings.setEdgeScrollEnabled(_edgeScrollCheckBox->isChecked());
 

@@ -64,6 +64,57 @@ TEST_CASE("locateScriptSource and locateCompiledScript resolve loose files to di
     fs::remove_all(base);
 }
 
+TEST_CASE("findScriptSourceInRoots matches by stem across an RP-style area tree", "[ssl]") {
+    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "ssl_source_roots";
+    fs::remove_all(base);
+    const fs::path root = base / "scripts_src";
+    // RP layout: sources grouped by area, compiled .int are flat elsewhere. Base name is the key.
+    writeFile(root / "modoc" / "mcrat.ssl", "procedure start begin end");
+    writeFile(root / "newreno" / "NcProsti.ssl", "procedure start begin end"); // mixed case on disk
+    writeFile(root / "newreno" / "ncprosti.ssl.tmp", "preprocessor artefact"); // must be ignored
+    writeFile(root / "headers" / "define.h", "#define FOO 1");                 // not a script
+
+    SECTION("finds a source in an area subdir and reports the marked root as workspace") {
+        const auto match = resource::findScriptSourceInRoots({ root }, "mcrat");
+        REQUIRE(match.has_value());
+        CHECK(fs::equivalent(match->sourceRoot, root));
+        CHECK(fs::equivalent(match->file, root / "modoc" / "mcrat.ssl"));
+    }
+
+    SECTION("base-name match is case-insensitive and ignores .ssl.tmp") {
+        const auto match = resource::findScriptSourceInRoots({ root }, "ncprosti");
+        REQUIRE(match.has_value());
+        CHECK(fs::equivalent(match->file, root / "newreno" / "NcProsti.ssl"));
+    }
+
+    SECTION("a stem with no source returns nullopt") {
+        CHECK_FALSE(resource::findScriptSourceInRoots({ root }, "nosuch").has_value());
+        CHECK_FALSE(resource::findScriptSourceInRoots({ root }, "").has_value());
+        CHECK_FALSE(resource::findScriptSourceInRoots({}, "mcrat").has_value());
+    }
+
+    SECTION("a duplicate stem resolves deterministically and flags ambiguity") {
+        writeFile(root / "vault13" / "waypnt.ssl", "a");
+        writeFile(root / "ncr" / "waypnt.ssl", "b");
+        bool ambiguous = false;
+        const auto match = resource::findScriptSourceInRoots({ root }, "waypnt", &ambiguous);
+        REQUIRE(match.has_value());
+        CHECK(ambiguous);
+        // Lexicographically smallest path wins → ncr/ before vault13/.
+        CHECK(fs::equivalent(match->file, root / "ncr" / "waypnt.ssl"));
+    }
+
+    SECTION("roots are searched in order; an earlier root wins") {
+        const fs::path root2 = base / "other_src";
+        writeFile(root2 / "mcrat.ssl", "override");
+        const auto match = resource::findScriptSourceInRoots({ root2, root }, "mcrat");
+        REQUIRE(match.has_value());
+        CHECK(fs::equivalent(match->sourceRoot, root2));
+    }
+
+    fs::remove_all(base);
+}
+
 TEST_CASE("compiledScriptTarget prefers the loose copy, then the writable root", "[ssl]") {
     const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "ssl_target";
     fs::remove_all(base);

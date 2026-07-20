@@ -116,6 +116,16 @@ void DataPathsWidget::setupUI() {
     _saveLocationButton->setEnabled(false);
     _controlLayout->addWidget(_saveLocationButton);
 
+    _scriptSourceButton = new QPushButton("Mark as Script Source");
+    _scriptSourceButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_FileLinkIcon));
+    _scriptSourceButton->setToolTip(
+        "Mark the selected folder as an SSL script-source tree (e.g. the Restoration Project's "
+        "scripts_src). \"Edit Script Source\" searches these for a script's .ssl by name and opens "
+        "it in your configured editor.\nOnly real folders can be a script source — DAT archives hold "
+        "compiled .int, not source.");
+    _scriptSourceButton->setEnabled(false);
+    _controlLayout->addWidget(_scriptSourceButton);
+
     _controlLayout->addStretch();
 
     _autoDetectButton = new QPushButton("Auto-Detect");
@@ -124,7 +134,7 @@ void DataPathsWidget::setupUI() {
     _controlLayout->addWidget(_autoDetectButton);
 
     // Consistent icon size + minimum height so the buttons don't shrink and clip their icons on resize.
-    for (QPushButton* btn : { _addButton, _removeButton, _moveUpButton, _moveDownButton, _saveLocationButton, _autoDetectButton }) {
+    for (QPushButton* btn : { _addButton, _removeButton, _moveUpButton, _moveDownButton, _saveLocationButton, _scriptSourceButton, _autoDetectButton }) {
         geck::ui::styleActionButton(btn);
     }
 
@@ -141,6 +151,7 @@ void DataPathsWidget::setupConnections() {
     connect(_moveUpButton, &QPushButton::clicked, [this]() { moveSelectedPath(-1); });
     connect(_moveDownButton, &QPushButton::clicked, [this]() { moveSelectedPath(1); });
     connect(_saveLocationButton, &QPushButton::clicked, this, &DataPathsWidget::onToggleSaveLocation);
+    connect(_scriptSourceButton, &QPushButton::clicked, this, &DataPathsWidget::onToggleScriptSource);
     connect(_autoDetectButton, &QPushButton::clicked, this, &DataPathsWidget::onAutoDetect);
     connect(_pathsTable, &QTableWidget::itemSelectionChanged, this, &DataPathsWidget::onSelectionChanged);
     connect(_pathsTable, &QTableWidget::cellDoubleClicked, this, &DataPathsWidget::onCellDoubleClicked);
@@ -183,6 +194,7 @@ void DataPathsWidget::setDataPaths(const std::vector<std::filesystem::path>& pat
             _writableDataPath.clear();
         }
     }
+    pruneScriptSourceMarkers(); // likewise, a source marker can't outlive its row
 
     validatePaths();
     updateButtonStates();
@@ -194,6 +206,20 @@ std::filesystem::path DataPathsWidget::getWritableDataPath() const {
 
 void DataPathsWidget::setWritableDataPath(const std::filesystem::path& path) {
     _writableDataPath = path.empty() ? std::filesystem::path{} : Settings::normalizeDataPath(path);
+    refreshSaveLocationMarkers();
+    updateButtonStates();
+}
+
+std::vector<std::filesystem::path> DataPathsWidget::getScriptSourcePaths() const {
+    return _scriptSourcePaths;
+}
+
+void DataPathsWidget::setScriptSourcePaths(const std::vector<std::filesystem::path>& paths) {
+    _scriptSourcePaths.clear();
+    for (const auto& path : paths) {
+        _scriptSourcePaths.push_back(Settings::normalizeDataPath(path));
+    }
+    pruneScriptSourceMarkers();
     refreshSaveLocationMarkers();
     updateButtonStates();
 }
@@ -336,6 +362,12 @@ void DataPathsWidget::updateButtonStates() {
     _saveLocationButton->setEnabled(markable);
     const bool selectedIsMarked = markable && !_writableDataPath.empty() && pathAtRow(row) == _writableDataPath;
     _saveLocationButton->setText(selectedIsMarked ? "Clear Save Location" : "Set as Save Location");
+
+    // The script-source button likewise toggles the selected folder's marker.
+    _scriptSourceButton->setEnabled(isScriptSourceRow(row));
+    const bool selectedIsSource = isScriptSourceRow(row)
+        && std::find(_scriptSourcePaths.begin(), _scriptSourcePaths.end(), pathAtRow(row)) != _scriptSourcePaths.end();
+    _scriptSourceButton->setText(selectedIsSource ? "Clear Script Source" : "Mark as Script Source");
 }
 
 std::filesystem::path DataPathsWidget::pathAtRow(int row) const {
@@ -371,6 +403,39 @@ void DataPathsWidget::onToggleSaveLocation() {
     } else {
         _writableDataPath = path;
         setStatusMessage(QString("Save location: %1").arg(QString::fromStdString(path.string())), "success");
+    }
+
+    Q_EMIT dataPathsChanged(); // marks the dialog dirty so Apply/OK persists the marker
+    refreshSaveLocationMarkers();
+    updateButtonStates();
+}
+
+bool DataPathsWidget::isScriptSourceRow(int row) const {
+    // Same rule as a save location: a real, writable-ish folder (not a .dat, not the built-in path).
+    return isMarkableRow(row);
+}
+
+void DataPathsWidget::pruneScriptSourceMarkers() {
+    const auto paths = getDataPaths();
+    std::erase_if(_scriptSourcePaths, [&paths](const std::filesystem::path& marker) {
+        return std::find(paths.begin(), paths.end(), marker) == paths.end();
+    });
+}
+
+void DataPathsWidget::onToggleScriptSource() {
+    const int row = selectedRow();
+    if (!isScriptSourceRow(row)) {
+        return;
+    }
+
+    const std::filesystem::path path = pathAtRow(row);
+    const auto it = std::find(_scriptSourcePaths.begin(), _scriptSourcePaths.end(), path);
+    if (it != _scriptSourcePaths.end()) {
+        _scriptSourcePaths.erase(it);
+        setStatusMessage("Script source cleared.", "info");
+    } else {
+        _scriptSourcePaths.push_back(path);
+        setStatusMessage(QString("Script source: %1").arg(QString::fromStdString(path.string())), "success");
     }
 
     Q_EMIT dataPathsChanged(); // marks the dialog dirty so Apply/OK persists the marker
@@ -422,6 +487,9 @@ void DataPathsWidget::refreshSaveLocationMarkers() {
             tooltip += "\nCurrent default save location (highest-priority folder). "
                        "Use \"Set as Save Location\" to pin one explicitly.";
         }
+        if (std::find(_scriptSourcePaths.begin(), _scriptSourcePaths.end(), rowPath) != _scriptSourcePaths.end()) {
+            tooltip += "\nScript source: searched for a script's .ssl when editing script source.";
+        }
         item->setToolTip(tooltip);
 
         // Swap the folder icon for a save badge on the effective row; leave warning/file icons alone.
@@ -447,6 +515,9 @@ void DataPathsWidget::removeSelectedPath() {
     const bool removedMarked = !_writableDataPath.empty() && pathAtRow(row) == _writableDataPath;
     if (removedMarked) {
         _writableDataPath.clear();
+    }
+    if (const std::filesystem::path removedPath = pathAtRow(row); !removedPath.empty()) {
+        std::erase(_scriptSourcePaths, removedPath); // a removed folder can't stay a script source
     }
 
     _pathsTable->removeRow(row);
@@ -612,8 +683,14 @@ void DataPathsWidget::onCellDoubleClicked(int row, int /*column*/) {
     if (!newPath.isEmpty() && newPath != currentPath) {
         // Re-picking a marked folder keeps it the save location under its new path.
         const std::filesystem::path oldPath = Settings::normalizeDataPath(currentPath.toStdString());
+        const std::filesystem::path newNormalized = Settings::normalizeDataPath(newPath.toStdString());
         if (!_writableDataPath.empty() && _writableDataPath == oldPath) {
-            _writableDataPath = Settings::normalizeDataPath(newPath.toStdString());
+            _writableDataPath = newNormalized;
+        }
+        // Likewise carry a script-source marker across to the new path.
+        if (const auto it = std::find(_scriptSourcePaths.begin(), _scriptSourcePaths.end(), oldPath);
+            it != _scriptSourcePaths.end()) {
+            *it = newNormalized;
         }
         item->setText(newPath);
         Q_EMIT dataPathsChanged();
