@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cctype>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
@@ -20,7 +21,7 @@ namespace {
     // Every regular file under `root` whose lowercased filename equals `wantedFilename`. Uses the
     // error_code iterator overloads so an unreadable subtree is skipped rather than throwing.
     std::vector<std::filesystem::path> filesNamed(const std::filesystem::path& root,
-        const std::string& wantedFilename) {
+        std::string_view wantedFilename) {
         std::vector<std::filesystem::path> matches;
         std::error_code ec;
         auto it = std::filesystem::recursive_directory_iterator(root,
@@ -122,8 +123,7 @@ std::optional<ScriptSourceInRoot> findScriptSourceInRoots(const std::vector<std:
     const std::string wanted = toLower(baseName) + ".ssl";
 
     for (const std::filesystem::path& root : sourceRoots) {
-        std::error_code ec;
-        if (!std::filesystem::is_directory(root, ec)) {
+        if (std::error_code ec; !std::filesystem::is_directory(root, ec)) {
             continue;
         }
 
