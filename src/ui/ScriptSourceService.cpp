@@ -100,32 +100,40 @@ QString ScriptSourceService::ensureDecompilerPath() {
         });
 }
 
+bool ScriptSourceService::openFromScriptSourceRoots(const std::string& baseName) {
+    // A marked script-source tree (e.g. FRP scripts_src): open <name>.ssl there with its root as
+    // the editor's workspace, so VS Code + BGforge MLS can resolve the tree's headers and compile.
+    const auto sourcePaths = _settings->getScriptSourcePaths();
+    if (sourcePaths.empty()) {
+        return false;
+    }
+    bool ambiguous = false;
+    const auto match = resource::findScriptSourceInRoots(sourcePaths, baseName, &ambiguous);
+    if (!match) {
+        return false; // not under the source roots — let the caller try the VFS / decompile paths
+    }
+    if (ambiguous) {
+        spdlog::warn("Edit Script: multiple sources named '{}.ssl' under the script-source roots; opening {}",
+            baseName, match->file.string());
+    }
+    _editorLauncher.openFileInWorkspace(QString::fromStdString(match->file.string()),
+        QString::fromStdString(match->sourceRoot.string()));
+    return true;
+}
+
 void ScriptSourceService::editScriptSource(int programIndex) {
     const std::string baseName = resolveBaseName(programIndex);
     if (baseName.empty()) {
         return;
     }
 
+    // 0) The primary path when the user has pointed Gecko at a source tree.
+    if (openFromScriptSourceRoots(baseName)) {
+        return;
+    }
+
     auto& files = _resources.files();
     const auto writableRoot = _settings->resolveWritableDataPath();
-
-    // 0) A marked script-source tree (e.g. FRP scripts_src): open <name>.ssl there with its root as
-    // the editor's workspace, so VS Code + BGforge MLS can resolve the tree's headers and compile.
-    // This is the primary path when the user has pointed Gecko at a source tree.
-    if (const auto sourcePaths = _settings->getScriptSourcePaths(); !sourcePaths.empty()) {
-        bool ambiguous = false;
-        if (const auto match = resource::findScriptSourceInRoots(sourcePaths, baseName, &ambiguous)) {
-            if (ambiguous) {
-                spdlog::warn("Edit Script: multiple sources named '{}.ssl' under the script-source roots; "
-                             "opening {}",
-                    baseName, match->file.string());
-            }
-            _editorLauncher.openFileInWorkspace(QString::fromStdString(match->file.string()),
-                QString::fromStdString(match->sourceRoot.string()));
-            return;
-        }
-        // Not found under the source roots: fall through to the in-VFS / decompile handling below.
-    }
 
     // 1) A loose .ssl on disk: open it directly.
     if (const auto source = resource::locateScriptSource(files, baseName)) {

@@ -129,11 +129,10 @@ void ExternalEditorLauncher::openFile(const QString& vfsFilePath) {
 }
 
 void ExternalEditorLauncher::openFileInWorkspace(const QString& nativeFilePath, const QString& workspaceRoot) {
-    auto& settings = *_settings;
-    const bool useCustom = settings.getTextEditorMode() == Settings::TextEditorMode::CUSTOM
-        && !settings.getCustomEditorPath().isEmpty();
-
-    if (useCustom) {
+    const auto& settings = *_settings;
+    if (const bool useCustom = settings.getTextEditorMode() == Settings::TextEditorMode::CUSTOM
+            && !settings.getCustomEditorPath().isEmpty();
+        useCustom) {
         const QString editor = settings.getCustomEditorPath();
         // `<editor> <workspaceRoot> <file>` — VS Code opens (or reuses) the folder as its workspace
         // and reveals the file; other editors that don't understand a folder arg still open the file.

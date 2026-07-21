@@ -48,6 +48,11 @@ private:
     /// or an empty string (with an error dialog shown) when it can't be resolved.
     std::string resolveBaseName(int programIndex);
 
+    /// Open `<baseName>.ssl` from a marked script-source tree (with the tree as the editor's
+    /// workspace) when one is configured and holds it. Returns true when it handled the request
+    /// (opened the file); false to fall through to the in-VFS / decompile handling.
+    bool openFromScriptSourceRoots(const std::string& baseName);
+
     /// The configured, existing path of a tool binary — prompting the user to locate (and
     /// persist) it when unset or stale. Empty when unavailable.
     QString ensureCompilerPath();

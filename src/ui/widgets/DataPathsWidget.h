@@ -79,15 +79,12 @@ private:
     bool isProtectedRow(int row) const;
     int selectedRow() const;
     std::filesystem::path pathAtRow(int row) const; // normalized, empty if the row has no path item
-    // A row can be marked as the save location only if it's a real folder the editor could write to
+    // A row can be marked (as the save location or a script source) only if it's a real folder
     // (not a .dat, not missing, not the protected built-in resources path).
     bool isMarkableRow(int row) const;
     // Re-derive each row's save-location badge (bold + save icon for the explicit marker, italic for
     // the positional default) from the current rows + marker. Called whenever either changes.
     void refreshSaveLocationMarkers();
-    // True when the selected row is a real folder that can hold a script-source tree (same rule as a
-    // save location: a directory, not a .dat, not the protected built-in path).
-    bool isScriptSourceRow(int row) const;
     // Drop any script-source marker whose folder is no longer among the rows.
     void pruneScriptSourceMarkers();
 

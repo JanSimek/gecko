@@ -364,8 +364,8 @@ void DataPathsWidget::updateButtonStates() {
     _saveLocationButton->setText(selectedIsMarked ? "Clear Save Location" : "Set as Save Location");
 
     // The script-source button likewise toggles the selected folder's marker.
-    _scriptSourceButton->setEnabled(isScriptSourceRow(row));
-    const bool selectedIsSource = isScriptSourceRow(row)
+    _scriptSourceButton->setEnabled(isMarkableRow(row));
+    const bool selectedIsSource = isMarkableRow(row)
         && std::find(_scriptSourcePaths.begin(), _scriptSourcePaths.end(), pathAtRow(row)) != _scriptSourcePaths.end();
     _scriptSourceButton->setText(selectedIsSource ? "Clear Script Source" : "Mark as Script Source");
 }
@@ -410,11 +410,6 @@ void DataPathsWidget::onToggleSaveLocation() {
     updateButtonStates();
 }
 
-bool DataPathsWidget::isScriptSourceRow(int row) const {
-    // Same rule as a save location: a real, writable-ish folder (not a .dat, not the built-in path).
-    return isMarkableRow(row);
-}
-
 void DataPathsWidget::pruneScriptSourceMarkers() {
     const auto paths = getDataPaths();
     std::erase_if(_scriptSourcePaths, [&paths](const std::filesystem::path& marker) {
@@ -424,13 +419,13 @@ void DataPathsWidget::pruneScriptSourceMarkers() {
 
 void DataPathsWidget::onToggleScriptSource() {
     const int row = selectedRow();
-    if (!isScriptSourceRow(row)) {
+    if (!isMarkableRow(row)) {
         return;
     }
 
     const std::filesystem::path path = pathAtRow(row);
-    const auto it = std::find(_scriptSourcePaths.begin(), _scriptSourcePaths.end(), path);
-    if (it != _scriptSourcePaths.end()) {
+    if (const auto it = std::find(_scriptSourcePaths.begin(), _scriptSourcePaths.end(), path);
+        it != _scriptSourcePaths.end()) {
         _scriptSourcePaths.erase(it);
         setStatusMessage("Script source cleared.", "info");
     } else {

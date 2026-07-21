@@ -12,6 +12,29 @@ namespace geck::resource {
 
 namespace {
 
+    std::string toLower(std::string s) {
+        std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return s;
+    }
+
+    // Every regular file under `root` whose lowercased filename equals `wantedFilename`. Uses the
+    // error_code iterator overloads so an unreadable subtree is skipped rather than throwing.
+    std::vector<std::filesystem::path> filesNamed(const std::filesystem::path& root,
+        const std::string& wantedFilename) {
+        std::vector<std::filesystem::path> matches;
+        std::error_code ec;
+        auto it = std::filesystem::recursive_directory_iterator(root,
+            std::filesystem::directory_options::skip_permission_denied, ec);
+        const std::filesystem::recursive_directory_iterator end;
+        while (!ec && it != end) {
+            if (it->is_regular_file(ec) && toLower(it->path().filename().string()) == wantedFilename) {
+                matches.push_back(it->path());
+            }
+            it.increment(ec);
+        }
+        return matches;
+    }
+
     std::optional<ScriptFileLocation> locateFirstExisting(const DataFileSystem& files,
         std::initializer_list<std::filesystem::path> vfsCandidates) {
         for (const std::filesystem::path& vfsPath : vfsCandidates) {
@@ -96,10 +119,7 @@ std::optional<ScriptSourceInRoot> findScriptSourceInRoots(const std::vector<std:
         return std::nullopt;
     }
 
-    std::string wanted = baseName;
-    std::transform(wanted.begin(), wanted.end(), wanted.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    wanted += ".ssl";
+    const std::string wanted = toLower(baseName) + ".ssl";
 
     for (const std::filesystem::path& root : sourceRoots) {
         std::error_code ec;
@@ -107,32 +127,14 @@ std::optional<ScriptSourceInRoot> findScriptSourceInRoots(const std::vector<std:
             continue;
         }
 
-        // Collect every matching file, then pick the lexicographically smallest so the result is
-        // stable across filesystems (recursive_directory_iterator order is unspecified). The RP has
-        // exactly one colliding stem (waypnt: vault13 vs ncr), so this only bites there.
-        std::vector<std::filesystem::path> matches;
-        std::filesystem::recursive_directory_iterator it(root,
-            std::filesystem::directory_options::skip_permission_denied, ec);
-        const std::filesystem::recursive_directory_iterator end;
-        for (; it != end; it.increment(ec)) {
-            if (ec) {
-                break;
-            }
-            if (!it->is_regular_file(ec)) {
-                continue;
-            }
-            std::string name = it->path().filename().string();
-            std::transform(name.begin(), name.end(), name.begin(),
-                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (name == wanted) {
-                matches.push_back(it->path());
-            }
-        }
-
+        std::vector<std::filesystem::path> matches = filesNamed(root, wanted);
         if (matches.empty()) {
             continue;
         }
-        std::sort(matches.begin(), matches.end());
+        // Pick the lexicographically smallest so the result is stable across filesystems
+        // (recursive_directory_iterator order is unspecified). The RP has exactly one colliding
+        // stem (waypnt: vault13 vs ncr), so this only bites there.
+        std::ranges::sort(matches);
         if (ambiguous != nullptr && matches.size() > 1) {
             *ambiguous = true;
         }

@@ -39,10 +39,10 @@ void TextEditorWidget::setupUI() {
     _layout->addWidget(_systemEditorRadio);
 
     _customEditorRadio = new QRadioButton("Use custom editor:");
-    _customEditorRadio->setToolTip(
-        "Set this to VS Code (the \"code\" binary) and install the BGforge MLS extension to get SSL "
-        "syntax highlighting, diagnostics, and compilation. \"Edit Script Source\" opens the script's "
-        "folder as a VS Code workspace so BGforge MLS can resolve its headers and compile.");
+    _customEditorRadio->setToolTip(QStringLiteral(
+        R"(Set this to VS Code (the "code" binary) and install the BGforge MLS extension to get SSL )"
+        R"(syntax highlighting, diagnostics, and compilation. "Edit Script Source" opens the script's )"
+        R"(folder as a VS Code workspace so BGforge MLS can resolve its headers and compile.)"));
     _layout->addWidget(_customEditorRadio);
 
     _customEditorLayout = new QHBoxLayout();
