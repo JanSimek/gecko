@@ -30,6 +30,8 @@ set(GECK_APP_SOURCES
 
     ui/ExternalEditorLauncher.h
     ui/ExternalEditorLauncher.cpp
+    ui/ScriptSourceService.h
+    ui/ScriptSourceService.cpp
 
     ui/FrmThumbnailGenerator.h
     ui/FrmThumbnailGenerator.cpp
@@ -147,6 +149,8 @@ set(GECK_APP_SOURCES
     ui/widgets/GameLocationWidget.cpp
     ui/widgets/TextEditorWidget.h
     ui/widgets/TextEditorWidget.cpp
+    ui/widgets/ScriptToolsWidget.h
+    ui/widgets/ScriptToolsWidget.cpp
     ui/widgets/ObjectPreviewWidget.h
     ui/widgets/ObjectPreviewWidget.cpp
     ui/widgets/ProInfoPanelWidget.h
@@ -219,6 +223,8 @@ set(GECK_APP_SOURCES
     # Game launch service
     state/GameLauncher.cpp
     state/GameLauncher.h
+    state/SslToolchain.cpp
+    state/SslToolchain.h
 
     # Map save service (Qt-free MapWriter + proto-resolver core)
     state/MapSaveService.cpp
@@ -483,6 +489,8 @@ add_library(gecko_resource STATIC
     resource/WritableDataRoot.cpp
     resource/MapNameEditor.h
     resource/MapNameEditor.cpp
+    resource/ScriptSourceLocator.h
+    resource/ScriptSourceLocator.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 
@@ -511,6 +519,8 @@ add_library(gecko_core STATIC
     util/Coordinates.cpp
     util/SpatialIndex.h
     util/SpatialIndex.cpp
+    util/SslOutputParser.h
+    util/SslOutputParser.cpp
 
     viewport/ViewportController.h
     viewport/ViewportController.cpp

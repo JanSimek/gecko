@@ -70,6 +70,9 @@ signals:
     void selectPlayerPositionRequested();
     void centerViewOnPlayerPositionRequested();
     void mapScriptIdChanged(int scriptId);
+    /// "Edit Source..." on the map-script row: open the SSL source of the script at this
+    /// 0-based scripts.lst program index (the header's 1-based script_id minus one).
+    void mapScriptSourceEditRequested(int programIndex);
     void darknessChanged(int darkness);
     void timestampChanged(int timestamp);
     void mapNamesChanged();     // a Map name / Lookup name field was edited -> mark the map modified
@@ -147,6 +150,7 @@ private:
     QSpinBox* _globalVarsSpin;
     QSpinBox* _localVarsSpin;
     QLineEdit* _mapScriptEdit;
+    QPushButton* _editMapScriptButton = nullptr;
     QSpinBox* _mapScriptIdSpin;
     QSpinBox* _darknessSpin;
     QSpinBox* _mapIdSpin;

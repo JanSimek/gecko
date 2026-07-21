@@ -5,6 +5,7 @@
 
 #include <QHeaderView>
 #include <QApplication>
+#include <QHBoxLayout>
 #include <QMessageBox>
 #include <QRegularExpression>
 #include <QSize>
@@ -190,7 +191,19 @@ void MapInfoPanel::setupUI() {
     _mapScriptEdit = new QLineEdit();
     _mapScriptEdit->setObjectName("mapScript");
     _mapScriptEdit->setReadOnly(true);
-    headerLayout->addRow("Map script:", _mapScriptEdit);
+    auto* mapScriptRow = new QHBoxLayout();
+    mapScriptRow->addWidget(_mapScriptEdit, 1);
+    _editMapScriptButton = new QPushButton("Edit Source...");
+    _editMapScriptButton->setToolTip("Open the map script's SSL source in the configured editor");
+    _editMapScriptButton->setEnabled(false); // enabled while the header names a script (id > 0)
+    connect(_editMapScriptButton, &QPushButton::clicked, this, [this]() {
+        // The header id is 1-based; the scripts.lst program index it names is id - 1.
+        if (const int scriptId = _mapScriptIdSpin->value(); scriptId > 0) {
+            Q_EMIT mapScriptSourceEditRequested(scriptId - 1);
+        }
+    });
+    mapScriptRow->addWidget(_editMapScriptButton);
+    headerLayout->addRow("Map script:", mapScriptRow);
 
     _mapScriptIdSpin = new QSpinBox();
     _mapScriptIdSpin->setRange(-1, INT_MAX); // -1 means no script
@@ -223,6 +236,8 @@ void MapInfoPanel::setupUI() {
     connect(_setPositionButton, &QPushButton::clicked, this, &MapInfoPanel::onSelectPositionClicked);
     connect(_centerViewButton, &QPushButton::clicked, this, &MapInfoPanel::onCenterViewClicked);
     connect(_mapScriptIdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MapInfoPanel::onFieldChanged);
+    connect(_mapScriptIdSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
+        [this](int value) { _editMapScriptButton->setEnabled(value > 0); });
     connect(_darknessSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MapInfoPanel::onFieldChanged);
     connect(_timestampSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MapInfoPanel::onFieldChanged);
     connect(_savegameCheck, &QCheckBox::toggled, this, &MapInfoPanel::onFieldChanged);
