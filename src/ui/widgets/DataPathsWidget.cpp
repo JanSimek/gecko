@@ -472,8 +472,7 @@ void DataPathsWidget::refreshSaveLocationMarkers() {
     // resolves the fallback locally so a stale marker doesn't warn-log on every table repaint —
     // the warning belongs to actual save operations.
     std::optional<std::filesystem::path> effective;
-    std::error_code ec;
-    if (!_writableDataPath.empty()
+    if (std::error_code ec; !_writableDataPath.empty()
         && std::find(paths.begin(), paths.end(), _writableDataPath) != paths.end()
         && std::filesystem::is_directory(_writableDataPath, ec)) {
         effective = _writableDataPath;
