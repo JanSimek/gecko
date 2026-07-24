@@ -1,11 +1,11 @@
 #include "GameLocationWidget.h"
 #include "util/GameDataPathResolver.h"
+#include "ui/IconHelper.h"
 #include "ui/Settings.h"
 #include "ui/common/ButtonStyle.h"
 #include "ui/theme/ThemeManager.h"
 
 #include <QApplication>
-#include <QStyle>
 #include <QStandardPaths>
 #include <QFileDialog>
 #include <QDir>
@@ -75,7 +75,7 @@ void GameLocationWidget::setupUI() {
     _executableLayout->addWidget(_executableLocationEdit);
 
     _browseExecutableButton = new QPushButton("Browse...");
-    _browseExecutableButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+    _browseExecutableButton->setIcon(createIcon(":/icons/actions/open.svg"));
     _browseExecutableButton->setToolTip("Browse for Fallout 2 executable file");
     _executableLayout->addWidget(_browseExecutableButton);
 
@@ -95,7 +95,7 @@ void GameLocationWidget::setupUI() {
     _dataDirectoryLayout->addWidget(_dataDirectoryEdit);
 
     _browseDataDirectoryButton = new QPushButton("Browse...");
-    _browseDataDirectoryButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirOpenIcon));
+    _browseDataDirectoryButton->setIcon(createIcon(":/icons/actions/open.svg"));
     _browseDataDirectoryButton->setToolTip("Browse for Fallout 2 game data directory");
     _dataDirectoryLayout->addWidget(_browseDataDirectoryButton);
 
@@ -105,7 +105,7 @@ void GameLocationWidget::setupUI() {
     _controlLayout->addStretch();
 
     _autoDetectButton = new QPushButton("Auto-Detect");
-    _autoDetectButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ComputerIcon));
+    _autoDetectButton->setIcon(createIcon(":/icons/ui/auto-detect.svg"));
     _autoDetectButton->setToolTip("Automatically detect Fallout 2 game installations");
     _controlLayout->addWidget(_autoDetectButton);
 

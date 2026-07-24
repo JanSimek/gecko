@@ -1,8 +1,8 @@
 #include "ScriptToolsWidget.h"
 
+#include "ui/IconHelper.h"
 #include "ui/theme/ThemeManager.h"
 
-#include <QApplication>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
@@ -11,7 +11,6 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QStandardPaths>
-#include <QStyle>
 #include <QVBoxLayout>
 
 namespace geck {
@@ -47,7 +46,7 @@ QLineEdit* ScriptToolsWidget::addPathRow(QFormLayout* form, const QString& label
     connect(pathEdit, &QLineEdit::textChanged, this, &ScriptToolsWidget::configurationChanged);
 
     auto* browseButton = new QPushButton("Browse...", this);
-    browseButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogOpenButton));
+    browseButton->setIcon(createIcon(":/icons/actions/open.svg"));
     connect(browseButton, &QPushButton::clicked, this, [this, pathEdit, dialogTitle]() {
         const QString currentPath = pathEdit->text();
         const QString startPath = currentPath.isEmpty()

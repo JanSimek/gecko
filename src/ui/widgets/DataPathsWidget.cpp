@@ -16,7 +16,6 @@
 #include <QTableWidgetItem>
 #include <QAbstractItemView>
 #include <algorithm>
-#include <array>
 #include <optional>
 #include <system_error>
 #include <spdlog/spdlog.h>
@@ -139,19 +138,11 @@ void DataPathsWidget::setupUI() {
     _controlLayout->addWidget(_autoDetectButton);
 
     // Consistent icon size + minimum height so the buttons don't shrink and clip their icons on resize.
-    const std::array actionButtons = { _addButton, _removeButton, _moveUpButton, _moveDownButton,
-        _saveLocationButton, _scriptSourceButton, _autoDetectButton };
-    for (QPushButton* btn : actionButtons) {
+    // They keep their content width (short labels now) so the row stays spaced and never overflows the
+    // dialog — forcing a common width pushed the total past the dialog and crammed the buttons together.
+    for (QPushButton* btn : { _addButton, _removeButton, _moveUpButton, _moveDownButton,
+             _saveLocationButton, _scriptSourceButton, _autoDetectButton }) {
         geck::ui::styleActionButton(btn);
-    }
-    // Give every action button the same width (the widest button's), a look worth keeping now that
-    // the two marker labels are short enough not to force the whole row wide.
-    int uniformWidth = 0;
-    for (QPushButton* btn : actionButtons) {
-        uniformWidth = std::max(uniformWidth, btn->sizeHint().width());
-    }
-    for (QPushButton* btn : actionButtons) {
-        btn->setMinimumWidth(uniformWidth);
     }
 
     _layout->addLayout(_controlLayout);

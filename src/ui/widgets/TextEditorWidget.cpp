@@ -1,8 +1,7 @@
 #include "TextEditorWidget.h"
+#include "ui/IconHelper.h"
 #include "ui/UIConstants.h"
 
-#include <QApplication>
-#include <QStyle>
 #include <QStandardPaths>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -58,7 +57,7 @@ void TextEditorWidget::setupUI() {
     _customEditorLayout->addWidget(_customEditorPathEdit);
 
     _browseEditorButton = new QPushButton("Browse...");
-    _browseEditorButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogOpenButton));
+    _browseEditorButton->setIcon(createIcon(":/icons/actions/open.svg"));
     _browseEditorButton->setEnabled(false);
     _customEditorLayout->addWidget(_browseEditorButton);
 
