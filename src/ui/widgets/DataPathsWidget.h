@@ -7,6 +7,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QGroupBox>
+#include <QIcon>
 #include <QProgressBar>
 #include <filesystem>
 #include <memory>
@@ -87,6 +88,9 @@ private:
     void refreshSaveLocationMarkers();
     // Drop any script-source marker whose folder is no longer among the rows.
     void pruneScriptSourceMarkers();
+    // The file-type icon (from the shared icon pack) for a row: warning / .dat / script-source
+    // folder / plain folder. The save-location role is shown by font weight, not the icon.
+    QIcon iconForRow(const std::filesystem::path& path, bool isScriptSource) const;
 
     // Highest priority is the top row; the stored order is lowest-priority-first, so the table
     // displays it reversed (see getDataPaths/setDataPaths). Columns:

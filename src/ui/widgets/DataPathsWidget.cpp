@@ -2,12 +2,12 @@
 #include "ui/Settings.h"
 #include "Application.h"
 #include "resource/WritableDataRoot.h"
+#include "ui/IconHelper.h"
 #include "ui/UIConstants.h"
 #include "ui/common/ButtonStyle.h"
 #include "util/GameDataPathResolver.h"
 
 #include <QApplication>
-#include <QStyle>
 #include <QStandardPaths>
 #include <QFileDialog>
 #include <QMenu>
@@ -16,6 +16,7 @@
 #include <QTableWidgetItem>
 #include <QAbstractItemView>
 #include <algorithm>
+#include <array>
 #include <optional>
 #include <system_error>
 #include <spdlog/spdlog.h>
@@ -84,7 +85,7 @@ void DataPathsWidget::setupUI() {
     _controlLayout = new QHBoxLayout();
 
     _addButton = new QPushButton("Add Path...");
-    _addButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogOpenButton));
+    _addButton->setIcon(createIcon(":/icons/ui/add.svg"));
     QMenu* addMenu = new QMenu(_addButton);
     addMenu->addAction("Add Folder...", this, &DataPathsWidget::onAddFolder);
     addMenu->addAction("Add DAT File...", this, &DataPathsWidget::onAddDat);
@@ -92,32 +93,36 @@ void DataPathsWidget::setupUI() {
     _controlLayout->addWidget(_addButton);
 
     _removeButton = new QPushButton("Remove");
-    _removeButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogCancelButton));
+    _removeButton->setIcon(createIcon(":/icons/ui/remove.svg"));
     _removeButton->setEnabled(false);
     _controlLayout->addWidget(_removeButton);
 
     _moveUpButton = new QPushButton("Move Up");
-    _moveUpButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ArrowUp));
+    _moveUpButton->setIcon(createIcon(":/icons/actions/move-up.svg"));
     _moveUpButton->setToolTip("Raise priority (closer to the top wins more often)");
     _moveUpButton->setEnabled(false);
     _controlLayout->addWidget(_moveUpButton);
 
     _moveDownButton = new QPushButton("Move Down");
-    _moveDownButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ArrowDown));
+    _moveDownButton->setIcon(createIcon(":/icons/actions/move-down.svg"));
     _moveDownButton->setToolTip("Lower priority");
     _moveDownButton->setEnabled(false);
     _controlLayout->addWidget(_moveDownButton);
 
-    _saveLocationButton = new QPushButton("Set as Save Location");
-    _saveLocationButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogSaveButton));
+    // Checkable so the short label stays constant while the check state shows whether the selected
+    // folder is marked (the label used to grow to "Clear …", clipping in the button row).
+    _saveLocationButton = new QPushButton("Save Location");
+    _saveLocationButton->setIcon(createIcon(":/icons/actions/save.svg"));
+    _saveLocationButton->setCheckable(true);
     _saveLocationButton->setToolTip(
         "Write map saves and name/variable edits to the selected folder, regardless of its priority.\n"
         "Only real folders can be a save location — DAT archives are read-only.");
     _saveLocationButton->setEnabled(false);
     _controlLayout->addWidget(_saveLocationButton);
 
-    _scriptSourceButton = new QPushButton("Mark as Script Source");
-    _scriptSourceButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_FileLinkIcon));
+    _scriptSourceButton = new QPushButton("Script Source");
+    _scriptSourceButton->setIcon(createIcon(":/icons/filetypes/script.svg"));
+    _scriptSourceButton->setCheckable(true);
     _scriptSourceButton->setToolTip(
         "Mark the selected folder as an SSL script-source tree (e.g. the Restoration Project's "
         "scripts_src). \"Edit Script Source\" searches these for a script's .ssl by name and opens "
@@ -129,13 +134,24 @@ void DataPathsWidget::setupUI() {
     _controlLayout->addStretch();
 
     _autoDetectButton = new QPushButton("Auto-Detect");
-    _autoDetectButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ComputerIcon));
+    _autoDetectButton->setIcon(createIcon(":/icons/ui/auto-detect.svg"));
     _autoDetectButton->setToolTip("Automatically detect Fallout 2 installations");
     _controlLayout->addWidget(_autoDetectButton);
 
     // Consistent icon size + minimum height so the buttons don't shrink and clip their icons on resize.
-    for (QPushButton* btn : { _addButton, _removeButton, _moveUpButton, _moveDownButton, _saveLocationButton, _scriptSourceButton, _autoDetectButton }) {
+    const std::array actionButtons = { _addButton, _removeButton, _moveUpButton, _moveDownButton,
+        _saveLocationButton, _scriptSourceButton, _autoDetectButton };
+    for (QPushButton* btn : actionButtons) {
         geck::ui::styleActionButton(btn);
+    }
+    // Give every action button the same width (the widest button's), a look worth keeping now that
+    // the two marker labels are short enough not to force the whole row wide.
+    int uniformWidth = 0;
+    for (QPushButton* btn : actionButtons) {
+        uniformWidth = std::max(uniformWidth, btn->sizeHint().width());
+    }
+    for (QPushButton* btn : actionButtons) {
+        btn->setMinimumWidth(uniformWidth);
     }
 
     _layout->addLayout(_controlLayout);
@@ -242,26 +258,23 @@ bool DataPathsWidget::addPathRow(const std::filesystem::path& path, bool atTop) 
 
     auto* pathItem = new QTableWidgetItem(pathStr);
 
-    // Icon, tooltip and colour reflect the path type and validity (matches the previous list view).
+    // Tooltip and colour reflect the path type and validity; the icon is derived by iconForRow (and
+    // refreshed when the script-source marker changes). The script-source state isn't known yet here
+    // (setScriptSourcePaths runs after the rows are built), so pass false — the refresh corrects it.
     auto& settings = *_settings;
     if (settings.validateDataPath(normalizedPath)) {
         if (isDefaultPath) {
             pathItem->setToolTip("Built-in resources path (cannot be removed)");
             QPalette palette = QApplication::palette();
             pathItem->setForeground(palette.color(QPalette::Disabled, QPalette::Text));
-            pathItem->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
-        } else if (std::filesystem::is_directory(normalizedPath)) {
-            pathItem->setToolTip("Valid Fallout 2 data path");
-            pathItem->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
         } else {
-            pathItem->setIcon(QApplication::style()->standardIcon(QStyle::SP_FileIcon));
             pathItem->setToolTip("Valid Fallout 2 data path");
         }
     } else {
-        pathItem->setIcon(QApplication::style()->standardIcon(QStyle::SP_MessageBoxWarning));
         pathItem->setToolTip("Invalid or missing path");
         pathItem->setForeground(ui::theme::colors::invalidPath());
     }
+    pathItem->setIcon(iconForRow(normalizedPath, /*isScriptSource=*/false));
 
     // Prepend the full path so a long entry that doesn't fit the column is still readable on hover
     // (the column stretches and elides the text); the status note above stays as a second line.
@@ -357,17 +370,16 @@ void DataPathsWidget::updateButtonStates() {
         _moveDownButton->setEnabled(false);
     }
 
-    // The button doubles as the un-mark action when the selected row is already the save location.
+    // Both markers are checkable toggles: enabled for a real folder, checked when the selected row
+    // already carries that marker (clicking clears it). The constant short label keeps the button
+    // row uniform; the check state and the row badge show whether it is set.
     const bool markable = isMarkableRow(row);
     _saveLocationButton->setEnabled(markable);
-    const bool selectedIsMarked = markable && !_writableDataPath.empty() && pathAtRow(row) == _writableDataPath;
-    _saveLocationButton->setText(selectedIsMarked ? "Clear Save Location" : "Set as Save Location");
+    _saveLocationButton->setChecked(markable && !_writableDataPath.empty() && pathAtRow(row) == _writableDataPath);
 
-    // The script-source button likewise toggles the selected folder's marker.
-    _scriptSourceButton->setEnabled(isMarkableRow(row));
-    const bool selectedIsSource = isMarkableRow(row)
-        && std::find(_scriptSourcePaths.begin(), _scriptSourcePaths.end(), pathAtRow(row)) != _scriptSourcePaths.end();
-    _scriptSourceButton->setText(selectedIsSource ? "Clear Script Source" : "Mark as Script Source");
+    _scriptSourceButton->setEnabled(markable);
+    _scriptSourceButton->setChecked(markable
+        && std::find(_scriptSourcePaths.begin(), _scriptSourcePaths.end(), pathAtRow(row)) != _scriptSourcePaths.end());
 }
 
 std::filesystem::path DataPathsWidget::pathAtRow(int row) const {
@@ -415,6 +427,21 @@ void DataPathsWidget::pruneScriptSourceMarkers() {
     std::erase_if(_scriptSourcePaths, [&paths](const std::filesystem::path& marker) {
         return std::find(paths.begin(), paths.end(), marker) == paths.end();
     });
+}
+
+QIcon DataPathsWidget::iconForRow(const std::filesystem::path& path, bool isScriptSource) const {
+    // Same file-type icon pack the File Browser uses (createIcon → themed tabler SVGs).
+    if (!_settings->validateDataPath(path)) {
+        return createIcon(":/icons/ui/warning.svg");
+    }
+    std::error_code ec;
+    if (!std::filesystem::is_directory(path, ec)) {
+        return createIcon(":/icons/filetypes/data.svg"); // a .dat archive entry
+    }
+    if (isScriptSource) {
+        return createIcon(":/icons/filetypes/script.svg"); // a folder marked as an SSL source tree
+    }
+    return createIcon(":/icons/filetypes/folder.svg");
 }
 
 void DataPathsWidget::onToggleScriptSource() {
@@ -480,18 +507,18 @@ void DataPathsWidget::refreshSaveLocationMarkers() {
                        "the highest-priority folder is used instead.";
         } else if (isEffective) {
             tooltip += "\nCurrent default save location (highest-priority folder). "
-                       "Use \"Set as Save Location\" to pin one explicitly.";
+                       "Use \"Save Location\" to pin one explicitly.";
         }
-        if (std::find(_scriptSourcePaths.begin(), _scriptSourcePaths.end(), rowPath) != _scriptSourcePaths.end()) {
+        const bool isSource = std::find(_scriptSourcePaths.begin(), _scriptSourcePaths.end(), rowPath) != _scriptSourcePaths.end();
+        if (isSource) {
             tooltip += "\nScript source: searched for a script's .ssl when editing script source.";
         }
         item->setToolTip(tooltip);
 
-        // Swap the folder icon for a save badge on the effective row; leave warning/file icons alone.
-        if (std::filesystem::is_directory(rowPath, ec) && _settings->validateDataPath(rowPath)) {
-            item->setIcon(QApplication::style()->standardIcon(
-                isEffective ? QStyle::SP_DialogSaveButton : QStyle::SP_DirIcon));
-        }
+        // The icon carries the entry TYPE (folder / .dat / script-source folder / invalid). The
+        // save-location role is shown by the font weight above, not the icon, so a folder that is
+        // both a script source and the save location keeps its script icon and shows both in bold.
+        item->setIcon(iconForRow(rowPath, isSource));
     }
 }
 
