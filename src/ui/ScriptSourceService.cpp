@@ -312,8 +312,8 @@ ScriptSourceService::CompileToTargetResult ScriptSourceService::compileToTarget(
     // missing input reported as a warning with exit 0) that a stale pre-existing target would
     // otherwise pass off as success.
     std::error_code sizeEc;
-    const bool producedOutput = fs::exists(tempOut, ec) && fs::file_size(tempOut, sizeEc) > 0 && !sizeEc;
-    if (!result.success() || !producedOutput) {
+    if (const bool producedOutput = fs::exists(tempOut, ec) && fs::file_size(tempOut, sizeEc) > 0 && !sizeEc;
+        !result.success() || !producedOutput) {
         fs::remove(tempOut, ec); // discard any partial temp; the deployed .int was never touched
         out.status = CompileToTargetResult::Status::CompileFailed;
         return out;
@@ -354,20 +354,20 @@ bool ScriptSourceService::compileFileForProgram(const QString& sslPath, const st
     }
 
     const auto outcome = compileToTarget(compilerPath, fs::path(sslPath.toStdString()), *target);
-    using Status = CompileToTargetResult::Status;
+    using enum CompileToTargetResult::Status;
     switch (outcome.status) {
-        case Status::NotStarted:
+        case NotStarted:
             QtDialogs::showError(_dialogParent, "Compile Script", "sslc could not be started.");
             return false;
-        case Status::TimedOut:
+        case TimedOut:
             QtDialogs::showError(_dialogParent, "Compile Script", "sslc timed out.");
             return false;
-        case Status::PlaceFailed:
+        case PlaceFailed:
             QtDialogs::showError(_dialogParent, "Compile Script",
                 QString("Compiled successfully but could not place the output at %1.")
                     .arg(QString::fromStdString(target->string())));
             return false;
-        case Status::CompileFailed: {
+        case CompileFailed: {
             QString summary = QString("Compilation of %1 failed").arg(QFileInfo(sslPath).fileName());
             if (outcome.errors > 0) {
                 summary += QString(" with %1 error(s)").arg(outcome.errors);
@@ -376,7 +376,7 @@ bool ScriptSourceService::compileFileForProgram(const QString& sslPath, const st
                 summary + ".\nSee the Log panel ([sslc]) for the compiler output.");
             return false;
         }
-        case Status::Success:
+        case Success:
             break;
     }
 
