@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QString>
+#include <cstddef>
+#include <filesystem>
 #include <memory>
 
 QT_BEGIN_NAMESPACE
@@ -42,6 +44,28 @@ public:
 
     /// Pick an .int file and decompile it with int2ssl to an .ssl next to it.
     void decompileScript();
+
+    /// Outcome of compiling a source onto its deployed `.int`. Exposed (with compileToTarget)
+    /// so the compile-safety behaviour can be tested without the surrounding dialogs.
+    struct CompileToTargetResult {
+        enum class Status {
+            NotStarted,    // the compiler binary could not be launched
+            TimedOut,      // the compiler ran past the timeout and was killed
+            CompileFailed, // errors, or no usable output was produced
+            PlaceFailed,   // compiled, but the output could not replace the target
+            Success,
+        };
+        Status status = Status::CompileFailed;
+        std::size_t errors = 0;
+        std::size_t warnings = 0;
+    };
+
+    /// Compile `sslPath` to `target` via a fresh temporary sibling, replacing `target` with an
+    /// atomic rename only after a good build. A failed compile (sslc deletes its own output on a
+    /// parse error) or an output-less run therefore never damages an existing `target`. Static and
+    /// UI-free so it is directly testable.
+    static CompileToTargetResult compileToTarget(const QString& compilerPath,
+        const std::filesystem::path& sslPath, const std::filesystem::path& target);
 
 private:
     /// The scripts.lst entry at `programIndex` reduced to its bare program name ("artemple"),

@@ -138,7 +138,9 @@ void ScriptSourceService::editScriptSource(int programIndex) {
     // 1) A loose .ssl on disk: open it directly.
     if (const auto source = resource::locateScriptSource(files, baseName)) {
         if (!source->insideDat && !source->diskPath.empty()) {
-            _editorLauncher.openFile(QString::fromStdString(source->diskPath.string()));
+            // A native path — openFile() would try to resolve it as a VFS path and fail, so open it
+            // directly (no workspace: this loose file isn't part of a marked source tree).
+            _editorLauncher.openFileInWorkspace(QString::fromStdString(source->diskPath.string()), QString());
             return;
         }
 
@@ -160,7 +162,7 @@ void ScriptSourceService::editScriptSource(int programIndex) {
             const fs::path copy
                 = resource::ensureWritableCopy(files, *writableRoot, source->vfsPath.generic_string());
             files.refresh(); // the loose copy must shadow the DAT on the next lookup
-            _editorLauncher.openFile(QString::fromStdString(copy.string()));
+            _editorLauncher.openFileInWorkspace(QString::fromStdString(copy.string()), QString());
         } catch (const resource::WritableCopyError& e) {
             QtDialogs::showError(_dialogParent, "Edit Script",
                 QString("Extracting the source failed: %1").arg(e.what()));
@@ -220,7 +222,7 @@ void ScriptSourceService::editScriptSource(int programIndex) {
 
     if (runDecompiler(decompilerPath, intDiskPath, sslTarget->string())) {
         files.refresh(); // the new .ssl should be visible to the VFS immediately
-        _editorLauncher.openFile(QString::fromStdString(sslTarget->string()));
+        _editorLauncher.openFileInWorkspace(QString::fromStdString(sslTarget->string()), QString());
     }
 }
 
@@ -275,6 +277,66 @@ void ScriptSourceService::compileScript() {
     compileFileForProgram(sslPath, baseName);
 }
 
+ScriptSourceService::CompileToTargetResult ScriptSourceService::compileToTarget(
+    const QString& compilerPath, const std::filesystem::path& sslPath, const std::filesystem::path& target) {
+    CompileToTargetResult out;
+
+    std::error_code ec;
+    if (target.has_parent_path()) {
+        fs::create_directories(target.parent_path(), ec);
+    }
+
+    // Compile to a fresh temporary sibling, never straight onto the deployed .int: sslc removes its
+    // output file on any parse error (parse.c), so a syntax error in a recompile would otherwise
+    // delete the last working bytecode. Same directory as the target so the final replace is an
+    // atomic rename on one filesystem.
+    fs::path tempOut = target;
+    tempOut += ".sslc-tmp";
+    fs::remove(tempOut, ec); // clear any stale temp so "exists afterwards" means "written by this run"
+
+    const auto result = SslToolchain::compile(compilerPath, sslPath, tempOut);
+    out.errors = ssl::countDiagnostics(result.diagnostics, ssl::DiagnosticSeverity::Error);
+    out.warnings = ssl::countDiagnostics(result.diagnostics, ssl::DiagnosticSeverity::Warning);
+
+    if (!result.started) {
+        out.status = CompileToTargetResult::Status::NotStarted;
+        return out;
+    }
+    if (result.timedOut) {
+        fs::remove(tempOut, ec);
+        out.status = CompileToTargetResult::Status::TimedOut;
+        return out;
+    }
+
+    // Require a freshly written, non-empty output. This rejects a run that produced nothing (e.g. a
+    // missing input reported as a warning with exit 0) that a stale pre-existing target would
+    // otherwise pass off as success.
+    std::error_code sizeEc;
+    const bool producedOutput = fs::exists(tempOut, ec) && fs::file_size(tempOut, sizeEc) > 0 && !sizeEc;
+    if (!result.success() || !producedOutput) {
+        fs::remove(tempOut, ec); // discard any partial temp; the deployed .int was never touched
+        out.status = CompileToTargetResult::Status::CompileFailed;
+        return out;
+    }
+
+    // Good build — replace the deployed .int now. rename() replaces the target atomically on POSIX;
+    // if a platform refuses to rename over an existing file, fall back to remove-then-rename.
+    std::error_code renameEc;
+    fs::rename(tempOut, target, renameEc);
+    if (renameEc) {
+        fs::remove(target, ec);
+        fs::rename(tempOut, target, renameEc);
+    }
+    if (renameEc) {
+        fs::remove(tempOut, ec);
+        out.status = CompileToTargetResult::Status::PlaceFailed;
+        return out;
+    }
+
+    out.status = CompileToTargetResult::Status::Success;
+    return out;
+}
+
 bool ScriptSourceService::compileFileForProgram(const QString& sslPath, const std::string& baseName) {
     const QString compilerPath = ensureCompilerPath();
     if (compilerPath.isEmpty()) {
@@ -291,39 +353,38 @@ bool ScriptSourceService::compileFileForProgram(const QString& sslPath, const st
         return false;
     }
 
-    std::error_code ec;
-    if (target->has_parent_path()) {
-        fs::create_directories(target->parent_path(), ec);
-    }
-
-    const auto result = SslToolchain::compile(compilerPath, fs::path(sslPath.toStdString()), *target);
-
-    const auto errors = ssl::countDiagnostics(result.diagnostics, ssl::DiagnosticSeverity::Error);
-    const auto warnings = ssl::countDiagnostics(result.diagnostics, ssl::DiagnosticSeverity::Warning);
-
-    if (!result.started) {
-        QtDialogs::showError(_dialogParent, "Compile Script", "sslc could not be started.");
-        return false;
-    }
-    if (result.timedOut) {
-        QtDialogs::showError(_dialogParent, "Compile Script", "sslc timed out.");
-        return false;
-    }
-    if (!result.success() || !fs::exists(*target)) {
-        QString summary = QString("Compilation of %1 failed").arg(QFileInfo(sslPath).fileName());
-        if (errors > 0) {
-            summary += QString(" with %1 error(s)").arg(errors);
+    const auto outcome = compileToTarget(compilerPath, fs::path(sslPath.toStdString()), *target);
+    using Status = CompileToTargetResult::Status;
+    switch (outcome.status) {
+        case Status::NotStarted:
+            QtDialogs::showError(_dialogParent, "Compile Script", "sslc could not be started.");
+            return false;
+        case Status::TimedOut:
+            QtDialogs::showError(_dialogParent, "Compile Script", "sslc timed out.");
+            return false;
+        case Status::PlaceFailed:
+            QtDialogs::showError(_dialogParent, "Compile Script",
+                QString("Compiled successfully but could not place the output at %1.")
+                    .arg(QString::fromStdString(target->string())));
+            return false;
+        case Status::CompileFailed: {
+            QString summary = QString("Compilation of %1 failed").arg(QFileInfo(sslPath).fileName());
+            if (outcome.errors > 0) {
+                summary += QString(" with %1 error(s)").arg(outcome.errors);
+            }
+            QtDialogs::showError(_dialogParent, "Compile Script",
+                summary + ".\nSee the Log panel ([sslc]) for the compiler output.");
+            return false;
         }
-        QtDialogs::showError(_dialogParent, "Compile Script",
-            summary + ".\nSee the Log panel ([sslc]) for the compiler output.");
-        return false;
+        case Status::Success:
+            break;
     }
 
     files.refresh(); // make the fresh .int visible to VFS lookups this session
     QString summary = QString("Compiled %1 → %2")
                           .arg(QFileInfo(sslPath).fileName(), QString::fromStdString(target->string()));
-    if (warnings > 0) {
-        summary += QString("\n%1 warning(s) — see the Log panel ([sslc]).").arg(warnings);
+    if (outcome.warnings > 0) {
+        summary += QString("\n%1 warning(s) — see the Log panel ([sslc]).").arg(outcome.warnings);
     }
     QtDialogs::showInfo(_dialogParent, "Compile Script", summary);
     return true;
@@ -354,7 +415,7 @@ void ScriptSourceService::decompileScript() {
 
     if (runDecompiler(decompilerPath, source.string(), target.string())) {
         _resources.files().refresh();
-        _editorLauncher.openFile(QString::fromStdString(target.string()));
+        _editorLauncher.openFileInWorkspace(QString::fromStdString(target.string()), QString());
     }
 }
 

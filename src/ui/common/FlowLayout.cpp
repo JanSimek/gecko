@@ -18,9 +18,12 @@ FlowLayout::FlowLayout(int margin, int hSpacing, int vSpacing)
 }
 
 FlowLayout::~FlowLayout() {
-    while (QLayoutItem* item = takeAt(0)) {
+    // Delete the items directly rather than through the virtual takeAt() — calling a virtual from a
+    // destructor is a smell, and we own _items outright.
+    for (QLayoutItem* item : _items) {
         delete item;
     }
+    _items.clear();
 }
 
 void FlowLayout::addItem(QLayoutItem* item) {
@@ -131,7 +134,7 @@ int FlowLayout::smartSpacing(QStyle::PixelMetric pm) const {
         return -1;
     }
     if (parentObject->isWidgetType()) {
-        auto* parentWidget = static_cast<QWidget*>(parentObject);
+        const auto* parentWidget = static_cast<const QWidget*>(parentObject);
         return parentWidget->style()->pixelMetric(pm, nullptr, parentWidget);
     }
     return static_cast<QLayout*>(parentObject)->spacing();
