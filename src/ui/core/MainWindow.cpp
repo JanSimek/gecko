@@ -1741,6 +1741,11 @@ void MainWindow::connectPanelSignals() {
                 if (_currentEditorWidget && object)
                     _currentEditorWidget->detachScript(object);
             });
+        // "Edit Source..." on an object's attached script: same flow as the map-script one.
+        connect(_selectionPanel, &SelectionPanel::requestEditScriptSource, this, [this](int programIndex) {
+            if (_scriptSourceService)
+                _scriptSourceService->editScriptSource(programIndex);
+        });
         connect(_selectionPanel, &SelectionPanel::requestObjectHighlight,
             this, [this](std::shared_ptr<Object> object) {
                 if (!_currentEditorWidget || !object)
