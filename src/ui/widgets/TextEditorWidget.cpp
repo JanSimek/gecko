@@ -63,21 +63,10 @@ void TextEditorWidget::setupUI() {
 
     _layout->addLayout(_customEditorLayout);
 
-    auto* sslNote = new QLabel(
-        "<b>Editing Fallout SSL scripts.</b> Gecko does not compile scripts itself — set the custom "
-        "editor above to VS Code and install the "
-        "<a href=\"https://github.com/BGforgeNet/BGforge-MLS\">BGforge MLS</a> extension, which adds SSL "
-        "syntax highlighting, live diagnostics and a bundled compiler. \"Edit Script Source\" (in the "
-        "Selection panel, Map Info and the Scripts panel) opens the script's <code>.ssl</code> with its "
-        "source tree as the VS Code workspace, so MLS can resolve the <code>#include</code> headers and "
-        "compile on save."
-        "<br><br>"
-        "<b>Deploying the compiled script.</b> The game and Gecko load <code>.int</code> bytecode only "
-        "from a data folder's <code>scripts/</code> directory. By default BGforge MLS writes the "
-        "<code>.int</code> next to the source, which is <i>not</i> that folder — so set MLS's output "
-        "directory (<code>bgforge.falloutSSL.outputDirectory</code>) to your writable data folder's "
-        "<code>scripts/</code>. The recompiled script then lands where it is loaded; reopen the map (or "
-        "reload data) to pick up the new bytecode.");
+    // Raw string (custom delimiter, since the text has parentheses) so the <a href="…"> and the
+    // quoted "Edit Script Source" need no backslash escaping.
+    auto* sslNote = new QLabel(QString::fromUtf8(
+        R"html(<b>Editing Fallout SSL scripts.</b> Gecko does not compile scripts itself — set the custom editor above to VS Code and install the <a href="https://github.com/BGforgeNet/BGforge-MLS">BGforge MLS</a> extension, which adds SSL syntax highlighting, live diagnostics and a bundled compiler. "Edit Script Source" (in the Selection panel, Map Info and the Scripts panel) opens the script's <code>.ssl</code> with its source tree as the VS Code workspace, so MLS can resolve the <code>#include</code> headers and compile on save.<br><br><b>Deploying the compiled script.</b> The game and Gecko load <code>.int</code> bytecode only from a data folder's <code>scripts/</code> directory. By default BGforge MLS writes the <code>.int</code> next to the source, which is <i>not</i> that folder — so set MLS's output directory (<code>bgforge.falloutSSL.outputDirectory</code>) to your writable data folder's <code>scripts/</code>. The recompiled script then lands where it is loaded; reopen the map (or reload data) to pick up the new bytecode.)html"));
     sslNote->setWordWrap(true);
     sslNote->setOpenExternalLinks(true);
     sslNote->setTextFormat(Qt::RichText);
