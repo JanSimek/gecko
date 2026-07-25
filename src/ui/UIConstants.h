@@ -155,7 +155,7 @@ namespace ui {
          */
         namespace dialog_sizes {
             // Settings dialog
-            constexpr int SETTINGS_MIN_WIDTH = 780;
+            constexpr int SETTINGS_MIN_WIDTH = 640; // Data Paths button row wraps, so no wide floor needed
             constexpr int SETTINGS_MIN_HEIGHT = 620;
             constexpr int SETTINGS_DEFAULT_WIDTH = 900;
             constexpr int SETTINGS_DEFAULT_HEIGHT = 750;

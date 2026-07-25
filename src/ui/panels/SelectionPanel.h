@@ -182,7 +182,7 @@ private:
     QLineEdit* _scriptValueEdit;
     QPushButton* _attachScriptButton;
     QPushButton* _detachScriptButton;
-    QPushButton* _editScriptSourceButton;
+    QPushButton* _editScriptSourceButton = nullptr;
     // 0-based scripts.lst program index of the attached script, or -1 when none is attached.
     // Set by updateScriptSection() so the "Edit Source" button knows which .ssl to open.
     int _attachedScriptProgramIndex = -1;

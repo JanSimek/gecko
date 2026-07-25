@@ -102,7 +102,7 @@ private:
     QVBoxLayout* _layout;
     QLabel* _helpLabel;
     QTableWidget* _pathsTable;
-    QHBoxLayout* _controlLayout;
+    QLayout* _controlLayout; // a wrapping FlowLayout so the button row reflows on narrow widths
     QPushButton* _addButton;
     QPushButton* _removeButton;
     QPushButton* _moveUpButton;

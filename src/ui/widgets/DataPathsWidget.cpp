@@ -5,6 +5,7 @@
 #include "ui/IconHelper.h"
 #include "ui/UIConstants.h"
 #include "ui/common/ButtonStyle.h"
+#include "ui/common/FlowLayout.h"
 #include "util/GameDataPathResolver.h"
 
 #include <QApplication>
@@ -16,6 +17,7 @@
 #include <QTableWidgetItem>
 #include <QAbstractItemView>
 #include <algorithm>
+#include <array>
 #include <optional>
 #include <system_error>
 #include <spdlog/spdlog.h>
@@ -81,7 +83,10 @@ void DataPathsWidget::setupUI() {
     _pathsTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     _layout->addWidget(_pathsTable, /*stretch=*/1);
 
-    _controlLayout = new QHBoxLayout();
+    // A wrapping row: on a narrow dialog / small screen the buttons reflow onto extra lines instead
+    // of pinning a wide minimum that would force the whole dialog off the edge of the screen.
+    auto* controlFlow = new ui::FlowLayout(/*margin=*/0, /*hSpacing=*/SPACING_NORMAL, /*vSpacing=*/SPACING_NORMAL);
+    _controlLayout = controlFlow;
 
     _addButton = new QPushButton("Add Path...");
     _addButton->setIcon(createIcon(":/icons/ui/add.svg"));
@@ -130,19 +135,27 @@ void DataPathsWidget::setupUI() {
     _scriptSourceButton->setEnabled(false);
     _controlLayout->addWidget(_scriptSourceButton);
 
-    _controlLayout->addStretch();
-
     _autoDetectButton = new QPushButton("Auto-Detect");
     _autoDetectButton->setIcon(createIcon(":/icons/ui/auto-detect.svg"));
     _autoDetectButton->setToolTip("Automatically detect Fallout 2 installations");
     _controlLayout->addWidget(_autoDetectButton);
 
-    // Consistent icon size + minimum height so the buttons don't shrink and clip their icons on resize.
-    // They keep their content width (short labels now) so the row stays spaced and never overflows the
-    // dialog — forcing a common width pushed the total past the dialog and crammed the buttons together.
-    for (QPushButton* btn : { _addButton, _removeButton, _moveUpButton, _moveDownButton,
-             _saveLocationButton, _scriptSourceButton, _autoDetectButton }) {
+    // Consistent icon size + minimum height so the buttons don't clip their icons on resize.
+    const std::array actionButtons = { _addButton, _removeButton, _moveUpButton, _moveDownButton,
+        _saveLocationButton, _scriptSourceButton, _autoDetectButton };
+    for (QPushButton* btn : actionButtons) {
         geck::ui::styleActionButton(btn);
+    }
+    // One comfortable width for all of them (the widest label plus breathing room) so no button's
+    // text is crammed against its icon. Safe to force now that the FlowLayout wraps instead of
+    // overflowing when the total exceeds the available width.
+    int uniformWidth = 0;
+    for (QPushButton* btn : actionButtons) {
+        uniformWidth = std::max(uniformWidth, btn->sizeHint().width());
+    }
+    uniformWidth += SPACING_LOOSE * 2; // extra horizontal padding around the label+icon
+    for (QPushButton* btn : actionButtons) {
+        btn->setMinimumWidth(uniformWidth);
     }
 
     _layout->addLayout(_controlLayout);

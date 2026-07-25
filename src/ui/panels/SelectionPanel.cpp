@@ -173,7 +173,6 @@ SelectionPanel::SelectionPanel(resource::GameResources& resources, QWidget* pare
     , _scriptValueEdit(nullptr)
     , _attachScriptButton(nullptr)
     , _detachScriptButton(nullptr)
-    , _editScriptSourceButton(nullptr)
     , _inventoryGroup(nullptr)
     , _inventoryViewStack(nullptr)
     , _inventoryTree(nullptr)
