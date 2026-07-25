@@ -23,7 +23,11 @@ ScriptToolsWidget::ScriptToolsWidget(QWidget* parent)
     auto* helpLabel = new QLabel(
         "External tools for the scripts behind scripts.lst entries: sslc (compile.exe) compiles "
         ".ssl source to the .int bytecode the engine loads; int2ssl recovers editable source from "
-        "an .int when none is available. Both are separate downloads — point Gecko at your copies.");
+        "an .int when none is available. Both are separate downloads — point Gecko at your copies.\n"
+        "With these set, \"Scripts › Compile Script\" writes the .int straight into your data "
+        "folder's scripts/ directory (where the game and Gecko load it) and refreshes it here — so a "
+        "script edited in an external editor takes effect without you copying anything by hand. "
+        "For an all-in-VS-Code workflow instead, see the Text Editor tab (BGforge MLS).");
     helpLabel->setWordWrap(true);
     helpLabel->setStyleSheet(ui::theme::styles::helpText());
     layout->addWidget(helpLabel);

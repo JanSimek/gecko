@@ -63,6 +63,26 @@ void TextEditorWidget::setupUI() {
 
     _layout->addLayout(_customEditorLayout);
 
+    auto* sslNote = new QLabel(
+        "<b>Editing Fallout SSL scripts.</b> Set the custom editor above to VS Code and install the "
+        "<a href=\"https://github.com/BGforgeNet/BGforge-MLS\">BGforge MLS</a> extension — it adds SSL "
+        "syntax highlighting, live diagnostics and a bundled compiler. \"Edit Script Source\" (in the "
+        "Selection panel, Map Info and the Scripts panel) opens the script's <code>.ssl</code> with its "
+        "source tree as the VS Code workspace, so MLS can resolve the <code>#include</code> headers."
+        "<br><br>"
+        "<b>Using a compiled script.</b> The game and Gecko load <code>.int</code> bytecode only from a "
+        "data folder's <code>scripts/</code> directory. Compiling in VS Code does <i>not</i> deploy it "
+        "there automatically — BGforge MLS writes the <code>.int</code> next to the source by default. "
+        "To make a recompiled script take effect, either point MLS's <i>output directory</i> at your "
+        "writable data folder's <code>scripts/</code>, or run <b>Scripts › Compile Script</b> here in "
+        "Gecko, which places the <code>.int</code> where it is loaded and refreshes it in the editor.");
+    sslNote->setWordWrap(true);
+    sslNote->setOpenExternalLinks(true);
+    sslNote->setTextFormat(Qt::RichText);
+    sslNote->setStyleSheet(ui::theme::styles::helpText());
+    sslNote->setContentsMargins(0, ui::theme::spacing::NORMAL, 0, 0);
+    _layout->addWidget(sslNote);
+
     updateControlStates();
 }
 
