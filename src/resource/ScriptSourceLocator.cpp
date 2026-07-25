@@ -89,28 +89,6 @@ std::optional<ScriptFileLocation> locateScriptSource(const DataFileSystem& files
         { "scripts/" + baseName + ".ssl", "scripts/source/" + baseName + ".ssl" });
 }
 
-std::optional<ScriptFileLocation> locateCompiledScript(const DataFileSystem& files, const std::string& baseName) {
-    if (baseName.empty()) {
-        return std::nullopt;
-    }
-    return locateFirstExisting(files, { "scripts/" + baseName + ".int" });
-}
-
-std::optional<std::filesystem::path> compiledScriptTarget(const DataFileSystem& files,
-    const std::optional<std::filesystem::path>& writableRoot, const std::string& baseName) {
-    if (baseName.empty()) {
-        return std::nullopt;
-    }
-    if (const auto compiled = locateCompiledScript(files, baseName);
-        compiled && !compiled->insideDat && !compiled->diskPath.empty()) {
-        return compiled->diskPath;
-    }
-    if (writableRoot) {
-        return *writableRoot / "scripts" / (baseName + ".int");
-    }
-    return std::nullopt;
-}
-
 std::optional<ScriptSourceInRoot> findScriptSourceInRoots(const std::vector<std::filesystem::path>& sourceRoots,
     const std::string& baseName, bool* ambiguous) {
     if (ambiguous != nullptr) {
@@ -141,21 +119,6 @@ std::optional<ScriptSourceInRoot> findScriptSourceInRoots(const std::vector<std:
         return ScriptSourceInRoot{ root, matches.front() };
     }
 
-    return std::nullopt;
-}
-
-std::optional<std::filesystem::path> decompiledSourceTarget(const DataFileSystem& files,
-    const std::optional<std::filesystem::path>& writableRoot, const std::string& baseName) {
-    if (baseName.empty()) {
-        return std::nullopt;
-    }
-    if (const auto compiled = locateCompiledScript(files, baseName);
-        compiled && !compiled->insideDat && !compiled->diskPath.empty()) {
-        return compiled->diskPath.parent_path() / (baseName + ".ssl");
-    }
-    if (writableRoot) {
-        return *writableRoot / "scripts" / (baseName + ".ssl");
-    }
     return std::nullopt;
 }
 

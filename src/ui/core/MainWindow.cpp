@@ -521,12 +521,6 @@ void MainWindow::setupMenuBar() {
     updateUndoRedoActions();
     updateFillSelectionAction();
 
-    // File-level SSL toolchain actions (sslc / int2ssl). Per-script "Edit Script Source" lives on
-    // the Scripts panel rows, the Map Info map-script row and the spatial-script dialog.
-    _scriptsMenu = _menuBar->addMenu("&Scripts");
-    addMenuAction(_scriptsMenu, ":/icons/actions/save.svg", "&Compile Script...", &MainWindow::showCompileScriptDialog, QKeySequence(), "Compile an SSL source file to the .int bytecode the engine loads");
-    addMenuAction(_scriptsMenu, ":/icons/actions/open.svg", "&Decompile Script...", &MainWindow::showDecompileScriptDialog, QKeySequence(), "Recover best-effort SSL source from a compiled .int script");
-
     _viewMenu = _menuBar->addMenu("&View");
     struct ViewToggleSpec {
         QAction** actionRef;
@@ -2691,18 +2685,6 @@ void MainWindow::showMapBrowserDialog() {
     const QString mapPath = dialog.selectedMapPath();
     if (!mapPath.isEmpty()) {
         handleMapLoadRequest(mapPath.toStdString(), false);
-    }
-}
-
-void MainWindow::showCompileScriptDialog() {
-    if (_scriptSourceService) {
-        _scriptSourceService->compileScript();
-    }
-}
-
-void MainWindow::showDecompileScriptDialog() {
-    if (_scriptSourceService) {
-        _scriptSourceService->decompileScript();
     }
 }
 

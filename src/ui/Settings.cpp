@@ -137,15 +137,6 @@ QJsonObject Settings::toJson() const {
     }
     json["textEditor"] = textEditor;
 
-    QJsonObject scriptTools;
-    if (!_sslCompilerPath.isEmpty()) {
-        scriptTools["sslcPath"] = _sslCompilerPath;
-    }
-    if (!_sslDecompilerPath.isEmpty()) {
-        scriptTools["int2sslPath"] = _sslDecompilerPath;
-    }
-    json["scriptTools"] = scriptTools;
-
     QJsonObject gameLocation;
     if (!_executableGameLocation.empty()) {
         gameLocation["executablePath"] = QString::fromStdString(_executableGameLocation.string());
@@ -241,12 +232,6 @@ void Settings::fromJson(const QJsonObject& json) {
         if (textEditor.contains("customPath")) {
             _customEditorPath = textEditor["customPath"].toString();
         }
-    }
-
-    if (json.contains("scriptTools") && json["scriptTools"].isObject()) {
-        QJsonObject scriptTools = json["scriptTools"].toObject();
-        _sslCompilerPath = scriptTools["sslcPath"].toString();
-        _sslDecompilerPath = scriptTools["int2sslPath"].toString();
     }
 
     if (json.contains("gameLocation") && json["gameLocation"].isObject()) {
@@ -447,22 +432,6 @@ QString Settings::getCustomEditorPath() const {
 
 void Settings::setCustomEditorPath(const QString& path) {
     _customEditorPath = path;
-}
-
-QString Settings::getSslCompilerPath() const {
-    return _sslCompilerPath;
-}
-
-void Settings::setSslCompilerPath(const QString& path) {
-    _sslCompilerPath = path;
-}
-
-QString Settings::getSslDecompilerPath() const {
-    return _sslDecompilerPath;
-}
-
-void Settings::setSslDecompilerPath(const QString& path) {
-    _sslDecompilerPath = path;
 }
 
 QColor Settings::getSelectionColor(const QString& key, const QColor& fallback) const {

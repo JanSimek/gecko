@@ -1,9 +1,8 @@
 #pragma once
 
 #include <QString>
-#include <cstddef>
-#include <filesystem>
 #include <memory>
+#include <string>
 
 QT_BEGIN_NAMESPACE
 class QWidget;
@@ -21,16 +20,13 @@ class Settings;
 /// @brief Service connecting scripts.lst program indices to their editable SSL source.
 ///
 /// Bridges the data model (a 0-based scripts.lst program index, as stored in the map header's
-/// script_id and each MapScript.script_id) to files the user can work on:
+/// script_id and each MapScript.script_id) to the .ssl the user edits: given a program index it
+/// resolves scripts.lst → base name → the matching `<name>.ssl` (in a marked script-source tree,
+/// loose in the mounted data, or extracted from a DAT) and opens it in the configured editor.
 ///
-///  - editScriptSource(): open the script's .ssl in the configured editor — extracting it from
-///    a DAT into the writable data folder, or decompiling the .int via int2ssl (best-effort,
-///    lossy), when no loose source exists.
-///  - compileScript() / decompileScript(): file-picker driven sslc / int2ssl runs, placing the
-///    compiled .int where the engine (and our VFS) will load it.
-///
-/// Tool binaries come from Settings; when one is missing the user is prompted to locate it.
-/// Tool output lands in the Log panel (tagged [sslc] / [int2ssl]).
+/// Gecko does not compile or decompile — that is owned by the external editor (VS Code + the
+/// BGforge MLS extension, which bundles the compiler). See the Text Editor preferences for how a
+/// compiled .int is deployed where the engine loads it.
 class ScriptSourceService {
 public:
     ScriptSourceService(resource::GameResources& resources, std::shared_ptr<Settings> settings,
@@ -39,34 +35,6 @@ public:
     /// Open the .ssl source behind the 0-based scripts.lst `programIndex` in the user's editor.
     void editScriptSource(int programIndex);
 
-    /// Pick a .ssl file and compile it with sslc, placing the .int under the engine's scripts/.
-    void compileScript();
-
-    /// Pick an .int file and decompile it with int2ssl to an .ssl next to it.
-    void decompileScript();
-
-    /// Outcome of compiling a source onto its deployed `.int`. Exposed (with compileToTarget)
-    /// so the compile-safety behaviour can be tested without the surrounding dialogs.
-    struct CompileToTargetResult {
-        enum class Status {
-            NotStarted,    // the compiler binary could not be launched
-            TimedOut,      // the compiler ran past the timeout and was killed
-            CompileFailed, // errors, or no usable output was produced
-            PlaceFailed,   // compiled, but the output could not replace the target
-            Success,
-        };
-        Status status = Status::CompileFailed;
-        std::size_t errors = 0;
-        std::size_t warnings = 0;
-    };
-
-    /// Compile `sslPath` to `target` via a fresh temporary sibling, replacing `target` with an
-    /// atomic rename only after a good build. A failed compile (sslc deletes its own output on a
-    /// parse error) or an output-less run therefore never damages an existing `target`. Static and
-    /// UI-free so it is directly testable.
-    static CompileToTargetResult compileToTarget(const QString& compilerPath,
-        const std::filesystem::path& sslPath, const std::filesystem::path& target);
-
 private:
     /// The scripts.lst entry at `programIndex` reduced to its bare program name ("artemple"),
     /// or an empty string (with an error dialog shown) when it can't be resolved.
@@ -74,21 +42,8 @@ private:
 
     /// Open `<baseName>.ssl` from a marked script-source tree (with the tree as the editor's
     /// workspace) when one is configured and holds it. Returns true when it handled the request
-    /// (opened the file); false to fall through to the in-VFS / decompile handling.
+    /// (opened the file); false to fall through to the in-VFS / DAT-extract handling.
     bool openFromScriptSourceRoots(const std::string& baseName);
-
-    /// The configured, existing path of a tool binary — prompting the user to locate (and
-    /// persist) it when unset or stale. Empty when unavailable.
-    QString ensureCompilerPath();
-    QString ensureDecompilerPath();
-
-    /// Run sslc on `sslPath`, placing the output at scripts/<baseName>.int, and report the
-    /// outcome. Returns true on success.
-    bool compileFileForProgram(const QString& sslPath, const std::string& baseName);
-
-    /// Decompile `intVfsOrDiskPath` (native path) to `sslTarget` and open the result on success.
-    bool runDecompiler(const QString& decompilerPath, const std::string& intDiskPath,
-        const std::string& sslTarget);
 
     resource::GameResources& _resources;
     std::shared_ptr<Settings> _settings;

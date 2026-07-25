@@ -161,8 +161,6 @@ private slots:
     void showStampPatternDialog();
     void showFillDialog();
     void showMapBrowserDialog();
-    void showCompileScriptDialog();
-    void showDecompileScriptDialog();
 
 public slots:
     void showStatusMessage(const QString& message);
@@ -284,7 +282,6 @@ private:
     QMenuBar* _menuBar;
     QMenu* _fileMenu;
     QMenu* _editMenu;
-    QMenu* _scriptsMenu = nullptr;
     QMenu* _viewMenu;
     QMenu* _panelsMenu;
     QMenu* _elevationMenu;

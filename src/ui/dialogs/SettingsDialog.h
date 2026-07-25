@@ -18,7 +18,6 @@ namespace geck {
 class DataPathsWidget;
 class GameLocationWidget;
 class TextEditorWidget;
-class ScriptToolsWidget;
 class Settings;
 }
 
@@ -55,7 +54,6 @@ private:
     void setupGeneralTab();
     void setupViewportTab();
     void setupEditorTab();
-    void setupScriptToolsTab();
     void setupColorsTab();
     void updateColorButton(const QString& key) const;
     void setupButtonBox();
@@ -83,10 +81,6 @@ private:
     QWidget* _editorTab;
     QVBoxLayout* _editorTabLayout;
     TextEditorWidget* _textEditorWidget;
-
-    // Script Tools Tab (external sslc / int2ssl binaries)
-    QWidget* _scriptToolsTab = nullptr;
-    ScriptToolsWidget* _scriptToolsWidget = nullptr;
 
     // Selection colours tab
     QWidget* _colorsTab = nullptr;

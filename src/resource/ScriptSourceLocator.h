@@ -40,19 +40,4 @@ std::string scriptBaseName(const std::string& lstEntry);
 /// (both layouts appear in modder toolchains). nullopt when no mounted source exists.
 std::optional<ScriptFileLocation> locateScriptSource(const DataFileSystem& files, const std::string& baseName);
 
-/// The compiled scripts/<base>.int — the file the engine actually loads.
-std::optional<ScriptFileLocation> locateCompiledScript(const DataFileSystem& files, const std::string& baseName);
-
-/// Where a compile should write scripts/<base>.int: over the winning loose copy when there is
-/// one (so the engine and VFS keep resolving the same file), otherwise under `writableRoot`.
-/// nullopt when the script only exists in DATs (or nowhere) and no writable root is configured.
-std::optional<std::filesystem::path> compiledScriptTarget(const DataFileSystem& files,
-    const std::optional<std::filesystem::path>& writableRoot, const std::string& baseName);
-
-/// Where a decompile should write scripts/<base>.ssl: next to a loose compiled script when there
-/// is one, otherwise under `writableRoot`. The caller is expected to have checked
-/// locateScriptSource() first — decompilation must never clobber real source.
-std::optional<std::filesystem::path> decompiledSourceTarget(const DataFileSystem& files,
-    const std::optional<std::filesystem::path>& writableRoot, const std::string& baseName);
-
 } // namespace geck::resource
