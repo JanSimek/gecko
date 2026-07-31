@@ -4,15 +4,163 @@
 #include "state/MapSaveService.h"
 #include "ui/Settings.h"
 #include "ui/QtDialogs.h"
+#include "util/GameDataPathResolver.h"
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
+#include <system_error>
 
 #include <QProcess>
 #include <QStringList>
 #include <spdlog/spdlog.h>
 
 namespace geck {
+
+namespace {
+
+    /**
+     * Set `key=value` inside @p sectionHeader (e.g. "[Misc]"), creating the section and/or the key
+     * when missing and leaving every other line untouched. A commented-out `;key=` is activated.
+     *
+     * Line terminators are preserved per line: ddraw.ini ships CRLF in a real installation, and a
+     * trailing CR would otherwise defeat the section-header match.
+     */
+    std::string applyIniSetting(const std::string& iniContent, const std::string& sectionHeader,
+        const std::string& key, const std::string& value) {
+        const std::string assignment = key + "=";
+        const std::string commentedAssignment = ";" + assignment;
+
+        std::string content;
+        std::string addedLineEnding = "\n";
+        bool lineEndingKnown = false;
+        bool inTargetSection = false;
+        bool sectionFound = false;
+        bool keyFound = false;
+
+        std::istringstream stream(iniContent);
+        std::string line;
+        while (std::getline(stream, line)) {
+            const bool crlf = line.ends_with("\r");
+            if (crlf) {
+                line.pop_back();
+            }
+            if (!lineEndingKnown) {
+                addedLineEnding = crlf ? "\r\n" : "\n";
+                lineEndingKnown = true;
+            }
+
+            if (line.starts_with("[") && line.ends_with("]")) {
+                inTargetSection = line == sectionHeader;
+                sectionFound = sectionFound || inTargetSection;
+            } else if (inTargetSection && (line.starts_with(assignment) || line.starts_with(commentedAssignment))) {
+                line = assignment + value;
+                keyFound = true;
+            }
+
+            content += line + (crlf ? "\r\n" : "\n");
+        }
+
+        if (keyFound) {
+            return content;
+        }
+
+        if (!sectionFound) {
+            return content + addedLineEnding + sectionHeader + addedLineEnding + assignment + value + addedLineEnding;
+        }
+
+        // The section exists but holds no such key: insert it directly below the section header.
+        const size_t headerPos = content.find(sectionHeader);
+        const size_t headerLineEnd = content.find('\n', headerPos);
+        content.insert(headerLineEnd + 1, assignment + value + addedLineEnding);
+        return content;
+    }
+
+    /** Read @p path (a missing file counts as empty), run @p transform over it and write the result back. */
+    bool patchConfigFile(const std::filesystem::path& path,
+        const std::function<std::string(const std::string&)>& transform) {
+        try {
+            std::string fileContent;
+            if (std::filesystem::exists(path)) {
+                std::ifstream file(path, std::ios::binary);
+                if (!file.is_open()) {
+                    spdlog::error("Failed to open {} for reading", path.string());
+                    return false;
+                }
+                std::ostringstream buffer;
+                buffer << file.rdbuf();
+                fileContent = buffer.str();
+            } else if (!path.parent_path().empty()) {
+                std::filesystem::create_directories(path.parent_path());
+            }
+
+            std::ofstream outFile(path, std::ios::binary);
+            if (!outFile.is_open()) {
+                spdlog::error("Failed to open {} for writing", path.string());
+                return false;
+            }
+
+            outFile << transform(fileContent);
+            return outFile.good();
+        } catch (const std::exception& e) {
+            spdlog::error("Failed to update {}: {}", path.string(), e.what());
+            return false;
+        }
+    }
+
+    /** Strip a trailing separator so directory paths compare element by element. */
+    std::filesystem::path normalizedForCompare(const std::filesystem::path& path) {
+        std::filesystem::path normalized = path.lexically_normal();
+        if (!normalized.has_filename() && normalized.has_parent_path()) {
+            normalized = normalized.parent_path();
+        }
+        return normalized;
+    }
+
+    /** Whether @p candidate is @p root or lives underneath it. */
+    bool isSameOrInside(const std::filesystem::path& candidate, const std::filesystem::path& root) {
+        const std::filesystem::path normalizedCandidate = normalizedForCompare(candidate);
+        const std::filesystem::path normalizedRoot = normalizedForCompare(root);
+        if (normalizedCandidate.empty() || normalizedRoot.empty()) {
+            return false;
+        }
+
+        auto candidatePart = normalizedCandidate.begin();
+        for (auto rootPart = normalizedRoot.begin(); rootPart != normalizedRoot.end(); ++rootPart, ++candidatePart) {
+            if (candidatePart == normalizedCandidate.end() || *candidatePart != *rootPart) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Resolve the binary to start. A macOS .app bundle has to be started through the binary inside
+     * Contents/MacOS: launching the bundle via `open` hands it to LaunchServices, which does not
+     * inherit our working directory - and fallout2-ce resolves master_patches/critter_patches
+     * against exactly that. Returns an empty path when no binary can be found.
+     */
+    std::filesystem::path resolveLaunchBinary(const std::filesystem::path& executablePath) {
+        if (executablePath.extension() != ".app") {
+            return executablePath;
+        }
+
+        std::error_code ec;
+        const std::filesystem::path macosDir = executablePath / "Contents" / "MacOS";
+        if (const std::filesystem::path named = macosDir / executablePath.stem(); std::filesystem::exists(named, ec)) {
+            return named;
+        }
+
+        for (const auto& entry : std::filesystem::directory_iterator(macosDir, ec)) {
+            if (entry.is_regular_file(ec)) {
+                return entry.path();
+            }
+        }
+
+        return {};
+    }
+
+} // namespace
 
 GameLauncher::GameLauncher(resource::GameResources& resources, std::shared_ptr<Settings> settings,
     QWidget* dialogParent, std::function<void(const QString&)> showStatus, QObject* parent)
@@ -53,6 +201,10 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
         return;
     }
 
+    if (!confirmLaunchConfiguration(gameDataDir, executableLocation)) {
+        return;
+    }
+
     std::filesystem::path mapsDir = gameDataDir / "data" / "maps";
     std::filesystem::path mapDestination = mapsDir / mapFilename;
 
@@ -73,15 +225,26 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
 
         spdlog::debug("Saved map to game directory: {} ({} bytes)", mapDestination.string(), *bytesWritten);
 
-        // 2. Modify ddraw.ini
-        std::filesystem::path ddrawIniPath = gameDataDir / "ddraw.ini";
-        if (!modifyDdrawIni(ddrawIniPath, mapFilename)) {
+        // 2. Point the game at the map. ddraw.ini is what the original executable plus sfall reads;
+        // fallout2-ce only consults it while migrating sfall settings into data/config/game#patch.cfg
+        // and skips that migration once the file exists, so write the migrated key ourselves too.
+        QStringList unwritten;
+        if (!modifyDdrawIni(gameDataDir / "ddraw.ini", mapFilename)) {
+            unwritten << "ddraw.ini";
+        }
+        if (!writeContentConfigPatch(gameDataDir, mapFilename)) {
+            unwritten << "data/config/game#patch.cfg";
+        }
+        if (!unwritten.isEmpty()) {
             QtDialogs::showWarning(_dialogParent, "Configuration Warning",
-                "Map saved successfully, but failed to modify ddraw.ini. You may need to manually set the starting map.");
+                QString("Map saved successfully, but the starting map could not be written to %1. "
+                        "You may need to set the starting map manually.")
+                    .arg(unwritten.join(" and ")));
         }
 
-        // 3. Launch the game
-        launchGame(executableLocation);
+        // 3. Launch the game from the data directory: fallout2-ce resolves master_patches and
+        // critter_patches against the working directory, so it has to be the tree we just wrote to.
+        launchGame(executableLocation, gameDataDir);
 
     } catch (const std::exception& e) {
         QtDialogs::showError(_dialogParent, "Play Failed",
@@ -91,98 +254,88 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
 }
 
 std::string applyStartingMapToDdrawIni(const std::string& iniContent, const std::string& mapFilename) {
-    std::string content;
-    bool foundMiscSection = false;
-    bool foundStartingMap = false;
+    return applyIniSetting(iniContent, "[Misc]", "StartingMap", mapFilename);
+}
 
-    std::istringstream stream(iniContent);
-    std::string line;
-    std::string currentSection;
+std::string applyStartingMapToContentConfig(const std::string& configContent, const std::string& mapFilename) {
+    return applyIniSetting(configContent, "[start]", "map", mapFilename);
+}
 
-    while (std::getline(stream, line)) {
-        if (line.starts_with("[") && line.ends_with("]")) {
-            currentSection = line;
-            if (line == "[Misc]") {
-                foundMiscSection = true;
-            }
-        }
+std::vector<std::string> collectLaunchConfigurationWarnings(
+    const std::filesystem::path& gameDataDirectory,
+    const std::filesystem::path& executableDirectory,
+    bool executableDirectoryHasGameData,
+    const std::vector<std::filesystem::path>& editorDataPaths) {
+    std::vector<std::string> warnings;
 
-        // Replace StartingMap inside [Misc] (also matches a commented-out ;StartingMap=)
-        if (foundMiscSection && currentSection == "[Misc]" && (line.starts_with("StartingMap=") || line.starts_with(";StartingMap="))) {
-            foundStartingMap = true;
-            line = "StartingMap=" + mapFilename;
-        }
-
-        content += line + "\n";
+    if (executableDirectoryHasGameData && !isSameOrInside(executableDirectory, gameDataDirectory)) {
+        warnings.push_back("The game executable sits in " + executableDirectory.string()
+            + ", which holds its own Fallout 2 data. Gecko runs the game against "
+            + gameDataDirectory.string() + " instead, so that is the installation the map is written to.");
     }
 
-    // If no [Misc] section found, add it
-    if (!foundMiscSection) {
-        content += "\n[Misc]\n";
-        foundMiscSection = true;
+    const bool anyPathCoversGame = std::any_of(editorDataPaths.begin(), editorDataPaths.end(),
+        [&gameDataDirectory](const std::filesystem::path& dataPath) {
+            return isSameOrInside(dataPath, gameDataDirectory) || isSameOrInside(gameDataDirectory, dataPath);
+        });
+    if (!editorDataPaths.empty() && !anyPathCoversGame) {
+        warnings.push_back("None of the editor's data paths point into " + gameDataDirectory.string()
+            + ". The game loads only what that installation already contains, so protos, art or scripts "
+              "that exist just in the editor's data paths will be missing.");
     }
 
-    // If no StartingMap found in [Misc] section, add it after the section header
-    if (!foundStartingMap && foundMiscSection) {
-        size_t miscPos = content.find("[Misc]");
-        if (miscPos != std::string::npos) {
-            size_t nextSection = content.find("\n[", miscPos + 6);
-            if (nextSection != std::string::npos) {
-                content.insert(nextSection, "StartingMap=" + mapFilename + "\n");
-            } else {
-                content += "StartingMap=" + mapFilename + "\n";
-            }
-        }
+    return warnings;
+}
+
+bool GameLauncher::confirmLaunchConfiguration(const std::filesystem::path& gameDataDirectory,
+    const std::filesystem::path& executablePath) {
+    const std::filesystem::path executableDirectory = executablePath.parent_path();
+    const std::vector<std::string> warnings = collectLaunchConfigurationWarnings(gameDataDirectory,
+        executableDirectory, util::hasFallout2DataLayout(executableDirectory), _settings->getDataPaths());
+    if (warnings.empty()) {
+        return true;
     }
 
-    return content;
+    QString message;
+    for (const std::string& warning : warnings) {
+        spdlog::warn("Launch configuration: {}", warning);
+        message += QString::fromStdString(warning) + "\n\n";
+    }
+    message += "Play anyway?";
+
+    return QtDialogs::showQuestion(_dialogParent, "Launch Configuration", message);
 }
 
 bool GameLauncher::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const std::string& mapFilename) {
-    try {
-        std::string fileContent;
-
-        // Read existing file if it exists
-        if (std::filesystem::exists(ddrawIniPath)) {
-            std::ifstream file(ddrawIniPath);
-            if (!file.is_open()) {
-                spdlog::error("Failed to open ddraw.ini for reading: {}", ddrawIniPath.string());
-                return false;
-            }
-
-            std::string line;
-            while (std::getline(file, line)) {
-                fileContent += line + "\n";
-            }
-            file.close();
-        }
-
-        std::string content = applyStartingMapToDdrawIni(fileContent, mapFilename);
-
-        // Write the modified content back
-        std::ofstream outFile(ddrawIniPath);
-        if (!outFile.is_open()) {
-            spdlog::error("Failed to open ddraw.ini for writing: {}", ddrawIniPath.string());
-            return false;
-        }
-
-        outFile << content;
-        outFile.close();
-
+    const bool patched = patchConfigFile(ddrawIniPath, [&mapFilename](const std::string& content) {
+        return applyStartingMapToDdrawIni(content, mapFilename);
+    });
+    if (patched) {
         spdlog::debug("Modified {}: set StartingMap to {}", ddrawIniPath.string(), mapFilename);
-        return true;
-
-    } catch (const std::exception& e) {
-        spdlog::error("Failed to modify {}: {}", ddrawIniPath.string(), e.what());
-        return false;
     }
+    return patched;
 }
 
-void GameLauncher::launchGame(const std::filesystem::path& executablePath) {
-    spdlog::debug("Launching game executable: {}", executablePath.string());
+bool GameLauncher::writeContentConfigPatch(const std::filesystem::path& gameDataDirectory,
+    const std::string& mapFilename) {
+    const std::filesystem::path configPath = gameDataDirectory / "data" / "config" / "game#patch.cfg";
+    const bool patched = patchConfigFile(configPath, [&mapFilename](const std::string& content) {
+        return applyStartingMapToContentConfig(content, mapFilename);
+    });
+    if (patched) {
+        spdlog::debug("Modified {}: set [start] map to {}", configPath.string(), mapFilename);
+    }
+    return patched;
+}
+
+void GameLauncher::launchGame(const std::filesystem::path& executablePath,
+    const std::filesystem::path& workingDirectory) {
+    const std::filesystem::path binary = resolveLaunchBinary(executablePath);
+    spdlog::debug("Launching game executable: {} (working directory: {})",
+        binary.empty() ? executablePath.string() : binary.string(), workingDirectory.string());
 
     QProcess* gameProcess = new QProcess(this);
-    gameProcess->setWorkingDirectory(QString::fromStdString(executablePath.parent_path().string()));
+    gameProcess->setWorkingDirectory(QString::fromStdString(workingDirectory.string()));
 
     connect(gameProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
         [gameProcess](int exitCode, QProcess::ExitStatus exitStatus) {
@@ -213,11 +366,15 @@ void GameLauncher::launchGame(const std::filesystem::path& executablePath) {
             gameProcess->deleteLater();
         });
 
-    // Launch the executable (use 'open' on macOS for .app bundles)
-    if (executablePath.extension() == ".app") {
+    if (binary.empty()) {
+        // Nothing executable inside the bundle: fall back to 'open', which starts the app through
+        // LaunchServices and therefore ignores the working directory set above.
+        spdlog::warn("No binary found inside {}; falling back to 'open'. The game will resolve its "
+                     "data paths against its own working directory, not {}.",
+            executablePath.string(), workingDirectory.string());
         gameProcess->start("open", QStringList() << QString::fromStdString(executablePath.string()));
     } else {
-        gameProcess->start(QString::fromStdString(executablePath.string()));
+        gameProcess->start(QString::fromStdString(binary.string()));
     }
 
     if (!gameProcess->waitForStarted(5000)) {
