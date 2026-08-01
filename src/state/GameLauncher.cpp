@@ -274,10 +274,10 @@ std::vector<std::string> collectLaunchConfigurationWarnings(
             + gameDataDirectory.string() + " instead, so that is the installation the map is written to.");
     }
 
-    const auto coversGameDirectory = [&gameDataDirectory](const std::filesystem::path& dataPath) {
-        return isSameOrInside(dataPath, gameDataDirectory) || isSameOrInside(gameDataDirectory, dataPath);
-    };
-    if (!editorDataPaths.empty() && !std::ranges::any_of(editorDataPaths, coversGameDirectory)) {
+    if (!editorDataPaths.empty()
+        && !std::ranges::any_of(editorDataPaths, [&gameDataDirectory](const std::filesystem::path& dataPath) {
+               return isSameOrInside(dataPath, gameDataDirectory) || isSameOrInside(gameDataDirectory, dataPath);
+           })) {
         warnings.push_back("None of the editor's data paths point into " + gameDataDirectory.string()
             + ". The game loads only what that installation already contains, so protos, art or scripts "
               "that exist just in the editor's data paths will be missing.");
