@@ -77,9 +77,9 @@ public:
 
 private:
     bool confirmLaunchConfiguration(const std::filesystem::path& gameDataDirectory,
-        const std::filesystem::path& executablePath);
-    bool modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const std::string& mapFilename);
-    bool writeContentConfigPatch(const std::filesystem::path& gameDataDirectory, const std::string& mapFilename);
+        const std::filesystem::path& executablePath) const;
+    bool modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const std::string& mapFilename) const;
+    bool writeContentConfigPatch(const std::filesystem::path& gameDataDirectory, const std::string& mapFilename) const;
     void launchGame(const std::filesystem::path& executablePath, const std::filesystem::path& workingDirectory);
 
     resource::GameResources& _resources;

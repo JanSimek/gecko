@@ -77,8 +77,8 @@ namespace {
     }
 
     /** Read @p path (a missing file counts as empty), run @p transform over it and write the result back. */
-    bool patchConfigFile(const std::filesystem::path& path,
-        const std::function<std::string(const std::string&)>& transform) {
+    template <typename Transform>
+    bool patchConfigFile(const std::filesystem::path& path, Transform&& transform) {
         try {
             std::string fileContent;
             if (std::filesystem::exists(path)) {
@@ -274,11 +274,10 @@ std::vector<std::string> collectLaunchConfigurationWarnings(
             + gameDataDirectory.string() + " instead, so that is the installation the map is written to.");
     }
 
-    const bool anyPathCoversGame = std::any_of(editorDataPaths.begin(), editorDataPaths.end(),
-        [&gameDataDirectory](const std::filesystem::path& dataPath) {
-            return isSameOrInside(dataPath, gameDataDirectory) || isSameOrInside(gameDataDirectory, dataPath);
-        });
-    if (!editorDataPaths.empty() && !anyPathCoversGame) {
+    const auto coversGameDirectory = [&gameDataDirectory](const std::filesystem::path& dataPath) {
+        return isSameOrInside(dataPath, gameDataDirectory) || isSameOrInside(gameDataDirectory, dataPath);
+    };
+    if (!editorDataPaths.empty() && !std::ranges::any_of(editorDataPaths, coversGameDirectory)) {
         warnings.push_back("None of the editor's data paths point into " + gameDataDirectory.string()
             + ". The game loads only what that installation already contains, so protos, art or scripts "
               "that exist just in the editor's data paths will be missing.");
@@ -288,7 +287,7 @@ std::vector<std::string> collectLaunchConfigurationWarnings(
 }
 
 bool GameLauncher::confirmLaunchConfiguration(const std::filesystem::path& gameDataDirectory,
-    const std::filesystem::path& executablePath) {
+    const std::filesystem::path& executablePath) const {
     const std::filesystem::path executableDirectory = executablePath.parent_path();
     const std::vector<std::string> warnings = collectLaunchConfigurationWarnings(gameDataDirectory,
         executableDirectory, util::hasFallout2DataLayout(executableDirectory), _settings->getDataPaths());
@@ -306,7 +305,7 @@ bool GameLauncher::confirmLaunchConfiguration(const std::filesystem::path& gameD
     return QtDialogs::showQuestion(_dialogParent, "Launch Configuration", message);
 }
 
-bool GameLauncher::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const std::string& mapFilename) {
+bool GameLauncher::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const std::string& mapFilename) const {
     const bool patched = patchConfigFile(ddrawIniPath, [&mapFilename](const std::string& content) {
         return applyStartingMapToDdrawIni(content, mapFilename);
     });
@@ -317,7 +316,7 @@ bool GameLauncher::modifyDdrawIni(const std::filesystem::path& ddrawIniPath, con
 }
 
 bool GameLauncher::writeContentConfigPatch(const std::filesystem::path& gameDataDirectory,
-    const std::string& mapFilename) {
+    const std::string& mapFilename) const {
     const std::filesystem::path configPath = gameDataDirectory / "data" / "config" / "game#patch.cfg";
     const bool patched = patchConfigFile(configPath, [&mapFilename](const std::string& content) {
         return applyStartingMapToContentConfig(content, mapFilename);
