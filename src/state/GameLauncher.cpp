@@ -222,6 +222,7 @@ GameLauncher::~GameLauncher() {
     } catch (...) {
         // Never propagate out of a destructor. The mod list stays patched; the next launch rewrites
         // it and the block is stripped rather than kept.
+        spdlog::error("Failed to restore the mod load order at {}", _modsOrderPath.string());
     }
 }
 
