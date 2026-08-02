@@ -237,13 +237,7 @@ GameLauncher::GameLauncher(resource::GameResources& resources, std::shared_ptr<S
 }
 
 GameLauncher::~GameLauncher() {
-    try {
-        restoreModsOrder();
-    } catch (...) {
-        // Never propagate out of a destructor. The mod list stays patched; the next launch rewrites
-        // it and the block is stripped rather than kept.
-        spdlog::error("Failed to restore the mod load order at {}", _modsOrderPath.string());
-    }
+    restoreModsOrder();
 }
 
 void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapFilename) {
@@ -520,7 +514,7 @@ bool GameLauncher::writeModsOrder(const std::filesystem::path& gameDataDirectory
     return true;
 }
 
-void GameLauncher::restoreModsOrder() {
+void GameLauncher::restoreModsOrder() noexcept {
     if (!_modsOrderPatched) {
         return;
     }

@@ -130,7 +130,9 @@ private:
     bool modifyDdrawIni(const std::filesystem::path& ddrawIniPath, const std::string& mapFilename) const;
     bool writeContentConfigPatch(const std::filesystem::path& gameDataDirectory, const std::string& mapFilename) const;
     bool writeModsOrder(const std::filesystem::path& gameDataDirectory, const std::vector<std::string>& entries);
-    void restoreModsOrder();
+    /// noexcept so the destructor can call it without a catch of its own: an escaping exception
+    /// while unwinding is worse than the failed restore, which the next launch repairs anyway.
+    void restoreModsOrder() noexcept;
     void launchGame(const std::filesystem::path& executablePath, const std::filesystem::path& workingDirectory);
 
     resource::GameResources& _resources;
