@@ -6,9 +6,10 @@
 #include "ui/QtDialogs.h"
 #include "util/GameDataPathResolver.h"
 
-#include <algorithm>
 #include <fstream>
+#include <optional>
 #include <sstream>
+#include <string_view>
 #include <system_error>
 
 #include <QProcess>
@@ -108,6 +109,59 @@ namespace {
         }
     }
 
+    /// Markers around the editor-managed part of mods_order.txt. Both carry a semicolon, which the
+    /// engine's mod-list parser treats as a comment, so it never tries to mount them.
+    constexpr std::string_view kManagedBlockBegin = "; gecko: editor data paths - regenerated on every Play";
+    constexpr std::string_view kManagedBlockEnd = "; gecko: end of editor data paths";
+
+    /** Write @p content to @p path verbatim, creating parent directories as needed. */
+    bool writeFileVerbatim(const std::filesystem::path& path, const std::string& content) {
+        try {
+            if (!path.parent_path().empty()) {
+                std::filesystem::create_directories(path.parent_path());
+            }
+
+            std::ofstream outFile(path, std::ios::binary);
+            if (!outFile.is_open()) {
+                spdlog::error("Failed to open {} for writing", path.string());
+                return false;
+            }
+
+            outFile << content;
+            return outFile.good();
+        } catch (const std::exception& e) {
+            spdlog::error("Failed to write {}: {}", path.string(), e.what());
+            return false;
+        }
+    }
+
+    /** Read @p path as raw bytes, or nullopt when it does not exist or cannot be read. */
+    std::optional<std::string> readFileVerbatim(const std::filesystem::path& path) {
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec)) {
+            return std::nullopt;
+        }
+
+        std::ifstream file(path, std::ios::binary);
+        if (!file.is_open()) {
+            spdlog::error("Failed to open {} for reading", path.string());
+            return std::nullopt;
+        }
+
+        std::ostringstream buffer;
+        buffer << file.rdbuf();
+        return buffer.str();
+    }
+
+    /** Trim ASCII whitespace, so marker lines match regardless of indentation or a trailing CR. */
+    std::string_view trimmed(std::string_view line) {
+        const auto first = line.find_first_not_of(" \t\r\n");
+        if (first == std::string_view::npos) {
+            return {};
+        }
+        return line.substr(first, line.find_last_not_of(" \t\r\n") - first + 1);
+    }
+
     /** Strip a trailing separator so directory paths compare element by element. */
     std::filesystem::path normalizedForCompare(const std::filesystem::path& path) {
         std::filesystem::path normalized = path.lexically_normal();
@@ -171,6 +225,10 @@ GameLauncher::GameLauncher(resource::GameResources& resources, std::shared_ptr<S
     , _showStatus(std::move(showStatus)) {
 }
 
+GameLauncher::~GameLauncher() {
+    restoreModsOrder();
+}
+
 void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapFilename) {
     auto& settings = *_settings;
 
@@ -201,7 +259,8 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
         return;
     }
 
-    if (!confirmLaunchConfiguration(gameDataDir, executableLocation)) {
+    const EditorDataMountPlan mountPlan = planEditorDataMounts(gameDataDir, settings.getDataPaths());
+    if (!confirmLaunchConfiguration(gameDataDir, executableLocation, mountPlan.unmountable)) {
         return;
     }
 
@@ -235,6 +294,10 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
         if (!writeContentConfigPatch(gameDataDir, mapFilename)) {
             unwritten << "data/config/game#patch.cfg";
         }
+        // Mount the editor's data paths for this run only; restored once the game exits.
+        if (!writeModsOrder(gameDataDir, mountPlan.modsOrderEntries)) {
+            unwritten << "mods/mods_order.txt";
+        }
         if (!unwritten.isEmpty()) {
             QtDialogs::showWarning(_dialogParent, "Configuration Warning",
                 QString("Map saved successfully, but the starting map could not be written to %1. "
@@ -261,11 +324,80 @@ std::string applyStartingMapToContentConfig(const std::string& configContent, co
     return applyIniSetting(configContent, "[start]", "map", mapFilename);
 }
 
+EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDirectory,
+    const std::vector<std::filesystem::path>& editorDataPaths) {
+    EditorDataMountPlan plan;
+    const std::filesystem::path modsDirectory = gameDataDirectory / "mods";
+
+    for (const std::filesystem::path& dataPath : editorDataPaths) {
+        if (dataPath.empty() || isSameOrInside(dataPath, gameDataDirectory)) {
+            // Already reachable: master_patches, the game's own DATs or the existing mod list.
+            continue;
+        }
+
+        std::error_code ec;
+        const std::filesystem::path entry = std::filesystem::relative(dataPath, modsDirectory, ec);
+        // relative() gives up across Windows volumes. A semicolon or hash would make the engine's
+        // parser treat the entry as a comment and silently skip it.
+        const std::string text = entry.generic_string();
+        if (ec || text.empty() || text.find_first_of(";#") != std::string::npos) {
+            plan.unmountable.push_back(dataPath);
+            continue;
+        }
+
+        plan.modsOrderEntries.push_back(text);
+    }
+
+    return plan;
+}
+
+std::string applyManagedModsOrderBlock(const std::string& existingContent, const std::vector<std::string>& entries) {
+    std::string content;
+    std::string lineEnding = "\n";
+    bool lineEndingKnown = false;
+    bool insideManagedBlock = false;
+
+    std::istringstream stream(existingContent);
+    std::string line;
+    while (std::getline(stream, line)) {
+        const bool crlf = line.ends_with("\r");
+        if (!lineEndingKnown) {
+            lineEnding = crlf ? "\r\n" : "\n";
+            lineEndingKnown = true;
+        }
+
+        const std::string_view text = trimmed(line);
+        if (insideManagedBlock) {
+            insideManagedBlock = text != kManagedBlockEnd;
+            continue;
+        }
+        if (text == kManagedBlockBegin) {
+            insideManagedBlock = true;
+            continue;
+        }
+
+        // `line` still carries its CR when the file is CRLF, so appending LF restores the pair.
+        content += line + "\n";
+    }
+
+    if (entries.empty()) {
+        return content;
+    }
+
+    // Appended last: the engine prepends every mount it opens, so the final entries win.
+    content += std::string(kManagedBlockBegin) + lineEnding;
+    for (const std::string& entry : entries) {
+        content += entry + lineEnding;
+    }
+    content += std::string(kManagedBlockEnd) + lineEnding;
+    return content;
+}
+
 std::vector<std::string> collectLaunchConfigurationWarnings(
     const std::filesystem::path& gameDataDirectory,
     const std::filesystem::path& executableDirectory,
     bool executableDirectoryHasGameData,
-    const std::vector<std::filesystem::path>& editorDataPaths) {
+    const std::vector<std::filesystem::path>& unmountableDataPaths) {
     std::vector<std::string> warnings;
 
     if (executableDirectoryHasGameData && !isSameOrInside(executableDirectory, gameDataDirectory)) {
@@ -274,23 +406,24 @@ std::vector<std::string> collectLaunchConfigurationWarnings(
             + gameDataDirectory.string() + " instead, so that is the installation the map is written to.");
     }
 
-    if (!editorDataPaths.empty()
-        && !std::ranges::any_of(editorDataPaths, [&gameDataDirectory](const std::filesystem::path& dataPath) {
-               return isSameOrInside(dataPath, gameDataDirectory) || isSameOrInside(gameDataDirectory, dataPath);
-           })) {
-        warnings.push_back("None of the editor's data paths point into " + gameDataDirectory.string()
-            + ". The game loads only what that installation already contains, so protos, art or scripts "
-              "that exist just in the editor's data paths will be missing.");
+    if (!unmountableDataPaths.empty()) {
+        std::string paths;
+        for (const std::filesystem::path& dataPath : unmountableDataPaths) {
+            paths += (paths.empty() ? "" : ", ") + dataPath.string();
+        }
+        warnings.push_back("These editor data paths cannot be mounted into " + gameDataDirectory.string() + ": "
+            + paths + ". Files that exist only there will be missing from the game.");
     }
 
     return warnings;
 }
 
 bool GameLauncher::confirmLaunchConfiguration(const std::filesystem::path& gameDataDirectory,
-    const std::filesystem::path& executablePath) const {
+    const std::filesystem::path& executablePath,
+    const std::vector<std::filesystem::path>& unmountableDataPaths) const {
     const std::filesystem::path executableDirectory = executablePath.parent_path();
     const std::vector<std::string> warnings = collectLaunchConfigurationWarnings(gameDataDirectory,
-        executableDirectory, util::hasFallout2DataLayout(executableDirectory), _settings->getDataPaths());
+        executableDirectory, util::hasFallout2DataLayout(executableDirectory), unmountableDataPaths);
     if (warnings.empty()) {
         return true;
     }
@@ -327,6 +460,55 @@ bool GameLauncher::writeContentConfigPatch(const std::filesystem::path& gameData
     return patched;
 }
 
+bool GameLauncher::writeModsOrder(const std::filesystem::path& gameDataDirectory,
+    const std::vector<std::string>& entries) {
+    const std::filesystem::path modsOrderPath = gameDataDirectory / "mods" / "mods_order.txt";
+
+    // Capture the player's own load order once per launch. A second Play before the game exits must
+    // not record our own block as the file to restore, and a block left behind by an editor crash is
+    // stripped so it never becomes part of the "original".
+    if (!_modsOrderPatched) {
+        const std::optional<std::string> existing = readFileVerbatim(modsOrderPath);
+        _modsOrderPath = modsOrderPath;
+        // Kept byte for byte so the restore reproduces the file exactly, including a missing final
+        // newline - unless it still carries a block from an editor that died before restoring, which
+        // is not part of the player's own order and is dropped.
+        _modsOrderOriginal = existing.has_value() && existing->find(kManagedBlockBegin) != std::string::npos
+            ? std::optional<std::string>(applyManagedModsOrderBlock(*existing, {}))
+            : existing;
+    }
+
+    const std::string patched = applyManagedModsOrderBlock(_modsOrderOriginal.value_or(std::string{}), entries);
+    if (!writeFileVerbatim(modsOrderPath, patched)) {
+        return false;
+    }
+
+    _modsOrderPatched = true;
+    spdlog::debug("Mounted {} editor data path(s) through {}", entries.size(), modsOrderPath.string());
+    return true;
+}
+
+void GameLauncher::restoreModsOrder() {
+    if (!_modsOrderPatched) {
+        return;
+    }
+    _modsOrderPatched = false;
+
+    if (_modsOrderOriginal.has_value()) {
+        if (writeFileVerbatim(_modsOrderPath, *_modsOrderOriginal)) {
+            spdlog::debug("Restored {}", _modsOrderPath.string());
+        }
+        return;
+    }
+
+    // The game had no mod list before; leave the directory as we found it.
+    std::error_code ec;
+    std::filesystem::remove(_modsOrderPath, ec);
+    if (ec) {
+        spdlog::warn("Failed to remove {}: {}", _modsOrderPath.string(), ec.message());
+    }
+}
+
 void GameLauncher::launchGame(const std::filesystem::path& executablePath,
     const std::filesystem::path& workingDirectory) {
     const std::filesystem::path binary = resolveLaunchBinary(executablePath);
@@ -336,12 +518,19 @@ void GameLauncher::launchGame(const std::filesystem::path& executablePath,
     QProcess* gameProcess = new QProcess(this);
     gameProcess->setWorkingDirectory(QString::fromStdString(workingDirectory.string()));
 
+    // 'open' returns as soon as LaunchServices accepts the request, long before the game has read
+    // its mod list, so on that path the restore has to wait for the editor to shut down instead.
+    const bool restoreOnExit = !binary.empty();
+
     connect(gameProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-        [gameProcess](int exitCode, QProcess::ExitStatus exitStatus) {
+        [this, gameProcess, restoreOnExit](int exitCode, QProcess::ExitStatus exitStatus) {
             if (exitStatus == QProcess::CrashExit) {
                 spdlog::warn("Game process crashed with exit code: {}", exitCode);
             } else {
                 spdlog::debug("Game process finished with exit code: {}", exitCode);
+            }
+            if (restoreOnExit) {
+                restoreModsOrder();
             }
             gameProcess->deleteLater();
         });
@@ -362,6 +551,7 @@ void GameLauncher::launchGame(const std::filesystem::path& executablePath,
             }
             QtDialogs::showError(_dialogParent, "Game Launch Error", errorMsg);
             spdlog::error("Game process error: {}", errorMsg.toStdString());
+            restoreModsOrder();
             gameProcess->deleteLater();
         });
 
@@ -379,6 +569,7 @@ void GameLauncher::launchGame(const std::filesystem::path& executablePath,
     if (!gameProcess->waitForStarted(5000)) {
         QtDialogs::showError(_dialogParent, "Game Launch Failed",
             "Failed to start the game within 5 seconds.");
+        restoreModsOrder();
         gameProcess->deleteLater();
         return;
     }
