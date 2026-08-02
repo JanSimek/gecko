@@ -97,14 +97,14 @@ TEST_CASE("planEditorDataMounts maps editor data paths onto the mod load order",
             "/games/fallout2", "/games/fallout2/data", "/games/fallout2/master.dat", "/games/fallout2/mods/rpu.dat"
         };
 
-        const auto plan = planEditorDataMounts(gameDir, dataPaths);
+        const auto plan = planEditorDataMounts(gameDir, dataPaths, {});
 
         REQUIRE(plan.modsOrderEntries.empty());
         REQUIRE(plan.unmountable.empty());
     }
 
     SECTION("An outside path becomes an entry relative to the mods directory") {
-        const auto plan = planEditorDataMounts(gameDir, { "/mods/restoration-project/data" });
+        const auto plan = planEditorDataMounts(gameDir, { "/mods/restoration-project/data" }, {});
 
         REQUIRE(plan.modsOrderEntries == std::vector<std::string>{ "../../../mods/restoration-project/data" });
         REQUIRE(plan.unmountable.empty());
@@ -113,7 +113,7 @@ TEST_CASE("planEditorDataMounts maps editor data paths onto the mod load order",
     SECTION("Editor order is preserved so the last data path keeps winning") {
         // Exact entries on purpose: the mapping has to be purely lexical, identical on every
         // platform and independent of the working directory or whether these paths exist.
-        const auto plan = planEditorDataMounts(gameDir, { "/a/first.dat", "/games/fallout2/data", "/b/second" });
+        const auto plan = planEditorDataMounts(gameDir, { "/a/first.dat", "/games/fallout2/data", "/b/second" }, {});
 
         REQUIRE(plan.modsOrderEntries
             == std::vector<std::string>{ "../../../a/first.dat", "../../../b/second" });
@@ -122,34 +122,45 @@ TEST_CASE("planEditorDataMounts maps editor data paths onto the mod load order",
 
     SECTION("A path the engine's parser would treat as a comment is reported instead") {
         // The mod list parser skips any line containing ';' or '#'.
-        const auto plan = planEditorDataMounts(gameDir, { "/mods/patch#3/data" });
+        const auto plan = planEditorDataMounts(gameDir, { "/mods/patch#3/data" }, {});
 
         REQUIRE(plan.modsOrderEntries.empty());
         REQUIRE(plan.unmountable == std::vector<std::filesystem::path>{ "/mods/patch#3/data" });
     }
 
     SECTION("A sibling directory sharing a name prefix is not treated as inside") {
-        const auto plan = planEditorDataMounts(gameDir, { "/games/fallout2-other/data" });
+        const auto plan = planEditorDataMounts(gameDir, { "/games/fallout2-other/data" }, {});
 
         REQUIRE(plan.modsOrderEntries.size() == 1);
     }
 
-    SECTION("Copies of the engine's own archives are not mounted above the player's mods") {
-        const std::vector<std::filesystem::path> dataPaths = { "/editor/master.dat", "/editor/CRITTER.DAT",
-            "/editor/patch000.dat", "/editor/f2_res.dat", "/editor/ce.dat" };
+    SECTION("A second copy of an archive the game already loads is not mounted above the mods") {
+        // Matching is case-insensitive, as the engine treats file names.
+        const std::vector<std::filesystem::path> dataPaths
+            = { "/editor/master.dat", "/editor/CRITTER.DAT", "/editor/patch000.dat" };
+        const std::vector<std::string> inGameFolder = { "master.dat", "critter.dat", "patch000.dat", "fallout2.cfg" };
 
-        const auto plan = planEditorDataMounts(gameDir, dataPaths);
+        const auto plan = planEditorDataMounts(gameDir, dataPaths, inGameFolder);
 
         REQUIRE(plan.modsOrderEntries.empty());
-        REQUIRE(plan.engineBaseArchives.size() == dataPaths.size());
+        REQUIRE(plan.alreadyLoadedByGame.size() == dataPaths.size());
         REQUIRE(plan.unmountable.empty());
     }
 
-    SECTION("An ordinary mod archive is still mounted") {
-        const auto plan = planEditorDataMounts(gameDir, { "/editor/rpu.dat", "/editor/patchwork.dat" });
+    SECTION("An archive the game does not have is mounted, whatever it is called") {
+        // Even a patch-style name: the engine only picks those up from its own folder.
+        const auto plan = planEditorDataMounts(gameDir, { "/editor/mymod.dat", "/editor/patch001.dat" },
+            { "master.dat", "critter.dat" });
 
         REQUIRE(plan.modsOrderEntries.size() == 2);
-        REQUIRE(plan.engineBaseArchives.empty());
+        REQUIRE(plan.alreadyLoadedByGame.empty());
+    }
+
+    SECTION("A directory is never mistaken for an archive the game loads") {
+        const auto plan = planEditorDataMounts(gameDir, { "/elsewhere/data" }, { "master.dat" });
+
+        REQUIRE(plan.modsOrderEntries.size() == 1);
+        REQUIRE(plan.alreadyLoadedByGame.empty());
     }
 }
 

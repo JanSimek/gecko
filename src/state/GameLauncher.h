@@ -56,9 +56,9 @@ struct EditorDataMountPlan {
     std::vector<std::string> modsOrderEntries;
     /// Data paths that cannot be expressed as an entry, e.g. on another Windows volume.
     std::vector<std::filesystem::path> unmountable;
-    /// Data paths holding an archive the engine loads by itself, skipped so a copy of the base game
-    /// data cannot outrank the player's mods.
-    std::vector<std::filesystem::path> engineBaseArchives;
+    /// Data paths naming an archive the game already loads from its own folder, skipped so a second
+    /// copy of it cannot outrank the player's mods.
+    std::vector<std::filesystem::path> alreadyLoadedByGame;
 };
 
 /**
@@ -66,9 +66,17 @@ struct EditorDataMountPlan {
  *
  * Paths already inside @p gameDataDirectory are skipped: the game reads those anyway through
  * master_patches, its own DATs or the existing mod list.
+ *
+ * @param archivesInGameFolder lower-case names of the files sitting directly in the game folder,
+ *        which is where the engine picks up master.dat, critter.dat, f2_res.dat, ce.dat and the
+ *        patchXXX chain by itself. An editor data path naming one of them is a second copy of base
+ *        game data and must not be mounted, or it would outrank every mod the player has installed.
+ *        Deliberately a lookup rather than a fixed name list: a mod archive of the editor's own,
+ *        even one called patch001.dat, is mounted as long as the game has no file of that name.
  */
 EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDirectory,
-    const std::vector<std::filesystem::path>& editorDataPaths);
+    const std::vector<std::filesystem::path>& editorDataPaths,
+    const std::vector<std::string>& archivesInGameFolder);
 
 /**
  * @brief Replaces the editor-managed block of a mods_order.txt with @p entries (pure).

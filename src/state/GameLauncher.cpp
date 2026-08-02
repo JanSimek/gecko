@@ -155,28 +155,10 @@ namespace {
         return line.substr(first, line.find_last_not_of(" \t\r\n") - first + 1);
     }
 
-    /**
-     * Whether @p path names an archive the engine opens on its own: the base DATs, the high-res
-     * patch, the CE mod and the patchXXX chain. Mounting a copy of one of those as a mod would rank
-     * unmodified base data above every mod in the player's load order.
-     */
-    bool isEngineBaseArchive(const std::filesystem::path& path) {
-        std::string name = path.filename().string();
-        std::ranges::transform(name, name.begin(), [](unsigned char ch) { return std::tolower(ch); });
-
-        if (name == "master.dat" || name == "critter.dat" || name == "f2_res.dat" || name == "ce.dat") {
-            return true;
-        }
-
-        // patch000.dat and friends, mounted by the engine until the first gap in the sequence.
-        constexpr std::string_view patchPrefix = "patch";
-        constexpr std::string_view datSuffix = ".dat";
-        if (!name.starts_with(patchPrefix) || !name.ends_with(datSuffix)) {
-            return false;
-        }
-        const std::string_view digits
-            = std::string_view(name).substr(patchPrefix.size(), name.size() - patchPrefix.size() - datSuffix.size());
-        return !digits.empty() && std::ranges::all_of(digits, [](unsigned char ch) { return std::isdigit(ch) != 0; });
+    /** Lower-case @p text so file names compare case-insensitively, as the engine treats them. */
+    std::string lowercased(std::string text) {
+        std::ranges::transform(text, text.begin(), [](unsigned char ch) { return std::tolower(ch); });
+        return text;
     }
 
     /** Strip a trailing separator so directory paths compare element by element. */
@@ -231,6 +213,18 @@ namespace {
         return {};
     }
 
+    /** Names of the files directly in the game folder - the archives the engine opens by itself. */
+    std::vector<std::string> archiveNamesInGameFolder(const std::filesystem::path& gameDataDirectory) {
+        std::vector<std::string> names;
+        std::error_code ec;
+        for (const auto& entry : std::filesystem::directory_iterator(gameDataDirectory, ec)) {
+            if (entry.is_regular_file(ec)) {
+                names.push_back(lowercased(entry.path().filename().string()));
+            }
+        }
+        return names;
+    }
+
 } // namespace
 
 GameLauncher::GameLauncher(resource::GameResources& resources, std::shared_ptr<Settings> settings,
@@ -282,9 +276,10 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
         return;
     }
 
-    const EditorDataMountPlan mountPlan = planEditorDataMounts(gameDataDir, settings.getDataPaths());
-    for (const std::filesystem::path& archive : mountPlan.engineBaseArchives) {
-        spdlog::debug("Not mounting {}: the engine loads its own copy of that archive", archive.string());
+    const EditorDataMountPlan mountPlan
+        = planEditorDataMounts(gameDataDir, settings.getDataPaths(), archiveNamesInGameFolder(gameDataDir));
+    for (const std::filesystem::path& archive : mountPlan.alreadyLoadedByGame) {
+        spdlog::debug("Not mounting {}: the game loads its own copy of that archive", archive.string());
     }
     if (!confirmLaunchConfiguration(gameDataDir, executableLocation, mountPlan.unmountable)) {
         return;
@@ -351,7 +346,8 @@ std::string applyStartingMapToContentConfig(const std::string& configContent, co
 }
 
 EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDirectory,
-    const std::vector<std::filesystem::path>& editorDataPaths) {
+    const std::vector<std::filesystem::path>& editorDataPaths,
+    const std::vector<std::string>& archivesInGameFolder) {
     EditorDataMountPlan plan;
     const std::filesystem::path modsDirectory = gameDataDirectory / "mods";
 
@@ -361,10 +357,11 @@ EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDi
             continue;
         }
 
-        if (isEngineBaseArchive(dataPath)) {
-            // The engine loads its own copy at the bottom of the chain. Mounting the editor's copy
-            // as a mod would place untouched base data above every mod the player has installed.
-            plan.engineBaseArchives.push_back(dataPath);
+        if (std::ranges::find(archivesInGameFolder, lowercased(dataPath.filename().string()))
+            != archivesInGameFolder.end()) {
+            // The game opens its own copy of this archive at the bottom of the chain. Mounting the
+            // editor's copy as a mod would put untouched base data above every mod the player has.
+            plan.alreadyLoadedByGame.push_back(dataPath);
             continue;
         }
 
