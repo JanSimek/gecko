@@ -111,11 +111,13 @@ TEST_CASE("planEditorDataMounts maps editor data paths onto the mod load order",
     }
 
     SECTION("Editor order is preserved so the last data path keeps winning") {
+        // Exact entries on purpose: the mapping has to be purely lexical, identical on every
+        // platform and independent of the working directory or whether these paths exist.
         const auto plan = planEditorDataMounts(gameDir, { "/a/first.dat", "/games/fallout2/data", "/b/second" });
 
-        REQUIRE(plan.modsOrderEntries.size() == 2);
-        REQUIRE(plan.modsOrderEntries[0].find("first.dat") != std::string::npos);
-        REQUIRE(plan.modsOrderEntries[1].find("second") != std::string::npos);
+        REQUIRE(plan.modsOrderEntries
+            == std::vector<std::string>{ "../../../a/first.dat", "../../../b/second" });
+        REQUIRE(plan.unmountable.empty());
     }
 
     SECTION("A path the engine's parser would treat as a comment is reported instead") {
@@ -164,9 +166,8 @@ TEST_CASE("applyManagedModsOrderBlock keeps the player's own load order", "[game
     SECTION("The block markers are comments, so the engine skips them") {
         const std::string result = applyManagedModsOrderBlock(playerOrder, { "../../rp/data" });
 
-        for (const std::string& line : { std::string("; gecko"), std::string("; gecko") }) {
-            REQUIRE(result.find(line) != std::string::npos);
-        }
+        REQUIRE(result.find("; gecko: editor data paths") != std::string::npos);
+        REQUIRE(result.find("; gecko: end of editor data paths") != std::string::npos);
         // Every line the engine would try to mount is either a player entry or one of ours.
         std::istringstream stream(result);
         std::string line;

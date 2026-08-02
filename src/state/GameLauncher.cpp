@@ -80,33 +80,29 @@ namespace {
     /** Read @p path (a missing file counts as empty), run @p transform over it and write the result back. */
     template <typename Transform>
     bool patchConfigFile(const std::filesystem::path& path, Transform&& transform) {
-        try {
-            std::string fileContent;
-            if (std::filesystem::exists(path)) {
-                std::ifstream file(path, std::ios::binary);
-                if (!file.is_open()) {
-                    spdlog::error("Failed to open {} for reading", path.string());
-                    return false;
-                }
-                std::ostringstream buffer;
-                buffer << file.rdbuf();
-                fileContent = buffer.str();
-            } else if (!path.parent_path().empty()) {
-                std::filesystem::create_directories(path.parent_path());
-            }
-
-            std::ofstream outFile(path, std::ios::binary);
-            if (!outFile.is_open()) {
-                spdlog::error("Failed to open {} for writing", path.string());
+        std::error_code ec;
+        std::string fileContent;
+        if (std::filesystem::exists(path, ec)) {
+            std::ifstream file(path, std::ios::binary);
+            if (!file.is_open()) {
+                spdlog::error("Failed to open {} for reading", path.string());
                 return false;
             }
+            std::ostringstream buffer;
+            buffer << file.rdbuf();
+            fileContent = buffer.str();
+        } else if (!path.parent_path().empty()) {
+            std::filesystem::create_directories(path.parent_path(), ec);
+        }
 
-            outFile << transform(fileContent);
-            return outFile.good();
-        } catch (const std::exception& e) {
-            spdlog::error("Failed to update {}: {}", path.string(), e.what());
+        std::ofstream outFile(path, std::ios::binary);
+        if (!outFile.is_open()) {
+            spdlog::error("Failed to open {} for writing", path.string());
             return false;
         }
+
+        outFile << transform(fileContent);
+        return outFile.good();
     }
 
     /// Markers around the editor-managed part of mods_order.txt. Both carry a semicolon, which the
@@ -116,29 +112,24 @@ namespace {
 
     /** Write @p content to @p path verbatim, creating parent directories as needed. */
     bool writeFileVerbatim(const std::filesystem::path& path, const std::string& content) {
-        try {
-            if (!path.parent_path().empty()) {
-                std::filesystem::create_directories(path.parent_path());
-            }
+        if (!path.parent_path().empty()) {
+            std::error_code ec;
+            std::filesystem::create_directories(path.parent_path(), ec);
+        }
 
-            std::ofstream outFile(path, std::ios::binary);
-            if (!outFile.is_open()) {
-                spdlog::error("Failed to open {} for writing", path.string());
-                return false;
-            }
-
-            outFile << content;
-            return outFile.good();
-        } catch (const std::exception& e) {
-            spdlog::error("Failed to write {}: {}", path.string(), e.what());
+        std::ofstream outFile(path, std::ios::binary);
+        if (!outFile.is_open()) {
+            spdlog::error("Failed to open {} for writing", path.string());
             return false;
         }
+
+        outFile << content;
+        return outFile.good();
     }
 
     /** Read @p path as raw bytes, or nullopt when it does not exist or cannot be read. */
     std::optional<std::string> readFileVerbatim(const std::filesystem::path& path) {
-        std::error_code ec;
-        if (!std::filesystem::exists(path, ec)) {
+        if (std::error_code ec; !std::filesystem::exists(path, ec)) {
             return std::nullopt;
         }
 
@@ -226,7 +217,12 @@ GameLauncher::GameLauncher(resource::GameResources& resources, std::shared_ptr<S
 }
 
 GameLauncher::~GameLauncher() {
-    restoreModsOrder();
+    try {
+        restoreModsOrder();
+    } catch (...) {
+        // Never propagate out of a destructor. The mod list stays patched; the next launch rewrites
+        // it and the block is stripped rather than kept.
+    }
 }
 
 void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapFilename) {
@@ -335,12 +331,14 @@ EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDi
             continue;
         }
 
-        std::error_code ec;
-        const std::filesystem::path entry = std::filesystem::relative(dataPath, modsDirectory, ec);
-        // relative() gives up across Windows volumes. A semicolon or hash would make the engine's
-        // parser treat the entry as a comment and silently skip it.
-        const std::string text = entry.generic_string();
-        if (ec || text.empty() || text.find_first_of(";#") != std::string::npos) {
+        // Lexical on purpose: std::filesystem::relative() resolves against the current working
+        // directory and the current volume, which makes the result depend on where the editor happens
+        // to run. lexically_relative() yields an empty path when no relative route exists, e.g. across
+        // Windows volumes. A semicolon or hash would make the engine's parser treat the entry as a
+        // comment and silently skip it.
+        const std::string text
+            = dataPath.lexically_normal().lexically_relative(modsDirectory.lexically_normal()).generic_string();
+        if (text.empty() || text.find_first_of(";#") != std::string::npos) {
             plan.unmountable.push_back(dataPath);
             continue;
         }
@@ -478,8 +476,8 @@ bool GameLauncher::writeModsOrder(const std::filesystem::path& gameDataDirectory
             : existing;
     }
 
-    const std::string patched = applyManagedModsOrderBlock(_modsOrderOriginal.value_or(std::string{}), entries);
-    if (!writeFileVerbatim(modsOrderPath, patched)) {
+    if (!writeFileVerbatim(modsOrderPath,
+            applyManagedModsOrderBlock(_modsOrderOriginal.value_or(std::string{}), entries))) {
         return false;
     }
 
