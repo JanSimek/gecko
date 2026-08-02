@@ -56,6 +56,9 @@ struct EditorDataMountPlan {
     std::vector<std::string> modsOrderEntries;
     /// Data paths that cannot be expressed as an entry, e.g. on another Windows volume.
     std::vector<std::filesystem::path> unmountable;
+    /// Data paths holding an archive the engine loads by itself, skipped so a copy of the base game
+    /// data cannot outrank the player's mods.
+    std::vector<std::filesystem::path> engineBaseArchives;
 };
 
 /**

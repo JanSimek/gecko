@@ -133,6 +133,24 @@ TEST_CASE("planEditorDataMounts maps editor data paths onto the mod load order",
 
         REQUIRE(plan.modsOrderEntries.size() == 1);
     }
+
+    SECTION("Copies of the engine's own archives are not mounted above the player's mods") {
+        const std::vector<std::filesystem::path> dataPaths = { "/editor/master.dat", "/editor/CRITTER.DAT",
+            "/editor/patch000.dat", "/editor/f2_res.dat", "/editor/ce.dat" };
+
+        const auto plan = planEditorDataMounts(gameDir, dataPaths);
+
+        REQUIRE(plan.modsOrderEntries.empty());
+        REQUIRE(plan.engineBaseArchives.size() == dataPaths.size());
+        REQUIRE(plan.unmountable.empty());
+    }
+
+    SECTION("An ordinary mod archive is still mounted") {
+        const auto plan = planEditorDataMounts(gameDir, { "/editor/rpu.dat", "/editor/patchwork.dat" });
+
+        REQUIRE(plan.modsOrderEntries.size() == 2);
+        REQUIRE(plan.engineBaseArchives.empty());
+    }
 }
 
 TEST_CASE("applyManagedModsOrderBlock keeps the player's own load order", "[game_launcher]") {

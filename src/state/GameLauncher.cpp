@@ -6,6 +6,8 @@
 #include "ui/QtDialogs.h"
 #include "util/GameDataPathResolver.h"
 
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <optional>
 #include <sstream>
@@ -153,6 +155,30 @@ namespace {
         return line.substr(first, line.find_last_not_of(" \t\r\n") - first + 1);
     }
 
+    /**
+     * Whether @p path names an archive the engine opens on its own: the base DATs, the high-res
+     * patch, the CE mod and the patchXXX chain. Mounting a copy of one of those as a mod would rank
+     * unmodified base data above every mod in the player's load order.
+     */
+    bool isEngineBaseArchive(const std::filesystem::path& path) {
+        std::string name = path.filename().string();
+        std::ranges::transform(name, name.begin(), [](unsigned char ch) { return std::tolower(ch); });
+
+        if (name == "master.dat" || name == "critter.dat" || name == "f2_res.dat" || name == "ce.dat") {
+            return true;
+        }
+
+        // patch000.dat and friends, mounted by the engine until the first gap in the sequence.
+        constexpr std::string_view patchPrefix = "patch";
+        constexpr std::string_view datSuffix = ".dat";
+        if (!name.starts_with(patchPrefix) || !name.ends_with(datSuffix)) {
+            return false;
+        }
+        const std::string_view digits
+            = std::string_view(name).substr(patchPrefix.size(), name.size() - patchPrefix.size() - datSuffix.size());
+        return !digits.empty() && std::ranges::all_of(digits, [](unsigned char ch) { return std::isdigit(ch) != 0; });
+    }
+
     /** Strip a trailing separator so directory paths compare element by element. */
     std::filesystem::path normalizedForCompare(const std::filesystem::path& path) {
         std::filesystem::path normalized = path.lexically_normal();
@@ -257,6 +283,9 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
     }
 
     const EditorDataMountPlan mountPlan = planEditorDataMounts(gameDataDir, settings.getDataPaths());
+    for (const std::filesystem::path& archive : mountPlan.engineBaseArchives) {
+        spdlog::debug("Not mounting {}: the engine loads its own copy of that archive", archive.string());
+    }
     if (!confirmLaunchConfiguration(gameDataDir, executableLocation, mountPlan.unmountable)) {
         return;
     }
@@ -329,6 +358,13 @@ EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDi
     for (const std::filesystem::path& dataPath : editorDataPaths) {
         if (dataPath.empty() || isSameOrInside(dataPath, gameDataDirectory)) {
             // Already reachable: master_patches, the game's own DATs or the existing mod list.
+            continue;
+        }
+
+        if (isEngineBaseArchive(dataPath)) {
+            // The engine loads its own copy at the bottom of the chain. Mounting the editor's copy
+            // as a mod would place untouched base data above every mod the player has installed.
+            plan.engineBaseArchives.push_back(dataPath);
             continue;
         }
 
