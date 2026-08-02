@@ -92,15 +92,34 @@ TEST_CASE("Starting-map rewrites survive CRLF config files", "[game_launcher]") 
 TEST_CASE("planEditorDataMounts maps editor data paths onto the mod load order", "[game_launcher]") {
     const std::filesystem::path gameDir = "/games/fallout2";
 
-    SECTION("Paths already inside the game directory need no mount") {
-        const std::vector<std::filesystem::path> dataPaths = {
-            "/games/fallout2", "/games/fallout2/data", "/games/fallout2/master.dat", "/games/fallout2/mods/rpu.dat"
-        };
+    SECTION("What the game already reads needs no mount") {
+        // The installation itself, master_patches, and archives the player's own mod list governs.
+        const std::vector<std::filesystem::path> dataPaths = { "/games/fallout2", "/games/fallout2/data",
+            "/games/fallout2/data/proto", "/games/fallout2/mods/rpu.dat" };
 
-        const auto plan = planEditorDataMounts(gameDir, dataPaths, {});
+        const auto plan = planEditorDataMounts(gameDir, dataPaths, { "master.dat" });
 
         REQUIRE(plan.modsOrderEntries.empty());
         REQUIRE(plan.unmountable.empty());
+    }
+
+    SECTION("A subdirectory of the installation the engine does not load is still mounted") {
+        // Being under the game folder proves nothing: the engine reads data/ and the archives it
+        // opens by name, never an arbitrary subdirectory.
+        const auto plan = planEditorDataMounts(gameDir, { "/games/fallout2/work-in-progress" }, { "master.dat" });
+
+        REQUIRE(plan.modsOrderEntries == std::vector<std::string>{ "../work-in-progress" });
+        REQUIRE(plan.unmountable.empty());
+    }
+
+    SECTION("An entry too long for the engine's buffer is reported, not written") {
+        // The engine copies "mods/" + entry into a COMPAT_MAX_PATH buffer without bounds checks.
+        const std::filesystem::path deep = std::filesystem::path("/editor") / std::string(300, 'x');
+
+        const auto plan = planEditorDataMounts(gameDir, { deep }, {});
+
+        REQUIRE(plan.modsOrderEntries.empty());
+        REQUIRE(plan.unmountable == std::vector<std::filesystem::path>{ deep });
     }
 
     SECTION("An outside path becomes an entry relative to the mods directory") {
@@ -138,7 +157,7 @@ TEST_CASE("planEditorDataMounts maps editor data paths onto the mod load order",
         // Matching is case-insensitive, as the engine treats file names.
         const std::vector<std::filesystem::path> dataPaths
             = { "/editor/master.dat", "/editor/CRITTER.DAT", "/editor/patch000.dat" };
-        const std::vector<std::string> inGameFolder = { "master.dat", "critter.dat", "patch000.dat", "fallout2.cfg" };
+        const std::vector<std::string> inGameFolder = { "master.dat", "critter.dat", "patch000.dat" };
 
         const auto plan = planEditorDataMounts(gameDir, dataPaths, inGameFolder);
 
@@ -161,6 +180,28 @@ TEST_CASE("planEditorDataMounts maps editor data paths onto the mod load order",
 
         REQUIRE(plan.modsOrderEntries.size() == 1);
         REQUIRE(plan.alreadyLoadedByGame.empty());
+    }
+}
+
+TEST_CASE("Starting-map rewrites honour the engine's key parsing", "[game_launcher]") {
+    SECTION("A key written with spaces is replaced in place, not duplicated") {
+        // fallout2-ce trims around '=' and applies assignments in order, so an appended duplicate
+        // would be overwritten by the stale line below it and the old map would still win.
+        const std::string input
+            = "[start]\n"
+              "map = old.map\n";
+
+        const std::string result = applyStartingMapToContentConfig(input, "new.map");
+
+        REQUIRE(result.find("map=new.map") != std::string::npos);
+        REQUIRE(result.find("old.map") == std::string::npos);
+    }
+
+    SECTION("An indented section header is still recognised") {
+        const std::string result = applyStartingMapToContentConfig("  [start]\n  map=old.map\n", "new.map");
+
+        REQUIRE(result.find("map=new.map") != std::string::npos);
+        REQUIRE(result.find("old.map") == std::string::npos);
     }
 }
 
@@ -206,6 +247,21 @@ TEST_CASE("applyManagedModsOrderBlock keeps the player's own load order", "[game
                 || line == "../../rp/data" || line.empty();
             REQUIRE((isComment || isKnown));
         }
+    }
+
+    SECTION("An unterminated block does not swallow entries added after it") {
+        // A previous write died before the end marker; a mod manager then appended an entry.
+        const std::string damaged
+            = "rpu.dat\n"
+              "; gecko: editor data paths - regenerated on every Play\n"
+              "../../rp/data\n"
+              "newmod.dat\n";
+
+        const std::string result = applyManagedModsOrderBlock(damaged, {});
+
+        REQUIRE(result.find("newmod.dat") != std::string::npos);
+        REQUIRE(result.find("rpu.dat") != std::string::npos);
+        REQUIRE(result.find("; gecko") == std::string::npos);
     }
 
     SECTION("A CRLF mod list stays CRLF") {

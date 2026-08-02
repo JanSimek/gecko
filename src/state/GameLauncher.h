@@ -64,19 +64,21 @@ struct EditorDataMountPlan {
 /**
  * @brief Works out which editor data paths have to be mounted into the game and how (pure).
  *
- * Paths already inside @p gameDataDirectory are skipped: the game reads those anyway through
- * master_patches, its own DATs or the existing mod list.
+ * Only paths the game already reads are skipped: the installation folder itself, anything under
+ * `data/` (master_patches), anything under `mods/` (governed by the player's own load order) and the
+ * archives named in @p engineArchivesInGameFolder. An arbitrary subdirectory of the installation is
+ * NOT loaded by the engine and is mounted like any other data path.
  *
- * @param archivesInGameFolder lower-case names of the files sitting directly in the game folder,
- *        which is where the engine picks up master.dat, critter.dat, f2_res.dat, ce.dat and the
- *        patchXXX chain by itself. An editor data path naming one of them is a second copy of base
- *        game data and must not be mounted, or it would outrank every mod the player has installed.
- *        Deliberately a lookup rather than a fixed name list: a mod archive of the editor's own,
- *        even one called patch001.dat, is mounted as long as the game has no file of that name.
+ * @param engineArchivesInGameFolder lower-case names of the archives the engine opens by itself
+ *        from the game folder: master.dat, critter.dat, f2_res.dat, ce.dat and the patchXXX chain,
+ *        and only the copies actually present there. An editor data path naming one of them is a
+ *        second copy of base game data and must not be mounted, or it would outrank every mod the
+ *        player has installed. Both halves matter - an unrelated DAT parked in the game folder must
+ *        not stop a same-named editor archive from being mounted.
  */
 EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDirectory,
     const std::vector<std::filesystem::path>& editorDataPaths,
-    const std::vector<std::string>& archivesInGameFolder);
+    const std::vector<std::string>& engineArchivesInGameFolder);
 
 /**
  * @brief Replaces the editor-managed block of a mods_order.txt with @p entries (pure).

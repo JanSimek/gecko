@@ -7,6 +7,7 @@
 #include "util/GameDataPathResolver.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <fstream>
 #include <optional>
@@ -22,6 +23,40 @@ namespace geck {
 
 namespace {
 
+    /** Trim ASCII whitespace, so marker lines match regardless of indentation or a trailing CR. */
+    std::string_view trimmed(std::string_view line) {
+        const auto first = line.find_first_not_of(" \t\r\n");
+        if (first == std::string_view::npos) {
+            return {};
+        }
+        return line.substr(first, line.find_last_not_of(" \t\r\n") - first + 1);
+    }
+
+    /** Lower-case @p text so file names compare the way the engine treats them. */
+    std::string lowercased(std::string text) {
+        std::ranges::transform(text, text.begin(), [](unsigned char ch) { return std::tolower(ch); });
+        return text;
+    }
+
+    /**
+     * The key of an ini assignment, or nullopt when the line holds none. `key = value` and a
+     * commented-out `;key=value` both yield `key`: the engine trims around both sides of the '='
+     * (`configParseKeyValue` -> `configGetTrimmedString`), so matching the raw prefix would miss a
+     * spaced-out line and append a duplicate. The engine applies assignments in order, so the
+     * duplicate we appended would then be overwritten by the stale one below it.
+     */
+    std::optional<std::string> iniLineKey(std::string_view line) {
+        std::string_view text = trimmed(line);
+        if (text.starts_with(";")) {
+            text = trimmed(text.substr(1));
+        }
+        const size_t equals = text.find('=');
+        if (equals == std::string_view::npos) {
+            return std::nullopt;
+        }
+        return std::string(trimmed(text.substr(0, equals)));
+    }
+
     /**
      * Set `key=value` inside @p sectionHeader (e.g. "[Misc]"), creating the section and/or the key
      * when missing and leaving every other line untouched. A commented-out `;key=` is activated.
@@ -32,7 +67,6 @@ namespace {
     std::string applyIniSetting(const std::string& iniContent, const std::string& sectionHeader,
         const std::string& key, const std::string& value) {
         const std::string assignment = key + "=";
-        const std::string commentedAssignment = ";" + assignment;
 
         std::string content;
         std::string addedLineEnding = "\n";
@@ -53,12 +87,14 @@ namespace {
                 lineEndingKnown = true;
             }
 
-            if (line.starts_with("[") && line.ends_with("]")) {
-                inTargetSection = line == sectionHeader;
+            if (const std::string_view text = trimmed(line); text.starts_with("[") && text.ends_with("]")) {
+                inTargetSection = text == sectionHeader;
                 sectionFound = sectionFound || inTargetSection;
-            } else if (inTargetSection && (line.starts_with(assignment) || line.starts_with(commentedAssignment))) {
-                line = assignment + value;
-                keyFound = true;
+            } else if (inTargetSection) {
+                if (const std::optional<std::string> lineKey = iniLineKey(line); lineKey && *lineKey == key) {
+                    line = assignment + value;
+                    keyFound = true;
+                }
             }
 
             content += line + (crlf ? "\r\n" : "\n");
@@ -79,6 +115,52 @@ namespace {
         return content;
     }
 
+    /// Markers around the editor-managed part of mods_order.txt. Both carry a semicolon, which the
+    /// engine's mod-list parser treats as a comment, so it never tries to mount them.
+    constexpr std::string_view kManagedBlockBegin = "; gecko: editor data paths - regenerated on every Play";
+    constexpr std::string_view kManagedBlockEnd = "; gecko: end of editor data paths";
+
+    /**
+     * Write @p content to @p path through a temporary file and rename it into place, so a failure
+     * part-way through leaves the original intact rather than a truncated config or mod list.
+     */
+    bool writeFileVerbatim(const std::filesystem::path& path, const std::string& content) {
+        std::error_code ec;
+        if (!path.parent_path().empty()) {
+            std::filesystem::create_directories(path.parent_path(), ec);
+        }
+
+        const std::filesystem::path temporary = path.string() + ".gecko-tmp";
+        {
+            std::ofstream outFile(temporary, std::ios::binary);
+            if (!outFile.is_open()) {
+                spdlog::error("Failed to open {} for writing", temporary.string());
+                return false;
+            }
+            outFile << content;
+            outFile.close();
+            if (!outFile) {
+                spdlog::error("Failed to write {}", temporary.string());
+                std::filesystem::remove(temporary, ec);
+                return false;
+            }
+        }
+
+        std::filesystem::rename(temporary, path, ec);
+        if (ec) {
+            // Windows refuses to rename onto an existing file, so drop the target first.
+            std::filesystem::remove(path, ec);
+            std::filesystem::rename(temporary, path, ec);
+        }
+        if (ec) {
+            spdlog::error("Failed to put {} in place: {}", path.string(), ec.message());
+            std::error_code cleanup;
+            std::filesystem::remove(temporary, cleanup);
+            return false;
+        }
+        return true;
+    }
+
     /** Read @p path (a missing file counts as empty), run @p transform over it and write the result back. */
     template <typename Transform>
     bool patchConfigFile(const std::filesystem::path& path, Transform&& transform) {
@@ -97,36 +179,7 @@ namespace {
             std::filesystem::create_directories(path.parent_path(), ec);
         }
 
-        std::ofstream outFile(path, std::ios::binary);
-        if (!outFile.is_open()) {
-            spdlog::error("Failed to open {} for writing", path.string());
-            return false;
-        }
-
-        outFile << transform(fileContent);
-        return outFile.good();
-    }
-
-    /// Markers around the editor-managed part of mods_order.txt. Both carry a semicolon, which the
-    /// engine's mod-list parser treats as a comment, so it never tries to mount them.
-    constexpr std::string_view kManagedBlockBegin = "; gecko: editor data paths - regenerated on every Play";
-    constexpr std::string_view kManagedBlockEnd = "; gecko: end of editor data paths";
-
-    /** Write @p content to @p path verbatim, creating parent directories as needed. */
-    bool writeFileVerbatim(const std::filesystem::path& path, const std::string& content) {
-        if (!path.parent_path().empty()) {
-            std::error_code ec;
-            std::filesystem::create_directories(path.parent_path(), ec);
-        }
-
-        std::ofstream outFile(path, std::ios::binary);
-        if (!outFile.is_open()) {
-            spdlog::error("Failed to open {} for writing", path.string());
-            return false;
-        }
-
-        outFile << content;
-        return outFile.good();
+        return writeFileVerbatim(path, transform(fileContent));
     }
 
     /** Read @p path as raw bytes, or nullopt when it does not exist or cannot be read. */
@@ -146,21 +199,6 @@ namespace {
         return buffer.str();
     }
 
-    /** Trim ASCII whitespace, so marker lines match regardless of indentation or a trailing CR. */
-    std::string_view trimmed(std::string_view line) {
-        const auto first = line.find_first_not_of(" \t\r\n");
-        if (first == std::string_view::npos) {
-            return {};
-        }
-        return line.substr(first, line.find_last_not_of(" \t\r\n") - first + 1);
-    }
-
-    /** Lower-case @p text so file names compare case-insensitively, as the engine treats them. */
-    std::string lowercased(std::string text) {
-        std::ranges::transform(text, text.begin(), [](unsigned char ch) { return std::tolower(ch); });
-        return text;
-    }
-
     /** Strip a trailing separator so directory paths compare element by element. */
     std::filesystem::path normalizedForCompare(const std::filesystem::path& path) {
         std::filesystem::path normalized = path.lexically_normal();
@@ -168,6 +206,15 @@ namespace {
             normalized = normalized.parent_path();
         }
         return normalized;
+    }
+
+    /** Compare one path component. Windows paths are case-insensitive, including the drive letter. */
+    bool pathPartsEqual(const std::filesystem::path& left, const std::filesystem::path& right) {
+#ifdef _WIN32
+        return lowercased(left.string()) == lowercased(right.string());
+#else
+        return left == right;
+#endif
     }
 
     /** Whether @p candidate is @p root or lives underneath it. */
@@ -180,7 +227,7 @@ namespace {
 
         auto candidatePart = normalizedCandidate.begin();
         for (auto rootPart = normalizedRoot.begin(); rootPart != normalizedRoot.end(); ++rootPart, ++candidatePart) {
-            if (candidatePart == normalizedCandidate.end() || *candidatePart != *rootPart) {
+            if (candidatePart == normalizedCandidate.end() || !pathPartsEqual(*candidatePart, *rootPart)) {
                 return false;
             }
         }
@@ -213,16 +260,57 @@ namespace {
         return {};
     }
 
-    /** Names of the files directly in the game folder - the archives the engine opens by itself. */
-    std::vector<std::string> archiveNamesInGameFolder(const std::filesystem::path& gameDataDirectory) {
+    /** Whether @p name is one of the patchXXX.dat archives the engine walks until the first gap. */
+    bool isPatchArchiveName(std::string_view name) {
+        constexpr std::string_view prefix = "patch";
+        constexpr std::string_view suffix = ".dat";
+        if (!name.starts_with(prefix) || !name.ends_with(suffix)) {
+            return false;
+        }
+        const std::string_view digits = name.substr(prefix.size(), name.size() - prefix.size() - suffix.size());
+        return !digits.empty() && std::ranges::all_of(digits, [](unsigned char ch) { return std::isdigit(ch) != 0; });
+    }
+
+    /**
+     * Names of the archives the engine opens on its own from the game folder. Both halves matter:
+     * the engine only auto-loads these particular names, and only the copies sitting in that folder,
+     * so an unrelated DAT parked next to the executable must not stop the editor's own copy of a
+     * same-named archive from being mounted.
+     */
+    std::vector<std::string> engineArchivesInGameFolder(const std::filesystem::path& gameDataDirectory) {
+        static constexpr std::array<std::string_view, 4> fixedNames
+            = { "master.dat", "critter.dat", "f2_res.dat", "ce.dat" };
+
         std::vector<std::string> names;
         std::error_code ec;
         for (const auto& entry : std::filesystem::directory_iterator(gameDataDirectory, ec)) {
-            if (entry.is_regular_file(ec)) {
-                names.push_back(lowercased(entry.path().filename().string()));
+            if (!entry.is_regular_file(ec)) {
+                continue;
+            }
+            std::string name = lowercased(entry.path().filename().string());
+            if (std::ranges::find(fixedNames, name) != fixedNames.end() || isPatchArchiveName(name)) {
+                names.push_back(std::move(name));
             }
         }
         return names;
+    }
+
+    /** The mod list the engine would generate itself from `mods/*.dat`, in the same order. */
+    std::string discoveredModsOrder(const std::filesystem::path& modsDirectory) {
+        std::vector<std::string> archives;
+        std::error_code ec;
+        for (const auto& entry : std::filesystem::directory_iterator(modsDirectory, ec)) {
+            if (entry.is_regular_file(ec) && lowercased(entry.path().extension().string()) == ".dat") {
+                archives.push_back(entry.path().filename().string());
+            }
+        }
+        std::ranges::sort(archives);
+
+        std::string content;
+        for (const std::string& archive : archives) {
+            content += archive + "\n";
+        }
+        return content;
     }
 
 } // namespace
@@ -271,7 +359,7 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
     }
 
     const EditorDataMountPlan mountPlan
-        = planEditorDataMounts(gameDataDir, settings.getDataPaths(), archiveNamesInGameFolder(gameDataDir));
+        = planEditorDataMounts(gameDataDir, settings.getDataPaths(), engineArchivesInGameFolder(gameDataDir));
     for (const std::filesystem::path& archive : mountPlan.alreadyLoadedByGame) {
         spdlog::debug("Not mounting {}: the game loads its own copy of that archive", archive.string());
     }
@@ -314,10 +402,21 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
             unwritten << "mods/mods_order.txt";
         }
         if (!unwritten.isEmpty()) {
-            QtDialogs::showWarning(_dialogParent, "Configuration Warning",
-                QString("Map saved successfully, but the starting map could not be written to %1. "
-                        "You may need to set the starting map manually.")
-                    .arg(unwritten.join(" and ")));
+            const bool dataPathsUnmounted = unwritten.contains("mods/mods_order.txt");
+            QString message
+                = QString("The map was saved, but %1 could not be written.").arg(unwritten.join(" and "));
+            message += dataPathsUnmounted
+                ? "\n\nThe game will not see the editor's data paths, so anything that lives only there "
+                  "will be missing.\n\nPlay anyway?"
+                : "\n\nYou may need to set the starting map manually.";
+
+            if (dataPathsUnmounted) {
+                if (!QtDialogs::showQuestion(_dialogParent, "Configuration Warning", message)) {
+                    return;
+                }
+            } else {
+                QtDialogs::showWarning(_dialogParent, "Configuration Warning", message);
+            }
         }
 
         // 3. Launch the game from the data directory: fallout2-ce resolves master_patches and
@@ -341,18 +440,24 @@ std::string applyStartingMapToContentConfig(const std::string& configContent, co
 
 EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDirectory,
     const std::vector<std::filesystem::path>& editorDataPaths,
-    const std::vector<std::string>& archivesInGameFolder) {
+    const std::vector<std::string>& engineArchivesInGameFolder) {
     EditorDataMountPlan plan;
     const std::filesystem::path modsDirectory = gameDataDirectory / "mods";
 
     for (const std::filesystem::path& dataPath : editorDataPaths) {
-        if (dataPath.empty() || isSameOrInside(dataPath, gameDataDirectory)) {
-            // Already reachable: master_patches, the game's own DATs or the existing mod list.
+        // Being inside the installation is not enough to be loaded: the engine reads data/ as
+        // master_patches and the archives it opens by name, but never an arbitrary subdirectory, so
+        // something like <game>/my-work-in-progress still has to be mounted.
+        const bool isTheInstallationItself
+            = normalizedForCompare(dataPath) == normalizedForCompare(gameDataDirectory);
+        const bool isMasterPatches = isSameOrInside(dataPath, gameDataDirectory / "data");
+        const bool belongsToThePlayersModList = isSameOrInside(dataPath, modsDirectory);
+        if (dataPath.empty() || isTheInstallationItself || isMasterPatches || belongsToThePlayersModList) {
             continue;
         }
 
-        if (std::ranges::find(archivesInGameFolder, lowercased(dataPath.filename().string()))
-            != archivesInGameFolder.end()) {
+        if (std::ranges::find(engineArchivesInGameFolder, lowercased(dataPath.filename().string()))
+            != engineArchivesInGameFolder.end()) {
             // The game opens its own copy of this archive at the bottom of the chain. Mounting the
             // editor's copy as a mod would put untouched base data above every mod the player has.
             plan.alreadyLoadedByGame.push_back(dataPath);
@@ -366,7 +471,10 @@ EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDi
         // comment and silently skip it.
         const std::string text
             = dataPath.lexically_normal().lexically_relative(modsDirectory.lexically_normal()).generic_string();
-        if (text.empty() || text.find_first_of(";#") != std::string::npos) {
+        // The engine reads a line into a COMPAT_MAX_PATH buffer and then builds "mods/" + entry into
+        // a second one with unbounded copies, so an over-long entry would overflow it.
+        constexpr size_t maxEntryLength = 254;
+        if (text.empty() || text.size() > maxEntryLength || text.find_first_of(";#") != std::string::npos) {
             plan.unmountable.push_back(dataPath);
             continue;
         }
@@ -378,6 +486,10 @@ EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDi
 }
 
 std::string applyManagedModsOrderBlock(const std::string& existingContent, const std::vector<std::string>& entries) {
+    // Skipping to the end marker is only safe when there is one. A block truncated by a failed
+    // write would otherwise swallow every entry the player added after it.
+    const bool blockIsTerminated = existingContent.find(kManagedBlockEnd) != std::string::npos;
+
     std::string content;
     std::string lineEnding = "\n";
     bool lineEndingKnown = false;
@@ -398,7 +510,11 @@ std::string applyManagedModsOrderBlock(const std::string& existingContent, const
             continue;
         }
         if (text == kManagedBlockBegin) {
-            insideManagedBlock = true;
+            // Unterminated: drop the stray marker only and keep everything below it.
+            insideManagedBlock = blockIsTerminated;
+            continue;
+        }
+        if (text == kManagedBlockEnd) {
             continue;
         }
 
@@ -488,7 +604,14 @@ bool GameLauncher::writeContentConfigPatch(const std::filesystem::path& gameData
 
 bool GameLauncher::writeModsOrder(const std::filesystem::path& gameDataDirectory,
     const std::vector<std::string>& entries) {
-    const std::filesystem::path modsOrderPath = gameDataDirectory / "mods" / "mods_order.txt";
+    const std::filesystem::path modsDirectory = gameDataDirectory / "mods";
+    const std::filesystem::path modsOrderPath = modsDirectory / "mods_order.txt";
+
+    // Playing a different installation while the first is still running would otherwise rebuild that
+    // one's list from this one's snapshot and never restore it, so hand the first one back first.
+    if (_modsOrderPatched && _modsOrderPath != modsOrderPath) {
+        restoreModsOrder();
+    }
 
     // Capture the player's own load order once per launch. A second Play before the game exits must
     // not record our own block as the file to restore, and a block left behind by an editor crash is
@@ -504,8 +627,12 @@ bool GameLauncher::writeModsOrder(const std::filesystem::path& gameDataDirectory
             : existing;
     }
 
-    if (!writeFileVerbatim(modsOrderPath,
-            applyManagedModsOrderBlock(_modsOrderOriginal.value_or(std::string{}), entries))) {
+    // With no list at all the engine builds one from mods/*.dat on startup. Writing our own file
+    // first suppresses that, silently dropping every mod the player has installed, so seed it with
+    // the same discovery result the engine would have produced.
+    const std::string playerOrder = _modsOrderOriginal.value_or(discoveredModsOrder(modsDirectory));
+
+    if (!writeFileVerbatim(modsOrderPath, applyManagedModsOrderBlock(playerOrder, entries))) {
         return false;
     }
 
@@ -518,21 +645,26 @@ void GameLauncher::restoreModsOrder() noexcept {
     if (!_modsOrderPatched) {
         return;
     }
-    _modsOrderPatched = false;
 
+    // Stay marked as patched when the restore fails - a locked or full volume then gets another
+    // attempt from the next launch or from the destructor, instead of losing the original for good.
     if (_modsOrderOriginal.has_value()) {
-        if (writeFileVerbatim(_modsOrderPath, *_modsOrderOriginal)) {
-            spdlog::debug("Restored {}", _modsOrderPath.string());
+        if (!writeFileVerbatim(_modsOrderPath, *_modsOrderOriginal)) {
+            spdlog::error("Failed to restore {}; the editor's block is still in place", _modsOrderPath.string());
+            return;
         }
-        return;
+    } else {
+        // The game had no mod list before; leave the directory as we found it.
+        std::error_code ec;
+        std::filesystem::remove(_modsOrderPath, ec);
+        if (ec) {
+            spdlog::error("Failed to remove {}: {}", _modsOrderPath.string(), ec.message());
+            return;
+        }
     }
 
-    // The game had no mod list before; leave the directory as we found it.
-    std::error_code ec;
-    std::filesystem::remove(_modsOrderPath, ec);
-    if (ec) {
-        spdlog::warn("Failed to remove {}: {}", _modsOrderPath.string(), ec.message());
-    }
+    _modsOrderPatched = false;
+    spdlog::debug("Restored {}", _modsOrderPath.string());
 }
 
 void GameLauncher::launchGame(const std::filesystem::path& executablePath,
