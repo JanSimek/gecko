@@ -120,6 +120,11 @@ namespace {
     constexpr std::string_view kManagedBlockBegin = "; gecko: editor data paths - regenerated on every Play";
     constexpr std::string_view kManagedBlockEnd = "; gecko: end of editor data paths";
 
+    /// Longest entry the engine can take: it reads a line into a COMPAT_MAX_PATH (260) buffer and
+    /// then builds "mods/" + entry into a second one with unbounded copies, so anything longer
+    /// overflows it. 260 less the "mods/" prefix and the terminator.
+    constexpr size_t kMaxModEntryLength = 254;
+
     /**
      * Write @p content to @p path through a temporary file and rename it into place, so a failure
      * part-way through leaves the original intact rather than a truncated config or mod list.
@@ -295,7 +300,7 @@ namespace {
         return names;
     }
 
-    /** The mod list the engine would generate itself from `mods/*.dat`, in the same order. */
+    /** The mod list the engine would generate itself from `mods\*.dat`, in the same order. */
     std::string discoveredModsOrder(const std::filesystem::path& modsDirectory) {
         std::vector<std::string> archives;
         std::error_code ec;
@@ -447,12 +452,10 @@ EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDi
     for (const std::filesystem::path& dataPath : editorDataPaths) {
         // Being inside the installation is not enough to be loaded: the engine reads data/ as
         // master_patches and the archives it opens by name, but never an arbitrary subdirectory, so
-        // something like <game>/my-work-in-progress still has to be mounted.
-        const bool isTheInstallationItself
-            = normalizedForCompare(dataPath) == normalizedForCompare(gameDataDirectory);
-        const bool isMasterPatches = isSameOrInside(dataPath, gameDataDirectory / "data");
-        const bool belongsToThePlayersModList = isSameOrInside(dataPath, modsDirectory);
-        if (dataPath.empty() || isTheInstallationItself || isMasterPatches || belongsToThePlayersModList) {
+        // something like <game>/my-work-in-progress still has to be mounted. In order: the
+        // installation itself, master_patches, and whatever the player's own mod list governs.
+        if (dataPath.empty() || normalizedForCompare(dataPath) == normalizedForCompare(gameDataDirectory)
+            || isSameOrInside(dataPath, gameDataDirectory / "data") || isSameOrInside(dataPath, modsDirectory)) {
             continue;
         }
 
@@ -471,10 +474,7 @@ EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDi
         // comment and silently skip it.
         const std::string text
             = dataPath.lexically_normal().lexically_relative(modsDirectory.lexically_normal()).generic_string();
-        // The engine reads a line into a COMPAT_MAX_PATH buffer and then builds "mods/" + entry into
-        // a second one with unbounded copies, so an over-long entry would overflow it.
-        constexpr size_t maxEntryLength = 254;
-        if (text.empty() || text.size() > maxEntryLength || text.find_first_of(";#") != std::string::npos) {
+        if (text.empty() || text.size() > kMaxModEntryLength || text.find_first_of(";#") != std::string::npos) {
             plan.unmountable.push_back(dataPath);
             continue;
         }
@@ -627,12 +627,11 @@ bool GameLauncher::writeModsOrder(const std::filesystem::path& gameDataDirectory
             : existing;
     }
 
-    // With no list at all the engine builds one from mods/*.dat on startup. Writing our own file
+    // With no list at all the engine builds one from `mods\*.dat` on startup. Writing our own file
     // first suppresses that, silently dropping every mod the player has installed, so seed it with
     // the same discovery result the engine would have produced.
-    const std::string playerOrder = _modsOrderOriginal.value_or(discoveredModsOrder(modsDirectory));
-
-    if (!writeFileVerbatim(modsOrderPath, applyManagedModsOrderBlock(playerOrder, entries))) {
+    if (!writeFileVerbatim(modsOrderPath,
+            applyManagedModsOrderBlock(_modsOrderOriginal.value_or(discoveredModsOrder(modsDirectory)), entries))) {
         return false;
     }
 
