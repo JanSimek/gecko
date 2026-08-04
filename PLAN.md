@@ -13,9 +13,9 @@
 
 1. **Cave rim quality** — the known-issues list below; highest-value generation work.
 2. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
-3. **SSL script editing** — toolchain glue shipped (sslc/int2ssl wrappers, Script Tools
-   settings, Edit Script Source / Compile / Decompile UI); next is the built-in editor
-   (Phase 2 below).
+3. **SSL script editing** — "Edit Script Source" is shipped; compiling belongs to VS Code +
+   BGforge MLS, not to Gecko (see the SSL section). Open question: whether an in-app editor is
+   still wanted now that the compile step lives elsewhere.
 4. **Minimap / overview panel** (feature-gap audit).
 5. **In-game preview mode** — idle animations first.
 6. **Analysis/MCP tail** — small, self-contained items.
@@ -160,9 +160,7 @@ terrain-derived locations:
     with a context-menu / Preferences UI to add, remove, and reorder buttons, persisted via `Settings`.
     Editor UX only; no map/format change.
 9. **Log panel follow-ups.** Add jump-to-source where a record carries a hex/object (needs
-   structured records, not text). When the SSL-editing output panel lands, make compiler output a
-   category of the existing log panel rather than a second dock. Editor UX only; changes no
-   map/format data.
+   structured records, not text). Editor UX only; changes no map/format data.
 
 ---
 
@@ -217,20 +215,22 @@ A simple Gecko-native editor: `QPlainTextEdit` (or QScintilla) + **KSyntaxHighli
 - **Licensing:** Safe — we ship our own editor + highlighter; sslc/int2ssl are invoked as external processes (int2ssl GPL stays at arm's length).
 - **Verdict:** **Best value-for-effort and the recommended foundation.**
 
-### Recommendation & phased path
+### Outcome: Gecko hands editing and compiling to VS Code
 
-Adopt **C as the core**, structured so **B** falls out for free and **A** remains a future upgrade.
+The options above were weighed and then overtaken: **Gecko does not compile or decompile SSL.**
+"Edit Script Source" resolves a program index to its `.ssl` (a data path marked as a script source,
+a loose file, or a DAT extracted via `ensureWritableCopy`) and opens it in VS Code with the source
+tree as the workspace root, which is what lets BGforge MLS resolve headers and compile.
 
-- **Phase 1 — Toolchain glue: SHIPPED.** `SslToolchain` (sslc/int2ssl `QProcess` wrappers, output
-  mirrored into the Log panel tagged `[sslc]`/`[int2ssl]`), `ScriptSourceLocator` +
-  `SslOutputParser` (Qt-free), Script Tools settings page + locate-binary prompts, and
-  `ScriptSourceService` behind "Edit Script Source…" (Scripts panel context menu, Map Info
-  map-script row, spatial dialog) plus Scripts › Compile/Decompile. DAT-resident sources are
-  extracted via `ensureWritableCopy`; missing sources decompile on confirm (flagged lossy).
-  *Not built (deliberate):* registering a brand-new script name into `scripts.lst` at compile
-  time — needs an Lst writer + override semantics; do it with Phase 2.
-- **Phase 2 — Built-in editor (M).** `QPlainTextEdit`/QScintilla + KSyntaxHighlighting SSL highlighting. Open the `.ssl` if present, else int2ssl-decompile the `.int` (clearly flagged "decompiled, lossy"); Save → compile via the shipped `SslToolchain` → place `.int`. Add "Open in external editor (VS Code)" detection as the escape hatch (this *is* Option B, now a menu item).
-- **Phase 3 — Optional LSP upgrade (L, gated on demand + MLS licensing).** Reuse the Phase-2 widget as an LSP client to `@bgforge/mls-server` for completion/hover/diagnostics, **only if** a Node runtime is acceptable and MLS's license is clarified so we can guide installation. Do not bundle the server.
+**Do not rebuild the compiler integration.** It existed and was removed deliberately: `sslc` ships
+no licence file and `int2ssl` is GPL-3.0, so neither can be bundled; `sslc` has no structured
+diagnostic API even in DLL mode, so any integration is text-scraping its stdout; and a separate
+process keeps a compiler crash out of the editor. BGforge MLS already does all of it, including
+placing the `.int` via its `outputDirectory` setting.
+
+Still open, if an in-app editor is ever wanted: it would be **edit-only** unless that decision is
+revisited, since Save could not compile. Registering a brand-new script name in `scripts.lst`
+(needs an Lst writer plus override semantics) remains unbuilt either way.
 
 ### Ties to scripts.lst + MapScript model
 
