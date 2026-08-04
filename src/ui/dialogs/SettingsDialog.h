@@ -8,6 +8,10 @@
 #include <QPushButton>
 #include <QCheckBox>
 #include <QTabWidget>
+
+QT_BEGIN_NAMESPACE
+class QScrollArea;
+QT_END_NAMESPACE
 #include <QMap>
 #include <QColor>
 #include <filesystem>
@@ -49,6 +53,9 @@ private slots:
     void onStatusChanged(const QString& message, const QString& styleClass);
 
 private:
+    /// Puts a tab's content in a scroll area so a short dialog scrolls rather than overlapping.
+    static QScrollArea* wrapInScrollArea(QWidget* content);
+
     void setupUI();
     void setupTabs();
     void setupGeneralTab();

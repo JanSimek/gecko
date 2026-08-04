@@ -6,6 +6,7 @@
 #include "ui/Settings.h"
 
 #include <QApplication>
+#include <QScrollArea>
 #include <QStyle>
 #include <QMessageBox>
 #include <QColorDialog>
@@ -49,6 +50,15 @@ SettingsDialog::SettingsDialog(std::shared_ptr<Settings> settings, QWidget* pare
     updateUI();
 }
 
+QScrollArea* SettingsDialog::wrapInScrollArea(QWidget* content) {
+    auto* area = new QScrollArea();
+    area->setWidget(content);
+    area->setWidgetResizable(true);
+    area->setFrameShape(QFrame::NoFrame);
+    area->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    return area;
+}
+
 void SettingsDialog::setupUI() {
     _mainLayout = new QVBoxLayout(this);
     _mainLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
@@ -59,6 +69,11 @@ void SettingsDialog::setupUI() {
     _statusLabel = new QLabel(READY_STATUS);
     _statusLabel->setStyleSheet(ui::theme::styles::statusNormal());
     _mainLayout->addWidget(_statusLabel);
+    // Everything it reports concerns the data paths, so it has no meaning on the other tabs.
+    connect(_tabWidget, &QTabWidget::currentChanged, this, [this](int index) {
+        _statusLabel->setVisible(_tabWidget->tabText(index) == "General");
+    });
+    _statusLabel->setVisible(_tabWidget->tabText(_tabWidget->currentIndex()) == "General");
 
     _progressBar = new QProgressBar();
     _progressBar->setVisible(false);
@@ -174,7 +189,10 @@ void SettingsDialog::setupGeneralTab() {
     // No trailing addStretch(): the data-paths list (stretch 1) absorbs the extra height instead of an
     // empty gap that pushed the game-location pane up and made it look oversized.
 
-    _tabWidget->addTab(_generalTab, "General");
+    // In a scroll area: a QBoxLayout that cannot meet its items' minimums hands out overlapping
+    // rectangles, which is how the button row came to be drawn over the data path list at the
+    // dialog's minimum size. Scrolling keeps the tab honest at any height.
+    _tabWidget->addTab(wrapInScrollArea(_generalTab), "General");
 
     connect(_dataPathsWidget, &DataPathsWidget::dataPathsChanged, this, &SettingsDialog::onWidgetChanged);
     connect(_dataPathsWidget, &DataPathsWidget::statusChanged, this, &SettingsDialog::onStatusChanged);

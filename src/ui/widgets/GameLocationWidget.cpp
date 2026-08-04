@@ -118,6 +118,10 @@ void GameLocationWidget::setupUI() {
     for (QPushButton* btn : { _browseExecutableButton, _browseDataDirectoryButton, _autoDetectButton }) {
         geck::ui::styleActionButton(btn);
     }
+    // Match the field height to the button beside it, or each row reads as two misaligned controls.
+    for (QLineEdit* edit : { _executableLocationEdit, _dataDirectoryEdit }) {
+        edit->setMinimumHeight(ui::constants::sizes::ACTION_BUTTON_HEIGHT);
+    }
 
     _layout->addLayout(_controlLayout);
 
