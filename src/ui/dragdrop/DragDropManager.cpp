@@ -1,7 +1,7 @@
 #include "DragDropManager.h"
 #include "DragDropContext.h"
 #include "viewport/ViewportController.h"
-#include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
 #include "editor/Object.h"
 #include "editor/HexagonGrid.h"
 #include "resource/GameResources.h"

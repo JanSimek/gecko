@@ -1,5 +1,4 @@
 #include "ExitGridPropertiesDialog.h"
-#include "ui/UIConstants.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/GameEnums.h"
 #include "util/Constants.h"

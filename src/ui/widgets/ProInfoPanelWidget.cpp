@@ -5,7 +5,6 @@
 #include "resource/GameResources.h"
 #include "util/ProHelper.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/UIConstants.h"
 
 #include <QAbstractSpinBox>
 #include <QHBoxLayout>

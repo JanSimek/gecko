@@ -31,7 +31,7 @@
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/dialogs/MapBrowserDialog.h"
 #include "ui/dialogs/PatternBrowserDialog.h"
-#include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
 #include "resource/GameResources.h"
 #include "state/loader/MapLoader.h"
 #include "state/loader/DataPathLoader.h"

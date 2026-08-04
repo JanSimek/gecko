@@ -4,7 +4,6 @@
 #include "ui/Settings.h"
 #include "ui/dialogs/ProEditorDialog.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/UIConstants.h"
 #include "reader/pro/ProReader.h"
 #include "reader/ReaderFactory.h"
 #include "format/pro/Pro.h"

@@ -169,7 +169,7 @@ object->setHexPosition(hex);
 
 ### Theme and Styling
 
-All colors and styles are centralized in `src/ui/theme/ThemeManager.h`. Use theme constants instead of hardcoded values:
+All colours, spacing and layout dimensions are centralized in `src/ui/theme/ThemeManager.h` - the single header for these. Use its constants instead of hardcoded values:
 
 ```cpp
 #include "../theme/ThemeManager.h"
@@ -185,6 +185,11 @@ ui::theme::colors::WARNING        // #F57C00 - warning text
 ui::theme::spacing::TIGHT   // 4px - compact/nested layouts
 ui::theme::spacing::NORMAL  // 8px - standard widget spacing
 ui::theme::spacing::LOOSE   // 12px - dialog/group spacing
+
+// Layout dimensions - use ui::constants::* (same header)
+ui::constants::LIST_MIN_HEIGHT        // list/table minimum heights
+ui::constants::sizes::ICON_BUTTON     // button and icon sizes
+ui::constants::dock::MIN_WIDTH        // dock and dialog geometry
 
 // Pre-built styles - use ui::theme::styles::*
 setStyleSheet(ui::theme::styles::selectedWidget());

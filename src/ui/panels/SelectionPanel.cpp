@@ -10,7 +10,6 @@
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/dialogs/ItemSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/UIConstants.h"
 #include "resource/AiTxtLoader.h"
 #include "resource/ResourcePaths.h"
 #include "resource/ScriptNames.h"

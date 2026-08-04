@@ -1,7 +1,6 @@
 #include "MapInfoPanel.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/GameEnums.h"
-#include "ui/UIConstants.h"
 
 #include <QHeaderView>
 #include <QApplication>
@@ -140,7 +139,7 @@ void MapInfoPanel::setupUI() {
     QWidget* elevationsWidget = new QWidget();
     QVBoxLayout* elevationsLayout = new QVBoxLayout(elevationsWidget);
     elevationsLayout->setContentsMargins(0, 0, 0, 0);
-    elevationsLayout->setSpacing(5);
+    elevationsLayout->setSpacing(ui::theme::spacing::TIGHT);
 
     _elevation1Check = new QCheckBox("Elevation 1");
     _elevation2Check = new QCheckBox("Elevation 2");

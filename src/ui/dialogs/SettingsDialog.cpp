@@ -2,7 +2,6 @@
 #include "ui/widgets/DataPathsWidget.h"
 #include "ui/widgets/GameLocationWidget.h"
 #include "ui/widgets/TextEditorWidget.h"
-#include "ui/UIConstants.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/Settings.h"
 

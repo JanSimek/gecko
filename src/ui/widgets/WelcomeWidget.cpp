@@ -14,7 +14,6 @@
 #include "Application.h"
 #include "ui/IconHelper.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/UIConstants.h"
 #include "version.h"
 
 namespace geck {
@@ -32,7 +31,7 @@ WelcomeWidget::WelcomeWidget(QWidget* parent)
 
 void WelcomeWidget::setupUI() {
     _layout = new QVBoxLayout(this);
-    _layout->setContentsMargins(0, 0, 10, 0);
+    _layout->setContentsMargins(0, 0, ui::theme::spacing::MARGIN_NORMAL, 0);
     _layout->setSpacing(0);
 
     _imageLabel = new QLabel();

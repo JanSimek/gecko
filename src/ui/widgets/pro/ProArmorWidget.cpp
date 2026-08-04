@@ -9,7 +9,6 @@
 #include "ui/dialogs/FrmSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/GameEnums.h"
-#include "ui/UIConstants.h"
 
 namespace geck {
 

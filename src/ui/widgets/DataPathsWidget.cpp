@@ -3,7 +3,7 @@
 #include "Application.h"
 #include "resource/WritableDataRoot.h"
 #include "ui/IconHelper.h"
-#include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
 #include "ui/common/ButtonStyle.h"
 #include "ui/common/FlowLayout.h"
 #include "util/GameDataPathResolver.h"

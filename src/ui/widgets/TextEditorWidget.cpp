@@ -1,6 +1,6 @@
 #include "TextEditorWidget.h"
 #include "ui/IconHelper.h"
-#include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
 
 #include <QStandardPaths>
 #include <QFileDialog>

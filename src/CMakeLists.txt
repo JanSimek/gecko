@@ -191,7 +191,6 @@ set(GECK_APP_SOURCES
     # Qt6 UI Constants
     ui/GameEnums.h
     ui/GameEnums.cpp
-    ui/UIConstants.h
     ui/rendering/ThumbnailRenderer.h
     ui/rendering/ThumbnailRenderer.cpp
     ui/rendering/MapThumbnail.h
