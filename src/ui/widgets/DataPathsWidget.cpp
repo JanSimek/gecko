@@ -37,6 +37,7 @@ DataPathsWidget::DataPathsWidget(std::shared_ptr<Settings> settings, QWidget* pa
     , _layout(nullptr)
     , _helpLabel(nullptr)
     , _pathsTable(nullptr)
+    , _controlContainer(nullptr)
     , _controlLayout(nullptr)
     , _addButton(nullptr)
     , _removeButton(nullptr)
@@ -85,7 +86,16 @@ void DataPathsWidget::setupUI() {
 
     // A wrapping row: on a narrow dialog / small screen the buttons reflow onto extra lines instead
     // of pinning a wide minimum that would force the whole dialog off the edge of the screen.
-    auto* controlFlow = new ui::FlowLayout(/*margin=*/0, /*hSpacing=*/SPACING_NORMAL, /*vSpacing=*/SPACING_NORMAL);
+    // The flow has to live in its own widget rather than go straight into the vertical layout:
+    // heightForWidth only propagates through widget items, so a nested layout's wrapped height never
+    // reaches the parent's minimum and the extra button rows end up drawn over the list above.
+    _controlContainer = new QWidget(this);
+    auto* controlFlow
+        = new ui::FlowLayout(_controlContainer, /*margin=*/0, /*hSpacing=*/SPACING_NORMAL, /*vSpacing=*/SPACING_NORMAL);
+    QSizePolicy controlPolicy = _controlContainer->sizePolicy();
+    controlPolicy.setVerticalPolicy(QSizePolicy::Minimum);
+    controlPolicy.setHeightForWidth(true);
+    _controlContainer->setSizePolicy(controlPolicy);
     _controlLayout = controlFlow;
 
     _addButton = new QPushButton("Add Path...");
@@ -158,7 +168,7 @@ void DataPathsWidget::setupUI() {
         btn->setMinimumWidth(uniformWidth);
     }
 
-    _layout->addLayout(_controlLayout);
+    _layout->addWidget(_controlContainer);
 
     _progressBar = new QProgressBar();
     _progressBar->setVisible(false);
