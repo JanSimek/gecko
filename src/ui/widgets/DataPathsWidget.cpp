@@ -34,18 +34,6 @@ namespace {
 
 DataPathsWidget::DataPathsWidget(std::shared_ptr<Settings> settings, QWidget* parent)
     : QGroupBox("Fallout 2 Data Paths", parent)
-    , _layout(nullptr)
-    , _helpLabel(nullptr)
-    , _pathsTable(nullptr)
-    , _controlContainer(nullptr)
-    , _controlLayout(nullptr)
-    , _addButton(nullptr)
-    , _removeButton(nullptr)
-    , _moveUpButton(nullptr)
-    , _moveDownButton(nullptr)
-    , _saveLocationButton(nullptr)
-    , _autoDetectButton(nullptr)
-    , _progressBar(nullptr)
     , _settings(std::move(settings)) {
 
     setupUI();

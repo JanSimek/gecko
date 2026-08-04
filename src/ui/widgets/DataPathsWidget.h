@@ -99,19 +99,19 @@ private:
         ColumnCount = 2 };
 
     // UI Components
-    QVBoxLayout* _layout;
-    QLabel* _helpLabel;
-    QTableWidget* _pathsTable;
-    QWidget* _controlContainer; // hosts the flow row: heightForWidth only propagates via widget items
-    QLayout* _controlLayout;    // a wrapping FlowLayout so the button row reflows on narrow widths
-    QPushButton* _addButton;
-    QPushButton* _removeButton;
-    QPushButton* _moveUpButton;
-    QPushButton* _moveDownButton;
-    QPushButton* _saveLocationButton;
-    QPushButton* _scriptSourceButton;
-    QPushButton* _autoDetectButton;
-    QProgressBar* _progressBar;
+    QVBoxLayout* _layout = nullptr;
+    QLabel* _helpLabel = nullptr;
+    QTableWidget* _pathsTable = nullptr;
+    QWidget* _controlContainer = nullptr; // hosts the flow row: heightForWidth only propagates via widget items
+    QLayout* _controlLayout = nullptr;    // a wrapping FlowLayout so the button row reflows on narrow widths
+    QPushButton* _addButton = nullptr;
+    QPushButton* _removeButton = nullptr;
+    QPushButton* _moveUpButton = nullptr;
+    QPushButton* _moveDownButton = nullptr;
+    QPushButton* _saveLocationButton = nullptr;
+    QPushButton* _scriptSourceButton = nullptr;
+    QPushButton* _autoDetectButton = nullptr;
+    QProgressBar* _progressBar = nullptr;
 
     std::shared_ptr<Settings> _settings;
     std::filesystem::path _writableDataPath;               // local copy; persisted by SettingsDialog on save
