@@ -5,7 +5,6 @@
 #include "ui/IconHelper.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/common/ButtonStyle.h"
-#include "ui/common/FlowLayout.h"
 #include "util/GameDataPathResolver.h"
 
 #include <QApplication>
@@ -13,6 +12,7 @@
 #include <QFileDialog>
 #include <QMenu>
 #include <QMessageBox>
+#include <QFrame>
 #include <QHeaderView>
 #include <QTableWidgetItem>
 #include <QAbstractItemView>
@@ -70,21 +70,17 @@ void DataPathsWidget::setupUI() {
     // for long entries is in each row's tooltip — see addPathRow).
     _pathsTable->setMinimumHeight(LIST_MIN_HEIGHT);
     _pathsTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    _layout->addWidget(_pathsTable, /*stretch=*/1);
 
-    // A wrapping row: on a narrow dialog / small screen the buttons reflow onto extra lines instead
-    // of pinning a wide minimum that would force the whole dialog off the edge of the screen.
-    // The flow has to live in its own widget rather than go straight into the vertical layout:
-    // heightForWidth only propagates through widget items, so a nested layout's wrapped height never
-    // reaches the parent's minimum and the extra button rows end up drawn over the list above.
-    _controlContainer = new QWidget(this);
-    auto* controlFlow
-        = new ui::FlowLayout(_controlContainer, /*margin=*/0, /*hSpacing=*/SPACING_NORMAL, /*vSpacing=*/SPACING_NORMAL);
-    QSizePolicy controlPolicy = _controlContainer->sizePolicy();
-    controlPolicy.setVerticalPolicy(QSizePolicy::Minimum);
-    controlPolicy.setHeightForWidth(true);
-    _controlContainer->setSizePolicy(controlPolicy);
-    _controlLayout = controlFlow;
+    // The list with its actions in a column beside it, the way Qt's own list editors are built. A
+    // column cannot wrap, so it needs no width to reserve and no height to negotiate: the buttons
+    // stay beside what they act on however narrow the dialog gets.
+    auto* listRow = new QHBoxLayout();
+    listRow->setSpacing(SPACING_NORMAL);
+    listRow->addWidget(_pathsTable, /*stretch=*/1);
+
+    auto* buttonColumn = new QVBoxLayout();
+    buttonColumn->setSpacing(SPACING_TIGHT);
+    _controlLayout = buttonColumn;
 
     _addButton = new QPushButton("Add Path...");
     _addButton->setIcon(createIcon(":/icons/ui/add.svg"));
@@ -113,6 +109,11 @@ void DataPathsWidget::setupUI() {
 
     // Checkable so the short label stays constant while the check state shows whether the selected
     // folder is marked (the label used to grow to "Clear …", clipping in the button row).
+    auto* markerSeparator = new QFrame();
+    markerSeparator->setFrameShape(QFrame::HLine);
+    markerSeparator->setFrameShadow(QFrame::Sunken);
+    _controlLayout->addWidget(markerSeparator); // below: what a path *is*, not what to do with it
+
     _saveLocationButton = new QPushButton("Save Location");
     _saveLocationButton->setIcon(createIcon(":/icons/actions/save.svg"));
     _saveLocationButton->setCheckable(true);
@@ -138,25 +139,18 @@ void DataPathsWidget::setupUI() {
     _autoDetectButton->setToolTip("Automatically detect Fallout 2 installations");
     _controlLayout->addWidget(_autoDetectButton);
 
-    // Consistent icon size + minimum height so the buttons don't clip their icons on resize.
+    // Consistent icon size + minimum height so the buttons don't clip their icons on resize. The
+    // column already gives them a common width, so none needs one forced on it.
     const std::array actionButtons = { _addButton, _removeButton, _moveUpButton, _moveDownButton,
         _saveLocationButton, _scriptSourceButton, _autoDetectButton };
     for (QPushButton* btn : actionButtons) {
         geck::ui::styleActionButton(btn);
     }
-    // One comfortable width for all of them (the widest label plus breathing room) so no button's
-    // text is crammed against its icon. Safe to force now that the FlowLayout wraps instead of
-    // overflowing when the total exceeds the available width.
-    int uniformWidth = 0;
-    for (QPushButton* btn : actionButtons) {
-        uniformWidth = std::max(uniformWidth, btn->sizeHint().width());
-    }
-    uniformWidth += SPACING_LOOSE * 2; // extra horizontal padding around the label+icon
-    for (QPushButton* btn : actionButtons) {
-        btn->setMinimumWidth(uniformWidth);
-    }
 
-    _layout->addWidget(_controlContainer);
+    // Pinned to the top of the list; the stretch below takes the slack as the dialog grows.
+    buttonColumn->addStretch();
+    listRow->addLayout(buttonColumn);
+    _layout->addLayout(listRow, /*stretch=*/1);
 
     _progressBar = new QProgressBar();
     _progressBar->setVisible(false);

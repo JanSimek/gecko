@@ -102,8 +102,7 @@ private:
     QVBoxLayout* _layout = nullptr;
     QLabel* _helpLabel = nullptr;
     QTableWidget* _pathsTable = nullptr;
-    QWidget* _controlContainer = nullptr; // hosts the flow row: heightForWidth only propagates via widget items
-    QLayout* _controlLayout = nullptr;    // a wrapping FlowLayout so the button row reflows on narrow widths
+    QLayout* _controlLayout = nullptr; // the action column beside the list
     QPushButton* _addButton = nullptr;
     QPushButton* _removeButton = nullptr;
     QPushButton* _moveUpButton = nullptr;

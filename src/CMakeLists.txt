@@ -45,8 +45,6 @@ set(GECK_APP_SOURCES
     ui/common/BaseDialog.h
     ui/common/BaseDialog.cpp
     ui/common/ButtonStyle.h
-    ui/common/FlowLayout.h
-    ui/common/FlowLayout.cpp
     ui/common/BasePaletteWidget.h
     ui/common/BasePanel.h
     ui/common/GridPalettePanel.h
