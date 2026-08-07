@@ -1,6 +1,6 @@
 #include "ProEditorDialog.h"
 #include "MessageSelectorDialog.h"
-#include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
 #include "ui/widgets/pro/ProAmmoWidget.h"
 #include "ui/widgets/pro/ProArmorWidget.h"
 #include "ui/widgets/pro/ProContainerKeyWidget.h"

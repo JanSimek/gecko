@@ -48,6 +48,9 @@ signals:
     /// double-click). Handled by MainWindow, which owns the dialog and command controller.
     void spatialScriptEditRequested(uint32_t sid);
     void spatialScriptDeleteRequested(uint32_t sid);
+    /// The user asked to open the SSL source of the script at this 0-based scripts.lst program
+    /// index (context menu, any row). Handled by MainWindow via ScriptSourceService.
+    void scriptSourceEditRequested(int programIndex);
 
 private slots:
     void applyFilter();                         // hide rows that don't match _filterEdit; re-applied after every populate()
@@ -65,6 +68,8 @@ private:
     const MapScript* scriptByPid(qulonglong sid) const;
     // The SID stashed in row's Script-ID cell, or MapScript::NONE if the row/cell is missing.
     uint32_t sidOfRow(int row) const;
+    // The row's 0-based scripts.lst program index (the Script ID cell's display value), or -1.
+    int programIndexOfRow(int row) const;
 
     resource::GameResources& _resources;
     Map* _map = nullptr;

@@ -7,13 +7,14 @@
 > Reminder: this repo squash-merges, so `git merge-base --is-ancestor <branch> master` reports
 > merged work as unmerged — use `gh pr list --state merged` to check.
 
-*Last compacted: 2026-07-15.*
+*Last compacted: 2026-08-06.*
 
 ## What's next (priority order)
 
 1. **Cave rim quality** — the known-issues list below; highest-value generation work.
 2. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
-3. **SSL script editing** — unstarted; Phase 1 toolchain glue is the entry point.
+3. **SSL script editing** — open question: whether an in-app editor is still wanted now that
+   compiling lives in VS Code + BGforge MLS (see the SSL section).
 4. **Minimap / overview panel** (feature-gap audit).
 5. **In-game preview mode** — idle animations first.
 6. **Analysis/MCP tail** — small, self-contained items.
@@ -40,15 +41,9 @@
 
 ## Cave rim quality (improved, NOT hand-authored quality yet)
 
-Current state: `cave.luau` generates the cavern as a metaball field (chambers = radial sources,
-corridors = line sources; walkable interior = the field-≥1 isocontour, noise-warped,
-flood-filled) and lines the rim with a dense 2-cell wall band. Pieces are learned from the
-shipped cave maps, keyed primarily by **rock-neighbour mask** (density-independent;
-cross-validated train cave1–3 / predict cave4: 79% orientation-family accuracy vs 53% for the
-compass bin), with finer face-direction keys and a compass fallback; corner protos
-(ca063/ca032/ca080) are keyed by their bent turn shape. Rim sealed with Secret-Blocking-Hex
-fills, scroll-blocker ring, exit patch + player start; deterministic, reachability-verified.
-Inspect regions with `map render --crop-hex`.
+`cave.luau` builds the cavern from a metaball field and lines the rim with pieces learned from the
+shipped caves, keyed by **rock-neighbour mask** (79% orientation-family accuracy cross-validated on
+cave4, vs 53% for a compass bin). Inspect regions with `map render --crop-hex`.
 *Superseded piece-selection models — do not retry:* outward-normal compass bin; edge-constraint
 (Wang) `follow[prev][dir]` sequence; hand-authored per-piece override table.
 
@@ -74,8 +69,7 @@ Inspect regions with `map render --crop-hex`.
 
 ## Biome script library
 
-`cave.luau` and the quilt generators (`quilt_sampler.luau`, `quilt_biomes.luau`,
-`fills/quilt_desert.luau`) are shipped; expand the `scripts/README.md` table as new ones land.
+Expand the `scripts/README.md` table as new generators land.
 
 - **`town.luau`** — needs the straight-wall-run + door-opening model above.
 - **`coast.luau`** — newly practical: quilting reproduces a shoreline's authored blend tiles
@@ -101,9 +95,8 @@ terrain-derived locations:
   axis-aligned box) and place exits on the edge segments the design wants open. Reuse the
   screen→hex edge walk from `placeExitGridRect`, following the diamond boundary with a
   per-edge open/closed mask.
-- **Reachability-aware placement** — the *check* shipped (`generate` runs reachability on every
-  map it writes and warns when an exit grid is unreachable from the player start); still open:
-  having placement consult reachability instead of just reporting after the fact.
+- **Reachability-aware placement** — placement should consult reachability, not just have
+  `generate` report an unreachable exit grid after the fact.
 
 ## Open questions
 
@@ -158,77 +151,46 @@ terrain-derived locations:
     with a context-menu / Preferences UI to add, remove, and reorder buttons, persisted via `Settings`.
     Editor UX only; no map/format change.
 9. **Log panel follow-ups.** Add jump-to-source where a record carries a hex/object (needs
-   structured records, not text). When the SSL-editing output panel lands, make compiler output a
-   category of the existing log panel rather than a second dock. Editor UX only; changes no
-   map/format data.
+   structured records, not text). Editor UX only; changes no map/format data.
+10. **Preferences dialog alignment (low priority).** The General tab still reads as unaligned:
+    - **Labels, fields and buttons don't share a line.** In the Game Location form the labels are
+      right-aligned, so their left edges are ragged, and the label text sits a couple of pixels
+      high in a row whose height comes from the taller field/button beside it. Nothing lines up
+      vertically with the path list above it either.
+    - **The action column is cramped.** `DataPathsWidget` stacks its seven buttons with
+      `SPACING_TIGHT`; they need room to breathe, and the marker buttons want more separation
+      from the row actions than a single hairline.
+    - **The Priority column should be right-aligned** so the numbers form a vertical line instead
+      of centring individually.
+    Editor UX only; no map/format change. A wider clean-up would drop the nested panel
+    backgrounds too — the tab paints a page, each `QGroupBox` paints another (`setFlat(true)`
+    gives Qt's section look instead), and everything sits in a scroll area on top of that.
 
 ---
 
-# SSL Script Editing Integration
+# SSL script editing
 
-### Goal
-Let users view and edit the Fallout 2 SSL script behind a `scripts.lst` entry from inside Gecko, instead of alt-tabbing to an external toolchain. This connects to our existing model: `scripts.lst` is a flat name list whose line index is the *program index* stored in the map header's `script_id` and in each `MapScript.script_id` (see `MapInfoPanel.cpp:397-403`, `ScriptSelectorDialog`, `SpatialScriptDialog`). Today Gecko only *references* scripts by index/name — it cannot open the source. The `.ssl` source compiles to `.int` bytecode (what the engine actually loads), which lives under `scripts/` alongside `scripts.lst`.
+**Gecko does not compile or decompile SSL.**
+"Edit Script Source" resolves a program index to its `.ssl` (a data path marked as a script source,
+a loose file, or a DAT extracted via `ensureWritableCopy`) and opens it in VS Code with the source
+tree as the workspace root, which is what lets BGforge MLS resolve headers and compile.
 
-### The three external tools
+**Do not rebuild the compiler integration.** It existed and was removed deliberately: `sslc` ships
+no licence file and `int2ssl` is GPL-3.0, so neither can be bundled; `sslc` has no structured
+diagnostic API even in DLL mode, so any integration is text-scraping its stdout; and a separate
+process keeps a compiler crash out of the editor. BGforge MLS already does all of it, including
+placing the `.int` via its `outputDirectory` setting.
 
-| Tool | Purpose | Lang | License | Cross-platform | Ships binaries |
-|------|---------|------|---------|----------------|----------------|
-| **sslc** (sfall-team) | `.ssl` → `.int` compiler | C | **No LICENSE file** (`license: null` on GitHub; Watcom-derived heritage, bundles `mcpp` preprocessor) | CMake; releases include `compile.exe`, `sslc-linux`, **and a wasm/emscripten/node build** | Yes |
-| **int2ssl** (falltergeist) | `.int` → `.ssl` decompiler | C++ | **GPL-3.0** | CMake (Win/macOS/Linux); release ships `int2ssl.exe` only | Win only prebuilt |
-| **BGforge-MLS** | VS Code ext **+ standalone LSP** server (syntax/completion/hover/diagnostics/go-to-def/dialog preview for SSL) | TypeScript | **Effectively unstated** — `LICENSE.txt` is 0 bytes; npm says "SEE LICENSE IN LICENSE.txt" | npm `@bgforge/mls-server`, needs **Node ≥20**; runs standalone over LSP | npm; also bundles wasm **sslc** as an optional dep, so the server can compile too |
+Still open, if an in-app editor is ever wanted: it would be **edit-only** unless that decision is
+revisited, since Save could not compile.
 
-Key facts that shape the decision:
-- **sslc has no license file.** Redistribution terms are unclear. Bundling its binary into Gecko's installer is a legal grey area; safest to *invoke* a user-provided/separately-fetched binary rather than vendor it into our repo/installers until licensing is clarified upstream.
-- **int2ssl is GPL-3.0.** We can ship/build it as a *separate executable* we shell out to (mere aggregation — no GPL obligation on Gecko itself). We must **not** link it into our binary.
-- **BGforge-MLS's empty LICENSE = all-rights-reserved by default.** Embedding/redistributing it is risky; depending on a user-installed copy (VS Code or npm) is safe; vendoring is not.
-- Decompilation (int2ssl) is **lossy**: comments, original names, and some constructs don't round-trip. Treat `.int`→`.ssl` as best-effort, not authoritative.
+### Still unbuilt
 
-### Option A — Embed BGforge-MLS LSP into a Qt editor widget
-
-A Qt code-editor widget (QScintilla, or `QPlainTextEdit` + **KSyntaxHighlighting**, or a custom widget) acting as an LSP *client* talking to `@bgforge/mls-server` over stdio.
-
-- **Effort: L.** We'd write a full LSP client (JSON-RPC framing, lifecycle, `textDocument/*`, diagnostics, completion, hover, semantic tokens), a process supervisor for the Node server, and editor-side rendering of all of it. No mature drop-in LSP client exists for Qt Widgets (Qt Creator's is internal/not reusable).
-- **Pros:** Best in-app UX — same diagnostics/completion as VS Code, fully integrated, no context switch.
-- **Cons / risk: High.** Requires a **Node ≥20 runtime** on the user's machine (heavy new dependency for a C++ desktop app). The MLS license is unstated, so we can't bundle the server. LSP client is a large surface to build and maintain against an upstream we don't control.
-- **Cross-platform:** Node + npm install must work on Win/macOS/Linux; manageable but adds a runtime-detection/onboarding burden.
-- **Verdict:** High value, but premature. Revisit only after a basic editor exists and if MLS licensing gets clarified.
-
-### Option B — Hand off to external VS Code + sslc/int2ssl round-trip
-
-User installs VS Code + BGforge-MLS. Gecko opens the `.ssl` in VS Code (`code <file>`); on the Gecko side we provide "Compile" (invoke sslc → `.int`, copy into `scripts/`) and "Decompile existing" (int2ssl `.int` → `.ssl`).
-
-- **Effort: S–M.** Mostly `QProcess` plumbing + tool-path settings + parsing sslc/int2ssl exit codes and stderr into a Gecko output panel.
-- **Pros:** Best editing experience for free (full MLS in VS Code); we own only the compile/place/decompile glue, which we need regardless.
-- **Cons:** Hard dependency on the user having VS Code + extension; clunky two-app workflow; no live feedback inside Gecko; we don't control when the user saves.
-- **Cross-platform:** `code` CLI exists on all three; sslc ships `sslc-linux`/`compile.exe` (no macOS prebuilt → users build it or we provide a CMake recipe); int2ssl ships Win-only (build from source on macOS/Linux). Tool-path config + "locate binary" UX needed.
-- **Licensing:** Cleanest — everything stays a separate user-installed/shelled-out process; no vendoring.
-- **Verdict:** Good pragmatic baseline; the compile/place/decompile glue is reusable by every other option.
-
-### Option C — Built-in lightweight editor + bundled-ish toolchain (hybrid, recommended core)
-
-A simple Gecko-native editor: `QPlainTextEdit` (or QScintilla) + **KSyntaxHighlighting** (we may already pull Qt/KDE deps; KSyntaxHighlighting ships an SSL/`*.ssl` syntax definition) — **no LSP**. Plus the Option-B compile/decompile glue. Optionally detect an installed external editor and offer "Open in VS Code" as a power-user escape hatch.
-
-- **Effort: M.** Editor widget + highlighter wiring + reuse of B's `QProcess` compile/decompile glue + tool-path settings.
-- **Pros:** Zero hard external editor dependency for basic edits; consistent in-app UX; no Node runtime; degrades gracefully (highlighting + compile, no completion). Lays the LSP-client groundwork (the editor widget) so Option A becomes incremental later.
-- **Cons:** No completion/diagnostics-as-you-type (only sslc compile errors, surfaced in an output panel); KSyntaxHighlighting adds a dependency if not already present.
-- **Cross-platform:** KSyntaxHighlighting is portable. sslc/int2ssl binary acquisition is the only friction (same as B) — mitigated by tool-path settings + first-run "locate/download sslc" helper. Avoid vendoring sslc binaries until its license is clarified.
-- **Licensing:** Safe — we ship our own editor + highlighter; sslc/int2ssl are invoked as external processes (int2ssl GPL stays at arm's length).
-- **Verdict:** **Best value-for-effort and the recommended foundation.**
-
-### Recommendation & phased path
-
-Adopt **C as the core**, structured so **B** falls out for free and **A** remains a future upgrade.
-
-- **Phase 1 — Toolchain glue (S/M).** `QProcess` wrappers for sslc (compile `.ssl`→`.int`, place into `scripts/`) and int2ssl (decompile `.int`→`.ssl`); tool-path Settings + first-run "locate binary" UX; output panel for compiler errors/warnings. Wire into the existing `scripts.lst`/`MapScript` flow: from `ScriptSelectorDialog`/`SpatialScriptDialog`/`MapInfoPanel`, given a program index, resolve `scripts.lst[index]` → `scripts/<name>.int`, and offer "Edit script."
-- **Phase 2 — Built-in editor (M).** `QPlainTextEdit`/QScintilla + KSyntaxHighlighting SSL highlighting. Open the `.ssl` if present, else int2ssl-decompile the `.int` (clearly flagged "decompiled, lossy"); Save → Phase-1 compile → place `.int`. Add "Open in external editor (VS Code)" detection as the escape hatch (this *is* Option B, now a menu item).
-- **Phase 3 — Optional LSP upgrade (L, gated on demand + MLS licensing).** Reuse the Phase-2 widget as an LSP client to `@bgforge/mls-server` for completion/hover/diagnostics, **only if** a Node runtime is acceptable and MLS's license is clarified so we can guide installation. Do not bundle the server.
-
-### Ties to scripts.lst + MapScript model
-
-- The bridge from our data model to a source file is: `header.script_id` / `MapScript.script_id` (program index) → `scripts.lst` line → `scripts/<name>.int` (compiled, what the engine loads) → `scripts/source/<name>.ssl` or `scripts/<name>.ssl` (source). Current code already resolves index→name (`MapInfoPanel.cpp:397-403`); the new layer adds name→file→edit/compile.
-- **Compiling a *new* script must also register it** in `scripts.lst` (append a line) so a fresh program index exists for `MapScript` to reference — mirror the engine's index-is-line-number convention exactly (1-based in the map header; `at(index-1)` in our `Lst`).
-- Keep `.int` placement consistent with VFS/`ResourcePaths::Lst::SCRIPTS` (`scripts/`); a recompiled `.int` must land where the engine and our `repository().load<Lst>` lookups expect it.
-- **Note:** BGforge-MLS itself already parses `scripts.lst`, MAP, and PRO formats — if we ever adopt its server, some of our format awareness overlaps, but our writers remain the source of truth for IDs.
+- **Registering a new script name in `scripts.lst`** — appending a line so a fresh program index
+  exists for `MapScript` to reference. Needs an Lst writer plus override semantics, and must mirror
+  the engine's index-is-line-number convention (1-based in the map header, `at(index-1)` in `Lst`).
+- A recompiled `.int` has to land where `ResourcePaths::Lst::SCRIPTS` (`scripts/`) expects it, or
+  neither the engine nor `repository().load<Lst>` will find it.
 
 ---
 
@@ -308,8 +270,6 @@ the running game (day/night, critter wander/AI) is **Large** and probably not wo
 ---
 
 # Architecture (residuals & guard notes)
-
-The 13-work-package architecture roadmap is delivered.
 
 **Deferred (real but modest, do opportunistically):**
 - **PanelVisibilityController.** Extracting the panel-visibility snapshot/restore/persist state

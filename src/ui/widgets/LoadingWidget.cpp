@@ -2,7 +2,6 @@
 #include "state/loader/Loader.h"
 #include "util/Constants.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/UIConstants.h"
 
 #include <QVBoxLayout>
 #include <QLabel>

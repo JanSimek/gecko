@@ -8,7 +8,6 @@
 #include "version.h"
 #include "Application.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/UIConstants.h"
 
 namespace geck {
 

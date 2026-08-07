@@ -221,18 +221,32 @@ void ScriptsPanel::onCellDoubleClicked(int row) {
 
 void ScriptsPanel::onTableContextMenu(const QPoint& pos) {
     const int row = _table->indexAt(pos).row();
-    const uint32_t sid = sidOfRow(row);
-    if (MapScript::fromPid(sid) != MapScript::ScriptType::SPATIAL) {
-        return; // Edit/Delete are spatial-only (other scripts live on their owning object).
+    if (row < 0) {
+        return;
     }
+    const uint32_t sid = sidOfRow(row);
+    const int programIndex = programIndexOfRow(row);
+    const bool spatial = MapScript::fromPid(sid) == MapScript::ScriptType::SPATIAL;
 
     _table->selectRow(row); // right-click also selects, syncing the map highlight
 
     QMenu menu(this);
-    const QAction* editAction = menu.addAction(tr("Edit Spatial Script..."));
-    const QAction* deleteAction = menu.addAction(tr("Delete Spatial Script"));
+    // Every row names a scripts.lst program, so its SSL source can be opened from any of them.
+    const QAction* sourceAction = programIndex >= 0 ? menu.addAction(tr("Edit Script Source...")) : nullptr;
+    // Edit/Delete of the record itself are spatial-only (other scripts live on their owning object).
+    const QAction* editAction = spatial ? menu.addAction(tr("Edit Spatial Script...")) : nullptr;
+    const QAction* deleteAction = spatial ? menu.addAction(tr("Delete Spatial Script")) : nullptr;
+    if (menu.isEmpty()) {
+        return;
+    }
+
     const QAction* chosen = menu.exec(_table->viewport()->mapToGlobal(pos));
-    if (chosen == editAction) {
+    if (chosen == nullptr) {
+        return;
+    }
+    if (chosen == sourceAction) {
+        Q_EMIT scriptSourceEditRequested(programIndex);
+    } else if (chosen == editAction) {
         Q_EMIT spatialScriptEditRequested(sid);
     } else if (chosen == deleteAction) {
         Q_EMIT spatialScriptDeleteRequested(sid);
@@ -246,6 +260,14 @@ uint32_t ScriptsPanel::sidOfRow(int row) const {
     const QTableWidgetItem* idItem = _table->item(row, COL_SCRIPT_ID);
     return idItem == nullptr ? MapScript::NONE
                              : static_cast<uint32_t>(idItem->data(Qt::UserRole).toULongLong());
+}
+
+int ScriptsPanel::programIndexOfRow(int row) const {
+    if (row < 0) {
+        return -1;
+    }
+    const QTableWidgetItem* idItem = _table->item(row, COL_SCRIPT_ID);
+    return idItem == nullptr ? -1 : idItem->data(Qt::DisplayRole).toInt();
 }
 
 void ScriptsPanel::selectSpatialScriptRow(uint32_t sid) {

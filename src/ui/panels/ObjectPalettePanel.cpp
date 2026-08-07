@@ -10,7 +10,6 @@
 #include "ui/common/BaseWidget.h"
 #include "ui/dragdrop/MimeTypes.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/UIConstants.h"
 
 #include <QPainter>
 #include <QMouseEvent>

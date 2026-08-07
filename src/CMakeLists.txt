@@ -30,6 +30,8 @@ set(GECK_APP_SOURCES
 
     ui/ExternalEditorLauncher.h
     ui/ExternalEditorLauncher.cpp
+    ui/ScriptSourceService.h
+    ui/ScriptSourceService.cpp
 
     ui/FrmThumbnailGenerator.h
     ui/FrmThumbnailGenerator.cpp
@@ -187,7 +189,6 @@ set(GECK_APP_SOURCES
     # Qt6 UI Constants
     ui/GameEnums.h
     ui/GameEnums.cpp
-    ui/UIConstants.h
     ui/rendering/ThumbnailRenderer.h
     ui/rendering/ThumbnailRenderer.cpp
     ui/rendering/MapThumbnail.h
@@ -483,6 +484,8 @@ add_library(gecko_resource STATIC
     resource/WritableDataRoot.cpp
     resource/MapNameEditor.h
     resource/MapNameEditor.cpp
+    resource/ScriptSourceLocator.h
+    resource/ScriptSourceLocator.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 

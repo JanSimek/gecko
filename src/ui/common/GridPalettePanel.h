@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BasePanel.h"
-#include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
 #include <QScrollArea>
 #include <QGridLayout>
 

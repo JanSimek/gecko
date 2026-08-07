@@ -7,6 +7,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QGroupBox>
+#include <QIcon>
 #include <QProgressBar>
 #include <filesystem>
 #include <memory>
@@ -38,6 +39,11 @@ public:
     std::filesystem::path getWritableDataPath() const;
     void setWritableDataPath(const std::filesystem::path& path);
 
+    // Folders marked as SSL script-source trees (a subset of the data paths). Kept as paths, not
+    // rows, so reordering never moves a marker.
+    std::vector<std::filesystem::path> getScriptSourcePaths() const;
+    void setScriptSourcePaths(const std::vector<std::filesystem::path>& paths);
+
     // Validation
     void validatePaths();
 
@@ -56,6 +62,7 @@ private slots:
     void onSelectionChanged();
     void onCellDoubleClicked(int row, int column);
     void onToggleSaveLocation(); // mark the selected folder as the save location (or clear it)
+    void onToggleScriptSource(); // mark the selected folder as an SSL script-source tree (or clear it)
 
 private:
     void setupUI();
@@ -73,12 +80,17 @@ private:
     bool isProtectedRow(int row) const;
     int selectedRow() const;
     std::filesystem::path pathAtRow(int row) const; // normalized, empty if the row has no path item
-    // A row can be marked as the save location only if it's a real folder the editor could write to
+    // A row can be marked (as the save location or a script source) only if it's a real folder
     // (not a .dat, not missing, not the protected built-in resources path).
     bool isMarkableRow(int row) const;
     // Re-derive each row's save-location badge (bold + save icon for the explicit marker, italic for
     // the positional default) from the current rows + marker. Called whenever either changes.
     void refreshSaveLocationMarkers();
+    // Drop any script-source marker whose folder is no longer among the rows.
+    void pruneScriptSourceMarkers();
+    // The file-type icon (from the shared icon pack) for a row: warning / .dat / script-source
+    // folder / plain folder. The save-location role is shown by font weight, not the icon.
+    QIcon iconForRow(const std::filesystem::path& path, bool isScriptSource) const;
 
     // Highest priority is the top row; the stored order is lowest-priority-first, so the table
     // displays it reversed (see getDataPaths/setDataPaths). Columns:
@@ -87,20 +99,22 @@ private:
         ColumnCount = 2 };
 
     // UI Components
-    QVBoxLayout* _layout;
-    QLabel* _helpLabel;
-    QTableWidget* _pathsTable;
-    QHBoxLayout* _controlLayout;
-    QPushButton* _addButton;
-    QPushButton* _removeButton;
-    QPushButton* _moveUpButton;
-    QPushButton* _moveDownButton;
-    QPushButton* _saveLocationButton;
-    QPushButton* _autoDetectButton;
-    QProgressBar* _progressBar;
+    QVBoxLayout* _layout = nullptr;
+    QLabel* _helpLabel = nullptr;
+    QTableWidget* _pathsTable = nullptr;
+    QLayout* _controlLayout = nullptr; // the action column beside the list
+    QPushButton* _addButton = nullptr;
+    QPushButton* _removeButton = nullptr;
+    QPushButton* _moveUpButton = nullptr;
+    QPushButton* _moveDownButton = nullptr;
+    QPushButton* _saveLocationButton = nullptr;
+    QPushButton* _scriptSourceButton = nullptr;
+    QPushButton* _autoDetectButton = nullptr;
+    QProgressBar* _progressBar = nullptr;
 
     std::shared_ptr<Settings> _settings;
-    std::filesystem::path _writableDataPath; // local copy; persisted by SettingsDialog on save
+    std::filesystem::path _writableDataPath;               // local copy; persisted by SettingsDialog on save
+    std::vector<std::filesystem::path> _scriptSourcePaths; // local copy; persisted by SettingsDialog on save
 };
 
 } // namespace geck

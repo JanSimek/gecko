@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <system_error>
 #include <stdexcept>
 
 namespace geck::resource {
@@ -52,13 +53,21 @@ std::filesystem::path ensureWritableCopy(const DataFileSystem& files,
 
     const auto bytes = files.readRawBytes(vfsRelPath);
     if (!bytes.has_value()) {
-        throw std::runtime_error("ensureWritableCopy: cannot read '" + vfsRelPath + "' from the mounted data");
+        throw WritableCopyError("ensureWritableCopy: cannot read '" + vfsRelPath + "' from the mounted data");
     }
 
-    std::filesystem::create_directories(dest.parent_path());
+    // error_code overload on purpose: the throwing one raises filesystem_error, which callers in Qt
+    // slots do not catch, so a read-only destination would unwind out of the event handler.
+    std::error_code ec;
+    std::filesystem::create_directories(dest.parent_path(), ec);
+    if (ec) {
+        throw WritableCopyError(
+            "ensureWritableCopy: cannot create " + dest.parent_path().string() + ": " + ec.message());
+    }
+
     std::ofstream out(dest, std::ios::binary | std::ios::trunc);
     if (!out) {
-        throw std::runtime_error("ensureWritableCopy: cannot write " + dest.string());
+        throw WritableCopyError("ensureWritableCopy: cannot write " + dest.string());
     }
     out.write(reinterpret_cast<const char*>(bytes->data()), static_cast<std::streamsize>(bytes->size()));
     return dest;

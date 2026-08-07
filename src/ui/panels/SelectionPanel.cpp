@@ -10,7 +10,6 @@
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/dialogs/ItemSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/UIConstants.h"
 #include "resource/AiTxtLoader.h"
 #include "resource/ResourcePaths.h"
 #include "resource/ScriptNames.h"
@@ -339,12 +338,20 @@ void SelectionPanel::setupUI() {
     _scriptContainer = new QWidget();
     QVBoxLayout* scriptLayout = new QVBoxLayout(_scriptContainer);
     scriptLayout->setContentsMargins(0, 0, 0, 0);
+    // Value row mirrors the Map Info map-script row: [name field][Edit Source]. Keeping the source
+    // button here (not with Attach/Detach) leaves the button row two-wide so the narrow dock doesn't
+    // have to grow to fit a third button.
     QHBoxLayout* scriptValueRow = new QHBoxLayout();
     scriptValueRow->addWidget(new QLabel("Script:"));
     _scriptValueEdit = new QLineEdit();
     _scriptValueEdit->setReadOnly(true);
     _scriptValueEdit->setPlaceholderText("None");
     scriptValueRow->addWidget(_scriptValueEdit, 1);
+    _editScriptSourceButton = new QPushButton("Edit Source...");
+    _editScriptSourceButton->setEnabled(false);
+    _editScriptSourceButton->setToolTip("Open the attached script's SSL source in the configured editor");
+    connect(_editScriptSourceButton, &QPushButton::clicked, this, &SelectionPanel::onEditScriptSourceClicked);
+    scriptValueRow->addWidget(_editScriptSourceButton);
     scriptLayout->addLayout(scriptValueRow);
     QHBoxLayout* scriptButtonRow = new QHBoxLayout();
     _attachScriptButton = new QPushButton("Attach Script...");
@@ -1199,6 +1206,8 @@ void SelectionPanel::updateScriptSection() {
         _scriptValueEdit->clear();
         _attachScriptButton->setEnabled(false);
         _detachScriptButton->setEnabled(false);
+        _editScriptSourceButton->setEnabled(false);
+        _attachedScriptProgramIndex = -1;
         return;
     }
 
@@ -1206,12 +1215,14 @@ void SelectionPanel::updateScriptSection() {
     const bool attached = mapObject && mapObject->map_scripts_pid != -1;
 
     QString text;
+    _attachedScriptProgramIndex = -1;
     if (attached) {
         const uint32_t sid = static_cast<uint32_t>(mapObject->map_scripts_pid);
         const int section = MapScript::sidSection(sid);
         if (section >= 0 && section < Map::SCRIPT_SECTIONS) {
             for (const auto& s : _map->getMapFile().map_scripts[section]) {
                 if (s.pid == sid) {
+                    _attachedScriptProgramIndex = static_cast<int>(s.script_id);
                     auto* lst = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
                     if (lst && s.script_id < lst->list().size()) {
                         text = QString::fromStdString(lst->list().at(s.script_id));
@@ -1231,6 +1242,13 @@ void SelectionPanel::updateScriptSection() {
     _scriptValueEdit->setText(text);
     _attachScriptButton->setEnabled(true);
     _detachScriptButton->setEnabled(attached);
+    _editScriptSourceButton->setEnabled(_attachedScriptProgramIndex >= 0);
+}
+
+void SelectionPanel::onEditScriptSourceClicked() {
+    if (_attachedScriptProgramIndex >= 0) {
+        Q_EMIT requestEditScriptSource(_attachedScriptProgramIndex);
+    }
 }
 
 void SelectionPanel::onAttachScriptClicked() {

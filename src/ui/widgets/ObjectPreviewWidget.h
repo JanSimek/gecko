@@ -8,7 +8,7 @@
 #include <QPixmap>
 #include <memory>
 
-#include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
 #include "AnimationController.h"
 
 class QGroupBox;

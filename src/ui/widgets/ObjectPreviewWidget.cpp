@@ -23,7 +23,6 @@
 #include "ui/FrmThumbnailGenerator.h"
 #include "ui/IconHelper.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/UIConstants.h"
 #include "reader/ReaderFactory.h"
 
 namespace geck {

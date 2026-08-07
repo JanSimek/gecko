@@ -31,7 +31,7 @@
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/dialogs/MapBrowserDialog.h"
 #include "ui/dialogs/PatternBrowserDialog.h"
-#include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
 #include "resource/GameResources.h"
 #include "state/loader/MapLoader.h"
 #include "state/loader/DataPathLoader.h"
@@ -46,6 +46,7 @@
 #include "ui/Settings.h"
 #include "ui/QtDialogs.h"
 #include "ui/ExternalEditorLauncher.h"
+#include "ui/ScriptSourceService.h"
 #include "reader/lst/LstReader.h"
 #include "format/lst/Lst.h"
 #include "format/map/MapObject.h"
@@ -130,6 +131,7 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
     _gameLauncher = std::make_unique<GameLauncher>(*_resourcesShared, _settings, this, [this](const QString& message) { showStatusMessage(message); }, nullptr);
 
     _externalEditorLauncher = std::make_unique<ExternalEditorLauncher>(*_resourcesShared, _settings, this);
+    _scriptSourceService = std::make_unique<ScriptSourceService>(*_resourcesShared, _settings, *_externalEditorLauncher, this);
 
     restoreDockWidgetState();
 
@@ -1733,6 +1735,11 @@ void MainWindow::connectPanelSignals() {
                 if (_currentEditorWidget && object)
                     _currentEditorWidget->detachScript(object);
             });
+        // "Edit Source..." on an object's attached script: same flow as the map-script one.
+        connect(_selectionPanel, &SelectionPanel::requestEditScriptSource, this, [this](int programIndex) {
+            if (_scriptSourceService)
+                _scriptSourceService->editScriptSource(programIndex);
+        });
         connect(_selectionPanel, &SelectionPanel::requestObjectHighlight,
             this, [this](std::shared_ptr<Object> object) {
                 if (!_currentEditorWidget || !object)
@@ -1893,6 +1900,12 @@ void MainWindow::connectPanelSignals() {
         // Editing a global variable value edits the map's .gam (MAP_GLOBAL_VARS); flag the map modified
         // so persistMapVars() writes the .gam alongside the .map on save (see the saveMap handlers).
         connect(_mapInfoPanel, &MapInfoPanel::mapVariablesChanged, this, [this]() { setMapModified(true); });
+        // "Edit Source..." next to the map-script row opens the header script's .ssl.
+        connect(_mapInfoPanel, &MapInfoPanel::mapScriptSourceEditRequested, this, [this](int programIndex) {
+            if (_scriptSourceService) {
+                _scriptSourceService->editScriptSource(programIndex);
+            }
+        });
     }
 
     // ScriptsPanel signals → current editor widget. Double-clicking an object-owned script row jumps to
@@ -1923,6 +1936,12 @@ void MainWindow::connectPanelSignals() {
         connect(_scriptsPanel, &ScriptsPanel::spatialScriptDeleteRequested, this, [this](uint32_t sid) {
             if (_currentEditorWidget) {
                 _currentEditorWidget->deleteSpatialScript(sid);
+            }
+        });
+        // "Edit Script Source..." on any row: open the .ssl behind the row's program index.
+        connect(_scriptsPanel, &ScriptsPanel::scriptSourceEditRequested, this, [this](int programIndex) {
+            if (_scriptSourceService) {
+                _scriptSourceService->editScriptSource(programIndex);
             }
         });
     }
@@ -2041,6 +2060,11 @@ void MainWindow::openSpatialScriptDialog(std::optional<uint32_t> editSid) {
         dialog->setRadius(info->radius);
     }
 
+    dialog->setSourceEditRequester([this](int programIndex) {
+        if (_scriptSourceService) {
+            _scriptSourceService->editScriptSource(programIndex);
+        }
+    });
     connect(dialog, &SpatialScriptDialog::pickPositionRequested, this, &MainWindow::pickSpatialScriptPosition);
     connect(dialog, &QDialog::accepted, this, &MainWindow::applySpatialScriptDialog);
     connect(dialog, &QObject::destroyed, this, [this]() { _spatialScriptDialog = nullptr; });

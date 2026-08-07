@@ -39,6 +39,7 @@ namespace resource {
 class Settings;
 class GameLauncher;
 class ExternalEditorLauncher;
+class ScriptSourceService;
 class SFMLWidget;
 class EditorWidget;
 class LoadingWidget;
@@ -271,6 +272,7 @@ private:
     std::shared_ptr<Settings> _settings;
     std::unique_ptr<GameLauncher> _gameLauncher;
     std::unique_ptr<ExternalEditorLauncher> _externalEditorLauncher;
+    std::unique_ptr<ScriptSourceService> _scriptSourceService;
 
     // Current widgets
     EditorWidget* _currentEditorWidget;

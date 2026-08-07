@@ -2,7 +2,7 @@
 
 #include "ui/common/GridPalettePanel.h"
 #include "ui/common/BasePaletteWidget.h"
-#include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
 #include <QTabWidget>
 #include <QDrag>
 #include <QMimeData>

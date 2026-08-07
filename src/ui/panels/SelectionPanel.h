@@ -90,6 +90,9 @@ signals:
     /// they are undoable.
     void requestAttachScript(std::shared_ptr<MapObject> object, int scriptType, uint32_t programIndex);
     void requestDetachScript(std::shared_ptr<MapObject> object);
+    /// Open the SSL source of the attached script (its 0-based scripts.lst program index).
+    /// Handled by MainWindow via ScriptSourceService, exactly like the map-script "Edit Source".
+    void requestEditScriptSource(int programIndex);
 
 public slots:
     void selectObject(std::shared_ptr<Object> selectedObject);
@@ -110,6 +113,7 @@ private slots:
     void onEditCritterClicked();
     void onAttachScriptClicked();
     void onDetachScriptClicked();
+    void onEditScriptSourceClicked();
     void onAddInventoryClicked();
     void onRemoveInventoryClicked();
     void onInventoryItemChanged(QTreeWidgetItem* item, int column);
@@ -178,6 +182,10 @@ private:
     QLineEdit* _scriptValueEdit;
     QPushButton* _attachScriptButton;
     QPushButton* _detachScriptButton;
+    QPushButton* _editScriptSourceButton = nullptr;
+    // 0-based scripts.lst program index of the attached script, or -1 when none is attached.
+    // Set by updateScriptSection() so the "Edit Source" button knows which .ssl to open.
+    int _attachedScriptProgramIndex = -1;
 
     // Inventory section (appears when object has inventory)
     QGroupBox* _inventoryGroup;

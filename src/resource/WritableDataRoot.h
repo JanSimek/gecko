@@ -2,12 +2,21 @@
 
 #include <filesystem>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace geck::resource {
 
 class DataFileSystem;
+
+/// Thrown by ensureWritableCopy when the source can't be read from the mounted data or the
+/// loose copy can't be written. Derives from std::runtime_error, so pre-existing callers that
+/// catch the base type keep working; new callers can catch this specifically.
+class WritableCopyError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
 
 /// The data path edited copies should be written to: the last entry in `dataPaths` that is an existing
 /// directory (DAT/archive paths are read-only and skipped), or nullopt if there is none. Editing writes
@@ -37,7 +46,7 @@ bool sameDataPathEntry(const std::filesystem::path& a, const std::filesystem::pa
 /// so CRLF survives), creating the nested directory structure.
 ///
 /// The writable root is expected to be mounted LAST in the VFS so this copy shadows the original on the
-/// next read. Throws std::runtime_error if the source file can't be read or the copy can't be written.
+/// next read. Throws WritableCopyError if the source file can't be read or the copy can't be written.
 std::filesystem::path ensureWritableCopy(const DataFileSystem& files,
     const std::filesystem::path& writableRoot, const std::string& vfsRelPath);
 

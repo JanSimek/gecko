@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
 
 #include <QPushButton>
 #include <QSize>

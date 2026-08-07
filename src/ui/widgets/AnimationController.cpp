@@ -1,5 +1,5 @@
 #include "AnimationController.h"
-#include "ui/UIConstants.h"
+#include "ui/theme/ThemeManager.h"
 
 namespace geck {
 

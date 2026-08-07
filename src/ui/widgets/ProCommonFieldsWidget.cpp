@@ -2,7 +2,6 @@
 #include "resource/GameResources.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/GameEnums.h"
-#include "ui/UIConstants.h"
 #include <QApplication>
 #include <QFrame>
 #include <QLabel>

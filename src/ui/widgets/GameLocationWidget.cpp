@@ -1,11 +1,12 @@
 #include "GameLocationWidget.h"
 #include "util/GameDataPathResolver.h"
+#include "ui/IconHelper.h"
 #include "ui/Settings.h"
 #include "ui/common/ButtonStyle.h"
 #include "ui/theme/ThemeManager.h"
 
 #include <QApplication>
-#include <QStyle>
+#include <QFormLayout>
 #include <QStandardPaths>
 #include <QFileDialog>
 #include <QDir>
@@ -64,54 +65,62 @@ void GameLocationWidget::setupUI() {
     _helpLabel->setStyleSheet(ui::theme::styles::helpText());
     _layout->addWidget(_helpLabel);
 
-    _executableLabel = new QLabel("Fallout 2 Executable (or GOG install):");
-    _layout->addWidget(_executableLabel);
+    // A form puts each label beside its field instead of on a line of its own, which halves the
+    // rows this panel needs and lines the two paths up with each other.
+    auto* pathForm = new QFormLayout();
+    pathForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    pathForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    // Long labels drop above their field rather than squeezing it when the dialog is narrow.
+    pathForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
+
+    _executableLabel = new QLabel("Executable:");
 
     _executableLayout = new QHBoxLayout();
-    _executableLayout->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 0, 0, 0);
-
     _executableLocationEdit = new QLineEdit();
-    _executableLocationEdit->setPlaceholderText("Path to Fallout 2 executable (e.g., fallout2.exe)...");
+    _executableLocationEdit->setPlaceholderText("Path to the Fallout 2 executable (e.g. fallout2.exe)...");
     _executableLayout->addWidget(_executableLocationEdit);
 
     _browseExecutableButton = new QPushButton("Browse...");
-    _browseExecutableButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+    _browseExecutableButton->setIcon(createIcon(":/icons/actions/open.svg"));
     _browseExecutableButton->setToolTip("Browse for Fallout 2 executable file");
     _executableLayout->addWidget(_browseExecutableButton);
+    pathForm->addRow(_executableLabel, _executableLayout);
 
-    _layout->addLayout(_executableLayout);
-
-    // Game data directory
-    _dataDirectoryLabel = new QLabel("Game Data Directory:");
-    _dataDirectoryLabel->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 8, 0, 0);
-    _dataDirectoryLabel->setStyleSheet(ui::theme::styles::smallLabel());
-    _layout->addWidget(_dataDirectoryLabel);
+    // Named for what it has to be: the folder holding data/, not the data folder itself, which is
+    // what the validation checks for and what the map and configs are written relative to.
+    _dataDirectoryLabel = new QLabel("Game folder:");
 
     _dataDirectoryLayout = new QHBoxLayout();
-    _dataDirectoryLayout->setContentsMargins(ui::theme::spacing::MARGIN_INDENT, 0, 0, 0);
-
     _dataDirectoryEdit = new QLineEdit();
-    _dataDirectoryEdit->setPlaceholderText("Path to game directory containing ddraw.ini...");
+    _dataDirectoryEdit->setPlaceholderText("Folder containing data/ (e.g. .../GOG.com/Fallout 2)...");
+    _dataDirectoryEdit->setToolTip(
+        "The game folder itself - the one that contains data/, master.dat and the executable.\n"
+        "Not the data folder inside it.");
     _dataDirectoryLayout->addWidget(_dataDirectoryEdit);
 
     _browseDataDirectoryButton = new QPushButton("Browse...");
-    _browseDataDirectoryButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirOpenIcon));
-    _browseDataDirectoryButton->setToolTip("Browse for Fallout 2 game data directory");
+    _browseDataDirectoryButton->setIcon(createIcon(":/icons/actions/open.svg"));
+    _browseDataDirectoryButton->setToolTip("Browse for the Fallout 2 game folder");
     _dataDirectoryLayout->addWidget(_browseDataDirectoryButton);
+    pathForm->addRow(_dataDirectoryLabel, _dataDirectoryLayout);
 
-    _layout->addLayout(_dataDirectoryLayout);
+    _layout->addLayout(pathForm);
 
     _controlLayout = new QHBoxLayout();
     _controlLayout->addStretch();
 
     _autoDetectButton = new QPushButton("Auto-Detect");
-    _autoDetectButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_ComputerIcon));
+    _autoDetectButton->setIcon(createIcon(":/icons/ui/auto-detect.svg"));
     _autoDetectButton->setToolTip("Automatically detect Fallout 2 game installations");
     _controlLayout->addWidget(_autoDetectButton);
 
     // Consistent icon size + minimum height so the buttons don't shrink and clip their icons on resize.
     for (QPushButton* btn : { _browseExecutableButton, _browseDataDirectoryButton, _autoDetectButton }) {
         geck::ui::styleActionButton(btn);
+    }
+    // Match the field height to the button beside it, or each row reads as two misaligned controls.
+    for (QLineEdit* edit : { _executableLocationEdit, _dataDirectoryEdit }) {
+        edit->setMinimumHeight(ui::constants::sizes::ACTION_BUTTON_HEIGHT);
     }
 
     _layout->addLayout(_controlLayout);

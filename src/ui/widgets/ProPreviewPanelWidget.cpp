@@ -3,7 +3,6 @@
 #include "ObjectPreviewWidget.h"
 #include "ui/dialogs/FrmSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/UIConstants.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
 

@@ -128,4 +128,36 @@ void ExternalEditorLauncher::openFile(const QString& vfsFilePath) {
     }
 }
 
+void ExternalEditorLauncher::openFileInWorkspace(const QString& nativeFilePath, const QString& workspaceRoot) {
+    const auto& settings = *_settings;
+    if (const bool useCustom = settings.getTextEditorMode() == Settings::TextEditorMode::CUSTOM
+            && !settings.getCustomEditorPath().isEmpty();
+        useCustom) {
+        const QString editor = settings.getCustomEditorPath();
+        // `<editor> <workspaceRoot> <file>` — VS Code opens (or reuses) the folder as its workspace
+        // and reveals the file; other editors that don't understand a folder arg still open the file.
+        QStringList arguments;
+        if (!workspaceRoot.isEmpty()) {
+            arguments << workspaceRoot;
+        }
+        arguments << nativeFilePath;
+
+        if (QProcess::startDetached(editor, arguments)) {
+            spdlog::debug("ExternalEditorLauncher: opened {} (workspace {}) in custom editor {}",
+                nativeFilePath.toStdString(), workspaceRoot.toStdString(), editor.toStdString());
+            return;
+        }
+        spdlog::warn("ExternalEditorLauncher: custom editor {} failed to start; falling back to system default",
+            editor.toStdString());
+    }
+
+    // No custom editor configured (or it failed): open just the file with the system default. This
+    // can't carry a workspace folder, so an SSL extension won't see the headers — the Text Editor
+    // preferences nudge the user to configure VS Code for the full flow.
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(nativeFilePath))) {
+        QtDialogs::showError(_dialogParent, "Edit Script",
+            QString("Failed to open the script source:\n%1").arg(nativeFilePath));
+    }
+}
+
 } // namespace geck

@@ -6,7 +6,6 @@
 #include "util/ColorUtils.h"
 #include "ui/common/BaseWidget.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/UIConstants.h"
 #include "selection/SelectionManager.h"
 
 #include <QPainter>

@@ -60,6 +60,7 @@ add_executable(general_tests
     general/test_map_completeness.cpp
     general/test_resource_repository.cpp
     general/test_script_names.cpp
+    general/test_script_source_locator.cpp
     general/test_object_visibility.cpp
     general/test_dat_concurrency.cpp
     general/test_map_renderer.cpp
@@ -103,6 +104,7 @@ add_executable(qt_tests
     qt/test_dat_archive.cpp
     # GameLauncher is an app-layer Qt class, so its ddraw.ini test links gecko::app.
     qt/test_ddraw_ini.cpp
+    qt/test_game_launcher.cpp
     # PatternSerializer is the editor's Qt (QByteArray/QString) serializer.
     qt/test_pattern_serializer.cpp
     # InputHandler is Qt-free but lives in gecko_app; its dispatch test needs SFML.
