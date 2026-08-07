@@ -269,13 +269,18 @@ namespace {
 
     /**
      * The value of @p key in an XML Info.plist, where keys and values are sibling elements
-     * (<key>NAME</key><string>VALUE</string>). Empty when the file is unreadable, is a binary
-     * plist, or has no such key - all of which the caller treats as "unknown", never as a default.
+     * (<key>NAME</key><string>VALUE</string>).
+     *
+     * "Read the file but found no such key" and "could not read the file at all" must not look
+     * alike: the first is an answer (the reader's own default applies), the second is not, and a
+     * caller that conflates them acts on a default it never actually read. So an unreadable file,
+     * malformed XML, or a *binary* plist - which Xcode emits routinely and this parser cannot read
+     * - gives nullopt, while a parsed file missing the key gives an empty string.
      */
-    std::string plistStringValue(const std::filesystem::path& plistPath, QLatin1StringView key) {
+    std::optional<std::string> plistStringValue(const std::filesystem::path& plistPath, QLatin1StringView key) {
         QFile file(QString::fromStdString(plistPath.string()));
         if (!file.open(QIODevice::ReadOnly)) {
-            return {};
+            return std::nullopt;
         }
 
         QXmlStreamReader xml(&file);
@@ -290,7 +295,11 @@ namespace {
                 return xml.readElementText().trimmed().toStdString();
             }
         }
-        return {};
+
+        if (xml.hasError()) {
+            return std::nullopt;
+        }
+        return std::string{}; // parsed, no such key
     }
 
     /** Whether @p name is one of the patchXXX.dat archives the engine walks until the first gap. */
@@ -586,16 +595,20 @@ std::optional<std::filesystem::path> macOsBundleDataRoot(const std::filesystem::
         return std::nullopt;
     }
 
-    // Absent means SDL's default, "resource" - a real answer, not a failure to read one.
-    const std::string baseDirType
+    const std::optional<std::string> baseDirType
         = plistStringValue(plist, QLatin1StringView("SDL_FILESYSTEM_BASE_DIR_TYPE"));
+    if (!baseDirType.has_value()) {
+        spdlog::warn("Could not read {}: leaving the configured game directory in place", plist.string());
+        return std::nullopt;
+    }
 
-    if (baseDirType == "parent") {
+    if (*baseDirType == "parent") {
         return executablePath.parent_path();
     }
-    if (baseDirType == "bundle") {
+    if (*baseDirType == "bundle") {
         return executablePath;
     }
+    // Absent, or a value SDL does not recognise, both mean its default: the Resources directory.
     return executablePath / "Contents" / "Resources";
 }
 

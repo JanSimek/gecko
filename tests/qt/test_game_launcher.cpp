@@ -389,6 +389,30 @@ TEST_CASE("macOsBundleDataRoot follows the bundle's own SDL base-dir type", "[ga
         CHECK_FALSE(macOsBundleDataRoot(bundle).has_value());
     }
 
+    SECTION("An unreadable plist yields nothing, never SDL's default") {
+        // "No such key" and "could not read the file" must not both resolve to Contents/Resources:
+        // that would redirect the map into a directory nobody read a setting from. A binary plist
+        // is the realistic case - Xcode emits them routinely and this parser only reads XML.
+        SECTION("binary plist") {
+            const auto bundle = makeBundle(root, std::string("bplist00\xd4\x01\x02\x03\x04", 13));
+            CHECK_FALSE(macOsBundleDataRoot(bundle).has_value());
+        }
+
+        SECTION("truncated XML") {
+            const auto bundle = makeBundle(root, R"(<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+    <key>SDL_FILESYSTEM_BASE_DIR_TYPE</key>
+)");
+            CHECK_FALSE(macOsBundleDataRoot(bundle).has_value());
+        }
+
+        SECTION("not XML at all") {
+            const auto bundle = makeBundle(root, "this is not a plist");
+            CHECK_FALSE(macOsBundleDataRoot(bundle).has_value());
+        }
+    }
+
     SECTION("The key is not confused with a neighbouring one of the same value") {
         // <string> elements follow every <key>; only the one after OUR key counts.
         const auto bundle = makeBundle(root, R"(<?xml version="1.0" encoding="UTF-8"?>
