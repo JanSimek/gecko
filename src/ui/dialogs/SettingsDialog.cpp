@@ -56,6 +56,13 @@ QScrollArea* SettingsDialog::wrapInScrollArea(QWidget* content) {
     area->setWidgetResizable(true);
     area->setFrameShape(QFrame::NoFrame);
     area->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
+    // Transparent, so the tab page's own background is the only one on screen. A scroll area fills
+    // its viewport with QPalette::Window by default, which is a different shade from the pane a
+    // QTabWidget paints - that mismatch is what made each section read as a lighter panel sitting
+    // on the page.
+    area->viewport()->setAutoFillBackground(false);
+    content->setAutoFillBackground(false);
     return area;
 }
 
@@ -86,6 +93,10 @@ void SettingsDialog::setupUI() {
 
 void SettingsDialog::setupTabs() {
     _tabWidget = new QTabWidget();
+    // Document mode drops the pane the tab widget paints behind its pages. That pane is a lighter
+    // shade than the dialog, which is what made each page look like a panel laid on the dialog
+    // rather than part of it; without it the pages sit on the dialog's own background.
+    _tabWidget->setDocumentMode(true);
 
     setupGeneralTab();
     setupViewportTab();
