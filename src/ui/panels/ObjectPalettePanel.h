@@ -3,7 +3,7 @@
 #include "ui/common/BasePanel.h"
 #include "ui/palette/PaletteModel.h"
 #include "ui/theme/ThemeManager.h"
-#include <QListView>
+#include "ui/palette/PaletteView.h"
 #include <QSortFilterProxyModel>
 #include <QTabWidget>
 #include <QDrag>
@@ -138,7 +138,7 @@ private:
     // Search controls
     QGroupBox* _searchGroup = nullptr;
 
-    QListView* _objectView = nullptr;
+    ui::PaletteView* _objectView = nullptr;
     ui::PaletteModel* _model = nullptr;
     QSortFilterProxyModel* _filter = nullptr;
 

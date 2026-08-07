@@ -46,6 +46,8 @@ set(GECK_APP_SOURCES
     ui/common/BaseDialog.cpp
     ui/common/BasePanel.h
     ui/palette/PaletteModel.h
+    ui/palette/PaletteView.h
+    ui/palette/PaletteView.cpp
     ui/palette/PaletteModel.cpp
     ui/common/InventoryItemUiHelper.h
     ui/common/InventoryItemUiHelper.cpp

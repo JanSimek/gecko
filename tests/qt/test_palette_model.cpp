@@ -15,9 +15,19 @@ TEST_CASE("PaletteModel serves rows to a view", "[qt][palette]") {
     model.setItems({ { 7, "grass", "Tile #7" }, { 12, "sand", "Tile #12" } });
 
     REQUIRE(model.rowCount() == 2);
-    CHECK(model.data(model.index(0, 0), Qt::DisplayRole).toString() == "grass");
     CHECK(model.data(model.index(1, 0), Qt::ToolTipRole).toString() == "Tile #12");
     CHECK(model.data(model.index(1, 0), PaletteModel::EngineIndexRole).toInt() == 12);
+
+    SECTION("The name is always readable for filtering, and shown only when captions are on") {
+        // A palette shows artwork; several placeholder icons already draw the name into the image,
+        // so a caption would repeat it.
+        CHECK(model.data(model.index(0, 0), Qt::DisplayRole).toString().isEmpty());
+        CHECK(model.data(model.index(0, 0), PaletteModel::LabelRole).toString() == "grass");
+
+        model.setShowLabels(true);
+        CHECK(model.data(model.index(0, 0), Qt::DisplayRole).toString() == "grass");
+        CHECK(model.data(model.index(0, 0), PaletteModel::LabelRole).toString() == "grass");
+    }
 
     SECTION("The engine index is what a panel selects by, not the row") {
         CHECK(model.rowForEngineIndex(12) == 1);

@@ -37,6 +37,8 @@ public:
 
     /// The engine index of the item in a row, for callers holding a QModelIndex.
     static constexpr int EngineIndexRole = Qt::UserRole + 1;
+    /// The item's name, whether or not it is shown as a caption. Filter on this, not DisplayRole.
+    static constexpr int LabelRole = Qt::UserRole + 2;
 
     explicit PaletteModel(QObject* parent = nullptr);
 
@@ -44,6 +46,9 @@ public:
     void setIconProvider(IconProvider provider);
     /// Hands dragging to the view: it starts the drag, the model supplies the payload.
     void setMimeProvider(QString mimeType, MimeProvider provider);
+    /// Captions under the icons. Off by default: a palette shows artwork, and the name is in the
+    /// tooltip - several placeholder icons draw the name into the image themselves.
+    void setShowLabels(bool show);
 
     [[nodiscard]] const PaletteItem* itemAt(int row) const;
     /// The row showing @p engineIndex, or -1. Linear: palettes are built once and searched rarely.
@@ -59,6 +64,7 @@ public:
 private:
     std::vector<PaletteItem> _items;
     IconProvider _iconProvider;
+    bool _showLabels = false;
     QString _mimeType;
     MimeProvider _mimeProvider;
     mutable std::unordered_map<int, QPixmap> _iconCache; ///< keyed by row

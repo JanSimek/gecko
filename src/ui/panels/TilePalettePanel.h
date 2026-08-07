@@ -4,7 +4,8 @@
 #include "ui/palette/PaletteModel.h"
 #include "ui/theme/ThemeManager.h"
 
-#include <QListView>
+#include "ui/palette/PaletteView.h"
+
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSortFilterProxyModel>
@@ -109,7 +110,7 @@ private:
     QSpinBox* _endTileSpinBox = nullptr;
     QPushButton* _showAllButton = nullptr;
 
-    QListView* _tileView = nullptr;
+    ui::PaletteView* _tileView = nullptr;
     ui::PaletteModel* _model = nullptr;
     QSortFilterProxyModel* _filter = nullptr;
 

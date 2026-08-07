@@ -114,19 +114,10 @@ void ObjectPalettePanel::setupObjectView() {
     _filter = new QSortFilterProxyModel(this);
     _filter->setSourceModel(_model);
     _filter->setFilterCaseSensitivity(Qt::CaseInsensitive);
+    _filter->setFilterRole(ui::PaletteModel::LabelRole);
 
-    _objectView = new QListView(this);
+    _objectView = new ui::PaletteView(OBJECT_SIZE, this);
     _objectView->setModel(_filter);
-    _objectView->setViewMode(QListView::IconMode);
-    _objectView->setResizeMode(QListView::Adjust);
-    _objectView->setUniformItemSizes(true);
-    _objectView->setMovement(QListView::Static);
-    _objectView->setIconSize(QSize(OBJECT_SIZE, OBJECT_SIZE));
-    const int captionHeight = fontMetrics().height() + ui::constants::SPACING_TIGHT;
-    _objectView->setGridSize(
-        QSize(OBJECT_SIZE + ui::constants::SPACING_GRID * 2, OBJECT_SIZE + captionHeight + ui::constants::SPACING_GRID));
-    _objectView->setSelectionMode(QAbstractItemView::SingleSelection);
-    _objectView->setWordWrap(true);
     _objectView->setDragEnabled(true);
     _objectView->setDragDropMode(QAbstractItemView::DragOnly);
 

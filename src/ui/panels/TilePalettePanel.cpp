@@ -139,20 +139,10 @@ void TilePalettePanel::setupTileList() {
     _filter = new QSortFilterProxyModel(this);
     _filter->setSourceModel(_model);
     _filter->setFilterCaseSensitivity(Qt::CaseInsensitive);
+    _filter->setFilterRole(ui::PaletteModel::LabelRole); // the caption is hidden; filter the name
 
-    _tileView = new QListView(this);
+    _tileView = new ui::PaletteView(TILE_SIZE, this);
     _tileView->setModel(_filter);
-    _tileView->setViewMode(QListView::IconMode);
-    _tileView->setResizeMode(QListView::Adjust); // reflows the columns on resize
-    _tileView->setUniformItemSizes(true);        // fixed cells let the view lay out without measuring
-    _tileView->setMovement(QListView::Static);
-    _tileView->setIconSize(QSize(TILE_SIZE, TILE_SIZE));
-    // The cell has to fit the icon and its caption, or the text is clipped into the row below.
-    const int captionHeight = fontMetrics().height() + ui::constants::SPACING_TIGHT;
-    _tileView->setGridSize(
-        QSize(TILE_SIZE + ui::constants::SPACING_GRID * 2, TILE_SIZE + captionHeight + ui::constants::SPACING_GRID));
-    _tileView->setSelectionMode(QAbstractItemView::SingleSelection);
-    _tileView->setWordWrap(true);
 
     connect(_tileView->selectionModel(), &QItemSelectionModel::currentChanged, this,
         [this](const QModelIndex& current, const QModelIndex&) {

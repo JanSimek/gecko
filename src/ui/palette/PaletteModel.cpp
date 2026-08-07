@@ -25,6 +25,16 @@ void PaletteModel::setMimeProvider(QString mimeType, MimeProvider provider) {
     _mimeProvider = std::move(provider);
 }
 
+void PaletteModel::setShowLabels(bool show) {
+    if (_showLabels == show) {
+        return;
+    }
+    _showLabels = show;
+    if (!_items.empty()) {
+        Q_EMIT dataChanged(index(0, 0), index(static_cast<int>(_items.size()) - 1, 0), { Qt::DisplayRole });
+    }
+}
+
 const PaletteItem* PaletteModel::itemAt(int row) const {
     if (row < 0 || row >= static_cast<int>(_items.size())) {
         return nullptr;
@@ -53,6 +63,8 @@ QVariant PaletteModel::data(const QModelIndex& index, int role) const {
 
     switch (role) {
         case Qt::DisplayRole:
+            return _showLabels ? item->label : QString();
+        case LabelRole:
             return item->label;
         case Qt::ToolTipRole:
             return item->tooltip;
