@@ -147,7 +147,10 @@ void TilePalettePanel::setupTileList() {
     _tileView->setUniformItemSizes(true);        // fixed cells let the view lay out without measuring
     _tileView->setMovement(QListView::Static);
     _tileView->setIconSize(QSize(TILE_SIZE, TILE_SIZE));
-    _tileView->setGridSize(QSize(TILE_SIZE + ui::constants::SPACING_GRID * 2, TILE_SIZE + ui::constants::SPACING_GRID * 3));
+    // The cell has to fit the icon and its caption, or the text is clipped into the row below.
+    const int captionHeight = fontMetrics().height() + ui::constants::SPACING_TIGHT;
+    _tileView->setGridSize(
+        QSize(TILE_SIZE + ui::constants::SPACING_GRID * 2, TILE_SIZE + captionHeight + ui::constants::SPACING_GRID));
     _tileView->setSelectionMode(QAbstractItemView::SingleSelection);
     _tileView->setWordWrap(true);
 
