@@ -42,15 +42,16 @@ void PaletteView::startDrag(Qt::DropActions supportedActions) {
         return;
     }
 
-    QMimeData* data = model()->mimeData(indexes);
-    if (data == nullptr) {
+    // Not named `data`: QWidget has a member of that name, and MSVC fails the build on the shadow.
+    QMimeData* payload = model()->mimeData(indexes);
+    if (payload == nullptr) {
         return;
     }
 
     // No drag pixmap on purpose: the editor renders the item on the map under the cursor, and the
     // view's default image would sit beside it as a larger duplicate.
     auto* drag = new QDrag(this);
-    drag->setMimeData(data);
+    drag->setMimeData(payload);
     drag->exec(supportedActions, Qt::CopyAction);
 }
 

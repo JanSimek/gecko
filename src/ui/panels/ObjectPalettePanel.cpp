@@ -107,10 +107,10 @@ void ObjectPalettePanel::setupObjectView() {
     _model->setMimeProvider(ui::mime::GECK_OBJECT, [this](const ui::PaletteItem& item) {
         // No setText(): with no drag pixmap the platform falls back to showing the plain text, which
         // put "geck/object" next to the cursor. The custom type is what the map's drop handler reads.
-        auto* data = new QMimeData;
-        data->setData(ui::mime::GECK_OBJECT,
+        auto* payload = new QMimeData; // not `data`: QWidget has a member of that name (MSVC C4458)
+        payload->setData(ui::mime::GECK_OBJECT,
             QByteArray::number(item.engineIndex) + "," + QByteArray::number(static_cast<int>(_currentCategory)));
-        return data;
+        return payload;
     });
 
     _filter = new QSortFilterProxyModel(this);
