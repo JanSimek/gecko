@@ -17,22 +17,8 @@
 
 namespace geck {
 
-TileWidget::TileWidget(int tileIndex, const QPixmap& pixmap, QWidget* parent)
-    : BasePaletteWidget(tileIndex, parent) {
-
-    QPixmap scaledPixmap = BaseWidget::scalePixmapToSize(pixmap, TILE_SIZE);
-    setPixmap(scaledPixmap);
-
-    setupCommonProperties(TILE_SIZE);
-    setToolTip(QString("Tile %1").arg(tileIndex));
-
-    connect(this, &BasePaletteWidget::clicked, this, [this](int index) {
-        Q_EMIT tileClicked(index);
-    });
-}
-
 TilePalettePanel::TilePalettePanel(resource::GameResources& resources, QWidget* parent)
-    : GridPalettePanel("Tiles", parent)
+    : BasePanel("Tiles", parent)
     , _resources(resources) {
     setupUI();
     setMinimumWidth(ui::constants::sizes::WIDTH_PANEL_MIN);
@@ -45,14 +31,11 @@ void TilePalettePanel::setupUI() {
 
     setupModeControls();
     setupFilterControls();
-    setupPaginationControls();
-    setupTileGrid();
+    setupTileList();
 
     _statusLabel = new QLabel("No tiles loaded", this);
     _statusLabel->setStyleSheet(ui::theme::styles::italicSecondaryText());
     _mainLayout->addWidget(_statusLabel);
-
-    _mainLayout->addStretch();
 }
 
 void TilePalettePanel::setupModeControls() {
@@ -141,28 +124,42 @@ void TilePalettePanel::setupFilterControls() {
         _searchLineEdit->clear();
         _startTileSpinBox->setValue(0);
         _endTileSpinBox->setValue(-1);
-        _currentPage = 0; // Reset to first page
     });
 
     _mainLayout->addWidget(_filterGroup);
 }
 
-void TilePalettePanel::setupTileGrid() {
-    setupGridArea();
-    _mainLayout->addWidget(scrollArea(), 1);
-}
+void TilePalettePanel::setupTileList() {
+    _model = new ui::PaletteModel(this);
+    _model->setIconProvider([this](const ui::PaletteItem& item) {
+        return tilePixmap(item.engineIndex, item.label.toStdString());
+    });
 
-void TilePalettePanel::setupPaginationControls() {
-    _paginationGroup = new QGroupBox("Page Navigation", this);
-    auto* paginationLayout = new QVBoxLayout(_paginationGroup);
+    // The search box filters through the proxy rather than by rebuilding the list.
+    _filter = new QSortFilterProxyModel(this);
+    _filter->setSourceModel(_model);
+    _filter->setFilterCaseSensitivity(Qt::CaseInsensitive);
 
-    _paginationWidget = new PaginationWidget(this);
-    _paginationWidget->setShowFirstLastButtons(true);
-    connect(_paginationWidget, &PaginationWidget::pageChanged,
-        this, &TilePalettePanel::onGridPaginationPageChanged);
-    paginationLayout->addWidget(_paginationWidget);
+    _tileView = new QListView(this);
+    _tileView->setModel(_filter);
+    _tileView->setViewMode(QListView::IconMode);
+    _tileView->setResizeMode(QListView::Adjust); // reflows the columns on resize
+    _tileView->setUniformItemSizes(true);        // fixed cells let the view lay out without measuring
+    _tileView->setMovement(QListView::Static);
+    _tileView->setIconSize(QSize(TILE_SIZE, TILE_SIZE));
+    _tileView->setGridSize(QSize(TILE_SIZE + ui::constants::SPACING_GRID * 2, TILE_SIZE + ui::constants::SPACING_GRID * 3));
+    _tileView->setSelectionMode(QAbstractItemView::SingleSelection);
+    _tileView->setWordWrap(true);
 
-    _mainLayout->addWidget(_paginationGroup);
+    connect(_tileView->selectionModel(), &QItemSelectionModel::currentChanged, this,
+        [this](const QModelIndex& current, const QModelIndex&) {
+            if (!current.isValid()) {
+                return;
+            }
+            onTileClicked(current.data(ui::PaletteModel::EngineIndexRole).toInt());
+        });
+
+    _mainLayout->addWidget(_tileView, 1);
 }
 
 void TilePalettePanel::loadTiles(const Lst* tileList) {
@@ -179,164 +176,96 @@ void TilePalettePanel::loadTiles(const Lst* tileList) {
     _startTileSpinBox->setMaximum(maxTiles);
     _endTileSpinBox->setMaximum(maxTiles);
 
-    updateTileGrid();
+    rebuildItems();
 }
 
-void TilePalettePanel::updateTileGrid() {
-    if (!_tileList) {
+QPixmap TilePalettePanel::tilePixmap(int tileIndex, const std::string& tileName) const {
+    try {
+        const auto& texture = _resources.textures().get("art/tiles/" + tileName);
+        const sf::Vector2u size = texture.getSize();
+        const sf::Image image = texture.copyToImage();
+        const QImage qImage(image.getPixelsPtr(), size.x, size.y, QImage::Format_RGBA8888);
+        return BaseWidget::scalePixmapToSize(QPixmap::fromImage(qImage), TILE_SIZE);
+    } catch (const std::exception& e) {
+        spdlog::debug("TilePalettePanel: Using placeholder for tile {}: {}", tileIndex, e.what());
+    }
+
+    // Deterministic tint keyed on the index, so a missing tile still reads as itself.
+    QPixmap placeholder(TILE_SIZE, TILE_SIZE);
+    placeholder.fill(QColor(100 + (tileIndex % 156), 100 + ((tileIndex * 7) % 156), 100 + ((tileIndex * 13) % 156)));
+
+    QPainter painter(&placeholder);
+    painter.setPen(ui::theme::colors::textLight());
+    painter.setFont(ui::theme::fonts::compact());
+    painter.drawText(QRect(0, 0, TILE_SIZE, TILE_SIZE / 2), Qt::AlignCenter, QString::number(tileIndex));
+    painter.setFont(ui::theme::fonts::tiny());
+    painter.drawText(QRect(0, TILE_SIZE / 2, TILE_SIZE, TILE_SIZE / 2), Qt::AlignCenter,
+        QString::fromStdString(tileName).left(8));
+    return placeholder;
+}
+
+void TilePalettePanel::rebuildItems() {
+    if (!_tileList || !_model) {
         return;
     }
 
-    int newColumnsPerRow = calculateOptimalColumnsPerRow(TileWidget::TILE_SIZE);
-    if (newColumnsPerRow != _tilesPerRow) {
-        _tilesPerRow = newColumnsPerRow;
-        _previousColumnsPerRow = newColumnsPerRow;
-    }
-
-    _tileWidgets.clear();
-    clearGridWidgets();
-
     const auto& tiles = _tileList->list();
-    int startIndex = _filterStart;
-    int endIndex = (_filterEnd >= 0) ? std::min(_filterEnd, static_cast<int>(tiles.size()) - 1)
-                                     : static_cast<int>(tiles.size()) - 1;
+    const int last = (_filterEnd >= 0) ? std::min(_filterEnd, static_cast<int>(tiles.size()) - 1)
+                                       : static_cast<int>(tiles.size()) - 1;
 
-    calculatePagination();
-
-    int filteredIndex = 0;
-    int targetStartIndex = getPageStartIndex();
-    int targetEndIndex = getPageEndIndex();
-
-    int row = 0;
-    int col = 0;
-    int tilesLoaded = 0;
-
-    for (int i = startIndex; i <= endIndex && i < static_cast<int>(tiles.size()); ++i) {
-        const std::string& tileName = tiles[i];
-
-        // Skip reserved.frm and grid000.frm (first two tiles) like in original implementation
-        if (i < 2) {
-            continue;
-        }
-
-        if (!_searchText.isEmpty()) {
-            QString tileNameQ = QString::fromStdString(tileName);
-            if (!tileNameQ.contains(_searchText, Qt::CaseInsensitive)) {
-                continue;
-            }
-        }
-
-        // Only build widgets for tiles within the current page range.
-        if (filteredIndex < targetStartIndex) {
-            filteredIndex++;
-            continue;
-        }
-        if (filteredIndex > targetEndIndex) {
-            break;
-        }
-
-        try {
-            std::string tilePath = "art/tiles/" + tileName;
-
-            QPixmap tilePixmap;
-
-            try {
-                const auto& texture = _resources.textures().get(tilePath);
-
-                sf::Vector2u textureSize = texture.getSize();
-                sf::Image image = texture.copyToImage();
-
-                QImage qImage(image.getPixelsPtr(), textureSize.x, textureSize.y, QImage::Format_RGBA8888);
-                tilePixmap = QPixmap::fromImage(qImage);
-
-                spdlog::debug("TilePalettePanel: Loaded texture for tile {} ({}x{})", i, textureSize.x, textureSize.y);
-
-            } catch (const std::exception& e) {
-                // Fall back to a generated placeholder when texture loading fails.
-                spdlog::debug("TilePalettePanel: Using placeholder for tile {}: {}", i, e.what());
-
-                tilePixmap = QPixmap(TileWidget::TILE_SIZE, TileWidget::TILE_SIZE);
-                // Deterministic pseudo-random placeholder tint keyed on the tile index.
-                tilePixmap.fill(QColor(100 + (i % 156), 100 + ((i * 7) % 156), 100 + ((i * 13) % 156)));
-
-                QPainter painter(&tilePixmap);
-                painter.setPen(ui::theme::colors::textLight());
-                painter.setFont(ui::theme::fonts::compact());
-                painter.drawText(QRect(0, 0, TileWidget::TILE_SIZE, TileWidget::TILE_SIZE / 2),
-                    Qt::AlignCenter, QString::number(i));
-                painter.setFont(ui::theme::fonts::tiny());
-                painter.drawText(QRect(0, TileWidget::TILE_SIZE / 2, TileWidget::TILE_SIZE, TileWidget::TILE_SIZE / 2),
-                    Qt::AlignCenter, QString::fromStdString(tileName).left(8));
-            }
-
-            auto tileWidget = std::make_unique<TileWidget>(i, tilePixmap, gridWidget());
-
-            tileWidget->setToolTip(QString("Tile #%1\nFile: %2").arg(i).arg(QString::fromStdString(tileName)));
-
-            connect(tileWidget.get(), &TileWidget::tileClicked,
-                this, &TilePalettePanel::onTileClicked);
-
-            gridLayout()->addWidget(tileWidget.get(), row, col);
-            _tileWidgets.push_back(std::move(tileWidget));
-
-            col++;
-            if (col >= _tilesPerRow) {
-                col = 0;
-                row++;
-            }
-
-            tilesLoaded++;
-        } catch (const std::exception& e) {
-            spdlog::warn("TilePalettePanel: Failed to load tile {}: {}", tileName, e.what());
-        }
-
-        filteredIndex++;
+    std::vector<ui::PaletteItem> items;
+    for (int i = std::max(_filterStart, 2); i <= last; ++i) { // 0 and 1 are reserved.frm / grid000.frm
+        const QString name = QString::fromStdString(tiles[static_cast<size_t>(i)]);
+        items.push_back({ i, name, QString("Tile #%1\nFile: %2").arg(i).arg(name) });
     }
 
-    QString statusText;
-    if (totalPages() > 0) {
-        if (!_searchText.isEmpty()) {
-            statusText = QString("Page %1 of %2 - Found %3 tiles matching '%4' (showing %5 tiles)")
-                             .arg(currentPage() + 1)
-                             .arg(totalPages())
-                             .arg(totalFilteredItems())
-                             .arg(_searchText)
-                             .arg(tilesLoaded);
-        } else {
-            int rangeStart = targetStartIndex + 1; // Convert to 1-based
-            int rangeEnd = std::min(targetStartIndex + tilesLoaded, totalFilteredItems());
-            statusText = QString("Page %1 of %2 - Showing %3 tiles (tiles %4-%5)")
-                             .arg(currentPage() + 1)
-                             .arg(totalPages())
-                             .arg(tilesLoaded)
-                             .arg(rangeStart)
-                             .arg(rangeEnd);
-        }
-    } else {
-        statusText = "No tiles to display";
+    _model->setItems(std::move(items));
+    selectRowForTile(_selectedTileIndex);
+    updateStatusLabel();
+}
+
+void TilePalettePanel::updateStatusLabel() {
+    if (!_statusLabel || !_filter) {
+        return;
     }
-    _statusLabel->setText(statusText);
 
-    GridPalettePanel::updatePaginationControls();
+    const int shown = _filter->rowCount();
+    const int total = _model ? _model->rowCount() : 0;
+    _statusLabel->setText(shown == total ? QString("%1 tiles").arg(total)
+                                         : QString("%1 of %2 tiles").arg(shown).arg(total));
+}
 
-    spdlog::debug("TilePalettePanel: Loaded {} tile widgets", tilesLoaded);
+void TilePalettePanel::selectRowForTile(int tileId) {
+    if (!_tileView || !_model || tileId < 0) {
+        return;
+    }
+
+    const int row = _model->rowForEngineIndex(tileId);
+    if (row < 0) {
+        return;
+    }
+
+    // Through the proxy: the row is only selectable while the current filter shows it.
+    const QModelIndex mapped = _filter->mapFromSource(_model->index(row, 0));
+    if (!mapped.isValid()) {
+        return;
+    }
+
+    QSignalBlocker blocker(_tileView->selectionModel());
+    _tileView->setCurrentIndex(mapped);
+    _tileView->scrollTo(mapped, QAbstractItemView::PositionAtCenter);
 }
 
 void TilePalettePanel::filterTiles() {
     _filterStart = _startTileSpinBox->value();
     _filterEnd = _endTileSpinBox->value();
-
-    // Reset to first page when filter changes
-    _currentPage = 0;
-    updateTileGrid();
+    rebuildItems();
 }
 
 void TilePalettePanel::onSearchTextChanged(const QString& text) {
-    _searchText = text.trimmed();
-
-    // Reset to first page when search changes
-    _currentPage = 0;
-    updateTileGrid();
+    _filter->setFilterFixedString(text.trimmed());
+    selectRowForTile(_selectedTileIndex);
+    updateStatusLabel();
 }
 
 void TilePalettePanel::onTileClicked(int tileIndex) {
@@ -349,15 +278,8 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
         return;
     }
 
-    clearTileSelection();
-
     _selectedTileIndex = tileIndex;
-
-    auto it = std::ranges::find_if(_tileWidgets,
-        [tileIndex](const auto& widget) { return widget->getTileIndex() == tileIndex; });
-    if (it != _tileWidgets.end()) {
-        (*it)->setSelected(true);
-    }
+    selectRowForTile(tileIndex);
 
     // Selecting a tile to paint clears any active map selection so clicks place tiles.
     bool hasExistingSelection = _selectionManager && _selectionManager->hasSelection();
@@ -369,9 +291,12 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
 }
 
 void TilePalettePanel::clearTileSelection() {
-    std::ranges::for_each(_tileWidgets, [](auto& widget) {
-        widget->setSelected(false);
-    });
+    if (_tileView == nullptr) {
+        return;
+    }
+    QSignalBlocker blocker(_tileView->selectionModel());
+    _tileView->clearSelection();
+    _tileView->setCurrentIndex({});
 }
 
 void TilePalettePanel::deselectTile() {
@@ -417,16 +342,10 @@ void TilePalettePanel::pickTile(int tileId, bool isRoof) {
         _endTileSpinBox->setValue(-1);
     }
 
-    // Select the tile and arm painting. MainWindow's tileSelected() connection switches the editor
-    // into PlaceTile with this tile, so pressing P "loads the brush" with the picked tile. The
-    // visible highlight is best-effort: it lands only if the tile is on the current page.
-    clearTileSelection();
+    // MainWindow's tileSelected() connection arms PlaceTile with this tile, so pressing P loads the
+    // brush with it. The list holds every tile, so the highlight always lands and scrolls into view.
     _selectedTileIndex = tileId;
-    auto it = std::ranges::find_if(_tileWidgets,
-        [tileId](const auto& widget) { return widget->getTileIndex() == tileId; });
-    if (it != _tileWidgets.end()) {
-        (*it)->setSelected(true);
-    }
+    selectRowForTile(tileId);
 
     Q_EMIT tileSelected(tileId, isRoof);
 }
@@ -445,52 +364,6 @@ void TilePalettePanel::setPlacementMode(PlacementMode mode) {
 
         // With unified placement mode, no button state to update
         Q_EMIT placementModeChanged(_placementMode);
-    }
-}
-
-void TilePalettePanel::calculatePagination() {
-    if (!_tileList) {
-        updatePaginationState(0);
-        return;
-    }
-
-    const auto& tiles = _tileList->list();
-    int startIndex = _filterStart;
-    int endIndex = (_filterEnd >= 0) ? std::min(_filterEnd, static_cast<int>(tiles.size()) - 1)
-                                     : static_cast<int>(tiles.size()) - 1;
-
-    int filteredCount = 0;
-    for (int i = startIndex; i <= endIndex && i < static_cast<int>(tiles.size()); ++i) {
-        // Skip reserved.frm and grid000.frm (first two tiles).
-        if (i < 2)
-            continue;
-
-        if (!_searchText.isEmpty()) {
-            const std::string& tileName = tiles[i];
-            QString tileNameQ = QString::fromStdString(tileName);
-            if (!tileNameQ.contains(_searchText, Qt::CaseInsensitive)) {
-                continue;
-            }
-        }
-        filteredCount++;
-    }
-
-    updatePaginationState(filteredCount);
-}
-
-void TilePalettePanel::resizeEvent(QResizeEvent* event) {
-    GridPalettePanel::resizeEvent(event);
-
-    int newColumnsPerRow = calculateOptimalColumnsPerRow(TileWidget::TILE_SIZE);
-
-    // Only rebuild when the column count actually changed.
-    if (newColumnsPerRow != _previousColumnsPerRow) {
-        _tilesPerRow = newColumnsPerRow;
-        _previousColumnsPerRow = newColumnsPerRow;
-
-        if (!_tileWidgets.empty()) {
-            updateTileGrid();
-        }
     }
 }
 
