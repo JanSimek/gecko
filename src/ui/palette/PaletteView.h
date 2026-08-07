@@ -17,8 +17,19 @@ class PaletteView : public QListView {
 public:
     explicit PaletteView(int iconSize, QWidget* parent = nullptr);
 
+    /// Makes room under each icon for a one-line caption. The model decides whether a row actually
+    /// has one (PaletteModel::setShowLabels); this only sizes the cell, and a cell sized for the
+    /// icon alone would clip the caption into the row below.
+    void setShowLabels(bool show);
+
 protected:
     void startDrag(Qt::DropActions supportedActions) override;
+
+private:
+    void applyGridSize();
+
+    int _iconSize;
+    bool _showLabels = false;
 };
 
 } // namespace geck::ui

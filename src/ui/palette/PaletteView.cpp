@@ -8,15 +8,32 @@
 namespace geck::ui {
 
 PaletteView::PaletteView(int iconSize, QWidget* parent)
-    : QListView(parent) {
+    : QListView(parent)
+    , _iconSize(iconSize) {
     setViewMode(QListView::IconMode);
     setResizeMode(QListView::Adjust); // reflows the columns on resize
     setUniformItemSizes(true);        // fixed cells let the view lay out without measuring
     setMovement(QListView::Static);
     setIconSize(QSize(iconSize, iconSize));
-    setGridSize(QSize(iconSize + constants::SPACING_GRID * 2, iconSize + constants::SPACING_GRID * 2));
     setSelectionMode(QAbstractItemView::SingleSelection);
-    setWordWrap(true);
+    // One line, elided: names run to "Vault 13 Outer Door", and wrapping them would make the row
+    // height depend on the longest caption on screen. The full name stays in the tooltip.
+    setWordWrap(false);
+    applyGridSize();
+}
+
+void PaletteView::setShowLabels(bool show) {
+    if (_showLabels == show) {
+        return;
+    }
+    _showLabels = show;
+    applyGridSize();
+}
+
+void PaletteView::applyGridSize() {
+    const int padding = constants::SPACING_GRID * 2;
+    const int caption = _showLabels ? fontMetrics().height() : 0;
+    setGridSize(QSize(_iconSize + padding, _iconSize + padding + caption));
 }
 
 void PaletteView::startDrag(Qt::DropActions supportedActions) {

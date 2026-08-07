@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "ui/palette/PaletteModel.h"
+#include "ui/palette/PaletteView.h"
 
 #include <QMimeData>
 #include <QPixmap>
@@ -88,4 +89,23 @@ TEST_CASE("PaletteModel serves rows to a view", "[qt][palette]") {
         CHECK(model.itemAt(5) == nullptr);
         CHECK_FALSE(model.data(model.index(5, 0), Qt::DisplayRole).isValid());
     }
+}
+
+TEST_CASE("PaletteView leaves room for a caption when labels are on", "[qt][palette]") {
+    // The cell has to grow by the caption's height, otherwise the text is drawn into the row below
+    // and shows up clipped - which is exactly how the first captioned grid looked.
+    constexpr int ICON = 48;
+    geck::ui::PaletteView view(ICON);
+
+    const QSize iconOnly = view.gridSize();
+    CHECK(iconOnly.height() >= ICON);
+
+    view.setShowLabels(true);
+    const QSize withCaption = view.gridSize();
+
+    CHECK(withCaption.width() == iconOnly.width()); // captions elide, they do not widen the cell
+    CHECK(withCaption.height() >= iconOnly.height() + view.fontMetrics().height());
+
+    view.setShowLabels(false);
+    CHECK(view.gridSize() == iconOnly); // and back again
 }

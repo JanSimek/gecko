@@ -118,7 +118,12 @@ void ObjectPalettePanel::setupObjectView() {
     _filter->setFilterCaseSensitivity(Qt::CaseInsensitive);
     _filter->setFilterRole(ui::PaletteModel::LabelRole);
 
+    // Caption each icon with the proto's engine name (protoDisplayName), falling back to its .pro
+    // filename. Both halves are needed: the model supplies the text, the view the room for it.
+    _model->setShowLabels(true);
+
     _objectView = new ui::PaletteView(OBJECT_SIZE, this);
+    _objectView->setShowLabels(true);
     _objectView->setModel(_filter);
     _objectView->setDragEnabled(true);
     _objectView->setDragDropMode(QAbstractItemView::DragOnly);
