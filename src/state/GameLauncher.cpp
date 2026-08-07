@@ -15,8 +15,10 @@
 #include <string_view>
 #include <system_error>
 
+#include <QFile>
 #include <QProcess>
 #include <QStringList>
+#include <QXmlStreamReader>
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -265,6 +267,41 @@ namespace {
         return {};
     }
 
+    /**
+     * The value of @p key in an XML Info.plist, where keys and values are sibling elements
+     * (<key>NAME</key><string>VALUE</string>).
+     *
+     * "Read the file but found no such key" and "could not read the file at all" must not look
+     * alike: the first is an answer (the reader's own default applies), the second is not, and a
+     * caller that conflates them acts on a default it never actually read. So an unreadable file,
+     * malformed XML, or a *binary* plist - which Xcode emits routinely and this parser cannot read
+     * - gives nullopt, while a parsed file missing the key gives an empty string.
+     */
+    std::optional<std::string> plistStringValue(const std::filesystem::path& plistPath, QLatin1StringView key) {
+        QFile file(QString::fromStdString(plistPath.string()));
+        if (!file.open(QIODevice::ReadOnly)) {
+            return std::nullopt;
+        }
+
+        QXmlStreamReader xml(&file);
+        bool atValue = false;
+        while (!xml.atEnd()) {
+            if (xml.readNext() != QXmlStreamReader::StartElement) {
+                continue;
+            }
+            if (xml.name() == QLatin1StringView("key")) {
+                atValue = xml.readElementText() == key;
+            } else if (atValue && xml.name() == QLatin1StringView("string")) {
+                return xml.readElementText().trimmed().toStdString();
+            }
+        }
+
+        if (xml.hasError()) {
+            return std::nullopt;
+        }
+        return std::string{}; // parsed, no such key
+    }
+
     /** Whether @p name is one of the patchXXX.dat archives the engine walks until the first gap. */
     bool isPatchArchiveName(std::string_view name) {
         constexpr std::string_view prefix = "patch";
@@ -363,6 +400,18 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
         return;
     }
 
+    // A bundled macOS build chdir's to its own base path on startup, so the configured directory is
+    // not the one it reads: writing the map, the configs and the mods there would leave the game
+    // playing whatever it already had. Follow the bundle instead - it is not a preference.
+    bool rootFixedByBundle = false;
+    if (const auto bundleRoot = macOsBundleDataRoot(executableLocation);
+        bundleRoot.has_value() && normalizedForCompare(*bundleRoot) != normalizedForCompare(gameDataDir)) {
+        spdlog::info("Using {} as the game root: {} fixes it via SDL_FILESYSTEM_BASE_DIR_TYPE, overriding the configured {}",
+            bundleRoot->string(), executableLocation.filename().string(), gameDataDir.string());
+        gameDataDir = *bundleRoot;
+        rootFixedByBundle = true;
+    }
+
     const EditorDataMountPlan mountPlan
         = planEditorDataMounts(gameDataDir, settings.getDataPaths(), engineArchivesInGameFolder(gameDataDir));
     for (const std::filesystem::path& archive : mountPlan.alreadyLoadedByGame) {
@@ -375,7 +424,12 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
     std::filesystem::path mapsDir = gameDataDir / "data" / "maps";
     std::filesystem::path mapDestination = mapsDir / mapFilename;
 
-    _showStatus(QString("Playing map: %1").arg(QString::fromStdString(mapFilename)));
+    // Name the directory when it is not the configured one, so a map that appears not to reach the
+    // game can be traced without having to know what the bundle does to the working directory.
+    _showStatus(rootFixedByBundle
+            ? QString("Playing map: %1 (in %2, the root the app bundle uses)")
+                  .arg(QString::fromStdString(mapFilename), QString::fromStdString(gameDataDir.string()))
+            : QString("Playing map: %1").arg(QString::fromStdString(mapFilename)));
 
     try {
         // 1. Save the current map to the game directory
@@ -528,6 +582,34 @@ std::string applyManagedModsOrderBlock(const std::string& existingContent, const
     }
     content += std::string(kManagedBlockEnd) + lineEnding;
     return content;
+}
+
+std::optional<std::filesystem::path> macOsBundleDataRoot(const std::filesystem::path& executablePath) {
+    if (executablePath.extension() != ".app") {
+        return std::nullopt;
+    }
+
+    const std::filesystem::path plist = executablePath / "Contents" / "Info.plist";
+    std::error_code ec;
+    if (!std::filesystem::exists(plist, ec)) {
+        return std::nullopt;
+    }
+
+    const std::optional<std::string> baseDirType
+        = plistStringValue(plist, QLatin1StringView("SDL_FILESYSTEM_BASE_DIR_TYPE"));
+    if (!baseDirType.has_value()) {
+        spdlog::warn("Could not read {}: leaving the configured game directory in place", plist.string());
+        return std::nullopt;
+    }
+
+    if (*baseDirType == "parent") {
+        return executablePath.parent_path();
+    }
+    if (*baseDirType == "bundle") {
+        return executablePath;
+    }
+    // Absent, or a value SDL does not recognise, both mean its default: the Resources directory.
+    return executablePath / "Contents" / "Resources";
 }
 
 std::vector<std::string> collectLaunchConfigurationWarnings(
