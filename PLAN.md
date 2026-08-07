@@ -140,7 +140,11 @@ terrain-derived locations:
     `Backspace` deletes), and a few ad-hoc ones (F11 spatial-script, F16). There is no central
     registry or any UI to view or change them. **Add configurable keybindings:** a single
     command/action table (stable action id → default `QKeySequence` + human label/category), a
-    Preferences page to rebind with live conflict detection, and persistence via `Settings`. Drive
+    Preferences page to rebind with live conflict detection, and persistence via `Settings`.
+    Build it from the stock pieces rather than inventing them: `QAction` *is* the command table
+    (it already carries the shortcut, icon, text and enabled state the menu/toolbar need), and
+    `QKeySequenceEdit` is the capture widget for the rebinding page — neither is used anywhere
+    in the codebase today. Drive
     the menu/toolbar `QAction`s *and* the `InputHandler` dispatch from that table instead of
     literals, so a rebind takes effect everywhere and the bindings stay discoverable. Engine-fidelity
     note: this is editor UX only — it changes no map/format data.
@@ -152,6 +156,26 @@ terrain-derived locations:
     Editor UX only; no map/format change.
 9. **Log panel follow-ups.** Add jump-to-source where a record carries a hex/object (needs
    structured records, not text). Editor UX only; changes no map/format data.
+10. **Move the item views onto Qt's model/view where the convenience widgets are fighting us.**
+    30 files use `QTableWidget`/`QListWidget`/`QTreeWidget`, 4 use a model. Three places where
+    that costs something concrete — each its own change, in rising order of size:
+    - **`DataPathsWidget`** — a `QAbstractTableModel` + `QTableView` would bring drag-to-reorder
+      (`moveRows` + `InternalMove`) alongside the Move Up/Down buttons, and drop the manual
+      renumbering pass. Note `QTableWidget` + `InternalMove` is *not* a shortcut: it moves cells
+      and duplicates rows, so the model is the prerequisite.
+    - **`FileBrowserPanel`** (1333 lines) — populates a `QTreeWidget` in chunks off a `QTimer`,
+      which is what `canFetchMore()`/`fetchMore()` exists for. A lazy model would also stop the
+      per-row `DataFileSystem` calls that contend with the loader thread.
+    - **The palettes** — `GridPalettePanel` builds one widget per item in a `QGridLayout`, which
+      is the only reason `PaginationWidget` exists. A `QListView` in `IconMode` with a
+      `QStyledItemDelegate` recycles item views and scrolls thousands of entries, so pagination
+      stops being a concept the palettes need at all.
+11. **Background work uses `std::thread`/`QThread` directly; `QtConcurrent` is unused.** The
+    loaders (`Loader.h`, `DataPathLoader`, `MapLoader`) each own a raw `std::thread`;
+    `QtConcurrent::run` + `QFutureWatcher` would deliver completion on the GUI thread without the
+    hand-rolled marshalling. **Weigh before doing:** this is the code the loading-dialog
+    starvation fixes landed in, so the risk is real and the benefit is idiom rather than
+    behaviour. Worth it only alongside a change that already touches the loaders.
 ---
 
 # SSL script editing
