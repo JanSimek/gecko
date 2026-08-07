@@ -32,6 +32,9 @@ public:
     std::filesystem::path getDataDirectory() const;
     void setDataDirectory(const std::filesystem::path& location);
 
+    /// Re-runs validation on the current executable selection and updates the status line.
+    void validateSelection();
+
     // Status updates
     void setStatusMessage(const QString& message, const QString& styleClass = "normal");
 

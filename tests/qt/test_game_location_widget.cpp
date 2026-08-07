@@ -23,7 +23,8 @@ QLineEdit* dataDirectoryEdit(GameLocationWidget& widget) {
 
 std::filesystem::path makeBundle(const std::filesystem::path& root, const std::string& baseDirType) {
     const std::filesystem::path bundle = root / "Fallout II Community Edition.app";
-    std::filesystem::create_directories(bundle / "Contents");
+    std::filesystem::create_directories(bundle / "Contents" / "MacOS");
+    std::ofstream(bundle / "Contents" / "MacOS" / "fallout2-ce") << "binary";
     std::ofstream(bundle / "Contents" / "Info.plist")
         << R"(<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
@@ -92,5 +93,53 @@ TEST_CASE("Choosing an .app fills the data directory from it and locks the field
         CHECK_FALSE(dataDir->isReadOnly());
         widget.setDataDirectory("/games/fallout2");
         CHECK(widget.getDataDirectory() == std::filesystem::path("/games/fallout2"));
+    }
+}
+
+TEST_CASE("An .app is validated as an executable, not as an installation folder", "[qt][settings]") {
+    // A bundle is a directory, so it used to fall to the installation check, which looks for a
+    // binary sitting directly in the folder - a bundle keeps its own in Contents/MacOS, so every
+    // one of them was reported as "may not be a valid Fallout 2 installation".
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const std::filesystem::path root = tempDir.path().toStdString();
+
+    GameLocationWidget widget;
+    QString lastStatus;
+    QString lastStyle;
+    QObject::connect(&widget, &GameLocationWidget::statusChanged,
+        [&lastStatus, &lastStyle](const QString& message, const QString& styleClass) {
+            lastStatus = message;
+            lastStyle = styleClass;
+        });
+
+    SECTION("A real bundle validates as an executable") {
+        const auto bundle = makeBundle(root, "parent");
+        std::filesystem::create_directories(root / "data"); // "parent" root, as a real install has
+
+        widget.setExecutableLocation(bundle);
+        widget.validateSelection();
+
+        CHECK(lastStyle.toStdString() == "success");
+        CHECK_FALSE(lastStatus.contains("may not be a valid Fallout 2 installation"));
+    }
+
+    SECTION("A bundle with no binary is called out as such") {
+        const std::filesystem::path empty = root / "Empty.app";
+        std::filesystem::create_directories(empty / "Contents");
+
+        widget.setExecutableLocation(empty);
+        widget.validateSelection();
+
+        CHECK(lastStyle.toStdString() == "warning");
+        CHECK(lastStatus.contains("no executable"));
+    }
+
+    SECTION("A plain directory is still checked as an installation") {
+        widget.setExecutableLocation(root);
+        widget.validateSelection();
+
+        CHECK(lastStyle.toStdString() == "warning");
+        CHECK(lastStatus.contains("installation"));
     }
 }
