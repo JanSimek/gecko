@@ -62,19 +62,14 @@ public:
     // Check if selected objects contain exit grids and edit them
     bool editSelectedExitGrids();
 
-    // "Draw edge" finalize: place the FROZEN committed segments (each captured at its closing click, so
-    // the placed edge is pixel-identical to the last preview). If exit grids already sit on every hex,
-    // bulk-edit their destination instead. The caller resets the segments (onMarkExitsLineReset) after.
+    // Finalize: place the FROZEN committed segments, so the placed edge matches the last preview. If
+    // exit grids already cover every hex, bulk-edit their destination instead.
     void selectExitGridsAlongLine();
 
-    // --- "Draw edge" TRUE-FREEZE state machine -----------------------------------------------------
-    //
-    // A committed segment is captured IMMUTABLY at the click that closes it (hexes + art at the flip
-    // then in effect) and never recomputes, so Space or a cursor move touches only the ONE live segment.
-    // The segments live HERE (the manager owns the per-segment art); the InputHandler drives
-    // capture/reset since only it knows when a vertex is committed and when the line resets.
-    //
-    // beginLine: start a fresh edge with no committed segments (the first vertex).
+    // --- "Draw edge" true-freeze state machine ---
+    // A committed segment is captured immutably at the click that closes it and never recomputes, so
+    // Space or a cursor move touches only the one live segment. The manager owns the per-segment art;
+    // the InputHandler drives capture and reset, since only it knows when a vertex commits.
     void beginLine();
     // commitSegment: freeze `from -> to` (hexes + art at the current flip), on every click that closes a
     // segment (2nd vertex on). A degenerate/off-grid segment captures nothing.
@@ -92,10 +87,8 @@ public:
     };
     DestinationKind currentDestinationKind() const { return _currentDestinationKind; }
 
-    // The live "Draw edge" preview: the FROZEN committed segments plus the ONE live segment (`liveFrom`
-    // -> `liveTo`), deduped first-seen, with each hex's directional marker FRM. Only the live segment is
-    // (re)classified, so `flipSide` affects ONLY it. `hasLive` is false before the first vertex commits.
-    // The returned vectors are parallel (hex i has frm i).
+    // The live preview: the frozen segments plus the one live segment, deduped first-seen, with each
+    // hex's directional FRM. Only the live segment is reclassified, so `flipSide` affects only it.
     struct LinePreview {
         std::vector<int> hexes;
         std::vector<uint32_t> frmPids;
@@ -132,9 +125,8 @@ private:
         std::vector<ExitGridArt> art;
     };
 
-    // Capture (classify) ONE world-space segment `from -> to` at `flipSide`: its hex-line walk and the
-    // parallel per-hex art. Returns an empty segment for a degenerate/off-grid pair. Used both to FREEZE
-    // a committed segment and to (re)compute the live segment.
+    // Capture one world-space segment at `flipSide`: its hex-line walk and the parallel per-hex art.
+    // Empty for a degenerate or off-grid pair.
     CommittedSegment classifySegment(sf::Vector2f from, sf::Vector2f to, bool flipSide) const;
     // The geometry (hexes + screen axis + outward facing) of one segment, or nullopt for degenerate/
     // off-grid. The per-segment classification input.
@@ -142,16 +134,14 @@ private:
     // The art for one classified segment run: Auto -> its own screen axis + side (optionally flipped),
     // or the marker-direction override. Shared by freeze and live recompute so they agree hex-for-hex.
     ExitGridArt segmentArt(const ExitGridSegmentRun& run, bool flipSide) const;
-    // Flatten the FROZEN committed segments then the live one into deduped parallel (hexes, art) vectors:
-    // first-seen wins, so committed hexes/art stay pixel-stable as the live segment moves. `live` may be
-    // empty. Pure + static for unit testing.
+    // Flatten the frozen segments then the live one into deduped parallel vectors, first-seen winning,
+    // so committed art stays pixel-stable as the live segment moves. Pure and static for testing.
     static void flattenSegments(const std::vector<CommittedSegment>& committed,
         const CommittedSegment& live, std::vector<int>& outHexes, std::vector<ExitGridArt>& outArt);
     // The existing exit-grid objects sitting on any of `hexPositions`.
     std::vector<std::shared_ptr<Object>> collectExitGridsOnHexes(const std::vector<int>& hexPositions) const;
-    // The SINGLE auto (non-override) art for a whole stroke: axis from first->last hex, side once from
-    // the midpoint's outward facing, so every hex shares one side. `flipSide` inverts it; a lone hex (or
-    // no grid) falls back to the center-facing classifier. Family from the destination kind.
+    // One auto art for a whole stroke: axis from first to last hex, side once from the midpoint's
+    // outward facing. `flipSide` inverts it; a lone hex falls back to the centre-facing classifier.
     ExitGridArt autoArtForLine(const std::vector<int>& orderedHexes, bool flipSide) const;
     // The art for a whole stroke honouring the override: Auto -> autoArtForLine (optionally flipped),
     // explicit -> that direction. Family from the destination kind. Shared by commit and preview.

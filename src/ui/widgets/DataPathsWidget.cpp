@@ -70,9 +70,8 @@ void DataPathsWidget::setupUI() {
     _pathsTable->setMinimumHeight(LIST_MIN_HEIGHT);
     _pathsTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    // The list with its actions in a column beside it, the way Qt's own list editors are built. A
-    // column cannot wrap, so it needs no width to reserve and no height to negotiate: the buttons
-    // stay beside what they act on however narrow the dialog gets.
+    // The list with its actions in a column beside it, as Qt's own list editors are built: a column
+    // cannot wrap, so it needs no width reserved and no height negotiated.
     auto* listRow = new QHBoxLayout();
     listRow->setContentsMargins(0, 0, 0, 0);
     listRow->setSpacing(SPACING_NORMAL);
@@ -109,9 +108,8 @@ void DataPathsWidget::setupUI() {
     _moveDownButton->setEnabled(false);
     _controlLayout->addWidget(_moveDownButton);
 
-    // Checkable so the short label stays constant while the check state shows whether the selected
-    // folder is marked (the label used to grow to "Clear …", clipping in the button row).
-    // Below this: what a path *is*, not what to do with it. A rule here reads as a disabled control.
+    // Checkable so the label stays constant while the check state shows the marker (it used to grow to
+    // "Clear ..." and clip). Below this: what a path *is*, not what to do with it.
     buttonColumn->addSpacing(SPACING_LOOSE);
 
     _saveLocationButton = new QPushButton("Save Location");
@@ -176,9 +174,8 @@ void DataPathsWidget::setupConnections() {
 }
 
 std::vector<std::filesystem::path> DataPathsWidget::getDataPaths() const {
-    // The table shows the highest priority at the top, but the stored order is lowest-priority-first
-    // (that is the order the loader mounts, where the last-mounted source wins). So read the rows
-    // top-to-bottom and reverse them to recover the stored order.
+    // The table shows highest priority first, but the stored order is lowest-first - the order the
+    // loader mounts, where the last-mounted source wins. So reverse the rows to recover it.
     std::vector<std::filesystem::path> paths;
 
     for (int row = _pathsTable->rowCount() - 1; row >= 0; --row) {
@@ -261,9 +258,8 @@ bool DataPathsWidget::addPathRow(const std::filesystem::path& path, bool atTop) 
 
     auto* pathItem = new QTableWidgetItem(pathStr);
 
-    // Tooltip and colour reflect the path type and validity; the icon is derived by iconForRow (and
-    // refreshed when the script-source marker changes). The script-source state isn't known yet here
-    // (setScriptSourcePaths runs after the rows are built), so pass false — the refresh corrects it.
+    // The script-source state isn't known yet (setScriptSourcePaths runs after the rows are built), so
+    // pass false here; the later refresh corrects the icon.
     auto& settings = *_settings;
     if (settings.validateDataPath(normalizedPath)) {
         if (isDefaultPath) {
@@ -377,8 +373,7 @@ void DataPathsWidget::updateButtonStates() {
     }
 
     // Both markers are checkable toggles: enabled for a real folder, checked when the selected row
-    // already carries that marker (clicking clears it). The constant short label keeps the button
-    // row uniform; the check state and the row badge show whether it is set.
+    // already carries the marker, so clicking clears it.
     const bool markable = isMarkableRow(row);
     _saveLocationButton->setEnabled(markable);
     _saveLocationButton->setChecked(markable && !_writableDataPath.empty() && pathAtRow(row) == _writableDataPath);
@@ -474,9 +469,8 @@ void DataPathsWidget::onToggleScriptSource() {
 void DataPathsWidget::refreshSaveLocationMarkers() {
     const auto paths = getDataPaths();
 
-    // Where saves would land right now. Mirrors resource::findWritableDataPath(paths, marker) but
-    // resolves the fallback locally so a stale marker doesn't warn-log on every table repaint —
-    // the warning belongs to actual save operations.
+    // Where saves would land right now. Mirrors resource::findWritableDataPath but resolves the
+    // fallback locally, so a stale marker does not warn-log on every repaint.
     std::optional<std::filesystem::path> effective;
     if (std::error_code ec; !_writableDataPath.empty()
         && std::find(paths.begin(), paths.end(), _writableDataPath) != paths.end()
@@ -520,9 +514,8 @@ void DataPathsWidget::refreshSaveLocationMarkers() {
         }
         item->setToolTip(tooltip);
 
-        // The icon carries the entry TYPE (folder / .dat / script-source folder / invalid). The
-        // save-location role is shown by the font weight above, not the icon, so a folder that is
-        // both a script source and the save location keeps its script icon and shows both in bold.
+        // The icon carries the entry TYPE; the save-location role is shown by font weight, so a folder that
+        // is both keeps its script icon.
         item->setIcon(iconForRow(rowPath, isSource));
     }
 }
@@ -559,9 +552,8 @@ void DataPathsWidget::removeSelectedPath() {
 }
 
 int DataPathsWidget::addFolderExpanded(const std::filesystem::path& folder, bool atTop) {
-    // expandDataPaths returns the folder before its DATs (legacy mount order). Inserting each atTop
-    // reverses that into the table (DATs above the folder); to get the same table layout when appending
-    // at the bottom, append in reverse. Either way the DATs keep their legacy priority over the folder.
+    // expandDataPaths returns the folder before its DATs, and inserting each atTop reverses that. To
+    // get the same layout when appending, append in reverse; the DATs keep priority over the folder.
     auto expanded = util::expandDataPaths({ folder });
     if (!atTop) {
         std::reverse(expanded.begin(), expanded.end());
