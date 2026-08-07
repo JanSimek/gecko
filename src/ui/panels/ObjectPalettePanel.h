@@ -114,6 +114,8 @@ private:
     void setupSearchControls();
     void setupObjectView();
 
+    /// The engine's own name for a proto, or the .pro file name when it has none.
+    [[nodiscard]] QString protoDisplayName(const Pro& pro, const QString& proFileName) const;
     /// Feed the model the current category's objects.
     void rebuildItems();
     void updateStatusLabel();

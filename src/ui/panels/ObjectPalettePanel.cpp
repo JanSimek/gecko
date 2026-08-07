@@ -1,4 +1,5 @@
 #include "ObjectPalettePanel.h"
+#include "format/msg/Msg.h"
 #include "format/map/Map.h"
 #include "format/lst/Lst.h"
 #include "format/pro/Pro.h"
@@ -176,9 +177,7 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
                 objectInfo->pro = _resources.repository().load<Pro>(proFilePath);
 
                 if (objectInfo->pro) {
-                    objectInfo->displayName = QString("%1 (%2)")
-                                                  .arg(QString::fromStdString(objectInfo->pro->typeToString()))
-                                                  .arg(qProFileName);
+                    objectInfo->displayName = protoDisplayName(*objectInfo->pro, qProFileName);
 
                     // Resolve the FRM path from the PRO's FID.
                     try {
@@ -212,6 +211,23 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
     }
 }
 
+QString ObjectPalettePanel::protoDisplayName(const Pro& pro, const QString& proFileName) const {
+    // getMessages().find(), not Msg::message(): that one is a map operator[] and inserts a blank
+    // entry for a missing id, mutating the shared cached Msg.
+    try {
+        if (const Msg* msg = ProHelper::msgFile(_resources, pro.type()); msg != nullptr) {
+            const auto& messages = msg->getMessages();
+            const auto found = messages.find(static_cast<int>(pro.header.message_id));
+            if (found != messages.end() && !found->second.text.empty()) {
+                return QString::fromStdString(found->second.text);
+            }
+        }
+    } catch (const std::exception& e) {
+        spdlog::debug("ObjectPalettePanel: no engine name for {}: {}", proFileName.toStdString(), e.what());
+    }
+    return proFileName;
+}
+
 void ObjectPalettePanel::rebuildItems() {
     if (_model == nullptr) {
         return;
@@ -225,7 +241,8 @@ void ObjectPalettePanel::rebuildItems() {
             continue;
         }
         const QString label = info->displayName.isEmpty() ? info->proFileName : info->displayName;
-        items.push_back({ info->listIndex, label, QString("%1\n%2").arg(label, info->proFileName) });
+        const QString tooltip = label == info->proFileName ? label : label + "\n" + info->proFileName;
+        items.push_back({ info->listIndex, label, tooltip });
     }
 
     _model->setItems(std::move(items));

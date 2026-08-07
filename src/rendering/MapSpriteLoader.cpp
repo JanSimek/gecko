@@ -101,8 +101,6 @@ void MapSpriteLoader::loadObjectSprites(
             continue;
         }
 
-        spdlog::debug("Loading object sprite: FRM='{}', position={}, direction={}, frm_pid=0x{:08X}, pro_pid=0x{:08X}",
-            frmName, object->position, object->direction, object->frm_pid, object->pro_pid);
         const Frm* frm = _resources.repository().find<Frm>(frmName);
 
         if (!frm) {
@@ -126,9 +124,6 @@ void MapSpriteLoader::loadObjectSprites(
             }
         }
 
-        spdlog::debug("FRM '{}' available: {} directions, filename='{}'",
-            frmName, frm->directions().size(), frm->filename());
-
         try {
             auto sceneObject = std::make_shared<Object>(frm);
             sf::Sprite objectSprite{ _resources.textures().get(frmName) };
@@ -144,7 +139,6 @@ void MapSpriteLoader::loadObjectSprites(
             }
 
             objects.emplace_back(std::move(sceneObject));
-            spdlog::debug("Successfully created object for FRM '{}' at position {}", frmName, object->position);
             objectsLoaded++;
         } catch (const std::exception& e) {
             spdlog::error("Failed to create object for FRM '{}' at position {}: {}",
