@@ -181,9 +181,14 @@ void SettingsDialog::setupGeneralTab() {
     _generalTabLayout->setSpacing(SPACING_LOOSE);
 
     _dataPathsWidget = new DataPathsWidget(_settings);
+    // Flat: the tab already paints a page and the scroll area another, so a filled, bordered box
+    // on top made every section look like a panel inside a panel. Flat is Qt's section style -
+    // title plus a rule.
+    _dataPathsWidget->setFlat(true);
     _generalTabLayout->addWidget(_dataPathsWidget, /*stretch=*/1); // grows with the dialog (the data-paths list)
 
     _gameLocationWidget = new GameLocationWidget();
+    _gameLocationWidget->setFlat(true);
     _generalTabLayout->addWidget(_gameLocationWidget); // hugs its content; no excess vertical space
 
     // No trailing addStretch(): the data-paths list (stretch 1) absorbs the extra height instead of an

@@ -68,7 +68,12 @@ void GameLocationWidget::setupUI() {
     // A form puts each label beside its field instead of on a line of its own, which halves the
     // rows this panel needs and lines the two paths up with each other.
     auto* pathForm = new QFormLayout();
-    pathForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    // Left-aligned: right alignment gives labels of different lengths ragged left edges. VCenter
+    // keeps the text on the centre line of a row whose height comes from the field beside it.
+    pathForm->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    pathForm->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+    pathForm->setHorizontalSpacing(ui::theme::spacing::NORMAL);
+    pathForm->setVerticalSpacing(ui::theme::spacing::NORMAL);
     pathForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     // Long labels drop above their field rather than squeezing it when the dialog is narrow.
     pathForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
@@ -76,6 +81,7 @@ void GameLocationWidget::setupUI() {
     _executableLabel = new QLabel("Executable:");
 
     _executableLayout = new QHBoxLayout();
+    _executableLayout->setSpacing(ui::theme::spacing::NORMAL);
     _executableLocationEdit = new QLineEdit();
     _executableLocationEdit->setPlaceholderText("Path to the Fallout 2 executable (e.g. fallout2.exe)...");
     _executableLayout->addWidget(_executableLocationEdit);
@@ -91,6 +97,7 @@ void GameLocationWidget::setupUI() {
     _dataDirectoryLabel = new QLabel("Game folder:");
 
     _dataDirectoryLayout = new QHBoxLayout();
+    _dataDirectoryLayout->setSpacing(ui::theme::spacing::NORMAL);
     _dataDirectoryEdit = new QLineEdit();
     _dataDirectoryEdit->setPlaceholderText("Folder containing data/ (e.g. .../GOG.com/Fallout 2)...");
     _dataDirectoryEdit->setToolTip(
@@ -107,6 +114,7 @@ void GameLocationWidget::setupUI() {
     _layout->addLayout(pathForm);
 
     _controlLayout = new QHBoxLayout();
+    _controlLayout->setContentsMargins(0, 0, 0, 0);
     _controlLayout->addStretch();
 
     _autoDetectButton = new QPushButton("Auto-Detect");

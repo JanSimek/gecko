@@ -152,20 +152,6 @@ terrain-derived locations:
     Editor UX only; no map/format change.
 9. **Log panel follow-ups.** Add jump-to-source where a record carries a hex/object (needs
    structured records, not text). Editor UX only; changes no map/format data.
-10. **Preferences dialog alignment (low priority).** The General tab still reads as unaligned:
-    - **Labels, fields and buttons don't share a line.** In the Game Location form the labels are
-      right-aligned, so their left edges are ragged, and the label text sits a couple of pixels
-      high in a row whose height comes from the taller field/button beside it. Nothing lines up
-      vertically with the path list above it either.
-    - **The action column is cramped.** `DataPathsWidget` stacks its seven buttons with
-      `SPACING_TIGHT`; they need room to breathe, and the marker buttons want more separation
-      from the row actions than a single hairline.
-    - **The Priority column should be right-aligned** so the numbers form a vertical line instead
-      of centring individually.
-    Editor UX only; no map/format change. A wider clean-up would drop the nested panel
-    backgrounds too — the tab paints a page, each `QGroupBox` paints another (`setFlat(true)`
-    gives Qt's section look instead), and everything sits in a scroll area on top of that.
-
 ---
 
 # SSL script editing

@@ -12,7 +12,6 @@
 #include <QFileDialog>
 #include <QMenu>
 #include <QMessageBox>
-#include <QFrame>
 #include <QHeaderView>
 #include <QTableWidgetItem>
 #include <QAbstractItemView>
@@ -59,6 +58,7 @@ void DataPathsWidget::setupUI() {
     _pathsTable->setHorizontalHeaderLabels({ "Priority", "Path" });
     _pathsTable->horizontalHeaderItem(PriorityColumn)
         ->setToolTip("1 = highest priority (overrides the sources below it)");
+    _pathsTable->horizontalHeaderItem(PriorityColumn)->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     _pathsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     _pathsTable->setSelectionMode(QAbstractItemView::SingleSelection);
     _pathsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -79,7 +79,7 @@ void DataPathsWidget::setupUI() {
     listRow->addWidget(_pathsTable, /*stretch=*/1);
 
     auto* buttonColumn = new QVBoxLayout();
-    buttonColumn->setSpacing(SPACING_TIGHT);
+    buttonColumn->setSpacing(SPACING_NORMAL);
     _controlLayout = buttonColumn;
 
     _addButton = new QPushButton("Add Path...");
@@ -109,10 +109,9 @@ void DataPathsWidget::setupUI() {
 
     // Checkable so the short label stays constant while the check state shows whether the selected
     // folder is marked (the label used to grow to "Clear …", clipping in the button row).
-    auto* markerSeparator = new QFrame();
-    markerSeparator->setFrameShape(QFrame::HLine);
-    markerSeparator->setFrameShadow(QFrame::Sunken);
-    _controlLayout->addWidget(markerSeparator); // below: what a path *is*, not what to do with it
+    // Below this: what a path *is*, not what to do with it. The gap does the grouping - a rule
+    // between two buttons reads as a disabled control at this size.
+    buttonColumn->addSpacing(SPACING_LOOSE);
 
     _saveLocationButton = new QPushButton("Save Location");
     _saveLocationButton->setIcon(createIcon(":/icons/actions/save.svg"));
@@ -250,7 +249,9 @@ bool DataPathsWidget::addPathRow(const std::filesystem::path& path, bool atTop) 
     bool isDefaultPath = Application::isDefaultResourcesPath(normalizedPath);
 
     auto* priorityItem = new QTableWidgetItem();
-    priorityItem->setTextAlignment(Qt::AlignCenter);
+    // Right-aligned so the numbers stack in a column; centring makes 1 and 10 start at different
+    // x positions and the list reads as ragged.
+    priorityItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
     auto* pathItem = new QTableWidgetItem(pathStr);
 
@@ -295,7 +296,7 @@ void DataPathsWidget::renumberPriorities() {
         QTableWidgetItem* item = _pathsTable->item(row, PriorityColumn);
         if (!item) {
             item = new QTableWidgetItem();
-            item->setTextAlignment(Qt::AlignCenter);
+            item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
             _pathsTable->setItem(row, PriorityColumn, item);
         }
         QString text = QString::number(row + 1);
