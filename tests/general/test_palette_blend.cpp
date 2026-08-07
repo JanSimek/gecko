@@ -149,7 +149,7 @@ TEST_CASE("blendPixel reproduces the worldmap circle's translucent tint", "[pale
     // This is the whole of _dark_translucent_trans_buf_to_buf at intensity 0x10000: grey level picks
     // the row, the row blends against the destination, the intensity table passes it through.
     for (int src = 1; src < 256; ++src) {
-        const uint8_t source = static_cast<uint8_t>(src);
+        const auto source = static_cast<uint8_t>(src);
         const uint8_t expected = tables.intensity(green.lookup(tables.grayLevel(source), terrain), 128);
         CHECK(green.blendPixel(source, terrain) == expected);
     }
