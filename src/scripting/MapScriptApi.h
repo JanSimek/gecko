@@ -161,11 +161,10 @@ public:
     /// writing opaque hex. Raises on an unknown type or an out-of-range number.
     uint32_t proto(const std::string& typeName, int number) const;
 
-    // --- Coordinates -------------------------------------------------------------
-    // Two grids, both numbered row-major as `position = row * width + col` (the engine's storage
-    // layout): hexes are 200x200 (objects/placement), floor & roof tiles are 100x100. These
-    // convert (col, row) <-> the linear index the other calls take, so scripts read in 2D. An
-    // off-grid (col, row) yields -1 (and the *XY ops below then no-op), so bounds are easy to skip.
+    // --- Coordinates ---
+    // Two grids, both row-major (`position = row * width + col`, the engine's layout): hexes 200x200
+    // for objects/placement, floor and roof tiles 100x100. An off-grid (col, row) yields -1, and the
+    // *XY ops then no-op, so bounds are easy to skip.
     /// (col, row) -> hex position [0, 40000); -1 if off the 200x200 hex grid.
     int hexIndex(int col, int row) const;
     /// (col, row) -> tile index [0, 10000); -1 if off the 100x100 tile grid.
@@ -362,24 +361,20 @@ private:
         int elevation;
         int orientation;
     };
-    // Record a freshly-built `mapObject`: data-only when headless (registerObjectData), else build its
-    // sprite from `frmPid` and register the placement so it draws. Returns false when the GUI can't
-    // resolve the art; bumps the placed-objects count on success. Shared by placeObject/placeExitGrid.
+    // Record a freshly-built `mapObject`: data-only when headless, else build its sprite from `frmPid`
+    // and register the placement. False when the GUI cannot resolve the art.
     bool registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction);
     // Build + register one exit-grid MISC marker at `hex` with the given art and destination. Assumes
     // `hex` is on-grid (callers validate). Returns registerObject's result.
     bool placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid, const ExitDest& dest);
-    // The four hex-line edges (top, bottom, left, right) of a screen-space rectangle centred on
-    // `centerHex` — shared by placeExitGridRect (per-edge directional art) and hexesOnScreenRect
-    // (flat query). Callers validate the centre and extents.
+    // The four hex-line edges of a screen-space rectangle centred on `centerHex`, shared by
+    // placeExitGridRect and hexesOnScreenRect. Callers validate the centre and extents.
     std::array<std::vector<int>, 4> screenRectEdges(int centerHex, int screenHalfWidth, int screenHalfHeight) const;
     bool paintTile(int tileIndex, uint16_t tileId, bool isRoof);
     // Parse a reference map headlessly (GL-free) for the palette queries; raises if unreadable.
     std::unique_ptr<Map> loadReferenceMap(const std::string& mapPath) const;
-    // loadReferenceMap through a per-api cache keyed by the exact path string, so a run that
-    // learns from a reference more than once (palette + floor grid + quilt) parses it once.
-    // Cleared on retarget()/detach() so a resident host re-reads after a data remount. Const:
-    // references are read-only inputs; nothing may mutate a cached parse.
+    // loadReferenceMap through a per-api cache keyed by the path string, so a run that learns from a
+    // reference more than once parses it once. Cleared on retarget()/detach() after a data remount.
     const Map& referenceMap(const std::string& mapPath) const;
     // pid -> placement count for the scatter-eligible scenery in `map` (scenery type, non-flat).
     // Shared by mapScenery (keys) and mapSceneryHistogram (the counts).
@@ -387,10 +382,8 @@ private:
     // Whether a scenery proto belongs in a scatter palette (upright decoration, not a flat blocker).
     bool isScatterableScenery(uint32_t pid) const;
 
-    // Stored as pointers so a persistent (plugin) host can re-point one long-lived api at
-    // whatever map/editor is current — see retarget()/detach(). The value constructor takes
-    // references and can never produce nulls, so per-run callers (generation runtime,
-    // CLI/MCP, fills) are unaffected. Access goes through the *Ref() guards below.
+    // Pointers so a persistent host can re-point one long-lived api at the current map/editor (see
+    // retarget()/detach()). The value constructor takes references, so per-run callers see no nulls.
     resource::GameResources* _resources;
     const HexagonGrid* _hexgrid;
     ObjectCommandController* _controller;
@@ -428,9 +421,8 @@ private:
     const EditArea* _area = nullptr;
     // Deterministic stream for rng()/rngInt(); reseed per run via setSeed for reproducible scatter.
     std::mt19937 _rng; // NOSONAR: seeded for reproducible fills, not a security-sensitive use
-    // Parsed reference maps, keyed by the exact path string (see referenceMap()). An ordered map
-    // with a transparent comparator: the cache holds a handful of entries, and heterogeneous
-    // lookup beats hashing full path strings.
+    // Parsed reference maps keyed by path string. Ordered with a transparent comparator: a handful of
+    // entries, where heterogeneous lookup beats hashing full paths.
     mutable std::map<std::string, std::unique_ptr<Map>, std::less<>> _referenceCache;
     // The last quiltFloor* run's flattened fidelity stats (see quiltStats()).
     std::vector<int> _quiltStats = std::vector<int>(6, 0);

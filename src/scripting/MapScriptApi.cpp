@@ -191,9 +191,8 @@ std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) 
     if (!bytes) {
         throw ScriptError(std::format("could not read map '{}' — check the path and that Fallout 2 data is mounted", mapPath));
     }
-    // The reader needs each object's proto for subtype parsing; resolve them GL-free like the
-    // analyzer does. A proto that won't load yields nullptr and the reader skips its extra fields
-    // (best-effort per object — not a fatal error for the whole map).
+    // The reader needs each object's proto for subtype parsing; resolve GL-free like the analyzer.
+    // A proto that won't load yields nullptr and its extra fields are skipped, per object.
     const std::function<Pro*(uint32_t)> proLoad = [this](uint32_t pid) -> Pro* {
         try {
             return resourcesRef().loadPro(pid);
@@ -300,9 +299,8 @@ namespace {
         }
     }
 
-    // Resolve a readable type name against the engine's own type names (Pro::typeToString) rather
-    // than a second hardcoded table — singular ("scenery") or its plural ("walls"). Throws
-    // ScriptError on an unknown name. Shared by proto() and mapObjectsAt().
+    // Resolved against the engine's own type names (Pro::typeToString), singular or plural, rather
+    // than a second hardcoded table. Throws ScriptError on an unknown name.
     Pro::OBJECT_TYPE objectTypeFromName(const std::string& typeName) {
         const auto lower = [](std::string s) {
             std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -374,10 +372,8 @@ bool MapScriptApi::protoBlocks(int pid) const {
 }
 
 bool MapScriptApi::protoFlat(int pid) const {
-    // OBJECT_FLAT marks ground-hugging art (rubble/fill textures, floor markers) drawn below
-    // standing objects — as opposed to a wall FACE that stands up. Cave-wall protos come in both:
-    // a generator wants the faces to line a boundary and the flat fill only to carpet solid rock.
-    // Same hard-fail contract as protoBlocks: an unloadable proto is raised, never guessed.
+    // OBJECT_FLAT marks ground-hugging art drawn below standing objects, as opposed to a wall face -
+    // cave walls come in both. Hard-fail like protoBlocks: an unloadable proto is never guessed.
     const Pro* pro = nullptr;
     try {
         pro = resourcesRef().loadPro(static_cast<uint32_t>(pid));
@@ -491,9 +487,8 @@ std::string MapScriptApi::protoName(int pid) const {
 }
 
 int MapScriptApi::protoFid(int pid) const {
-    // The proto's art FID — what placeProto resolves and stores. Lets a generator identify a proto's
-    // art (resolve_fid / its sprite) rather than reason from the opaque proto number. Same hard-fail
-    // contract as protoName/protoBlocks: an unloadable proto is raised, never guessed.
+    // The proto's art FID, what placeProto resolves and stores, so a generator can identify art rather
+    // than reason from the proto number. Hard-fail: an unloadable proto is raised, never guessed.
     const Pro* pro = nullptr;
     try {
         pro = resourcesRef().loadPro(static_cast<uint32_t>(pid));
@@ -509,10 +504,8 @@ int MapScriptApi::protoFid(int pid) const {
 }
 
 std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
-    // Resolve the proto -> its art FID -> the FRM, the same path placeProto and the renderer take,
-    // and flatten every frame's geometry into (direction, frame, width, height, offsetX, offsetY)
-    // 6-tuples. Same hard-fail contract as protoFid: an unresolvable proto or FRM is raised, never
-    // guessed, because a caller measuring art footprints can't recover from a silent wrong answer.
+    // Proto -> art FID -> FRM, the path placeProto and the renderer take, flattened to per-frame
+    // geometry. Hard-fail: a caller measuring footprints cannot recover from a silent wrong answer.
     const int fid = protoFid(pid); // raises if the proto can't load
     const std::string artPath = resourcesRef().frmResolver().resolve(static_cast<uint32_t>(fid));
     if (artPath.empty()) {
@@ -564,16 +557,12 @@ std::size_t MapScriptApi::sinkCap() const {
 }
 
 bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction) {
-    // Placement is map state even though the write goes through the controller (which holds
-    // its own reference to the map): with no map open this must raise, not silently write
-    // into whatever the controller is still bound to. The (void) discards the [[nodiscard]]
-    // reference on purpose — only the guard's throw matters here (MSVC C4834 under /WX).
+    // Placement is map state: with no map open this must raise rather than write through the
+    // controller's own reference. The (void) discards a [[nodiscard]] (MSVC C4834 under /WX).
     (void)mapRef();
 
-    // Plan-sink active (preview / area fill): build the object exactly as the commit paths do
-    // (GUI needs a resolvable sprite — a fid that won't load is "not placed", same as below;
-    // headless records data with a null visual) but RECORD it into the plan instead of committing.
-    // PlacementBatch::replay applies the plan later, so the result matches a direct run.
+    // Plan sink active: build the object exactly as the commit paths do, then record it into the plan
+    // instead of committing. PlacementBatch::replay applies it later, matching a direct run.
     if (_planSink != nullptr) {
         // Refuse past the per-run cap (before any sprite is built): surplus counts as
         // dropped, and the script sees "not placed" — the same contract as off-grid.
@@ -594,9 +583,8 @@ bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, i
         return true;
     }
 
-    // Headless: record the MapObject as data only. The .map stores just these ids; the engine
-    // and editor resolve the art (frmPid) when the map is loaded, so no sprite or GL is needed
-    // and placement does not require the FRM to be present in the mounted data.
+    // Headless: record data only. The .map stores just these ids and the art resolves at load, so no
+    // sprite or GL is needed and the FRM need not be mounted.
     if (!_buildSprites) {
         if (controllerRef().registerObjectData(mapObject)) {
             ++_placedObjects;
@@ -741,9 +729,8 @@ std::vector<int> MapScriptApi::tilesInRect(int col0, int row0, int col1, int row
 }
 
 int MapScriptApi::hexTile(int hex) const {
-    // The exact visual bridge: project the hex's screen centre through the same inverse the
-    // eyedropper and tile painting use. The naive col/2 halving drifts up to a tile near block
-    // boundaries, which is enough to put a wall on the wrong side of a floor edge.
+    // Project the hex's screen centre through the same inverse the eyedropper and tile painting use:
+    // the naive col/2 halving drifts up to a tile near block boundaries.
     if (!isValidHex(hex)) {
         return -1;
     }
@@ -825,9 +812,8 @@ uint32_t MapScriptApi::objectAt(int hex) const {
 }
 
 double MapScriptApi::rng() {
-    // Top 24 bits of the mt19937 word mapped to [0,1). mt19937's sequence is standardised and the
-    // shift/divide are integer-exact, so the same seed gives the same draws on every platform —
-    // unlike std::uniform_real_distribution, whose output is implementation-defined.
+    // Top 24 bits of the mt19937 word mapped to [0,1): integer-exact and standardised, so a seed
+    // reproduces on every platform - unlike uniform_real_distribution, which is implementation-defined.
     return (static_cast<uint32_t>(_rng()) >> 8) * (1.0 / 16777216.0);
 }
 
@@ -949,9 +935,8 @@ int MapScriptApi::quiltObjects(const std::string& typeName, const std::vector<in
         if (found == byTile.end()) {
             continue;
         }
-        // Both grids are uniform lattices under one affine screen transform, so a tile
-        // translation of (dcol, drow) is exactly a hex translation of (2*dcol, 2*drow) — the
-        // transplanted object keeps its sub-tile position precisely.
+        // Both grids are uniform lattices under one affine transform, so a tile translation (dcol, drow)
+        // is exactly a hex translation (2*dcol, 2*drow); the sub-tile position is preserved.
         const int dcol = targetTile % HexagonGrid::TILE_GRID_WIDTH - sourceTile % HexagonGrid::TILE_GRID_WIDTH;
         const int drow = targetTile / HexagonGrid::TILE_GRID_WIDTH - sourceTile / HexagonGrid::TILE_GRID_WIDTH;
         for (const MapObject* source : found->second) {
@@ -1014,9 +999,8 @@ int MapScriptApi::quiltFloorTiles(const std::string& mapPath, int refElevation, 
         throw ScriptError(std::format("map '{}' elevation {} has an empty floor grid (after exclusions) — nothing to quilt from", mapPath, refElevation));
     }
 
-    // The bound map's current floor: pre-existing tiles around the region become the boundary
-    // constraints the synthesis blends into. With a plan sink installed this reads the COMMITTED
-    // map, like every query (see setPlanSink) — same-run uncommitted paints are not constraints.
+    // Pre-existing tiles around the region are the synthesis boundary constraints. With a plan sink
+    // this reads the COMMITTED map, like every query - same-run uncommitted paints do not count.
     floorsynth::Grid targetGrid;
     targetGrid.width = HexagonGrid::TILE_GRID_WIDTH;
     targetGrid.height = HexagonGrid::TILE_GRID_HEIGHT;
@@ -1047,9 +1031,8 @@ int MapScriptApi::quiltFloorTiles(const std::string& mapPath, int refElevation, 
         }
     }
 
-    // Degraded output must be visible, not silent: repairs are normal in small numbers, but
-    // unresolved seams mean the reference never showed a border the result now contains. The
-    // stats stay queryable (quiltStats) because the CLI runs with logging off.
+    // Degraded output must be visible: unresolved seams mean the reference never showed a border the
+    // result now contains. Stats stay queryable because the CLI runs with logging off.
     _quiltStats = { painted, result.stats.blocksPlaced, result.stats.perfectBlocks,
         result.stats.mismatchedCells, result.stats.repairedCells, result.stats.unresolvedSeams };
     if (result.stats.unresolvedSeams > 0 || result.stats.repairedCells > 0) {
@@ -1075,9 +1058,8 @@ int MapScriptApi::placeStamp(const std::string& name, int anchorHex, int variant
         throw ScriptError("placeStamp: variant " + std::to_string(variant) + " out of range for stamp '" + name + "'");
     }
     pattern::PatternStamper stamper(resourcesRef(), hexgridRef(), controllerRef(), mapRef(), _buildSprites);
-    // Plan-sink active: capture the stamp's built objects/tiles into the plan (committing nothing),
-    // so a stamp scattered by a fill is previewed and lands in the fill's single undo entry. Without
-    // this, placeStamp would open its own ScopedUndoBatch and mutate the live map during preview.
+    // Plan sink active: capture the stamp's objects/tiles into the plan, so it previews and lands in
+    // the fill's single undo entry instead of opening its own batch against the live map.
     if (_planSink != nullptr) {
         const std::size_t objBefore = _planSink->objects.size();
         const std::size_t tileBefore = _planSink->tiles.size();
@@ -1106,16 +1088,13 @@ int MapScriptApi::placeStamp(const std::string& name, int anchorHex, int variant
 }
 
 void MapScriptApi::newMap() {
-    // These whole-map/header mutators can't be expressed as a deferred FillPlan (replay only
-    // applies object/tile changes), so they must never run while a sink is recording a fill
-    // preview — doing so would mutate the live map directly and break preview==apply. Reject with
-    // a clear error instead; a fill script paints/scatters, it does not reset the map.
+    // Replay only applies object/tile changes, so these whole-map mutators cannot be deferred: one
+    // running while a sink records would mutate the live map and break preview == apply.
     if (_planSink != nullptr) {
         throw ScriptError("newMap() is not allowed in a fill — it would reset the live map");
     }
-    // Resetting is map state like placement: with the api's map null (resident session, no
-    // map open), the controller may still be bound to one — resetting it behind the host's
-    // back would desync the two. Map lifecycle belongs to the host there, so raise.
+    // Resetting is map state: with the api's map null the controller may still be bound to one, and
+    // resetting it behind the host's back would desync the two.
     (void)mapRef();
     controllerRef().newEmptyMap();
     _mutatedDirectly = true;
