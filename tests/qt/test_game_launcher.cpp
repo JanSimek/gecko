@@ -2,6 +2,8 @@
 
 #include "state/GameLauncher.h"
 
+#include <QTemporaryDir>
+
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -340,10 +342,11 @@ TEST_CASE("macOsBundleDataRoot follows the bundle's own SDL base-dir type", "[ga
     // ("data") against it, so a bundle decides the game root and the launcher's working directory
     // is discarded. Reading the key rather than assuming it keeps a differently packaged build
     // working; fallout2-ce itself ships "parent".
-    const std::filesystem::path root
-        = std::filesystem::temp_directory_path() / "geck_bundle_root_test";
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root);
+    // QTemporaryDir, not a fixed name under the shared temp directory: Catch2 re-enters the case
+    // once per SECTION, so each gets its own tree and cannot inherit the last one's bundle.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const std::filesystem::path root = tempDir.path().toStdString();
 
     SECTION("\"parent\" resolves to the folder holding the .app") {
         const auto bundle = makeBundle(root, plistWith("parent"));
@@ -403,6 +406,4 @@ TEST_CASE("macOsBundleDataRoot follows the bundle's own SDL base-dir type", "[ga
         REQUIRE(resolved.has_value());
         CHECK(*resolved == bundle); // "bundle", not the earlier "parent"
     }
-
-    std::filesystem::remove_all(root);
 }
