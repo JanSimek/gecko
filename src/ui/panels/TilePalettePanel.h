@@ -1,13 +1,15 @@
 #pragma once
 
-#include "ui/common/GridPalettePanel.h"
-#include "ui/common/BasePaletteWidget.h"
+#include "ui/common/BasePanel.h"
+#include "ui/palette/PaletteModel.h"
 #include "ui/theme/ThemeManager.h"
-#include <QSpinBox>
+
+#include "ui/palette/PaletteView.h"
+
 #include <QPushButton>
 #include <QRadioButton>
-#include <vector>
-#include <memory>
+#include <QSortFilterProxyModel>
+#include <QSpinBox>
 
 namespace geck {
 
@@ -21,33 +23,14 @@ namespace selection {
     class SelectionManager;
 }
 
-/// @brief Widget representing a single tile in the palette.
-class TileWidget : public BasePaletteWidget {
-    Q_OBJECT
-
-public:
-    explicit TileWidget(int tileIndex, const QPixmap& pixmap, QWidget* parent = nullptr);
-
-    int getTileIndex() const { return getIndex(); }
-
-signals:
-    void tileClicked(int tileIndex);
-
-public:
-    static constexpr int TILE_SIZE = 64; // Display size for tiles
-};
-
 /**
- * @brief Panel showing all available tiles in a grid layout
+ * @brief Panel showing every available tile, for selection and placement.
  *
- * Features:
- * - Grid display of all tiles with Qt pixmaps
- * - Tile selection for placement/replacement
- * - Single tile placement mode
- * - Area fill mode with selection box
- * - Replace selected tiles mode
+ * A QListView over a PaletteModel: the view builds an item only for the rows it paints, so the
+ * whole tile set is one scrollable list rather than pages, and a picked tile can always be
+ * highlighted and scrolled to.
  */
-class TilePalettePanel : public GridPalettePanel {
+class TilePalettePanel : public BasePanel {
     Q_OBJECT
 
 public:
@@ -95,26 +78,22 @@ private slots:
     void filterTiles();
     void onSearchTextChanged(const QString& text) override;
 
-protected:
-    void resizeEvent(QResizeEvent* event) override;
-
-    // GridPalettePanel overrides
-    int getDefaultColumnsPerRow() const override {
-        return ui::constants::palette::DEFAULT_TILES_PER_ROW;
-    }
-    void updateGrid() override { updateTileGrid(); }
+public:
+    static constexpr int TILE_SIZE = 64; // icon size in the list
 
 private:
     void setupUI() override;
     void setupModeControls();
-    void setupTileGrid();
+    void setupTileList();
     void setupFilterControls();
-    void setupPaginationControls();
 
-    void updateTileGrid();
+    /// Rebuild the model's items from the tile list and the numeric range filter.
+    void rebuildItems();
+    /// The tile's artwork, or a labelled placeholder when it will not load.
+    [[nodiscard]] QPixmap tilePixmap(int tileIndex, const std::string& tileName) const;
+    void updateStatusLabel();
+    void selectRowForTile(int tileId);
     void clearTileSelection();
-    void updateTileDisplay();
-    void calculatePagination();
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
@@ -131,8 +110,9 @@ private:
     QSpinBox* _endTileSpinBox = nullptr;
     QPushButton* _showAllButton = nullptr;
 
-    // Target controls removed - tiles are replaced based on what's actually selected
-    // Note: _scrollArea, _gridWidget, _gridLayout are inherited from GridPalettePanel
+    ui::PaletteView* _tileView = nullptr;
+    ui::PaletteModel* _model = nullptr;
+    QSortFilterProxyModel* _filter = nullptr;
 
     QLabel* _statusLabel = nullptr;
 
@@ -140,20 +120,14 @@ private:
     resource::GameResources& _resources;
     Map* _map = nullptr;
     const Lst* _tileList = nullptr;
-    std::vector<std::unique_ptr<TileWidget>> _tileWidgets;
     selection::SelectionManager* _selectionManager = nullptr;
 
     // State
     int _selectedTileIndex = -1;
     bool _isRoofMode = false; // Default to floor mode
     PlacementMode _placementMode = PlacementMode::UNIFIED_PLACEMENT;
-    int _tilesPerRow = 8;
     int _filterStart = 0;
-    int _filterEnd = -1;      // -1 means show all
-    QString _searchText = ""; // Current search filter text
-
-    // Note: _paginationGroup, _paginationWidget, _currentPage, _totalPages,
-    // _totalFilteredItems, _previousColumnsPerRow are inherited from GridPalettePanel
+    int _filterEnd = -1; // -1 means show all
 };
 
 } // namespace geck

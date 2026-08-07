@@ -1,0 +1,73 @@
+#pragma once
+
+#include <QAbstractListModel>
+#include <QMimeData>
+#include <QPixmap>
+#include <QStringList>
+#include <QString>
+
+#include <functional>
+#include <unordered_map>
+#include <vector>
+
+namespace geck::ui {
+
+/// One palette entry, as the engine identifies it plus what the view shows.
+struct PaletteItem {
+    int engineIndex = -1; ///< tiles.lst index, proto number, ... - what the panel emits on selection
+    QString label;        ///< shown under the icon
+    QString tooltip;
+};
+
+/**
+ * @brief The items of a palette, as a model a QListView can render.
+ *
+ * The icon for a row is produced on demand and cached: a view asks only for the rows it is about
+ * to paint, so a palette of several thousand entries costs the artwork of one screenful rather
+ * than of a page, and needs no pagination to stay responsive.
+ */
+class PaletteModel : public QAbstractListModel {
+    Q_OBJECT
+
+public:
+    /// Produces the icon for an item. Called once per item; the result is cached.
+    using IconProvider = std::function<QPixmap(const PaletteItem&)>;
+    /// Produces the drag payload for an item. Without one, rows are not draggable.
+    using MimeProvider = std::function<QMimeData*(const PaletteItem&)>;
+
+    /// The engine index of the item in a row, for callers holding a QModelIndex.
+    static constexpr int EngineIndexRole = Qt::UserRole + 1;
+    /// The item's name, whether or not it is shown as a caption. Filter on this, not DisplayRole.
+    static constexpr int LabelRole = Qt::UserRole + 2;
+
+    explicit PaletteModel(QObject* parent = nullptr);
+
+    void setItems(std::vector<PaletteItem> items);
+    void setIconProvider(IconProvider provider);
+    /// Hands dragging to the view: it starts the drag, the model supplies the payload.
+    void setMimeProvider(QString mimeType, MimeProvider provider);
+    /// Captions under the icons. Off by default: a palette shows artwork, and the name is in the
+    /// tooltip - several placeholder icons draw the name into the image themselves.
+    void setShowLabels(bool show);
+
+    [[nodiscard]] const PaletteItem* itemAt(int row) const;
+    /// The row showing @p engineIndex, or -1. Linear: palettes are built once and searched rarely.
+    [[nodiscard]] int rowForEngineIndex(int engineIndex) const;
+
+    [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override;
+    [[nodiscard]] QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+    [[nodiscard]] Qt::ItemFlags flags(const QModelIndex& index) const override;
+    [[nodiscard]] QStringList mimeTypes() const override;
+    [[nodiscard]] QMimeData* mimeData(const QModelIndexList& indexes) const override;
+    [[nodiscard]] Qt::DropActions supportedDragActions() const override;
+
+private:
+    std::vector<PaletteItem> _items;
+    IconProvider _iconProvider;
+    bool _showLabels = false;
+    QString _mimeType;
+    MimeProvider _mimeProvider;
+    mutable std::unordered_map<int, QPixmap> _iconCache; ///< keyed by row
+};
+
+} // namespace geck::ui

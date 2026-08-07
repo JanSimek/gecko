@@ -1,8 +1,10 @@
 #pragma once
 
-#include "ui/common/GridPalettePanel.h"
-#include "ui/common/BasePaletteWidget.h"
+#include "ui/common/BasePanel.h"
+#include "ui/palette/PaletteModel.h"
 #include "ui/theme/ThemeManager.h"
+#include "ui/palette/PaletteView.h"
+#include <QSortFilterProxyModel>
 #include <QTabWidget>
 #include <QDrag>
 #include <QMimeData>
@@ -60,31 +62,6 @@ struct ObjectInfo {
         , listIndex(index) { }
 };
 
-/// @brief Widget representing a single object in the palette.
-class ObjectWidget : public BasePaletteWidget {
-    Q_OBJECT
-
-public:
-    explicit ObjectWidget(int objectIndex, const ObjectInfo* objectInfo, const QPixmap& pixmap, ObjectCategory category, QWidget* parent = nullptr);
-
-    int getObjectIndex() const { return getIndex(); }
-    const ObjectInfo* getObjectInfo() const { return _objectInfo; }
-    ObjectCategory getCategory() const { return _category; }
-
-signals:
-    void objectClicked(int objectIndex);
-
-protected:
-    void mouseMoveEvent(QMouseEvent* event) override;
-
-public:
-    static constexpr int OBJECT_SIZE = 64; // Display size for objects
-
-private:
-    const ObjectInfo* _objectInfo;
-    ObjectCategory _category;
-};
-
 /**
  * @brief Panel showing all available objects organized by category
  *
@@ -95,7 +72,7 @@ private:
  * - Search functionality within categories
  * - Single object placement mode
  */
-class ObjectPalettePanel : public GridPalettePanel {
+class ObjectPalettePanel : public BasePanel {
     Q_OBJECT
 
 public:
@@ -128,25 +105,21 @@ public slots:
     void onCategoryChanged(int tabIndex);
     void onSearchTextChanged(const QString& text) override;
 
-private slots:
-    void updateObjectGrid();
-    void calculatePagination();
-
-protected:
-    void resizeEvent(QResizeEvent* event) override;
-
-    // GridPalettePanel overrides
-    int getDefaultColumnsPerRow() const override {
-        return ui::constants::palette::DEFAULT_OBJECTS_PER_ROW;
-    }
-    void updateGrid() override { updateObjectGrid(); }
+public:
+    static constexpr int OBJECT_SIZE = 64; // icon size in the grid
 
 private:
     void setupUI() override;
     void setupCategoryTabs();
     void setupSearchControls();
-    void setupObjectGrid();
-    void setupPaginationControls();
+    void setupObjectView();
+
+    /// The engine's own name for a proto, or the .pro file name when it has none.
+    [[nodiscard]] QString protoDisplayName(const Pro& pro, const QString& proFileName) const;
+    /// Feed the model the current category's objects.
+    void rebuildItems();
+    void updateStatusLabel();
+    void selectRowForObject(int objectIndex);
 
     void loadCategoryObjects(ObjectCategory category);
     QPixmap createObjectThumbnail(const ObjectInfo* objectInfo, ObjectCategory category);
@@ -167,22 +140,19 @@ private:
     // Search controls
     QGroupBox* _searchGroup = nullptr;
 
-    // Note: _scrollArea, _gridWidget, _gridLayout, _paginationGroup, _paginationWidget,
-    // _currentPage, _totalPages, _totalFilteredItems, _previousColumnsPerRow
-    // are inherited from GridPalettePanel
+    ui::PaletteView* _objectView = nullptr;
+    ui::PaletteModel* _model = nullptr;
+    QSortFilterProxyModel* _filter = nullptr;
 
     QLabel* _statusLabel = nullptr;
 
     // Data
     resource::GameResources& _resources;
     Map* _map = nullptr;
-    std::vector<std::unique_ptr<ObjectWidget>> _objectWidgets;
 
     // State
     int _selectedObjectIndex = -1;
     ObjectCategory _currentCategory = ObjectCategory::ITEMS;
-    QString _searchText = ""; // Current search filter text
-    int _objectsPerRow = 6;
 
     // Object lists by category
     std::unordered_map<ObjectCategory, std::vector<std::unique_ptr<ObjectInfo>>> _objectsByCategory;

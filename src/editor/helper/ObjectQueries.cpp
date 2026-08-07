@@ -32,9 +32,6 @@ bool blocksMovement(const MapObject& object, resource::GameResources& resources)
     // Objects WITHOUT the NoBlock flag block movement.
     bool hasNoBlockFlag = (pro->header.flags & static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK)) != 0;
 
-    spdlog::debug("Object PID {} has flags 0x{:08X}, NoBlock flag: {}, blocks movement: {}",
-        object.pro_pid, pro->header.flags, hasNoBlockFlag, !hasNoBlockFlag);
-
     return !hasNoBlockFlag;
 }
 

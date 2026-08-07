@@ -68,10 +68,9 @@ public:
                 ErrorMessages::invalidFileSize(filePath, pos.total, 24), filePath);
         }
 
-        int32_t pid = utils.readBE32Signed();
-
+        // A PRO header carries no magic or version to check, so the size test above is the whole
+        // validation. Rewound anyway, so the reader always starts from the top like the others.
         utils.setPosition(0);
-        spdlog::debug("PRO format validation passed: PID=0x{:08X}", pid);
     }
 
     static void validateFrmFile(BinaryUtils& utils, const std::filesystem::path& filePath) {

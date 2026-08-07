@@ -990,11 +990,12 @@ std::shared_ptr<MapObject> EditorWidget::createScrollBlockerObject(int hexPositi
     mapObject->direction = 0;
     mapObject->frame_number = 0;
 
-    // scrblk.frm: MISC type (0x05) with base ID 1
-    mapObject->frm_pid = 0x05000000 | WallBlockers::SCROLL_BLOCKER_BASE_ID;
+    mapObject->frm_pid = WallBlockers::SCROLL_BLOCKER_FRM_PID; // art/misc/scrblk.frm
 
-    // MISC type, generic small object proto
-    mapObject->pro_pid = 0x05000000 | WallBlockers::GENERIC_PROTO_ID;
+    // Must be the engine's scroll-blocker proto: _obj_scroll_blocking_at() matches this exact pid
+    // and nothing else, so blockers written with any other proto (this used to write 24, "Flare")
+    // are inert in game however they are drawn.
+    mapObject->pro_pid = WallBlockers::SCROLL_BLOCKER_PID;
 
     // Scroll blockers don't block movement, they are visual indicators only
     mapObject->flags = 0;
@@ -2675,11 +2676,11 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     mapObject->direction = placementDirection;
     mapObject->frame_number = 0;
 
-    auto hexCoords = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexPosition));
-    if (hexCoords) {
-        mapObject->x = static_cast<uint32_t>(hexCoords->get().x());
-        mapObject->y = static_cast<uint32_t>(hexCoords->get().y());
-    }
+    // x/y are a pixel offset FROM the hex's screen position, not a position: the engine renders at
+    // tileToScreenXY(tile) + art offset + (x, y). Storing the hex's own screen coordinates here
+    // pushes the object thousands of pixels off its hex, so it never appears in game.
+    mapObject->x = 0;
+    mapObject->y = 0;
 
     // Only use actual PIDs from ObjectInfo - fail rather than substitute placeholder PIDs
     if (!_previewObjectInfo || !_previewObjectInfo->pro) {

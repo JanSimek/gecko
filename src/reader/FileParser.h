@@ -33,7 +33,6 @@ public:
             this->_path = filename;
             _binaryUtils = std::make_unique<BinaryUtils>(_stream, _path);
 
-            spdlog::debug("Opening file from data: {}", filename.string());
             return read();
         } catch (const std::exception& e) {
             throw IOException("Failed to open file from data: " + std::string(e.what()), filename);

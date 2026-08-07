@@ -1,4 +1,5 @@
 #include "ObjectPalettePanel.h"
+#include "format/msg/Msg.h"
 #include "format/map/Map.h"
 #include "format/lst/Lst.h"
 #include "format/pro/Pro.h"
@@ -22,61 +23,8 @@
 
 namespace geck {
 
-ObjectWidget::ObjectWidget(int objectIndex, const ObjectInfo* objectInfo, const QPixmap& pixmap, ObjectCategory category, QWidget* parent)
-    : BasePaletteWidget(objectIndex, parent)
-    , _objectInfo(objectInfo)
-    , _category(category) {
-
-    QPixmap scaledPixmap = BaseWidget::scalePixmapToSize(pixmap, OBJECT_SIZE);
-    QPixmap centeredPixmap = BaseWidget::createCenteredPixmap(scaledPixmap, OBJECT_SIZE);
-    setPixmap(centeredPixmap);
-
-    setupCommonProperties(OBJECT_SIZE);
-    setStyleSheet(ui::theme::styles::normalWidget());
-
-    if (objectInfo) {
-        setToolTip(QString("Object %1: %2\nFile: %3")
-                .arg(objectIndex)
-                .arg(objectInfo->displayName)
-                .arg(objectInfo->proFileName));
-    } else {
-        setToolTip(QString("Object %1").arg(objectIndex));
-    }
-
-    connect(this, &BasePaletteWidget::clicked, this, [this](int index) {
-        Q_EMIT objectClicked(index);
-    });
-}
-
-void ObjectWidget::mouseMoveEvent(QMouseEvent* event) {
-    if (!(event->buttons() & Qt::LeftButton)) {
-        BasePaletteWidget::mouseMoveEvent(event);
-        return;
-    }
-
-    QPoint startPos = mapFromGlobal(QCursor::pos()) - event->pos();
-    if ((event->pos() + startPos).manhattanLength() < QApplication::startDragDistance()) {
-        BasePaletteWidget::mouseMoveEvent(event);
-        return;
-    }
-
-    QDrag* drag = new QDrag(this);
-    QMimeData* mimeData = new QMimeData;
-
-    // Payload: "<objectIndex>,<category>".
-    mimeData->setText(QString("geck/object"));
-    mimeData->setData(ui::mime::GECK_OBJECT,
-        QByteArray::number(getIndex()) + "," + QByteArray::number(static_cast<int>(_category)));
-
-    drag->setPixmap(pixmap().scaled(32, 32, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    drag->setMimeData(mimeData);
-
-    Qt::DropAction dropAction = drag->exec(Qt::CopyAction);
-    Q_UNUSED(dropAction);
-}
-
 ObjectPalettePanel::ObjectPalettePanel(resource::GameResources& resources, QWidget* parent)
-    : GridPalettePanel("Objects", parent)
+    : BasePanel("Objects", parent)
     , _resources(resources) {
     setupUI();
     spdlog::debug("ObjectPalettePanel: Created object palette panel");
@@ -87,7 +35,6 @@ ObjectPalettePanel::~ObjectPalettePanel() {
     spdlog::debug("ObjectPalettePanel: Clearing object lists before destruction");
 
     _objectsByCategory.clear();
-    _objectWidgets.clear();
 
     spdlog::debug("ObjectPalettePanel: Destructor completed");
 }
@@ -112,8 +59,7 @@ void ObjectPalettePanel::setupUI() {
 
     setupCategoryTabs();
     setupSearchControls();
-    setupPaginationControls();
-    setupObjectGrid();
+    setupObjectView();
 
     _statusLabel = new QLabel("No objects loaded", this);
     _statusLabel->setStyleSheet(ui::theme::styles::italicSecondaryText());
@@ -151,30 +97,52 @@ void ObjectPalettePanel::setupSearchControls() {
     _mainLayout->addWidget(_searchGroup);
 }
 
-void ObjectPalettePanel::setupObjectGrid() {
-    setupGridArea();
-    _mainLayout->addWidget(scrollArea(), 1);
-}
+void ObjectPalettePanel::setupObjectView() {
+    _model = new ui::PaletteModel(this);
+    _model->setIconProvider([this](const ui::PaletteItem& item) {
+        const ObjectInfo* info = getObjectInfo(item.engineIndex, _currentCategory);
+        return info ? createObjectThumbnail(info, _currentCategory) : QPixmap();
+    });
+    // The view starts the drag; the model only supplies the payload the map drop handler expects.
+    _model->setMimeProvider(ui::mime::GECK_OBJECT, [this](const ui::PaletteItem& item) {
+        // No setText(): with no drag pixmap the platform falls back to showing the plain text, which
+        // put "geck/object" next to the cursor. The custom type is what the map's drop handler reads.
+        auto* payload = new QMimeData; // not `data`: QWidget has a member of that name (MSVC C4458)
+        payload->setData(ui::mime::GECK_OBJECT,
+            QByteArray::number(item.engineIndex) + "," + QByteArray::number(static_cast<int>(_currentCategory)));
+        return payload;
+    });
 
-void ObjectPalettePanel::setupPaginationControls() {
-    _paginationGroup = new QGroupBox("Page Navigation", this);
-    auto* paginationLayout = new QHBoxLayout(_paginationGroup);
+    _filter = new QSortFilterProxyModel(this);
+    _filter->setSourceModel(_model);
+    _filter->setFilterCaseSensitivity(Qt::CaseInsensitive);
+    _filter->setFilterRole(ui::PaletteModel::LabelRole);
 
-    _paginationWidget = new PaginationWidget(this);
-    _paginationWidget->setShowFirstLastButtons(true);
-    connect(_paginationWidget, &PaginationWidget::pageChanged,
-        this, &ObjectPalettePanel::onGridPaginationPageChanged);
-    paginationLayout->addWidget(_paginationWidget);
+    // Caption each icon with the proto's engine name (protoDisplayName), falling back to its .pro
+    // filename. Both halves are needed: the model supplies the text, the view the room for it.
+    _model->setShowLabels(true);
 
-    _mainLayout->addWidget(_paginationGroup);
-    _paginationGroup->hide();
+    _objectView = new ui::PaletteView(OBJECT_SIZE, this);
+    _objectView->setShowLabels(true);
+    _objectView->setModel(_filter);
+    _objectView->setDragEnabled(true);
+    _objectView->setDragDropMode(QAbstractItemView::DragOnly);
+
+    connect(_objectView->selectionModel(), &QItemSelectionModel::currentChanged, this,
+        [this](const QModelIndex& current, const QModelIndex&) {
+            if (current.isValid()) {
+                onObjectClicked(current.data(ui::PaletteModel::EngineIndexRole).toInt());
+            }
+        });
+
+    _mainLayout->addWidget(_objectView, 1);
 }
 
 void ObjectPalettePanel::loadObjects() {
     spdlog::debug("ObjectPalettePanel: Loading objects from LST files");
 
     loadCategoryObjects(_currentCategory);
-    updateObjectGrid();
+    rebuildItems();
 }
 
 void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
@@ -215,9 +183,7 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
                 objectInfo->pro = _resources.repository().load<Pro>(proFilePath);
 
                 if (objectInfo->pro) {
-                    objectInfo->displayName = QString("%1 (%2)")
-                                                  .arg(QString::fromStdString(objectInfo->pro->typeToString()))
-                                                  .arg(qProFileName);
+                    objectInfo->displayName = protoDisplayName(*objectInfo->pro, qProFileName);
 
                     // Resolve the FRM path from the PRO's FID.
                     try {
@@ -251,106 +217,83 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
     }
 }
 
-void ObjectPalettePanel::updateObjectGrid() {
-    int newColumnsPerRow = calculateOptimalColumnsPerRow(ObjectWidget::OBJECT_SIZE);
-    if (newColumnsPerRow != _objectsPerRow) {
-        _objectsPerRow = newColumnsPerRow;
-        _previousColumnsPerRow = newColumnsPerRow;
+QString ObjectPalettePanel::protoDisplayName(const Pro& pro, const QString& proFileName) const {
+    // getMessages().find(), not Msg::message(): that one is a map operator[] and inserts a blank
+    // entry for a missing id, mutating the shared cached Msg.
+    try {
+        if (const Msg* msg = ProHelper::msgFile(_resources, pro.type()); msg != nullptr) {
+            const auto& messages = msg->getMessages();
+            const auto found = messages.find(static_cast<int>(pro.header.message_id));
+            if (found != messages.end() && !found->second.text.empty()) {
+                return QString::fromStdString(found->second.text);
+            }
+        }
+    } catch (const std::exception& e) {
+        spdlog::debug("ObjectPalettePanel: no engine name for {}: {}", proFileName.toStdString(), e.what());
     }
+    return proFileName;
+}
 
-    _objectWidgets.clear();
-    clearGridWidgets();
-
-    const auto& objectList = getObjectList(_currentCategory);
-
-    if (objectList.empty()) {
-        _statusLabel->setText("No objects available for this category");
+void ObjectPalettePanel::rebuildItems() {
+    if (_model == nullptr) {
         return;
     }
 
-    calculatePagination();
-
-    int row = 0;
-    int col = 0;
-    int objectsLoaded = 0;
-    int filteredIndex = 0;
-    int targetStartIndex = getPageStartIndex();
-    int targetEndIndex = getPageEndIndex();
-
-    for (int i = 0; i < static_cast<int>(objectList.size()); ++i) {
-        const auto& objectInfo = objectList[i];
-
-        if (!_searchText.isEmpty()) {
-            if (!objectInfo->displayName.contains(_searchText, Qt::CaseInsensitive) && !objectInfo->proFileName.contains(_searchText, Qt::CaseInsensitive)) {
-                continue;
-            }
-        }
-
-        // Only build widgets for objects within the current page range.
-        if (filteredIndex < targetStartIndex) {
-            filteredIndex++;
+    const auto& objects = getObjectList(_currentCategory);
+    std::vector<ui::PaletteItem> items;
+    items.reserve(objects.size());
+    // The index is the position in this list, which is what getObjectInfo() and revealProto() use.
+    // ObjectInfo::listIndex is the .lst line instead, and the two diverge as soon as a proto fails
+    // to load and its entry is skipped - placing then looked up the wrong object, or none.
+    for (int position = 0; position < static_cast<int>(objects.size()); ++position) {
+        const auto& info = objects[static_cast<size_t>(position)];
+        if (!info) {
             continue;
         }
-        if (filteredIndex > targetEndIndex) {
-            break;
-        }
-
-        try {
-            QPixmap objectThumbnail = createObjectThumbnail(objectInfo.get(), _currentCategory);
-
-            auto objectWidget = std::make_unique<ObjectWidget>(i, objectInfo.get(), objectThumbnail, _currentCategory, this);
-            connect(objectWidget.get(), &ObjectWidget::objectClicked, this, &ObjectPalettePanel::onObjectClicked);
-
-            gridLayout()->addWidget(objectWidget.get(), row, col);
-            _objectWidgets.push_back(std::move(objectWidget));
-
-            col++;
-            if (col >= _objectsPerRow) {
-                col = 0;
-                row++;
-            }
-
-            objectsLoaded++;
-            filteredIndex++;
-        } catch (const std::exception& e) {
-            spdlog::warn("ObjectPalettePanel: Failed to load object {}: {}",
-                objectInfo->proFileName.toStdString(), e.what());
-        }
+        const QString label = info->displayName.isEmpty() ? info->proFileName : info->displayName;
+        const QString tooltip = label == info->proFileName ? label : label + "\n" + info->proFileName;
+        items.push_back({ position, label, tooltip });
     }
 
-    QString statusText;
-    if (!_searchText.isEmpty()) {
-        statusText = QString("Page %1/%2: Found %3 objects matching '%4' in %5 (showing %6)")
-                         .arg(currentPage() + 1)
-                         .arg(totalPages())
-                         .arg(totalFilteredItems())
-                         .arg(_searchText)
-                         .arg(getCategoryDisplayName(_currentCategory))
-                         .arg(objectsLoaded);
-    } else {
-        statusText = QString("Page %1/%2: %3 total %4 objects (showing %5)")
-                         .arg(currentPage() + 1)
-                         .arg(totalPages())
-                         .arg(totalFilteredItems())
-                         .arg(getCategoryDisplayName(_currentCategory))
-                         .arg(objectsLoaded);
+    _model->setItems(std::move(items));
+    updateStatusLabel();
+}
+
+void ObjectPalettePanel::updateStatusLabel() {
+    if (_statusLabel == nullptr || _filter == nullptr) {
+        return;
     }
-    _statusLabel->setText(statusText);
+    const int shown = _filter->rowCount();
+    const int total = _model ? _model->rowCount() : 0;
+    _statusLabel->setText(shown == total ? QString("%1 objects").arg(total)
+                                         : QString("%1 of %2 objects").arg(shown).arg(total));
+}
 
-    GridPalettePanel::updatePaginationControls();
-
-    spdlog::debug("ObjectPalettePanel: Loaded {} object widgets for category {}",
-        objectsLoaded, getCategoryDisplayName(_currentCategory).toStdString());
+void ObjectPalettePanel::selectRowForObject(int objectIndex) {
+    if (_objectView == nullptr || _model == nullptr || objectIndex < 0) {
+        return;
+    }
+    const int row = _model->rowForEngineIndex(objectIndex);
+    if (row < 0) {
+        return;
+    }
+    const QModelIndex mapped = _filter->mapFromSource(_model->index(row, 0));
+    if (!mapped.isValid()) {
+        return;
+    }
+    QSignalBlocker blocker(_objectView->selectionModel());
+    _objectView->setCurrentIndex(mapped);
+    _objectView->scrollTo(mapped, QAbstractItemView::PositionAtCenter);
 }
 
 QPixmap ObjectPalettePanel::createObjectThumbnail(const ObjectInfo* objectInfo, ObjectCategory category) {
-    QPixmap thumbnail(ObjectWidget::OBJECT_SIZE, ObjectWidget::OBJECT_SIZE);
+    QPixmap thumbnail(OBJECT_SIZE, OBJECT_SIZE);
 
     if (objectInfo && !objectInfo->frmPath.isEmpty()) {
         try {
             thumbnail = FrmThumbnailGenerator::fromFrmPath(_resources,
                 objectInfo->frmPath.toStdString(),
-                QSize(ObjectWidget::OBJECT_SIZE, ObjectWidget::OBJECT_SIZE));
+                QSize(OBJECT_SIZE, OBJECT_SIZE));
             if (!thumbnail.isNull()) {
                 return thumbnail;
             }
@@ -394,7 +337,7 @@ QPixmap ObjectPalettePanel::createObjectThumbnail(const ObjectInfo* objectInfo, 
     painter.setPen(ui::theme::colors::textDark());
     painter.setFont(ui::theme::fonts::compactBold());
 
-    painter.drawText(QRect(0, 2, ObjectWidget::OBJECT_SIZE, 12),
+    painter.drawText(QRect(0, 2, OBJECT_SIZE, 12),
         Qt::AlignCenter, categoryText);
 
     painter.setFont(ui::theme::fonts::tiny());
@@ -405,7 +348,7 @@ QPixmap ObjectPalettePanel::createObjectThumbnail(const ObjectInfo* objectInfo, 
         displayText = "Unknown";
     }
 
-    painter.drawText(QRect(2, ObjectWidget::OBJECT_SIZE / 2, ObjectWidget::OBJECT_SIZE - 4, ObjectWidget::OBJECT_SIZE / 2 - 2),
+    painter.drawText(QRect(2, OBJECT_SIZE / 2, OBJECT_SIZE - 4, OBJECT_SIZE / 2 - 2),
         Qt::AlignCenter | Qt::TextWordWrap, displayText);
 
     return thumbnail;
@@ -444,13 +387,12 @@ QString ObjectPalettePanel::getCategoryDisplayName(ObjectCategory category) cons
 }
 
 void ObjectPalettePanel::onObjectClicked(int objectIndex) {
-    clearObjectSelection();
-
+    // No selectRowForObject() here: this runs from the view's own currentChanged, so the row is
+    // already current, and re-applying it would scrollTo(PositionAtCenter) and recentre the grid
+    // under the still-pressed cursor - the click then landed on whatever item the scroll brought
+    // under the mouse. Programmatic callers (revealProto, the search filter) sync the view
+    // themselves.
     _selectedObjectIndex = objectIndex;
-
-    if (objectIndex >= 0 && objectIndex < static_cast<int>(_objectWidgets.size())) {
-        _objectWidgets[objectIndex]->setSelected(true);
-    }
 
     Q_EMIT objectSelected(objectIndex, _currentCategory);
 
@@ -463,22 +405,22 @@ void ObjectPalettePanel::onCategoryChanged(int tabIndex) {
 
     spdlog::debug("ObjectPalettePanel: Changed to category {}", static_cast<int>(_currentCategory));
 
-    _currentPage = 0; // Reset to first page on category change
-
     loadCategoryObjects(_currentCategory);
-    updateObjectGrid();
+    rebuildItems();
 }
 
 void ObjectPalettePanel::onSearchTextChanged(const QString& text) {
-    _searchText = text.trimmed();
-    _currentPage = 0; // Reset to first page when search changes
-    updateObjectGrid();
+    _filter->setFilterFixedString(text.trimmed());
+    selectRowForObject(_selectedObjectIndex);
+    updateStatusLabel();
 }
 
 void ObjectPalettePanel::clearObjectSelection() {
-    std::ranges::for_each(_objectWidgets, [](auto& widget) {
-        widget->setSelected(false);
-    });
+    if (_objectView != nullptr) {
+        QSignalBlocker blocker(_objectView->selectionModel());
+        _objectView->clearSelection();
+        _objectView->setCurrentIndex({});
+    }
     _selectedObjectIndex = -1;
 }
 
@@ -545,38 +487,10 @@ std::optional<std::pair<int, ObjectCategory>> ObjectPalettePanel::revealProto(ui
         _searchLineEdit->setText(fileName);
     }
     clearObjectSelection();
-    for (const auto& widget : _objectWidgets) {
-        const ObjectInfo* info = widget->getObjectInfo();
-        if (info && info->proFileName.compare(fileName, Qt::CaseInsensitive) == 0) {
-            widget->setSelected(true);
-            _selectedObjectIndex = widget->getObjectIndex();
-            Q_EMIT objectSelected(_selectedObjectIndex, _currentCategory);
-            break;
-        }
-    }
+    _selectedObjectIndex = index;
+    selectRowForObject(index);
+    Q_EMIT objectSelected(index, _currentCategory);
     return std::make_pair(index, category);
-}
-
-void ObjectPalettePanel::calculatePagination() {
-    const auto& objectList = getObjectList(_currentCategory);
-
-    if (objectList.empty()) {
-        updatePaginationState(0);
-        GridPalettePanel::updatePaginationControls();
-        return;
-    }
-
-    int filteredCount = 0;
-    for (const auto& objectInfo : objectList) {
-        if (!_searchText.isEmpty()) {
-            if (!objectInfo->displayName.contains(_searchText, Qt::CaseInsensitive) && !objectInfo->proFileName.contains(_searchText, Qt::CaseInsensitive)) {
-                continue;
-            }
-        }
-        filteredCount++;
-    }
-
-    updatePaginationState(filteredCount);
 }
 
 const ObjectInfo* ObjectPalettePanel::getObjectInfo(int objectIndex, ObjectCategory category) const {
@@ -587,22 +501,6 @@ const ObjectInfo* ObjectPalettePanel::getObjectInfo(int objectIndex, ObjectCateg
     }
 
     return categoryList[objectIndex].get();
-}
-
-void ObjectPalettePanel::resizeEvent(QResizeEvent* event) {
-    GridPalettePanel::resizeEvent(event);
-
-    int newColumnsPerRow = calculateOptimalColumnsPerRow(ObjectWidget::OBJECT_SIZE);
-
-    // Only rebuild when the column count actually changed.
-    if (newColumnsPerRow != _previousColumnsPerRow) {
-        _objectsPerRow = newColumnsPerRow;
-        _previousColumnsPerRow = newColumnsPerRow;
-
-        if (!_objectWidgets.empty()) {
-            updateObjectGrid();
-        }
-    }
 }
 
 } // namespace geck
