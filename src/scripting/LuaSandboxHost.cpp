@@ -57,9 +57,8 @@ bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::
 #undef GECK_SCRIPT_API_BIND
     luabridge::setGlobal(_state, &api, "api");
 
-    // Resolve this run's RNG seed: use --arg seed=N when it parses, otherwise pick a fresh one so
-    // each per-run host differs. Luau's math.randomseed truncates to a 32-bit signed int, so keep
-    // the seed in that range; the counter avoids collisions if random_device repeats.
+    // --arg seed=N when it parses, else a fresh one per host. Luau's math.randomseed truncates to a
+    // 32-bit signed int, so keep the seed in range; the counter avoids random_device repeats.
     int seed = 0;
     {
         static std::atomic<uint32_t> runCounter{ 0 };
@@ -79,9 +78,8 @@ bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::
         }
     }
 
-    // Seed the api's deterministic stream (api:rng()/rngInt()) from the same resolved seed, so both
-    // RNGs reproduce from --arg seed=N in every host (console, CLI, MCP). A caller that pre-seeds the
-    // api (the fill preview) passes the identical seed in `args`, so this re-seed is idempotent there.
+    // Seed the api's stream from the same resolved seed, so both RNGs reproduce from --arg seed=N in
+    // every host. A caller that pre-seeds (the fill preview) passes the same seed, so this is idempotent.
     api.setSeed(static_cast<uint32_t>(seed));
 
     // Expose caller parameters as the global table `args`, and always publish the resolved seed so
@@ -122,9 +120,8 @@ bool LuaSandboxHost::loadSource(const std::string& source, std::string& error) {
         return false;
     }
 
-    // Drop a chunk an earlier loadSource() pushed but nobody ran. runLoaded()'s lua_pcall is what
-    // normally pops it, so an abandoned load would otherwise sit on the stack for the life of the
-    // state, keeping its prototype reachable — a slow leak in a resident VM that loads per dispatch.
+    // Drop a chunk an earlier loadSource() pushed but nobody ran: runLoaded()'s lua_pcall normally pops
+    // it, so an abandoned load would keep its prototype reachable for the life of the state.
     if (_hasLoadedChunk) {
         lua_pop(_state, 1);
         _hasLoadedChunk = false;
@@ -210,9 +207,8 @@ int LuaSandboxHost::capturePrint(lua_State* L) {
     return 0;
 }
 
-// Called by Luau at safepoints (call, return, and every loop back-edge) and by the collector.
-// `gc >= 0` marks a GC step: we must not longjmp out of the collector, so only the non-GC
-// safepoints can abort.
+// Called by Luau at safepoints and by the collector. `gc >= 0` marks a GC step: we must not longjmp
+// out of the collector, so only non-GC safepoints can abort.
 void LuaSandboxHost::timeBudgetInterrupt(lua_State* L, int gc) {
     if (gc >= 0) {
         return;
@@ -228,11 +224,9 @@ void LuaSandboxHost::timeBudgetInterrupt(lua_State* L, int gc) {
     }
     host->_timedOut = true;
 
-    // Deliberately stay armed. Disarming here would let a script-level `pcall` catch this error and
-    // then run unwatched forever. Armed, every subsequent safepoint raises again, and since Luau
-    // puts a safepoint on call/return/back-edge the chunk cannot make progress or even return — the
-    // error walks out to our lua_pcall. Re-raising inside an xpcall handler is bounded too: Luau
-    // runs the handler under luaD_rawrunprotected and degrades to "error in error handling".
+    // Deliberately stay armed. Disarming would let a script-level `pcall` catch this and then run
+    // unwatched forever; armed, every later safepoint raises again and the chunk cannot even return,
+    // so the error walks out to our lua_pcall. Re-raising inside an xpcall handler is bounded too.
     luaL_error(L, "%s", TIME_BUDGET_ERROR);
 }
 

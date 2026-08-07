@@ -60,9 +60,9 @@ namespace {
         return json{ { "content", json::array({ { { "type", "text" }, { "text", text } } }) }, { "isError", isError } };
     }
 
-    // --- typed argument access --------------------------------------------------
-    // A bad tool argument: thrown by the require*/checked accessors and turned into an isError tool
-    // result by callTool, so the handlers can validate as straight-line code.
+    // --- typed argument access ---
+    // A bad tool argument, thrown by the require*/checked accessors and turned into an isError result
+    // by callTool, so handlers can validate as straight-line code.
     struct ToolError {
         std::string message;
     };
@@ -79,9 +79,8 @@ namespace {
         }
         return it->get<std::string>();
     }
-    // Optional integer in [min, max]: absent -> fallback (unvalidated), but a present value must be a
-    // genuine in-range integer — no silently-ignored wrong type, no negative wrapping to a huge
-    // unsigned downstream.
+    // Optional integer in [min, max]: absent falls back unvalidated, but a present value must be a
+    // genuine in-range integer - no silently-ignored wrong type, no negative wrapping.
     int64_t optInt(const json& args, const char* key, int64_t fallback, int64_t min, int64_t max) {
         const auto it = args.find(key);
         if (it == args.end()) {
@@ -153,10 +152,8 @@ namespace {
     // from disk instead of embedded.
     constexpr std::size_t kEmbedMaxBytes = 8u * 1024 * 1024;
 
-    // embed=true on the render tools: read the just-written image back and append it as an MCP
-    // image content block (base64), so the client can look at it without a second file read. The
-    // render itself succeeded by the time this runs, so every embed failure says the file was
-    // still written.
+    // embed=true: read the just-written image back as a base64 MCP image block, so the client need not
+    // read the file. The render already succeeded, so an embed failure still means the file is there.
     json appendEmbeddedImage(json result, const std::string& outPath) {
         const std::string mime = imageMimeType(outPath);
         if (mime.empty()) {
@@ -578,31 +575,23 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
-    // Dispatch a tools/call by name. Returns the tool result, or nullopt for an unknown tool
-    // (which the caller turns into a JSON-RPC method error).
-    // One contract per tool: the schema advertised by tools/list and the handler run by
-    // tools/call live together, so the dispatch and the advertised surface cannot drift. Handlers
-    // take (resources, args) uniformly (each ignores what it doesn't need).
+    // Dispatch a tools/call by name; nullopt for an unknown tool. One contract per tool: the schema
+    // advertised by tools/list and the handler live together, so they cannot drift.
     struct ToolSpec {
         std::string name;
         std::string description;
         json inputSchema;
         std::function<json(resource::GameResources&, const json&)> handler;
-        // When the tool's SUCCESS text is machine-readable JSON, this drives the MCP
-        // structuredContent field on the result: "" means the text is a JSON object (attached
-        // as-is); a non-empty key means the text is a JSON array, wrapped as { key: [...] }
-        // (structuredContent must be an object per the MCP schema). nullptr = plain text.
+        // Drives the MCP structuredContent field when the success text is JSON: "" means the text is an
+        // object (attached as-is), a key means it is an array wrapped as { key: [...] }. nullptr = text.
         const char* structuredKey = nullptr;
-        // Advertised as MCP tool annotations (tools/list). Default false; toolRegistry() tags the
-        // read-only group en masse. None of our tools is destructive (the mutating ones only write
-        // new output files) and all operate on local data (openWorldHint is emitted as false).
+        // MCP tool annotations for tools/list. None of our tools is destructive (the mutating ones only
+        // write new files) and all work on local data, so openWorldHint is false.
         bool readOnly = false;
     };
 
-    // Attach the structuredContent form of a tool result when the tool contract says its success
-    // text is JSON (see ToolSpec::structuredKey). The text block stays the authoritative payload:
-    // if it unexpectedly fails to parse — or has the wrong shape — the result simply stays
-    // text-only rather than failing a call that succeeded.
+    // Attach structuredContent when the tool contract says its success text is JSON. The text block
+    // stays authoritative: a parse failure leaves the result text-only rather than failing the call.
     void attachStructuredContent(const ToolSpec& spec, json& result) {
         if (spec.structuredKey == nullptr || result.value("isError", true)) {
             return;
@@ -927,11 +916,8 @@ namespace {
         }
     }
 
-    // Tool schemas advertised by tools/list. The annotations are the MCP 2025-03-26 hints: they
-    // let a client (or its human) triage tools without reading every description — everything
-    // except generate/render_map/render_frm/extract_pattern is read-only, nothing modifies
-    // existing data destructively (the mutating tools only write new output files), and every
-    // tool works purely on local data (openWorldHint false).
+    // Tool schemas for tools/list. The annotations are MCP 2025-03-26 hints, so a client can triage
+    // tools without reading every description.
     json toolDefinitions() {
         auto tools = json::array();
         for (const auto& spec : toolRegistry()) {
@@ -941,15 +927,13 @@ namespace {
         return tools;
     }
 
-    // Route a JSON-RPC *request* (already known to have an id and jsonrpc 2.0) to its result. Kept
-    // out of McpServer::handleMessage so that stays a thin envelope (notification + version guards +
-    // try/catch) and neither function is over-complex.
+    // Route a JSON-RPC request to its result, kept out of handleMessage so that stays a thin envelope
+    // and neither function is over-complex.
     json dispatchRequest(resource::GameResources& resources, const json& request, const json& id) {
         const std::string method = request.value("method", "");
         if (method == "initialize") {
-            // We speak exactly one protocol version, so negotiation is just declaring it: return
-            // kProtocolVersion regardless of what the client asked for, and the client decides whether
-            // it can proceed (per the lifecycle spec). Multi-version support would branch here.
+            // We speak exactly one protocol version, so negotiation is declaring it: return kProtocolVersion
+            // whatever the client asked for and let it decide (per the lifecycle spec).
             return resultMessage(id, { { "protocolVersion", kProtocolVersion }, { "capabilities", { { "tools", json::object() } } }, { "serverInfo", { { "name", kServerName }, { "version", kServerVersion } } } });
         }
         if (method == "ping") {
@@ -979,9 +963,8 @@ json McpServer::handleMessage(const json& request) {
     const bool isNotification = !request.contains("id");
     const json id = isNotification ? json(nullptr) : request["id"];
     try {
-        // A notification (no id) takes no response, and we never run a request method (initialize,
-        // tools/*, ping) as one — executing a tool with no id to return its result is meaningless. So
-        // any no-id message is acknowledged silently regardless of method (e.g. notifications/initialized).
+        // A notification takes no response, and running a request method without an id is meaningless, so
+        // any no-id message is acknowledged silently.
         if (isNotification) {
             return json(nullptr);
         }

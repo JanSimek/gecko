@@ -79,19 +79,15 @@ public:
     bool hasSelection() const { return !_state.isEmpty(); }
     bool isAreaSelecting() const { return _state.isAreaSelecting(); }
 
-    // True when `worldPos` lands on a currently-selected item that is actually visible there —
-    // any selected floor tile (the floor layer always draws), a selected roof tile while the roof
-    // is shown, or a selected, visible object. Lets the editor grab and move a region by any of
-    // its visible parts, so a selection stays movable even when some of its layers are hidden.
-    // Mirrors the visibility rules of Ctrl+click deselect (collectDeselectableAtPosition).
+    // True when `worldPos` lands on a selected item that is visible there, so a region stays movable
+    // by any of its visible parts. Mirrors the visibility rules of Ctrl+click deselect.
     bool isPointOnSelection(sf::Vector2f worldPos) const;
 
     // Replace the selected items wholesale and notify (used to make the selection follow a move).
     void setSelectedItems(std::vector<SelectedItem> items);
 
-    // The combinable layers an ALL-mode selection considers (floor / roof / objects). A disabled
-    // layer is treated as absent by area-select, the click cycle and Ctrl-deselect; the dedicated
-    // single-layer modes ignore this. Changing it does not touch the current selection.
+    // The combinable layers an ALL-mode selection considers. A disabled layer is treated as absent;
+    // the single-layer modes ignore this, and changing it leaves the current selection alone.
     void setActiveLayers(SelectionLayers layers) { _layers = layers; }
     SelectionLayers activeLayers() const { return _layers; }
 
@@ -104,10 +100,8 @@ public:
     // Helper for external classes (like EditorWidget) to check collision
     bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
 
-    // The topmost pickable thing under a world position (eyedropper). Composes the same hit-testers
-    // and priority a single left-click uses — roof (only when the roof layer is shown) → object →
-    // floor — so "pick under cursor" matches "what a click would select". At most one field is set;
-    // roofTile/floorTile hold the tile position (0..TILES_PER_ELEVATION), not the tiles.lst id.
+    // The topmost pickable thing under a world position, using the same hit-testers and priority as a
+    // left-click. At most one field is set; the tile fields hold a position, not a tiles.lst id.
     struct PickResult {
         std::shared_ptr<Object> object;
         std::optional<int> roofTile;
@@ -121,20 +115,15 @@ public:
     std::vector<std::shared_ptr<Object>> getObjectsInArea(const sf::FloatRect& area, int elevation) const;
     std::vector<int> getHexesInArea(const sf::FloatRect& area) const;
 
-    // Move the selected floor and roof tiles by a whole-tile delta, as a set of tile edits (each
-    // moved tile vacates its source to Map::EMPTY_TILE and fills its target) the editor applies
-    // through the shared tile-edit undo path. Empty if there is nothing to move or any tile would
-    // leave the map (the block moves as a whole or not at all). Pure: computes the change set without
-    // mutating the map, and is block-safe — every source is vacated before any target is filled, so
-    // overlapping moves never corrupt.
+    // Move the selected tiles by a whole-tile delta as a set of tile edits. Empty if any tile would
+    // leave the map - the block moves as a whole or not at all. Pure, and block-safe: every source
+    // is vacated before any target is filled, so overlapping moves cannot corrupt.
     std::vector<TileChange> planSelectionTileMove(int deltaRow, int deltaColumn) const;
     // As above, deriving the whole-tile delta from a world-space translation (the snapped movement
     // the dragged objects made), so the tiles land aligned with the objects.
     std::vector<TileChange> planSelectionMoveForTranslation(sf::Vector2f worldTranslation) const;
-    // The world-space translation of moving the selection by whole tiles nearest rawTranslation.
-    // Moving both the dragged objects and the tiles by this keeps them aligned to the tile grid
-    // (objects snap to a finer hex grid, so an unaligned translation drifts them off the tiles).
-    // nullopt when no tiles are selected (then the caller should keep the raw per-object movement).
+    // The world translation of moving by whole tiles nearest rawTranslation, which keeps dragged
+    // objects aligned to the tile grid. nullopt when no tiles are selected.
     std::optional<sf::Vector2f> tileAlignedTranslation(sf::Vector2f rawTranslation) const;
     // The whole-tile (row, column) delta the selection moves by for a world translation; nullopt
     // when no tiles are selected. Used to shift the selection's tile items so it follows the move.
@@ -176,9 +165,8 @@ private:
     void appendObjectsInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area, int elevation) const;
     void appendHexesInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area) const;
 
-    // Visible, selectable layers at a point in priority order (roof -> objects -> floor
-    // for ALL mode). Used by deselectAtPosition so a Ctrl+click removes whichever visible
-    // layer is actually selected. Hidden roofs are skipped so they stay selected.
+    // Visible, selectable layers at a point in priority order. Hidden roofs are skipped so a Ctrl+click
+    // leaves them selected.
     std::vector<SelectedItem> collectDeselectableAtPosition(sf::Vector2f worldPos, SelectionMode mode, int elevation) const;
 
     // Per-category appenders used by collectDeselectableAtPosition (keep its branching shallow).

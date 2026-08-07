@@ -148,9 +148,8 @@ QString FileLoaderWorker::resolveProName(const std::string& vfsPath) const {
             return QStringLiteral("MSG not found");
         }
 
-        // Read via getMessages().find(): Msg::message() is a map operator[] that INSERTS a
-        // blank entry on a missing id, mutating the shared cached Msg — unacceptable from a
-        // worker thread (and a silent leak on the UI thread too).
+        // getMessages().find(), not Msg::message(): the latter is a map operator[] that INSERTS a blank
+        // entry for a missing id, mutating the shared cached Msg from a worker thread.
         const auto messageId = static_cast<int>(pro->header.message_id);
         const auto& messages = msgFile->getMessages();
         const auto it = messages.find(messageId);
@@ -238,9 +237,8 @@ void FileLoaderWorker::loadFiles() {
         spdlog::debug("FileLoaderWorker: Loaded {} files with {} file types",
             allFiles.size(), fileTypes.size());
 
-        // Second pass: PRO display names. Parsing every proto (plus its msg file) is the one
-        // expensive per-file job — seconds on a cold cache — so it runs after the tree data is
-        // already delivered and trickles in as batched column updates.
+        // Second pass: parsing every proto and its msg file is the one expensive per-file job, so it runs
+        // after the tree is delivered and trickles in as batched column updates.
         QHash<QString, QString> names;
         for (const auto& entry : entries) {
             if (_shouldStop.load()) {
@@ -354,9 +352,8 @@ void FileBrowserPanel::stopAndDestroyLoader() noexcept {
     }
 
     if (_loaderWorker) {
-        // loadFiles() polls _shouldStop, so cancelling it lets the worker's loop exit and the
-        // thread's event loop quit — wait() then returns promptly. Disconnect first so a late
-        // queued signal can't reach a half-torn-down panel.
+        // loadFiles() polls _shouldStop, so cancelling lets the worker's loop exit and wait() return.
+        // Disconnect first so a late queued signal cannot reach a half-torn-down panel.
         _loaderWorker->_shouldStop.store(true);
         disconnect(_loaderWorker, nullptr, this, nullptr);
     }
@@ -365,18 +362,16 @@ void FileBrowserPanel::stopAndDestroyLoader() noexcept {
     if (_loaderThread->isRunning()) {
         _loaderThread->quit();
         if (!_loaderThread->wait(3000)) {
-            // Only reachable if the worker is stuck in the one step it cannot poll _shouldStop
-            // from — the initial VFS files().list(). Force-stop as a last resort (there is no
-            // other cancellation path there) so the worker can be freed without a data race.
+            // Only reachable if the worker is stuck in the one step that cannot poll _shouldStop, the initial
+            // files().list(). Force-stop as a last resort so it can be freed without a data race.
             spdlog::warn("FileBrowserPanel: loader thread didn't stop within 3s, forcing termination");
             _loaderThread->terminate();
             _loaderThread->wait();
         }
     }
 
-    // The thread is stopped now, so the worker is no longer running and is deleted directly:
-    // deleteLater() would never run here, because the worker lives in a thread whose event loop
-    // has already exited (and it is not parented to the QThread). delete nullptr is a safe no-op.
+    // Deleted directly, not deleteLater(): the worker lives in a thread whose event loop has already
+    // exited, so a deferred delete would never run.
     delete _loaderWorker;
     _loaderWorker = nullptr;
     delete _loaderThread;
@@ -898,10 +893,8 @@ void FileBrowserPanel::startProgressiveTreeBuild(std::vector<FileBrowserEntry> f
     _pendingEntries = std::move(filteredEntries);
     _currentChunkIndex = 0;
 
-    // Detach the model from the proxy for the bulk build: attached, every appendRow pays
-    // proxy mapping (and, once a previous population has sorted the proxy, a sorted insert
-    // with lessThan sibling lookups). Detached, rows cost only the QStandardItem work and
-    // the proxy maps everything once on re-attach at completion.
+    // Detached from the proxy for the bulk build: attached, every appendRow pays proxy mapping and a
+    // sorted insert. Detached, the proxy maps everything once on re-attach.
     _proxyModel->setSourceModel(nullptr);
 
     _proNameItems.clear(); // the model clear below deletes the indexed items
@@ -940,13 +933,9 @@ void FileBrowserPanel::processNextChunk() {
 
     FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
 
-    // No nested processEvents here: a chunk is small (CHUNK_SIZE rows) and the queued
-    // re-invoke below already yields to the real event loop between chunks. Re-entrant
-    // event pumping from inside the chunk let other timers (notably the SFML render
-    // loop) run long work re-entrantly, starving modal progress dialogs — a map load's
-    // progress bar sat frozen until the load finished. It also let a settings change
-    // delete or restart this panel mid-chunk; with the pump gone, nothing can touch the
-    // population state while a chunk runs.
+    // No nested processEvents here. Re-entrant pumping let other timers - notably the SFML render
+    // loop - run long work re-entrantly, freezing a map load's progress bar until the load finished,
+    // and let a settings change delete this panel mid-chunk. The queued re-invoke below yields instead.
     const auto chunkStart = std::chrono::steady_clock::now();
     size_t endIndex = std::min(_currentChunkIndex + CHUNK_SIZE, _pendingEntries.size());
     for (size_t i = _currentChunkIndex; i < endIndex; ++i) {
@@ -965,11 +954,9 @@ void FileBrowserPanel::processNextChunk() {
             .arg(_currentChunkIndex)
             .arg(_pendingEntries.size()));
 
-    // Re-queue through the single-shot timer, NOT a queued invocation: a self-re-posting
-    // event chain keeps the event loop from ever reaching its about-to-idle phase, which
-    // on macOS is when widget paints flush — the progress label updated every chunk but
-    // painted nothing until the build finished. A 1ms timer lets the loop sleep briefly
-    // between chunks, so progress (and the rest of the UI) actually renders.
+    // A single-shot timer, NOT a queued invocation: a self-re-posting event chain never lets the loop
+    // reach its about-to-idle phase, which on macOS is when widget paints flush, so progress updated
+    // but never painted. A 1ms timer lets the loop sleep briefly between chunks.
     _chunkTimer->start();
 }
 

@@ -198,9 +198,8 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     _mapModified = false;
     updateWindowTitle();
 
-    // Installing a map must (re)start the render loop: closeCurrentMap() stops it, and it is
-    // otherwise only started once at application startup. startGameLoop() is idempotent, so this is
-    // a no-op when the loop is already running (e.g. the startup map load).
+    // Installing a map must (re)start the render loop, which closeCurrentMap() stops. startGameLoop()
+    // is idempotent, so this is a no-op when it is already running.
     startGameLoop();
 
     QTimer::singleShot(50, this, &MainWindow::updatePanelMenuActions);
@@ -235,10 +234,8 @@ void MainWindow::connectMenuSignals() {
         if (!maybeSaveChanges()) {
             return; // user cancelled — keep the current map
         }
-        // Building the editor loads essential art (the hex-grid overlay, etc.); if Fallout 2 data
-        // isn't configured those files are missing and the load throws. Surface that as a "Missing
-        // Game Files" dialog — the same way a failed map load does — instead of letting the
-        // exception abort the app.
+        // Building the editor loads essential art, which is missing when Fallout 2 data isn't configured.
+        // Surface that as a "Missing Game Files" dialog rather than letting the exception abort the app.
         try {
             if (_currentEditorWidget) {
                 _currentEditorWidget->createNewMap();
@@ -352,9 +349,8 @@ QAction* MainWindow::addPanelToggleAction(const QString& label, QDockWidget* doc
             QSignalBlocker blocker(*action);
             action->setChecked(dockVisible);
         }
-        // A genuine user show/hide updates the persisted dock layout immediately, so it survives even
-        // a non-clean exit (e.g. the app being killed to recompile). saveDockWidgetState() is a no-op
-        // while re-laying-out programmatically or when no map is open.
+        // A genuine user show/hide persists the dock layout immediately, so it survives a non-clean exit.
+        // saveDockWidgetState() is a no-op during programmatic relayout or with no map open.
         if (!_suppressDockStateSave) {
             saveDockWidgetState();
         }
@@ -425,9 +421,8 @@ void MainWindow::applyDefaultPanelDockLayout() {
         _tilePaletteDock->raise();
     }
 
-    // Give each dock column enough width to show its panel content (e.g. the Map Info form) without a
-    // horizontal scrollbar. Only applied to the default layout; a restored layout keeps the user's own
-    // widths, so this never fights a manual resize.
+    // Enough width for each dock column to show its panel without a horizontal scrollbar. Default
+    // layout only - a restored layout keeps the user's widths.
     const int preferredWidth = ui::constants::sizes::PANEL_PREFERRED_WIDTH;
     resizeDocks({ _mapInfoDock, _tilePaletteDock }, { preferredWidth, preferredWidth }, Qt::Horizontal);
 }
@@ -1222,10 +1217,8 @@ void MainWindow::setupDockWidgets() {
     wireScriptConsole();
 #endif
 
-    // Log & diagnostics: same shape as the script console — a bottom dock outside the managed
-    // layout persistence, hidden until opened from the View menu. Two tabs: the raw record
-    // stream (the application's LogModel, attached via setLogModel() once the window exists)
-    // and the structured per-map completeness summary (refreshed on map load/close).
+    // Log & diagnostics: like the script console, a bottom dock outside the managed layout
+    // persistence. Two tabs: the raw record stream and the per-map completeness summary.
     _logPanel = new LogPanel();
     _completenessView = new CompletenessView();
     connect(_completenessView, &CompletenessView::refreshRequested, this, &MainWindow::refreshCompleteness);
@@ -1368,9 +1361,8 @@ void MainWindow::replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSize
     if (QWidget* oldWidget = dock->widget()) {
         oldWidget->hide();
         oldWidget->setParent(nullptr);
-        // deleteLater, not delete: the old panel may still be on the call stack (FileBrowserPanel's
-        // chunked tree build pumps the event loop mid-chunk); a synchronous delete here would free
-        // an object that resumes executing when the loop unwinds.
+        // deleteLater, not delete: the old panel may still be on the call stack (FileBrowserPanel pumps
+        // the event loop mid-chunk), and a synchronous delete would free an object that resumes.
         oldWidget->deleteLater();
     }
 
@@ -1405,17 +1397,15 @@ void MainWindow::rebuildResourcePanels() {
 }
 
 void MainWindow::rebuildGameResourcesFromSettings() {
-    // Rebuilding resources closes the current map, so honour the same unsaved-changes prompt the
-    // New/Open/Quit paths use. Cancelling keeps the map (the data-path change just won't take effect
-    // until the next rebuild).
+    // Rebuilding resources closes the current map, so honour the same unsaved-changes prompt as
+    // New/Open/Quit. Cancelling keeps the map; the data-path change waits for the next rebuild.
     if (hasActiveMap() && !maybeSaveChanges()) {
         return;
     }
 
     auto dataPaths = _settings->getDataPaths();
-    // Same fallback as Application::loadDataPaths: the editor's bundled resources (blank tile,
-    // overlay art, ...) must survive any data-path reconfiguration, or every subsequent map load
-    // fails on editor-essential art the game data does not ship.
+    // Same fallback as Application::loadDataPaths: the bundled resources must survive a data-path
+    // change, or every later map load fails on editor art the game data does not ship.
     util::ensureFallbackDataPath(dataPaths, Application::getResourcesPath());
 
     if (hasActiveMap()) {
@@ -1604,9 +1594,8 @@ void MainWindow::raiseTilePalette() {
 }
 
 void MainWindow::keyPressEvent(QKeyEvent* event) {
-    // Editor shortcuts that act on the SFML viewport (e.g. the "P" eyedropper) are handled by the
-    // InputHandler on the forwarded SFML key stream, not here — a focused child consumes key events
-    // before they reach this override. This just forwards keys to SFML.
+    // Viewport shortcuts (the "P" eyedropper, ...) are handled by InputHandler on the forwarded SFML
+    // key stream: a focused child consumes key events before this override. This only forwards.
     if (_currentEditorWidget) {
         SFMLWidget* sfmlWidget = _currentEditorWidget->getSFMLWidget();
         if (sfmlWidget) {
@@ -1684,9 +1673,8 @@ void MainWindow::convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, 
 }
 
 void MainWindow::connectPanelSignals() {
-    // Connections from panel signals to lambdas that resolve _currentEditorWidget
-    // at call time. Called from setupDockWidgets() and rebuildResourcePanels()
-    // (panel recreation destroys old connections automatically).
+    // Panel signals to lambdas that resolve _currentEditorWidget at call time. Called from
+    // setupDockWidgets() and rebuildResourcePanels(); panel recreation drops old connections.
 
     // SelectionPanel signals → MainWindow / current editor widget
     if (_selectionPanel) {
@@ -1885,9 +1873,8 @@ void MainWindow::connectPanelSignals() {
             }
         });
 
-        // Header edits in the Info panel write straight to the map (no undo command), so flag the map
-        // modified here. These also fire while the panel is being populated from a freshly loaded map,
-        // but setEditorWidget()/createNewMap clear the flag right after populating, so that's harmless.
+        // Header edits write straight to the map with no undo command, so flag it modified here. They
+        // also fire while populating from a fresh map, but the callers clear the flag right after.
         connect(_mapInfoPanel, &MapInfoPanel::playerPositionChanged, this, [this](int) { setMapModified(true); });
         connect(_mapInfoPanel, &MapInfoPanel::playerElevationChanged, this, [this](int) { setMapModified(true); });
         connect(_mapInfoPanel, &MapInfoPanel::playerOrientationChanged, this, [this](int) { setMapModified(true); });
@@ -2209,9 +2196,8 @@ void MainWindow::updateMapInfo(Map* map) {
         _scriptsPanel->setMap(map);
     }
 
-    // The selection panel needs the live map to show tile info; without this it
-    // keeps the (often null) map it was given at connect time and every tile
-    // selection falls back to "No tile selected".
+    // The selection panel needs the live map for tile info; otherwise it keeps the (often null) map
+    // from connect time and every tile selection reads "No tile selected".
     if (_selectionPanel) {
         _selectionPanel->setMap(map);
     }
@@ -2326,9 +2312,8 @@ void MainWindow::setupPanelsMenu() {
 }
 
 void MainWindow::saveDockWidgetState() {
-    // The saved dock state is the user's working layout with a map open. While no map is open the
-    // panels are transiently hidden (welcome screen) and _suppressDockStateSave guards programmatic
-    // relayout, so in both cases we must not overwrite the saved layout with a transient one.
+    // The saved state is the user's layout with a map open. While none is open the panels are
+    // transiently hidden, so neither case may overwrite it.
     if (_suppressDockStateSave || !_currentEditorWidget || !_currentEditorWidget->getMap()) {
         return;
     }

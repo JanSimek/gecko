@@ -30,12 +30,9 @@
 namespace geck {
 
 namespace {
-    // Fragment shader that emits the outline colour only at a silhouette EDGE — an opaque texel with
-    // a transparent neighbour — and is transparent elsewhere. Run over the offscreen selection mask
-    // it yields a thin 1px outline that never fills, so the scene underneath stays visible. The mask
-    // is clamp-to-edge, so neighbour samples past the mask border read the border texel: a silhouette
-    // running off the viewport edge continues rather than gaining a fake outline along that edge.
-    // SFML gives normalised gl_TexCoord[0] via its texture matrix.
+    // Emits the outline colour only at a silhouette edge - an opaque texel with a transparent
+    // neighbour - so the outline never fills. The mask is clamp-to-edge, so a silhouette running off
+    // the viewport continues instead of gaining a fake outline there.
     constexpr const char* kOutlineFragmentShader = R"(
 uniform sampler2D texture;
 uniform vec4 outlineColor;
@@ -57,19 +54,16 @@ void main() {
     // Outline thickness in pixels (texels sampled when detecting the silhouette edge).
     constexpr float kOutlineThickness = 1.0f;
 
-    // Fallout 2 CE light model, used to tint the "Show light overlays" cue like the engine lights a
-    // hex (fallout2-ce src/light.cc, src/object.cc `_obj_adjust_light`). The engine stamps light into
-    // a per-hex grid: full intensity on the source hex, then a linear per-ring decrement out to the
-    // light's radius. We reproduce the falloff value per ring; we do NOT reproduce wall shadowing or
-    // the ambient-darkness pass — this is an illustrative overlay, not a lighting simulation.
+    // Fallout 2 CE light model (fallout2-ce light.cc, object.cc `_obj_adjust_light`): the engine stamps
+    // full intensity on the source hex, then a linear per-ring decrement out to the radius. We
+    // reproduce the falloff only - not wall shadowing or the ambient pass. Illustrative, not a sim.
     namespace light {
         constexpr int FLOOR = 655;    // per-hex ambient floor the engine inits every cell to (~1% of full)
         constexpr int FULL = 65536;   // 0x10000 == 100% brightness (light intensity is clamped to this)
         constexpr int MAX_RADIUS = 8; // object light radius is clamped to 8 hexes
 
-        // Intensity the engine deposits `ring` steps from a source of the given `intensity`/`radius`:
-        // the source hex (ring 0) gets full intensity, each further ring loses (intensity - FLOOR) /
-        // (radius + 1). Mirrors the `v28[]` distribution built in `_obj_adjust_light`.
+        // Intensity `ring` steps out: the source hex gets full intensity, each ring loses
+        // (intensity - FLOOR) / (radius + 1). Mirrors the `v28[]` distribution in `_obj_adjust_light`.
         int depositedIntensity(int intensity, int radius, int ring) {
             if (ring <= 0) {
                 return intensity;
@@ -78,9 +72,8 @@ void main() {
             return intensity - ring * step;
         }
 
-        // Overlay alpha for a deposited intensity: nothing at/below the ambient floor, otherwise a warm
-        // tint whose opacity tracks the fraction of full brightness contributed, so brighter/closer
-        // hexes read stronger and dim or distant ones fade out.
+        // Nothing at or below the ambient floor; above it a warm tint whose opacity tracks the fraction of
+        // full brightness, so closer hexes read stronger.
         constexpr int MIN_ALPHA = 30;
         constexpr int MAX_ALPHA = 140;
         int tintAlpha(int deposited) {
@@ -139,9 +132,8 @@ void RenderingEngine::render(sf::RenderTarget& target,
         renderHexGrid(target, view, renderData);
     }
 
-    // Layer 3: Objects. Per-category visibility (objects/critters/walls/scroll blockers) is
-    // handled per object inside renderObjects via isObjectVisible — there is no master gate here,
-    // otherwise turning off "objects" would also hide critters and walls.
+    // Per-category visibility is handled per object inside renderObjects: a master gate here would
+    // make turning off "objects" hide critters and walls too.
     renderObjects(target, renderData, visibility);
 
     // Layer 4: Drag preview object
@@ -469,9 +461,8 @@ void RenderingEngine::renderTileSelectionOutline(sf::RenderTarget& target,
 
     const std::unordered_set<int> selected(selectedTiles.begin(), selectedTiles.end());
     const sf::Color outlineColor = _selectionColors.tile;
-    // A slight translucent fill so the selected region reads as a filled shape (not just an
-    // outline). Roof tiles get a marginally different fill so a roof selection is distinguishable
-    // from a floor one. Tweak these two alphas to taste.
+    // A translucent fill so the region reads as a shape, not just an outline; roof tiles differ
+    // slightly so a roof selection is distinguishable from a floor one.
     const sf::Color fillColor(outlineColor.r, outlineColor.g, outlineColor.b,
         static_cast<std::uint8_t>(roof ? 70 : 45));
     sf::VertexArray fill(sf::PrimitiveType::Triangles);
@@ -586,9 +577,8 @@ void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
         return;
     }
 
-    // Editor-only "Show exit grids" overlay: the bundled "EG" hex marker (art/misc/exitgrid.frm, shipped
-    // under resources/, not in the DATs) on every exit-grid hex. Separate from the player-visible
-    // directional exitgrd*/ext2grd* art renderObjects already drew.
+    // Editor-only overlay: the bundled "EG" marker on every exit-grid hex, separate from the
+    // player-visible directional art renderObjects already drew.
     const sf::Texture& exitGridTexture = _resources.textures().get(ResourcePaths::Frm::EXIT_GRID);
     sf::Sprite exitGridSprite(exitGridTexture);
     // Anchor by centre so the marker sits on the hex.
@@ -627,9 +617,8 @@ void RenderingEngine::renderSpatialScripts(sf::RenderTarget& target,
         return;
     }
 
-    // Radius disc: translucent green, matching the marker. hexesWithinRadius reproduces the engine's
-    // tileDistanceBetween(centre, h) <= radius trigger zone. The selected script switches to a
-    // brighter amber so it reads as highlighted against the green of the others.
+    // Radius disc reproducing the engine's tileDistanceBetween(centre, h) <= radius trigger zone. The
+    // selected script switches to amber so it reads against the green of the others.
     const sf::Color radiusFill(80, 220, 110, 110);
     const sf::Color selectedRadiusFill(255, 205, 70, 150);
     const sf::Color markerTint(255, 255, 255);         // unselected: no colour shift
@@ -810,9 +799,8 @@ std::shared_ptr<Object> RenderingEngine::buildExitGridPreviewObject(const Render
             return nullptr;
         }
 
-        // Anchor exactly like a committed exit grid: setDirection sets the frame rect, then
-        // setHexPosition centers the bar on the hex using that frame's FRM offset. Order matters —
-        // setHexPosition reads the current frame's width()/height()/shift, so the rect must be set first.
+        // Order matters: setDirection sets the frame rect, then setHexPosition centres the bar using that
+        // frame's FRM offset, which it reads from the current frame.
         auto previewObject = std::make_shared<Object>(frm);
         previewObject->setSprite(sf::Sprite{ _resources.textures().get(frmName) });
         previewObject->setDirection(ObjectDirection(0));
@@ -826,9 +814,8 @@ std::shared_ptr<Object> RenderingEngine::buildExitGridPreviewObject(const Render
 
 void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const sf::View& view,
     const RenderData& renderData) {
-    // Each prospective hex is drawn with its own directional marker art (the same FRM the commit will
-    // place), anchored like a real exit grid and tinted by destination kind. If the sprite can't be
-    // built, it falls back to the plain editor overlay marker so the preview never blanks out.
+    // Each prospective hex uses the same directional art the commit will place, tinted by destination
+    // kind, falling back to the plain overlay marker so the preview never blanks out.
     const auto* hexes = renderData.exitGridPreview.hexes;
     const auto* frmPids = renderData.exitGridPreview.frmPids;
     if (!hexes || hexes->empty() || !frmPids || frmPids->size() != hexes->size()) {

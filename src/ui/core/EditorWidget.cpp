@@ -198,9 +198,8 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
     _controller.viewport().centerViewOnMap();
 }
 
-// Tile-edit command logic lives in ObjectCommandController (the single command
-// owner); these are thin TilePlacementContext delegators. The controller invokes
-// ensureElevationTiles/updateTileSprite/getCurrentElevation back through callbacks.
+// Tile-edit commands live in ObjectCommandController; these are thin TilePlacementContext
+// delegators it calls back through.
 void EditorWidget::applyTileChanges(const std::vector<TileChange>& changes, bool applyAfterState) {
     _controller.commandController().applyTileChanges(changes, applyAfterState);
 }
@@ -283,10 +282,8 @@ void EditorWidget::reselectAfterDragMove(sf::Vector2f worldTranslation) {
         return;
     }
 
-    // The object move rebuilt _session.objects() (fresh wrappers around the same, now-moved MapObjects),
-    // orphaning the selection's old wrappers; the tile items still hold pre-move indices. Rebuild the
-    // selection so it follows the move: re-point objects by MapObject identity, and shift the tile
-    // items by the same whole-tile delta the move used.
+    // The move rebuilt _session.objects(), orphaning the selection's wrappers: re-point objects by
+    // MapObject identity and shift the tile items by the same whole-tile delta.
     const auto tileDelta = _session.selectionManager()->selectionTileDelta(worldTranslation);
 
     std::unordered_map<const MapObject*, std::shared_ptr<Object>> objectsByMapObject;
@@ -779,9 +776,8 @@ void EditorWidget::init() {
 }
 
 namespace {
-    // Load every *.json stamp under `dir` into `api`, keyed by each pattern's name. Appends one
-    // diagnostic line per file we couldn't open or that the deserializer rejected, so a bad stamp is
-    // visible in the Console output instead of being silently swallowed. A missing dir is no-op.
+    // Load every *.json stamp under `dir`, keyed by pattern name. A file that fails to open or
+    // deserialize adds a diagnostic line rather than being silently skipped.
     void loadStampsFromDir(const QString& dir, MapScriptApi& api, QStringList& notes) {
         QDirIterator it(dir, QStringList{ "*.json" }, QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) {
@@ -802,12 +798,8 @@ namespace {
         }
     }
 
-    // Register stamps a Console script can place by name — api:placeStamp("tent", ...). The CLI/MCP load
-    // stamps via --stamp/the stamps arg; the Console pulls from two sources, so worked examples like
-    // random_camp.luau find their tent out of the box and a user's own captures are still honoured:
-    //   1. bundled examples shipped with the editor (resources/scripts/stamps/*.json);
-    //   2. the user's pattern library (where "save pattern" and a captured extract land).
-    // The library is scanned last so a user's saved pattern overrides a bundled example of the same name.
+    // Two sources so bundled examples and a user's own captures both work: the library is scanned
+    // last, so a saved pattern overrides a bundled example of the same name.
     std::string registerLibraryStamps(MapScriptApi& api) {
         QStringList notes;
         const QString bundled = QString::fromStdString((Application::getResourcesPath() / "scripts" / "stamps").string());
@@ -826,10 +818,8 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
     // so api:placeStamp(name, ...) finds the user's saved patterns; any unloadable file is reported.
     const std::string stampNotes = registerLibraryStamps(api);
     LuaScriptRuntime runtime;
-    // The console runs synchronously on the UI thread, so a runaway script would hang the
-    // editor with no recourse — arm the same safepoint watchdog the fill preview uses, just
-    // with a far more generous budget (real generation scripts finish in well under a
-    // second; trusted long batches belong on gecko-cli, which stays untimed).
+    // The console runs on the UI thread, so a runaway script would hang the editor: the fill
+    // preview's safepoint watchdog, with a far more generous budget.
     constexpr unsigned CONSOLE_SCRIPT_BUDGET_MS = 30000;
     // The continuous SFML render loop shows the script's edits on the next frame.
     ScriptResult result = runtime.run(source, api, _controller.commandController(), "Run script",
@@ -838,9 +828,8 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
         result.output = result.output.empty() ? stampNotes : stampNotes + "\n" + result.output;
     }
     if (api.mutated()) {
-        // A script can reset the map (newMap) or change the header (setPlayerStart) without pushing
-        // an undo command, leaving the selection and Map Info panel referencing the pre-run state and
-        // the map unflagged. Drop the selection, refresh the header UI, and flag the map modified.
+        // A script can reset the map or change the header without pushing an undo command, so drop the
+        // selection, refresh the header UI and flag the map modified.
         if (_session.selectionManager()) {
             _session.selectionManager()->clearSelection();
         }
@@ -855,11 +844,8 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
 #endif
 
 bool EditorWidget::canSaveInPlace(const std::filesystem::path& mapPath) {
-    // Save-in-place is only valid when the map already lives at a real, existing on-disk file (opened
-    // from disk, or saved here before). A map opened from the game data carries a VFS path such as
-    // "/maps/arbridge.map" — which looks absolute but is not a writable filesystem location (writing it
-    // would try to create "/maps" at the filesystem root) — and a brand-new map has no file yet. Both of
-    // those must go to "Save As" instead, which defaults into the writable data path.
+    // Save-in-place needs a real on-disk file. A VFS path like "/maps/x.map" looks absolute but is
+    // not writable, and a new map has no file yet - both belong in Save As.
     std::error_code ec;
     return mapPath.is_absolute() && std::filesystem::exists(mapPath, ec);
 }
@@ -876,9 +862,8 @@ bool EditorWidget::saveMapAs(const std::filesystem::path& defaultDir) {
         return false;
     }
 
-    // Default the dialog to <writable data path>/maps/<filename> when a writable location exists;
-    // otherwise just the file name (the dialog then seeds its last-used directory). Passing an absolute
-    // suggestion deliberately overrides that last-used directory.
+    // Default to <writable data path>/maps/<filename> when one exists; an absolute suggestion
+    // deliberately overrides the dialog's last-used directory.
     const std::string filename = _session.map()->filename();
     const QString suggested = defaultDir.empty()
         ? QString::fromStdString(filename)
@@ -1129,9 +1114,8 @@ void EditorWidget::registerNativeTools() {
     if (!_toolRegistry) {
         return;
     }
-    // The brush resolves/paints through the exact same projection + undoable edit path as
-    // click tile placement (TilePlacementManager), so the ghost, the stroke dedupe key,
-    // and the painted tile can't disagree; the stroke batch collapses to one undo entry.
+    // The brush paints through the same projection and undoable path as click placement, so ghost,
+    // dedupe key and painted tile cannot disagree; the stroke collapses to one undo entry.
     _toolRegistry->registerTool(std::make_unique<FillBrushTool>(FillBrushTool::Host{
         .resolveTile = [](sf::Vector2f worldPos, bool isRoof) { return screenToTileIndex(worldPos.x, worldPos.y, isRoof); },
         .paintTile = [this](int tileId, sf::Vector2f worldPos, bool isRoof) { _tilePlacementManager->placeTileAtPosition(tileId, worldPos, isRoof); },
@@ -1241,9 +1225,7 @@ bool EditorWidget::dispatchToolKeyPressed(const sf::Event::KeyPressed& event) {
         .modifiers = currentToolModifiers(),
     });
     if (consumed) {
-        // A consumed key may have changed what the tool wants to ghost (rotation, brush
-        // resize); rebuild the preview at the last cursor position so it can't render
-        // stale until the next mouse move.
+        // A consumed key may change what the tool ghosts; rebuild the preview so it cannot render stale.
         updateToolPreview(buildToolMouseEvent(_lastToolCursorPos, std::nullopt));
     }
     return consumed;
@@ -1256,10 +1238,8 @@ void EditorWidget::updateToolPreview(const ToolMouseEvent& event) {
         return;
     }
 
-    // Tools describe their ghost in engine terms (tile ids / PIDs / hexes); lower the spec
-    // to sprites here through the same art pipeline as the stamp ghost, so native and
-    // (future) plugin tools cannot drift from how the editor actually renders. Unresolvable
-    // art is skipped, matching the stamp preview's behaviour.
+    // Tools describe ghosts in engine terms; lower them to sprites through the same art pipeline as
+    // the stamp ghost, skipping art that will not resolve.
     const ToolPreviewSpec spec = tool->buildPreview(event);
     clearToolPreview();
     if (spec.empty()) {
@@ -1294,9 +1274,8 @@ void EditorWidget::clearToolPreview() {
 void EditorWidget::bindSelectionCallbacks(InputHandler::Callbacks& callbacks) {
     // Mouse events
     callbacks.onSelectionClick = [this](sf::Vector2f worldPos, InputHandler::SelectionModifier modifier) {
-        // A plain click on a visible spatial-script marker selects (or, on a quick second click,
-        // edits) that script instead of the object/tile underneath. Modified clicks (add/toggle/
-        // range) stay object-selection operations and leave the spatial selection untouched.
+        // A plain click on a visible spatial marker selects (or on a second click edits) it; modified
+        // clicks stay object selection and leave the spatial selection alone.
         if (modifier == InputHandler::SelectionModifier::NONE && trySelectSpatialScriptAt(worldPos)) {
             return;
         }
@@ -1473,11 +1452,8 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
             setMode(EditorMode::Select);
             Q_EMIT statusMessageRequested("Pattern stamping cancelled.");
         } else if (_mode == EditorMode::PluginTool) {
-            // The host-side cancel guarantee for registered tools: a tool sees Esc/right-click
-            // first (onToolKeyPressed/onToolMousePressed) and may consume them for its own
-            // behaviour, but when it does not, leaving the tool must still work — the hint
-            // promises "Esc / right-click: cancel" for every tool, not just ones that
-            // implement their own cancel.
+            // Host-side cancel guarantee: a tool may consume Esc/right-click, but when it does not, leaving
+            // the tool must still work - the hint promises cancel for every tool.
             setMode(EditorMode::Select);
             Q_EMIT statusMessageRequested("Tool cancelled.");
         } else if (_mode == EditorMode::SetPlayerPosition) {
@@ -1490,10 +1466,8 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
                 _mainWindow->getTilePalettePanel()->deselectTile();
             }
             _tilePlacementManager->resetState(); // also clears the area-fill / replace sub-options
-            // Deterministically leave PlaceTile: setMode() resets both the tile manager and the input
-            // handler. The old path relied only on deselectTile()'s tileSelected(-1) signal to do
-            // this, which is a no-op when no palette tile is highlighted — stranding the mode so the
-            // viewport kept painting after Escape.
+            // setMode() resets both the tile manager and the input handler. Relying on deselectTile()'s
+            // signal was a no-op when no palette tile was highlighted, which stranded the mode.
             setMode(EditorMode::Select);
         } else {
             clearSelection();
@@ -1501,9 +1475,8 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
     };
 
     callbacks.onDeleteObjects = [this]() {
-        // Delete removes the selected spatial script only while its overlay is visible (so it can't
-        // silently delete an invisible script); otherwise it deletes the selected objects. Spatial
-        // selection is exclusive with object selection.
+        // Delete removes the selected spatial script only while its overlay is visible, otherwise the
+        // selected objects; the two selections are exclusive.
         if (_session.visibility().showSpatialScripts
             && _session.selectedSpatialScriptSid() != MapScript::NONE) {
             deleteSpatialScript(_session.selectedSpatialScriptSid());
@@ -1599,9 +1572,8 @@ void EditorWidget::updateEdgeScroll(const float dt) {
         return;
     }
 
-    // Never fight a manual right-drag pan. Every other action (drag-select, object move, tile
-    // paint, mark-exits, ...) benefits from scrolling toward off-screen areas, so only PANNING
-    // is suppressed.
+    // Never fight a manual right-drag pan: every other action benefits from scrolling toward
+    // off-screen areas, so only PANNING is suppressed.
     if (_inputHandler->getCurrentAction() == InputHandler::EditorAction::PANNING) {
         return;
     }
@@ -1627,16 +1599,14 @@ void EditorWidget::updateEdgeScroll(const float dt) {
         return;
     }
 
-    // The velocity is a screen-space speed (px/second). Divide by the zoom so the on-screen scroll
-    // rate stays constant regardless of zoom, then scale by the frame time to get this frame's
-    // world-space step.
+    // Velocity is a screen-space px/s: divide by the zoom so the on-screen rate is constant, then
+    // scale by frame time for this frame's world step.
     const float zoom = _controller.viewport().getZoomLevel();
     const float scale = (zoom > 0.f ? 1.0f / zoom : 1.0f) * dt;
     _controller.viewport().panBy(velocity * scale);
 
-    // Re-fire the move at the (unchanged) cursor pixel against the now-scrolled view, so the hover
-    // highlight, drag-select rectangle, object ghost, and edge-line preview all track the map that
-    // just moved under a possibly-stationary cursor.
+    // Re-fire the move at the unchanged cursor pixel so hover, drag rectangle, ghost and edge
+    // preview all track the map that moved under it.
     if (auto* target = _sfmlWidget->getRenderTarget()) {
         _inputHandler->handleEvent(
             sf::Event(sf::Event::MouseMoved{ { cursor.x(), cursor.y() } }),
@@ -1675,9 +1645,7 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     renderData.selectedRoofTiles = &_controller.visualizer().roofVisuals();
     renderData.dragPreviewObject = &_dragPreviewObject;
     renderData.isDraggingFromPalette = _isDraggingFromPalette;
-    // The ghost-overlay field is shared: a fill preview and a stamp ghost are never live at once, so
-    // point it at whichever is active (A3 reuses the stamp preview's render path rather than adding a
-    // second field).
+    // One shared ghost field: a fill preview and a stamp ghost are never live at once.
     if (_fillPreviewActive) {
         renderData.stampPreview.floorTiles = &_fillPreviewFloorTiles;
         renderData.stampPreview.objects = &_fillPreviewObjects;
@@ -1900,9 +1868,8 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         clearStampPreview();
     }
     if (mode != EditorMode::PluginTool) {
-        // Leaving the registered-tool mode deactivates the tool, drops its preview, and drops
-        // the object-placement cursor ghost (plus its cached ObjectInfo) that the placement
-        // tool arms via startDragPreview.
+        // Leaving the tool mode deactivates the tool and drops its preview plus the object-placement
+        // cursor ghost armed via startDragPreview.
         cancelDragPreview();
         if (_toolRegistry) {
             _toolRegistry->clearActiveTool();
@@ -2052,9 +2019,8 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
     pattern::PatternStamper stamper(_resources, _session.hexgrid(), _controller.commandController(), *_session.map());
     const pattern::PatternStamper::Result result = stamper.stamp(variant, hex, _session.currentElevation());
 
-    // PatternStamper appends object sprites and applies tile sprites incrementally
-    // through the controller, so no full refresh is needed here (mirrors the single
-    // placeObjectAtPosition path).
+    // PatternStamper applies sprites incrementally through the controller, so no full refresh here
+    // (mirrors placeObjectAtPosition).
 
     QString message = QString("Stamped '%1': %2 objects, %3 tiles")
                           .arg(QString::fromStdString(_stampPattern->name))
@@ -2122,10 +2088,8 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
 // ---- Area fill over the current selection (driven by a Luau fill script) ------------------------
 
 namespace {
-    // The bounding hexes covering a set of selected floor/roof tiles, derived from their on-screen sprite
-    // bounds — so a floor/area selection (which carries no hexes) can still scatter objects over the same
-    // region. Exact for a rectangular drag; a non-rectangular selection over-includes its bounding box
-    // (acceptable for a scatter region). Empty when no selected tile has drawable bounds.
+    // Bounding hexes for the selected floor/roof tiles, from their sprite bounds, so a tile selection
+    // can scatter objects. Exact for a rectangular drag, over-inclusive otherwise.
     std::vector<int> hexesCoveringTiles(const std::vector<int>& floorTiles, const std::vector<int>& roofTiles,
         const std::vector<sf::Sprite>& floorSprites, const std::vector<sf::Sprite>& roofSprites,
         selection::SelectionManager& selectionManager) {
@@ -2175,17 +2139,15 @@ EditArea EditorWidget::selectionFillArea() const {
     area.roofTiles = state.getRoofTileIndices();
     area.hexes = state.getHexIndices();
 
-    // A tile selection carries no hexes, but object scatter iterates the area's hexes. Derive the
-    // covering hexes from the selected tiles' on-screen bounds so a floor/area selection can scatter
-    // objects over the same region.
+    // A tile selection carries no hexes but scatter iterates them; derive them from the selected
+    // tiles' on-screen bounds.
     if (area.hexes.empty() && (!area.floorTiles.empty() || !area.roofTiles.empty())) {
         area.hexes = hexesCoveringTiles(area.floorTiles, area.roofTiles,
             _session.floorSprites(), _session.roofSprites(), *selectionManager);
     }
 
-    // EditArea's contract: each list ascending AND unique (areaContains* binary-searches; the seeded
-    // fill iterates in this canonical order, so the same selection + seed reproduces the same result,
-    // and a duplicated index would be painted/counted twice).
+    // EditArea's contract: each list ascending and unique - areaContains* binary-searches, and a
+    // duplicate index would be painted twice.
     const auto sortUnique = [](std::vector<int>& v) {
         std::ranges::sort(v);
         v.erase(std::unique(v.begin(), v.end()), v.end());
@@ -2222,11 +2184,8 @@ ScriptResult EditorWidget::previewLuaFill(const EditArea& area, const std::strin
     if (!_session.map()) {
         return { false, "No map loaded", "" };
     }
-    // Record into the plan sink instead of committing: the script's api:paintFloor/scatter/placeStamp
-    // calls buffer into _fillPlan while the live map stays untouched, so the result previews as a
-    // ghost and applyFillPreview() replays it as one undo entry. setArea exposes the selection to
-    // api:areaFloorTiles()/areaHexes(),
-    // and setSeed makes api:rng()/rngInt() reproducible from the dialog's seed.
+    // Record into the plan sink instead of committing, so the script previews as a ghost and applies
+    // as one undo entry; setArea/setSeed expose the selection and make api:rng reproducible.
     MapScriptApi api(_resources, _session.hexgrid(), _controller.commandController(), *_session.map(), _session.currentElevation());
     registerLibraryStamps(api);
     api.setArea(&area);
@@ -2445,10 +2404,8 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
     _selectionRectangle.setSize({ width, height });
 
     if (isDeselect) {
-        // Ctrl+drag: show the selection with the covered (visible) selected items removed, so
-        // they un-highlight live while everything else stays highlighted. The commit
-        // (deselectArea) and the manager's preview query share the same visibility rules, so
-        // the preview matches exactly what will be deselected.
+        // Ctrl+drag previews with the covered items un-highlighted. The commit and the preview share the
+        // same visibility rules, so the preview matches what will be deselected.
         auto toRemove = _session.selectionManager()->itemsToDeselectInArea(selectionArea, _currentSelectionMode, _session.currentElevation());
         selection::SelectionState preview = _session.selectionManager()->getCurrentSelection();
         for (const auto& item : toRemove) {
@@ -2678,10 +2635,8 @@ void EditorWidget::beginObjectPlacement(uint32_t pid, sf::Vector2f worldPos) {
         _mainWindow->raiseObjectPalette();
     }
 
-    // Enter the registered tool branch first, then arm the palette-drag ghost (sets
-    // _previewObjectInfo + builds the cursor ghost). setMode() clears the ghost when LEAVING
-    // the tool mode; picking a second object while already placing stays in PluginTool, so
-    // drop any previous ghost explicitly before arming the new one.
+    // Picking a second object while already placing stays in PluginTool, and setMode() only clears
+    // the ghost when leaving the mode - so drop the previous one explicitly.
     if (!activateRegisteredTool(kObjectPlacementToolId)) {
         Q_EMIT statusMessageRequested("Pick (P): object placement tool is unavailable");
         return;
@@ -2913,9 +2868,8 @@ bool EditorWidget::revealScriptObject(int sid) {
         return false; // ownerless (spatial / timer / system) — leave the current selection untouched
     }
 
-    // Switch to the owning elevation if needed; changeElevation() rebuilds _session.objects() (fresh
-    // visual wrappers) via loadSprites(), so the visual Object is fetched only afterwards. The host
-    // re-syncs the elevation menu after this returns true (see MainWindow's scriptObjectActivated handler).
+    // changeElevation() rebuilds _session.objects(), so the visual Object is fetched only afterwards.
+    // The host re-syncs the elevation menu when this returns true.
     if (_session.currentElevation() != ownerElevation) {
         changeElevation(ownerElevation);
     }
@@ -3008,10 +2962,8 @@ void EditorWidget::refreshUnreachableOverlay() {
     const auto& objects = objIt != mapFile.map_objects.end() ? objIt->second : kNoObjects;
     const std::size_t objectCount = objects.size();
 
-    // Cheap signature: map identity + elevation + object count. It catches load/new, elevation switch,
-    // and object add/remove without hooking every mutation site. A count-neutral edit (moving a blocker,
-    // flipping a blocking flag) the signature can't see is picked up by toggling the overlay off and on
-    // — setShowUnreachableAreas invalidates the cache on enable, forcing a fresh flood-fill.
+    // Cheap signature: map identity + elevation + object count. It misses a count-neutral edit, which
+    // toggling the overlay picks up by invalidating the cache.
     if (_unreachableCacheValid && map == _unreachableCacheMap
         && elevation == _unreachableCacheElevation && objectCount == _unreachableCacheObjectCount) {
         return;
@@ -3031,9 +2983,8 @@ void EditorWidget::refreshUnreachableOverlay() {
 
 void EditorWidget::clearDragSelectionPreview() {
     clearDragPreview();
-    // A Ctrl+drag preview temporarily un-highlights the covered selected items; restore the
-    // real selection highlight so cancelling the drag (or clearing after another op) leaves
-    // the selection looking correct.
+    // A Ctrl+drag preview un-highlights covered items; restore the real highlight so cancelling
+    // leaves the selection looking correct.
     _controller.visualizer().refresh();
 
     spdlog::debug("EditorWidget::clearDragSelectionPreview() - cleared selection rectangle");

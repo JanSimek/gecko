@@ -2,6 +2,9 @@
 
 #include <QColor>
 #include <QFont>
+#include <QLabel>
+#include <QPushButton>
+#include <QSize>
 #include <QString>
 
 namespace geck {
@@ -295,6 +298,13 @@ namespace ui {
                 return QString("QGroupBox { font-weight: bold; }");
             }
 
+            /// A section heading rather than a box: title only, so the page supplies the background.
+            inline QString sectionGroupBox() {
+                return QString("QGroupBox { background: transparent; border: none; margin-top: %1px; }"
+                               "QGroupBox::title { subcontrol-origin: margin; left: 0px; }")
+                    .arg(spacing::NORMAL);
+            }
+
             // Progress bar style (loading dialogs)
             inline QString progressBarStyle() {
                 return QString(
@@ -529,6 +539,46 @@ namespace ui {
     namespace defaults {
         // Default values
         constexpr const char* READY_STATUS = "Ready";
+    }
+
+    /**
+     * @brief Helpers that apply the theme to a widget, rather than returning a string to apply.
+     *
+     * They live here with the styles they use: each is a couple of lines that several widgets need
+     * to agree on, and a header apiece would scatter the vocabulary the sections share.
+     */
+
+    /// Apply the standard sizing for an icon action button: a consistent icon size and a minimum
+    /// height, so the button does not shrink and clip its icon when the dialog is resized.
+    inline void styleActionButton(QPushButton* button) {
+        if (button == nullptr) {
+            return;
+        }
+        button->setIconSize(QSize(constants::sizes::ICON_SIZE_SMALL, constants::sizes::ICON_SIZE_SMALL));
+        button->setMinimumHeight(constants::sizes::ACTION_BUTTON_HEIGHT);
+    }
+
+    /// Show @p message on a status label in the named style ("warning", "error", "success", "info",
+    /// anything else neutral), hiding the label when there is nothing to say.
+    inline void setStatusText(QLabel* label, const QString& message, const QString& styleClass) {
+        if (label == nullptr) {
+            return;
+        }
+
+        label->setText(message);
+        label->setVisible(!message.isEmpty());
+
+        if (styleClass == "warning") {
+            label->setStyleSheet(theme::styles::statusWarning());
+        } else if (styleClass == "error") {
+            label->setStyleSheet(theme::styles::statusError());
+        } else if (styleClass == "success") {
+            label->setStyleSheet(theme::styles::statusSuccess());
+        } else if (styleClass == "info") {
+            label->setStyleSheet(theme::styles::statusInfo());
+        } else {
+            label->setStyleSheet(theme::styles::statusNormal());
+        }
     }
 
 } // namespace ui

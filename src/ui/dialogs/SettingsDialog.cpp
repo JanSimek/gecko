@@ -56,6 +56,11 @@ QScrollArea* SettingsDialog::wrapInScrollArea(QWidget* content) {
     area->setWidgetResizable(true);
     area->setFrameShape(QFrame::NoFrame);
     area->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
+    // Transparent: the viewport's default QPalette::Window fill is a different shade from the tab
+    // pane, which made each section look like a panel laid on the page.
+    area->viewport()->setAutoFillBackground(false);
+    content->setAutoFillBackground(false);
     return area;
 }
 
@@ -66,14 +71,11 @@ void SettingsDialog::setupUI() {
 
     setupTabs();
 
-    _statusLabel = new QLabel(READY_STATUS);
+    // Dialog-level only (the save confirmation); sections report inside themselves.
+    _statusLabel = new QLabel();
     _statusLabel->setStyleSheet(ui::theme::styles::statusNormal());
+    _statusLabel->setVisible(false);
     _mainLayout->addWidget(_statusLabel);
-    // Everything it reports concerns the data paths, so it has no meaning on the other tabs.
-    connect(_tabWidget, &QTabWidget::currentChanged, this, [this](int index) {
-        _statusLabel->setVisible(_tabWidget->tabText(index) == "General");
-    });
-    _statusLabel->setVisible(_tabWidget->tabText(_tabWidget->currentIndex()) == "General");
 
     _progressBar = new QProgressBar();
     _progressBar->setVisible(false);
@@ -181,9 +183,14 @@ void SettingsDialog::setupGeneralTab() {
     _generalTabLayout->setSpacing(SPACING_LOOSE);
 
     _dataPathsWidget = new DataPathsWidget(_settings);
+    // A heading, not a box: flat alone still paints a frame and a slightly different fill.
+    _dataPathsWidget->setFlat(true);
+    _dataPathsWidget->setStyleSheet(ui::theme::styles::sectionGroupBox());
     _generalTabLayout->addWidget(_dataPathsWidget, /*stretch=*/1); // grows with the dialog (the data-paths list)
 
     _gameLocationWidget = new GameLocationWidget();
+    _gameLocationWidget->setFlat(true);
+    _gameLocationWidget->setStyleSheet(ui::theme::styles::sectionGroupBox());
     _generalTabLayout->addWidget(_gameLocationWidget); // hugs its content; no excess vertical space
 
     // No trailing addStretch(): the data-paths list (stretch 1) absorbs the extra height instead of an
@@ -195,9 +202,7 @@ void SettingsDialog::setupGeneralTab() {
     _tabWidget->addTab(wrapInScrollArea(_generalTab), "General");
 
     connect(_dataPathsWidget, &DataPathsWidget::dataPathsChanged, this, &SettingsDialog::onWidgetChanged);
-    connect(_dataPathsWidget, &DataPathsWidget::statusChanged, this, &SettingsDialog::onStatusChanged);
     connect(_gameLocationWidget, &GameLocationWidget::configurationChanged, this, &SettingsDialog::onWidgetChanged);
-    connect(_gameLocationWidget, &GameLocationWidget::statusChanged, this, &SettingsDialog::onStatusChanged);
 }
 
 void SettingsDialog::setupEditorTab() {
@@ -313,6 +318,7 @@ void SettingsDialog::updateUI() {
 
 void SettingsDialog::setMainStatus(const QString& message, const QString& styleClass) {
     _statusLabel->setText(message);
+    _statusLabel->setVisible(!message.isEmpty());
 
     if (styleClass == "warning") {
         _statusLabel->setStyleSheet(ui::theme::styles::statusWarning());
@@ -330,10 +336,6 @@ void SettingsDialog::setMainStatus(const QString& message, const QString& styleC
 void SettingsDialog::onWidgetChanged() {
     _hasChanges = true;
     updateUI();
-}
-
-void SettingsDialog::onStatusChanged(const QString& message, const QString& styleClass) {
-    setMainStatus(message, styleClass);
 }
 
 void SettingsDialog::onAccept() {

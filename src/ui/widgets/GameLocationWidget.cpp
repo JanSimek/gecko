@@ -2,7 +2,6 @@
 #include "util/GameDataPathResolver.h"
 #include "ui/IconHelper.h"
 #include "ui/Settings.h"
-#include "ui/common/ButtonStyle.h"
 #include "ui/theme/ThemeManager.h"
 
 #include <QApplication>
@@ -68,7 +67,11 @@ void GameLocationWidget::setupUI() {
     // A form puts each label beside its field instead of on a line of its own, which halves the
     // rows this panel needs and lines the two paths up with each other.
     auto* pathForm = new QFormLayout();
-    pathForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    // Left-aligned: right alignment leaves labels of different lengths with ragged left edges.
+    pathForm->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    pathForm->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+    pathForm->setHorizontalSpacing(ui::theme::spacing::NORMAL);
+    pathForm->setVerticalSpacing(ui::theme::spacing::NORMAL);
     pathForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     // Long labels drop above their field rather than squeezing it when the dialog is narrow.
     pathForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
@@ -76,6 +79,7 @@ void GameLocationWidget::setupUI() {
     _executableLabel = new QLabel("Executable:");
 
     _executableLayout = new QHBoxLayout();
+    _executableLayout->setSpacing(ui::theme::spacing::NORMAL);
     _executableLocationEdit = new QLineEdit();
     _executableLocationEdit->setPlaceholderText("Path to the Fallout 2 executable (e.g. fallout2.exe)...");
     _executableLayout->addWidget(_executableLocationEdit);
@@ -91,6 +95,7 @@ void GameLocationWidget::setupUI() {
     _dataDirectoryLabel = new QLabel("Game folder:");
 
     _dataDirectoryLayout = new QHBoxLayout();
+    _dataDirectoryLayout->setSpacing(ui::theme::spacing::NORMAL);
     _dataDirectoryEdit = new QLineEdit();
     _dataDirectoryEdit->setPlaceholderText("Folder containing data/ (e.g. .../GOG.com/Fallout 2)...");
     _dataDirectoryEdit->setToolTip(
@@ -107,6 +112,7 @@ void GameLocationWidget::setupUI() {
     _layout->addLayout(pathForm);
 
     _controlLayout = new QHBoxLayout();
+    _controlLayout->setContentsMargins(0, 0, 0, 0);
     _controlLayout->addStretch();
 
     _autoDetectButton = new QPushButton("Auto-Detect");
@@ -118,9 +124,12 @@ void GameLocationWidget::setupUI() {
     for (QPushButton* btn : { _browseExecutableButton, _browseDataDirectoryButton, _autoDetectButton }) {
         geck::ui::styleActionButton(btn);
     }
-    // Match the field height to the button beside it, or each row reads as two misaligned controls.
-    for (QLineEdit* edit : { _executableLocationEdit, _dataDirectoryEdit }) {
-        edit->setMinimumHeight(ui::constants::sizes::ACTION_BUTTON_HEIGHT);
+    // One height per row so the centre lines coincide: QFormLayout otherwise top-aligns a 26px
+    // label against a 30px field, leaving its text two pixels high.
+    for (QWidget* rowWidget : { static_cast<QWidget*>(_executableLocationEdit),
+             static_cast<QWidget*>(_dataDirectoryEdit), static_cast<QWidget*>(_executableLabel),
+             static_cast<QWidget*>(_dataDirectoryLabel) }) {
+        rowWidget->setMinimumHeight(ui::constants::sizes::ACTION_BUTTON_HEIGHT);
     }
 
     _layout->addLayout(_controlLayout);
@@ -128,6 +137,12 @@ void GameLocationWidget::setupUI() {
     _progressBar = new QProgressBar();
     _progressBar->setVisible(false);
     _layout->addWidget(_progressBar);
+
+    _statusLabel = new QLabel();
+    _statusLabel->setWordWrap(true);
+    _statusLabel->setStyleSheet(ui::theme::styles::statusNormal());
+    _statusLabel->setVisible(false);
+    _layout->addWidget(_statusLabel);
 }
 
 void GameLocationWidget::setupConnections() {
@@ -157,6 +172,8 @@ void GameLocationWidget::setDataDirectory(const std::filesystem::path& location)
 }
 
 void GameLocationWidget::setStatusMessage(const QString& message, const QString& styleClass) {
+    // In this section: a shared line meant adding a data path wiped out the executable warning.
+    ui::setStatusText(_statusLabel, message, styleClass);
     Q_EMIT statusChanged(message, styleClass);
 }
 

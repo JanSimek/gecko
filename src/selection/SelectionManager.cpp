@@ -123,10 +123,8 @@ SelectionResult SelectionManager::addArea(const sf::FloatRect& area, SelectionMo
 }
 
 std::vector<SelectedItem> SelectionManager::itemsToDeselectInArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) const {
-    // The covered items a Ctrl+drag would remove: currently selected and on a visible layer.
-    // A roof you cannot see must never be silently deselected, so skip hidden roof tiles.
-    // (Hidden objects are already excluded by collectItemsInArea -> getObjectsInArea; floors
-    // are always visible.)
+    // What a Ctrl+drag would remove: selected and on a visible layer. A roof you cannot see must never
+    // be silently deselected; hidden objects are already excluded upstream.
     const bool roofVisible = _provider.isRoofVisible();
     std::vector<SelectedItem> toRemove;
     for (const auto& item : collectItemsInArea(area, mode, currentElevation)) {
@@ -201,9 +199,8 @@ SelectionResult SelectionManager::addToSelection(sf::Vector2f worldPos, Selectio
         }
 
         case SelectionMode::ALL:
-            // ALL mode adds the first available item in priority order (roof, object, floor)
-            // without cycling, restricted to the user-enabled layers. A hidden roof is skipped so
-            // it can't shadow the object beneath it (consistent with cycleThroughItemsAtPosition).
+            // ALL mode adds the first item in priority order without cycling, restricted to enabled layers. A
+            // hidden roof is skipped so it cannot shadow the object beneath.
             if (_layers.roofTiles && _provider.isRoofVisible()) {
                 auto tileIndex = getRoofTileAtPosition(worldPos, currentElevation);
                 if (tileIndex) {
@@ -342,9 +339,8 @@ std::vector<SelectedItem> SelectionManager::collectDeselectableAtPosition(sf::Ve
 }
 
 SelectionResult SelectionManager::deselectAtPosition(sf::Vector2f worldPos, SelectionMode mode, int currentElevation) {
-    // Ctrl+click is deselect-only: remove the topmost visible layer under the cursor that is
-    // already selected, and never add. Clicking outside the selection leaves it untouched.
-    // collectDeselectableAtPosition already drops hidden roofs, so they stay selected.
+    // Ctrl+click is deselect-only: remove the topmost visible selected layer, never add, and leave the
+    // selection alone when clicking outside it.
     for (const auto& candidate : collectDeselectableAtPosition(worldPos, mode, currentElevation)) {
         if (isItemSelected(candidate)) {
             removeItemFromSelection(candidate);
@@ -358,9 +354,8 @@ SelectionResult SelectionManager::deselectAtPosition(sf::Vector2f worldPos, Sele
 }
 
 bool SelectionManager::isPointOnSelection(sf::Vector2f worldPos) const {
-    // The visible, selectable layers under the cursor (roof skipped while hidden, hidden objects
-    // dropped, floor always present) — the same candidates Ctrl+click deselect considers. If any
-    // of them is in the current selection, the point is a valid grab handle for moving it.
+    // The same candidates Ctrl+click deselect considers; if any is selected, the point is a valid grab
+    // handle for moving the selection.
     const auto candidates = collectDeselectableAtPosition(worldPos, SelectionMode::ALL, _provider.getCurrentElevation());
     return std::ranges::any_of(candidates, [this](const SelectedItem& candidate) { return isItemSelected(candidate); });
 }
@@ -624,9 +619,8 @@ std::vector<std::shared_ptr<Object>> SelectionManager::getObjectsInArea(const sf
     const auto& allObjects = _provider.getObjects();
 
     for (const auto& object : allObjects) {
-        // Only visible objects are selectable, matching getObjectsAtPosition's point-pick
-        // rule. Without this, an area drag selects objects on a hidden layer (e.g. scroll
-        // blockers while their layer is off) that the user cannot see.
+        // Only visible objects are selectable, matching the point-pick rule - otherwise an area drag
+        // selects objects on a hidden layer the user cannot see.
         if (!_provider.isObjectSelectable(object)) {
             continue;
         }
@@ -720,10 +714,8 @@ SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f world
     // and only walks the user-enabled layers.
     auto objectsAtPos = _layers.objects ? getObjectsAtPosition(worldPos, elevation)
                                         : std::vector<std::shared_ptr<Object>>{};
-    // A roof you cannot see must never shadow a click on the object (or floor) beneath it. Point
-    // selection used to gate the roof only on the layer flag, so hiding the roof to edit interior
-    // objects still selected the hidden roof tile under the cursor. This mirrors the area-select
-    // path (collectItemsInArea) and itemsToDeselectInArea, which already check isRoofVisible().
+    // A roof you cannot see must never shadow a click beneath it. Gating only on the layer flag meant
+    // hiding the roof still selected its tile; this mirrors the area-select path.
     auto roofTileIndex = (_layers.roofTiles && _provider.isRoofVisible())
         ? getRoofTileAtPosition(worldPos, elevation)
         : std::nullopt;
@@ -925,9 +917,8 @@ std::optional<std::pair<int, bool>> SelectionManager::selectionTileReference() c
 }
 
 std::optional<std::pair<int, int>> SelectionManager::selectionTileDelta(sf::Vector2f worldTranslation) const {
-    // A tile centre round-trips through the hit-test, so translating it and snapping yields a
-    // whole-tile delta aligned with how the dragged objects move — deriving the delta from the
-    // arbitrary click/drop points double-rounds and lands the tiles off-centre.
+    // A tile centre round-trips through the hit-test, so translating and snapping it yields a delta
+    // aligned with the dragged objects - deriving it from the click points double-rounds.
     const auto reference = selectionTileReference();
     if (!reference.has_value()) {
         return std::nullopt;

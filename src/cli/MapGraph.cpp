@@ -45,9 +45,8 @@ namespace {
         bool analysed = false;
     };
 
-    // An aggregated edge between two maps: how many exit hexes form it, the raw destination index, the
-    // destination's friendly name, and what kind of target it is (map / worldmap / townmap / unknown —
-    // an index with no maps.txt entry).
+    // An aggregated edge between two maps: how many exit hexes form it, the raw destination index, its
+    // friendly name, and the target kind (map / worldmap / townmap / unknown).
     struct EdgeInfo {
         int destMap = 0;
         std::string toName;
@@ -56,9 +55,8 @@ namespace {
         // The individual exit grids forming this edge — the one-way join needs each arrival's
         // destination hex/elevation and each return exit's source hex/elevation.
         std::vector<MapExit> exitList;
-        // Can the player walk back through this edge? Filled by annotateReturnPaths for map-kind
-        // edges: unset = undeterminable (destination never analysed, or every return path runs
-        // through another elevation — stairs, which this model doesn't trace).
+        // Can the player walk back? Filled for map-kind edges; unset means undeterminable - the
+        // destination was never analysed, or every return path runs through another elevation.
         std::optional<bool> oneWay;
         std::string oneWayReason; ///< "no-return-edge" or "return-unreachable" when oneWay is true
     };
@@ -145,9 +143,8 @@ namespace {
         return analysed;
     }
 
-    // Per-destination-map reachability cache for the one-way join: the map is re-loaded once (the
-    // first pass frees each map after reading its exits) and each elevation's walkable components
-    // are computed on first use.
+    // Per-destination reachability cache for the one-way join: the map is re-loaded once and each
+    // elevation's walkable components computed on first use.
     struct DestReachability {
         std::unique_ptr<Map> map;
         std::map<int, reachability::ElevationResult> byElevation;
@@ -169,10 +166,8 @@ namespace {
         return it->second;
     }
 
-    // The walkability half of the one-way join: does some return exit share a walkable component
-    // with an arrival hex, on the arrival's elevation? Uses the same optimistic model as the
-    // reachability tool (doors passable), so a "return-unreachable" verdict is a real seal, not a
-    // locked door.
+    // Does some return exit share a walkable component with an arrival hex on that elevation? Same
+    // optimistic model as the reachability tool (doors passable), so a verdict is a real seal.
     void evaluateReturnWalkability(resource::GameResources& resources, EdgeInfo& edge,
         const EdgeInfo& returnEdge, const std::string& toFile, const StringMap& pathOf,
         std::map<std::string, DestReachability, std::less<>>& reach) {
@@ -205,20 +200,16 @@ namespace {
                 }
             }
         }
-        // "return-unreachable" is claimed only when EVERY (arrival, return) combination was
-        // determinable and blocked; a cross-elevation return option leaves the verdict unset,
-        // since stairs might still connect it.
+        // Claimed only when every (arrival, return) combination was determinable and blocked; a
+        // cross-elevation option leaves it unset, since stairs might connect.
         if (sawSameElevationPair && !sawCrossElevationOption) {
             edge.oneWay = true;
             edge.oneWayReason = "return-unreachable";
         }
     }
 
-    // The one-way join: for every map-kind edge A->B, can the player walk back to A? Structurally
-    // first (does B have an exit grid targeting A at all), then effectively (is some return exit
-    // walk-connected to an arrival hex — evaluateReturnWalkability). Non-map edges (worldmap/
-    // townmap/unknown) have no "return" concept and stay unset, as do edges into maps that were
-    // never analysed.
+    // The one-way join: for every map-kind edge A->B, can the player walk back? Structurally first
+    // (does B target A at all), then effectively. Non-map edges have no return concept.
     void annotateReturnPaths(resource::GameResources& resources, const Nodes& nodes, Edges& edges,
         const StringMap& pathOf) {
         std::map<std::string, DestReachability, std::less<>> reach;

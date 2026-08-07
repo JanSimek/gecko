@@ -75,9 +75,8 @@ void MapLoader::load() {
     setStatus("Loading map " + _mapPath.filename().string());
     _percentDone = 0;
 
-    // Runs on a background thread (see the std::thread in start()): an exception escaping here
-    // would call std::terminate and abort the app, so a failed/corrupt read must become a
-    // reported error instead.
+    // Runs on a background thread: an escaping exception would call std::terminate, so a failed or
+    // corrupt read must become a reported error.
     try {
         if (_forceFilesystem) {
             spdlog::debug("MapLoader: Force filesystem loading requested");
@@ -235,12 +234,9 @@ void MapLoader::loadMapResources() {
             try {
                 _resources->textures().preload("art/tiles/" + tile);
             } catch (const std::exception& e) {
-                // A tiles.lst entry whose art isn't in the mounted data is NOT fatal. The engine
-                // loads tiles on demand, so a full tiles.lst that indexes art a given data set does
-                // not ship (common with mods that patch tiles.lst but rely on master.dat for the
-                // rest, or carry unused/placeholder slots) is normal. Skip it: the tile renders
-                // blank only if a map actually places it. Aborting here would make an otherwise
-                // loadable map fail on a tile it never uses.
+                // A tiles.lst entry whose art isn't mounted is NOT fatal - the engine loads tiles on demand, and a
+                // full tiles.lst indexing art a data set doesn't ship is normal. Skip it: the tile renders blank
+                // only if a map places it, where aborting would fail a map over a tile it never uses.
                 unresolvedTiles.push_back(tile);
                 spdlog::debug("MapLoader: skipping unresolved tile '{}': {}", tile, e.what());
             }
@@ -272,10 +268,8 @@ void MapLoader::loadMapResources() {
                 continue; // object inside an inventory/container
             }
 
-            // Same tolerance as tiles: a single object whose art (or proto->FID mapping) can't be
-            // resolved must not abort the whole map. resolve() itself throws on an out-of-range FID,
-            // so both it and preload() sit inside the guard; the object just renders blank. `art`
-            // stays empty when resolve() is what threw, so we fall back to naming the FID.
+            // Same tolerance as tiles: one object whose art or proto->FID mapping won't resolve must not abort
+            // the map. `art` stays empty when resolve() threw, so we fall back to naming the FID.
             std::string art;
             try {
                 art = _resources->frmResolver().resolve(object->frm_pid);
@@ -348,9 +342,8 @@ void MapLoader::loadSiblingEdge(bool viaVfs) {
             continue;
         }
 
-        // Stop at the first sibling that parses. tryParse returns nullopt on a malformed or empty
-        // file, in which case we keep probing the other case variant (a case-sensitive filesystem
-        // could hold a valid ".edg" beside an unparsable ".EDG").
+        // Stop at the first sibling that parses: a case-sensitive filesystem could hold a valid ".edg"
+        // beside an unparsable ".EDG".
         if (auto edge = MapEdgeReader::tryParse(edgePath, *bytes)) {
             spdlog::debug("MapLoader: loaded map-edge sidecar {} ({} zones)",
                 edgePath.string(), edge->totalZones());

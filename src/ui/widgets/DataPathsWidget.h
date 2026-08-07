@@ -103,6 +103,7 @@ private:
     QLabel* _helpLabel = nullptr;
     QTableWidget* _pathsTable = nullptr;
     QLayout* _controlLayout = nullptr; // the action column beside the list
+    QLabel* _statusLabel = nullptr;    // this section's own status line
     QPushButton* _addButton = nullptr;
     QPushButton* _removeButton = nullptr;
     QPushButton* _moveUpButton = nullptr;

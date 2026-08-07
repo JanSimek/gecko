@@ -13,9 +13,7 @@ namespace geck {
  */
 namespace ResourcePaths {
 
-    // ========================================
     // LST Files - File listings
-    // ========================================
     namespace Lst {
         constexpr std::string_view ITEMS = "art/items/items.lst";
         constexpr std::string_view CRITTERS = "art/critters/critters.lst";
@@ -38,9 +36,7 @@ namespace ResourcePaths {
         constexpr std::string_view SCRIPTS = "scripts/scripts.lst";
     }
 
-    // ========================================
     // FRM Files - Sprites and graphics
-    // ========================================
     namespace Frm {
         // Special FRM files
         constexpr std::string_view HEX_GRID = "art/misc/HEX.frm";
@@ -48,9 +44,8 @@ namespace ResourcePaths {
         constexpr std::string_view WALL_BLOCK = "art/misc/wallblock.frm";
         constexpr std::string_view WALL_BLOCK_FULL = "art/misc/wallblockF.frm";
 
-        // Editor-only "Show exit grids" overlay marker (the bundled "EG" hex image under
-        // resources/art/misc/ — not in the DATs). Drawn per exit-grid hex, separate from the
-        // player-visible directional exitgrd*/ext2grd* art.
+        // Editor-only "Show exit grids" marker (bundled under resources/art/misc/, not in the DATs),
+        // separate from the player-visible directional exitgrd*/ext2grd* art.
         constexpr std::string_view EXIT_GRID = "art/misc/exitgrid.frm";
 
         // Spatial-script trigger marker — the same green hex the fallout2-ce mapper spawns for its
@@ -67,16 +62,12 @@ namespace ResourcePaths {
         constexpr std::string_view STANDING_SUFFIX = "aa.frm";
     }
 
-    // ========================================
     // PAL Files - Color palettes
-    // ========================================
     namespace Pal {
         constexpr std::string_view COLOR = "color.pal";
     }
 
-    // ========================================
     // MSG Files - Text messages
-    // ========================================
     namespace Msg {
         constexpr std::string_view PROTO = "text/english/game/proto.msg";
         constexpr std::string_view PRO_ITEM = "text/english/game/pro_item.msg";
@@ -94,9 +85,7 @@ namespace ResourcePaths {
         constexpr std::string_view SCRNAME = "scrname.msg";
     }
 
-    // ========================================
     // Directory prefixes for FRM types
-    // ========================================
     namespace Directories {
         constexpr std::string_view ITEMS = "art/items/";
         constexpr std::string_view CRITTERS = "art/critters/";
@@ -121,9 +110,7 @@ namespace ResourcePaths {
         constexpr std::string_view TEXT = "text/";
     }
 
-    // ========================================
     // DAT Files - Archive files
-    // ========================================
     namespace Dat {
         constexpr std::string_view MASTER = "master.dat";
         constexpr std::string_view CRITTER = "critter.dat";

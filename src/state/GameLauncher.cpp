@@ -392,9 +392,8 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
 
         spdlog::debug("Saved map to game directory: {} ({} bytes)", mapDestination.string(), *bytesWritten);
 
-        // 2. Point the game at the map. ddraw.ini is what the original executable plus sfall reads;
-        // fallout2-ce only consults it while migrating sfall settings into data/config/game#patch.cfg
-        // and skips that migration once the file exists, so write the migrated key ourselves too.
+        // 2. Point the game at the map. ddraw.ini is what the original exe plus sfall reads; fallout2-ce
+        // only consults it once, while migrating into game#patch.cfg, so write that key ourselves too.
         QStringList unwritten;
         if (!modifyDdrawIni(gameDataDir / "ddraw.ini", mapFilename)) {
             unwritten << "ddraw.ini";
@@ -450,10 +449,8 @@ EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDi
     const std::filesystem::path modsDirectory = gameDataDirectory / "mods";
 
     for (const std::filesystem::path& dataPath : editorDataPaths) {
-        // Being inside the installation is not enough to be loaded: the engine reads data/ as
-        // master_patches and the archives it opens by name, but never an arbitrary subdirectory, so
-        // something like <game>/my-work-in-progress still has to be mounted. In order: the
-        // installation itself, master_patches, and whatever the player's own mod list governs.
+        // Being inside the installation is not enough: the engine reads data/ as master_patches and the
+        // archives it opens by name, never an arbitrary subdirectory. Skip only what it already loads.
         if (dataPath.empty() || normalizedForCompare(dataPath) == normalizedForCompare(gameDataDirectory)
             || isSameOrInside(dataPath, gameDataDirectory / "data") || isSameOrInside(dataPath, modsDirectory)) {
             continue;
@@ -467,11 +464,9 @@ EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDi
             continue;
         }
 
-        // Lexical on purpose: std::filesystem::relative() resolves against the current working
-        // directory and the current volume, which makes the result depend on where the editor happens
-        // to run. lexically_relative() yields an empty path when no relative route exists, e.g. across
-        // Windows volumes. A semicolon or hash would make the engine's parser treat the entry as a
-        // comment and silently skip it.
+        // Lexical on purpose: std::filesystem::relative() resolves against the working directory and
+        // volume, so the result would depend on where the editor runs. An entry containing ';' or '#'
+        // would be treated as a comment and silently skipped.
         const std::string text
             = dataPath.lexically_normal().lexically_relative(modsDirectory.lexically_normal()).generic_string();
         if (text.empty() || text.size() > kMaxModEntryLength || text.find_first_of(";#") != std::string::npos) {
@@ -613,23 +608,20 @@ bool GameLauncher::writeModsOrder(const std::filesystem::path& gameDataDirectory
         restoreModsOrder();
     }
 
-    // Capture the player's own load order once per launch. A second Play before the game exits must
-    // not record our own block as the file to restore, and a block left behind by an editor crash is
-    // stripped so it never becomes part of the "original".
+    // Capture the player's own order once per launch: a second Play before the game exits must not
+    // record our own block, and a block left by a crash is stripped rather than kept.
     if (!_modsOrderPatched) {
         const std::optional<std::string> existing = readFileVerbatim(modsOrderPath);
         _modsOrderPath = modsOrderPath;
-        // Kept byte for byte so the restore reproduces the file exactly, including a missing final
-        // newline - unless it still carries a block from an editor that died before restoring, which
-        // is not part of the player's own order and is dropped.
+        // Byte for byte, including a missing final newline - unless it still carries a block from an
+        // editor that died before restoring, which is not the player's order.
         _modsOrderOriginal = existing.has_value() && existing->find(kManagedBlockBegin) != std::string::npos
             ? std::optional<std::string>(applyManagedModsOrderBlock(*existing, {}))
             : existing;
     }
 
-    // With no list at all the engine builds one from `mods\*.dat` on startup. Writing our own file
-    // first suppresses that, silently dropping every mod the player has installed, so seed it with
-    // the same discovery result the engine would have produced.
+    // With no list the engine builds one from `mods\*.dat` at startup. Writing ours first suppresses
+    // that and silently drops every installed mod, so seed it with the same discovery.
     if (!writeFileVerbatim(modsOrderPath,
             applyManagedModsOrderBlock(_modsOrderOriginal.value_or(discoveredModsOrder(modsDirectory)), entries))) {
         return false;

@@ -70,10 +70,8 @@ namespace {
         return entries;
     }
 
-    // Per-map usage histograms: floor-tile id -> count, proto pid -> count.
-    // An ordered, directional floor-tile border: b sits immediately east ('E', col+1) or south
-    // ('S', row+1) of a. Ordered because transition art is directional (most shipped-map borders
-    // never occur reversed); the opposite direction is simply the swapped pair.
+    // Per-map usage histograms: floor-tile id -> count, proto pid -> count. An ordered floor-tile
+    // border: b sits east ('E') or south ('S') of a - transition art is directional.
     using DirectedPair = std::tuple<uint16_t, uint16_t, char>;
 
     struct MapUsage {
@@ -94,9 +92,8 @@ namespace {
         int analysed = 0;
     };
 
-    // Resolves tile and object display names from engine data (cached). The proto name comes
-    // from the type's message file keyed by the proto's message_id — the same path the UI uses
-    // (SelectionPanel) — not typeToString(), which only names the category ("Scenery").
+    // Resolves tile and object display names from engine data (cached). The proto name comes from the
+    // type's message file keyed by message_id, as the UI does, not from typeToString().
     class NameResolver {
     public:
         explicit NameResolver(resource::GameResources& resources)
@@ -127,9 +124,8 @@ namespace {
             return _flat[pid];
         }
 
-        // Whether the proto actually loads from the mounted data. False means the flag/name reported
-        // for it are not authoritative (incomplete data) — used to keep unplaceable protos out of the
-        // curated palette rather than substituting a guess (engine-data-fidelity rule).
+        // Whether the proto actually loads from the mounted data. False means its reported flag/name are
+        // not authoritative, which keeps unplaceable protos out of the curated palette.
         bool resolved(uint32_t pid) {
             characterize(pid);
             return _resolved[pid];
@@ -155,9 +151,8 @@ namespace {
         }
 
     private:
-        // tiles.lst (tile id -> name), or nullptr when it isn't mounted — tileName() falls back to a
-        // "tile#N" label, so analyze still runs on a bare .map (e.g. one just generated) without the
-        // full game data. Tolerant for the same reason loadScriptsLst() is.
+        // tiles.lst, or nullptr when unmounted - tileName() then falls back to "tile#N" so analyze still
+        // runs on a bare .map.
         static const Lst* loadTilesLst(resource::GameResources& resources) {
             try {
                 return resources.repository().load<Lst>("art/tiles/tiles.lst");
@@ -224,9 +219,8 @@ namespace {
         }
     }
 
-    // {programIndex, scripts.lst filename} for an object's attached script — its map_scripts_pid (SID)
-    // matches a MapScript whose script_id is the (0-based) scripts.lst index — or nullopt if it has no
-    // script. Indexes scripts.lst exactly as SelectionPanel/the engine do (directly, no offset).
+    // {programIndex, filename} for an object's attached script, or nullopt. The object's SID matches a
+    // MapScript whose script_id is the 0-based scripts.lst index (no offset, as the engine does).
     std::optional<std::pair<int, std::string>> resolveObjectScript(Map& map, int32_t mapScriptsPid, const Lst* scriptsLst) {
         if (mapScriptsPid < 0) {
             return std::nullopt;
@@ -250,9 +244,8 @@ namespace {
         return std::nullopt;
     }
 
-    // The MapScript an object's map_scripts_pid (SID) points at, or nullptr if the object has no
-    // script. Mirrors resolveObjectScript's lookup (the SID's section + a pid match), so the caller
-    // can read the script's local variables without re-deriving the section.
+    // The MapScript an object's SID points at, or nullptr. Mirrors resolveObjectScript's lookup so the
+    // caller can read local variables without re-deriving the section.
     const MapScript* findObjectScript(Map& map, int32_t mapScriptsPid) {
         if (mapScriptsPid < 0) {
             return nullptr;
@@ -289,10 +282,8 @@ namespace {
         return mapPaths;
     }
 
-    // Tally directional floor-tile borders within one elevation's tile grid (row-major, Map::COLS
-    // wide) through the synthesizer's own learner, so what analyze reports and what quilting
-    // consumes can never disagree. Same-tile borders are dropped from the report — it is about the
-    // transitions between tile types (the learner keeps them for its repair ladder).
+    // Tally directional borders through the synthesizer's own learner, so analyze and quilting cannot
+    // disagree. Same-tile borders are dropped here; the learner keeps them for its repair ladder.
     void collectFloorAdjacency(const std::vector<Tile>& tiles, std::map<DirectedPair, int>& adjacency) {
         floorsynth::Grid grid;
         grid.width = static_cast<int>(Map::COLS);
@@ -334,9 +325,8 @@ namespace {
         return usage;
     }
 
-    // --- object clustering: group nearby objects so an agent can spot structures (tents, buildings)
-    // and feed extract_pattern. Objects within kClusterMergeDistance hexes (Chebyshev) are one
-    // cluster; clusters smaller than kMinClusterSize are dropped as decoration noise.
+    // Group nearby objects so an agent can spot structures: within kClusterMergeDistance hexes
+    // (Chebyshev) is one cluster, and clusters under kMinClusterSize are decoration noise.
     constexpr int kClusterMergeDistance = 3;
     constexpr int kMinClusterSize = 2;
 
@@ -493,9 +483,8 @@ namespace {
         return array;
     }
 
-    // Per-map object array: [{pid,number,type,name,count,flat}], accumulating totals into agg.
-    // `number` is the PID's low 24 bits — the value api:proto(type, number) wants (one less than the
-    // NNN in the 00000NNN.pro filename), so a script can use it verbatim.
+    // Per-map object array, accumulating totals into agg. `number` is the PID's low 24 bits - what
+    // api:proto(type, number) wants, so a script can use it verbatim.
     ordered_json objectsToJson(const MapUsage& usage, NameResolver& names, Aggregate& agg) {
         auto array = ordered_json::array();
         for (const auto& [pid, count] : sortedByCountDesc(usage.objects)) {
@@ -544,10 +533,8 @@ namespace {
         return array;
     }
 
-    // The weighted generation palette aggregated across maps: floor tiles, and the scatter-eligible
-    // scenery (scenery type, non-flat — no walls, blockers or flat markers), each with its total
-    // placement count as a weight. The small input a generator script needs (what random_desert.luau
-    // hardcodes), not the full analyze report. `id`/`number` are ready for api:paintFloor/api:proto.
+    // The weighted generation palette across maps: floor tiles and scatter-eligible scenery (non-flat
+    // scenery only), each weighted by placement count. `id`/`number` are ready for the api.
     void emitPalette(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
         NameResolver& names, std::ostream& out) {
         std::map<uint16_t, int> floor;
@@ -629,10 +616,8 @@ namespace {
             { "areaAttackMode", packet->areaAttackMode }, { "secondaryFreq", packet->secondaryFreq } };
     }
 
-    // Per-map critter array: [{pid,number,name,hex,elevation,team,aiPacket,ai:{...}|null}]. `team` is
-    // the instance group_id; `aiPacket` is the instance ai_packet, falling back to the proto default
-    // when it is 0, resolved through ai.txt into the behaviour sub-object. Lets an agent read who is
-    // on the map, which side they fight for, and how they behave.
+    // Per-map critter array. `team` is the instance group_id; `aiPacket` falls back to the proto
+    // default when 0 and resolves through ai.txt into the behaviour sub-object.
     ordered_json crittersToJson(Map& map, NameResolver& names, const AiTxt& ai, const Lst* scriptsLst) {
         auto array = ordered_json::array();
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
@@ -662,10 +647,8 @@ namespace {
         return array;
     }
 
-    // The script's local-variable slice of the map's flat LVAR pool: lvars[local_var_offset ..
-    // local_var_offset + local_var_count). Empty array when the script has no locals (offset is the
-    // NONE sentinel or count is 0). Every index is bounds-checked and the slice stops at the pool's
-    // end, so a stale count (e.g. a hand-edited map) can never read past the vector.
+    // The script's slice of the map's flat LVAR pool. Every index is bounds-checked and the slice
+    // stops at the pool's end, so a stale count cannot read past the vector.
     ordered_json localVarsToJson(const MapScript& script, const std::vector<int32_t>& lvars) {
         auto array = ordered_json::array();
         if (script.local_var_offset == MapScript::NONE || script.local_var_count == 0) {
@@ -681,13 +664,8 @@ namespace {
         return array;
     }
 
-    // Per-map script list across every section, mirroring the editor's Scripts panel: each entry is
-    // { section, programIndex, name, filename, ownerObject, [spatialRadius|timerMs], localVars }. The
-    // section name comes from the section index (== MapScript::ScriptType); programIndex is the
-    // 0-based scripts.lst index (script_id), resolved to a friendly scrname.msg name and its .lst
-    // filename. ownerObject is the script's owning object id (null for the -1 sentinel / 0 = none).
-    // spatialRadius is included only for Spatial scripts, timerMs only for Timer scripts. localVars
-    // is the script's slice of the map's LVAR pool.
+    // Per-map script list across every section, mirroring the Scripts panel. programIndex is the
+    // 0-based scripts.lst index; spatialRadius and timerMs appear only for their own section.
     ordered_json scriptsToJson(Map& map, const Lst* scriptsLst, resource::GameResources& resources) {
         auto array = ordered_json::array();
         const auto& mapFile = map.getMapFile();
@@ -730,9 +708,8 @@ namespace {
         }
     }
 
-    // Per-map header digest: player spawn, which elevations are enabled, darkness, the map script id,
-    // the local-var pool size, and the map variables (MVARS) — each with its name from the .gam (the
-    // .map stores only the value) so an agent reads the map's tracked state, not just a count.
+    // Per-map header digest. Map variables carry their name from the .gam, since the .map stores only
+    // the value.
     ordered_json headerToJson(Map& map, const Gam* gam, const Lst* scriptsLst, resource::GameResources& resources) {
         const auto& header = map.getMapFile().header;
         ordered_json root;
@@ -747,10 +724,8 @@ namespace {
         }
         root["elevations"] = std::move(elevations);
         root["darkness"] = header.darkness;
-        // The header's script_id is **1-based**: the engine runs the map's SYSTEM script from
-        // scripts.lst[script_id - 1] (fallout2-ce map.cc: `script->index = scriptIndex - 1`, only
-        // when scriptIndex > 0). Resolve to that 0-based programIndex + name so describe_script can be
-        // fed it directly; null when the map has no script (script_id <= 0).
+        // The header's script_id is 1-based: the engine runs scripts.lst[script_id - 1] (fallout2-ce
+        // map.cc), so resolve to that 0-based programIndex. Null when the map has no script.
         root["scriptId"] = header.script_id;
         if (header.script_id > 0) {
             const int programIndex = header.script_id - 1;
@@ -780,11 +755,8 @@ namespace {
         return root;
     }
 
-    // Per-map exit graph: [{hex,elevation,destMap,destMapName,destMapDisplayName,destHex,
-    // destElevation,orientation}] from the exit-grid markers. destMap/destHex are signed (-1 = town
-    // map / unused, -2 = worldmap, else a map id); destMapName is the .map filename and
-    // destMapDisplayName the friendly map.msg name at the destination elevation (both null when
-    // unknown). The map's connectivity, so an agent sees where each edge leads.
+    // Per-map exit graph from the exit-grid markers. destMap/destHex are signed: -1 = town map,
+    // -2 = worldmap, else a map id.
     ordered_json exitsToJson(Map& map, const resource::MapNameResolver& mapNames) {
         auto array = ordered_json::array();
         for (const MapExit& exit : collectMapExits(map)) {
@@ -800,9 +772,8 @@ namespace {
         return array;
     }
 
-    // The shared, per-run inputs every map's JSON needs: engine resources, the name/tile resolver,
-    // ai.txt, scripts.lst and the map-name resolver. Bundled so mapToJson takes a handful of
-    // arguments, not a dozen.
+    // The shared per-run inputs every map's JSON needs, bundled so mapToJson takes a handful of
+    // arguments rather than a dozen.
     struct AnalyzeContext {
         resource::GameResources& resources;
         NameResolver& names;
@@ -841,12 +812,8 @@ namespace {
         return entry;
     }
 
-    // Machine-readable analyze, for an MCP client: per map { name, path, floor[], objects[],
-    // adjacency[], clusters[], critters[], header{}, scripts[], exits[] } and an aggregate { analysed, floor[],
-    // objects[], adjacency[] }. `flat` is the structural-vs-decoration hint; `adjacency` lists
-    // directional floor-tile borders (transitions; dir "E"/"S", the reverse direction is the
-    // swapped pair); `clusters` groups nearby objects (structures) with a centre/bbox an agent
-    // feeds to extract_pattern. Built with nlohmann ordered_json.
+    // Machine-readable analyze for an MCP client: per map and an aggregate. `flat` is the
+    // structural-vs-decoration hint; `adjacency` lists directional borders; `clusters` groups objects.
     void emitJson(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
         NameResolver& names, const AiTxt& ai, std::ostream& out) {
         Aggregate agg;

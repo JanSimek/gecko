@@ -144,11 +144,8 @@ namespace {
         }
     }
 
-    // Append one tile cell (two triangles) for the tile whose 80x36 art box has top-left (x, y).
-    // The cell is the iso-lattice parallelogram around the tile centre, spanned by the grid's
-    // half-basis vectors — the screen step for +1 column (u) and +1 row (v). Using these (not an
-    // axis-aligned 80x36 diamond) makes neighbouring cells abut exactly, so regions fill solidly
-    // instead of leaving gaps.
+    // One tile cell (two triangles) as the iso-lattice parallelogram around the tile centre, spanned by
+    // the grid's half-basis vectors. An axis-aligned 80x36 diamond would leave gaps between cells.
     void appendCell(sf::VertexArray& vertices, float x, float y, sf::Color color) {
         const sf::Vector2f center{ x + static_cast<float>(TILE_WIDTH) / 2.0f,
             y + static_cast<float>(TILE_HEIGHT) / 2.0f };
@@ -170,10 +167,8 @@ namespace {
 
     constexpr uint16_t kEmptyTile = static_cast<uint16_t>(Map::EMPTY_TILE);
 
-    // Grow `bounds` to the FULL floor-tile grid's screen extent — the whole iso playable area — using
-    // the same tile->screen projection the renderer uses to place floor tiles. The screen X and Y of a
-    // tile are both monotonic in (row, col), so the four grid corners bound the entire 100x100 grid.
-    // Independent of map content, so an empty/sparse map still frames to the whole grid.
+    // Grow `bounds` to the whole iso playable area using the renderer's own tile->screen projection.
+    // Screen X and Y are monotonic in (row, col), so the four grid corners bound the grid.
     void addFullGridBounds(Bounds& bounds) {
         constexpr int lastRow = MAP_HEIGHT - 1;
         constexpr int lastCol = MAP_WIDTH - 1;
@@ -187,9 +182,8 @@ namespace {
         }
     }
 
-    // Grow `bounds` to the non-empty tiles of one layer (floor or roof). Empty cells are excluded so
-    // the frame fits the map's actual content — the loader emits a blank sprite for every empty cell
-    // across the full 100x100 grid, and framing to those would shrink the content into a sea of black.
+    // Grow `bounds` to one layer's non-empty tiles: the loader emits a blank sprite for every empty
+    // cell, and framing to those would shrink the content into a sea of black.
     void addTileContentBounds(Bounds& bounds, const std::vector<Tile>& tiles, bool roof) {
         for (std::size_t i = 0; i < tiles.size(); ++i) {
             const uint16_t id = roof ? tiles[i].getRoof() : tiles[i].getFloor();
@@ -307,9 +301,8 @@ namespace {
         }
     }
 
-    // Semantic overlay: colour each object marker by its *role* — exit grids highlighted (and always
-    // shown, though flat), critters by team (group_id), everything else by category — and ring any
-    // object that carries a map script. The legend keys on the role so it joins back to describe_map.
+    // Colour each marker by role - exit grids highlighted, critters by team, everything else by
+    // category - and ring any object carrying a map script. The legend keys on the role.
     struct SemanticRole {
         sf::Color color;
         std::string label;
@@ -448,9 +441,8 @@ sf::Image MapRenderer::renderNatural(Map& map, const Options& options) {
     std::vector<sf::Sprite> wallBlockerOverlays;
     loader.loadSprites(map, options.elevation, floorSprites, roofSprites, objects, wallBlockerOverlays);
 
-    // Frame to the map's *content*: non-empty tiles plus objects. (We still draw the blank sprites the
-    // loader made for empty cells — they just fall outside this frame instead of dominating it.)
-    // With fullExtent, seed the bounds with the whole floor-tile grid so even an empty map shows it all.
+    // Frame to the map's content: non-empty tiles plus objects. With fullExtent, seed the bounds with
+    // the whole floor grid so even an empty map shows it all.
     Bounds bounds;
     if (options.hasCrop) {
         // Frame exactly the requested rectangle (the whole map is still drawn; the view clips to it).

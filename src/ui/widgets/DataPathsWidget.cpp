@@ -4,7 +4,6 @@
 #include "resource/WritableDataRoot.h"
 #include "ui/IconHelper.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/common/ButtonStyle.h"
 #include "util/GameDataPathResolver.h"
 
 #include <QApplication>
@@ -12,7 +11,6 @@
 #include <QFileDialog>
 #include <QMenu>
 #include <QMessageBox>
-#include <QFrame>
 #include <QHeaderView>
 #include <QTableWidgetItem>
 #include <QAbstractItemView>
@@ -59,6 +57,7 @@ void DataPathsWidget::setupUI() {
     _pathsTable->setHorizontalHeaderLabels({ "Priority", "Path" });
     _pathsTable->horizontalHeaderItem(PriorityColumn)
         ->setToolTip("1 = highest priority (overrides the sources below it)");
+    _pathsTable->horizontalHeaderItem(PriorityColumn)->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
     _pathsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     _pathsTable->setSelectionMode(QAbstractItemView::SingleSelection);
     _pathsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -71,15 +70,17 @@ void DataPathsWidget::setupUI() {
     _pathsTable->setMinimumHeight(LIST_MIN_HEIGHT);
     _pathsTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    // The list with its actions in a column beside it, the way Qt's own list editors are built. A
-    // column cannot wrap, so it needs no width to reserve and no height to negotiate: the buttons
-    // stay beside what they act on however narrow the dialog gets.
+    // The list with its actions in a column beside it, as Qt's own list editors are built: a column
+    // cannot wrap, so it needs no width reserved and no height negotiated.
     auto* listRow = new QHBoxLayout();
+    listRow->setContentsMargins(0, 0, 0, 0);
     listRow->setSpacing(SPACING_NORMAL);
     listRow->addWidget(_pathsTable, /*stretch=*/1);
 
     auto* buttonColumn = new QVBoxLayout();
-    buttonColumn->setSpacing(SPACING_TIGHT);
+    // Flush with the top of the list: a nested layout otherwise inherits margins from the style.
+    buttonColumn->setContentsMargins(0, 0, 0, 0);
+    buttonColumn->setSpacing(SPACING_NORMAL);
     _controlLayout = buttonColumn;
 
     _addButton = new QPushButton("Add Path...");
@@ -107,12 +108,9 @@ void DataPathsWidget::setupUI() {
     _moveDownButton->setEnabled(false);
     _controlLayout->addWidget(_moveDownButton);
 
-    // Checkable so the short label stays constant while the check state shows whether the selected
-    // folder is marked (the label used to grow to "Clear …", clipping in the button row).
-    auto* markerSeparator = new QFrame();
-    markerSeparator->setFrameShape(QFrame::HLine);
-    markerSeparator->setFrameShadow(QFrame::Sunken);
-    _controlLayout->addWidget(markerSeparator); // below: what a path *is*, not what to do with it
+    // Checkable so the label stays constant while the check state shows the marker (it used to grow to
+    // "Clear ..." and clip). Below this: what a path *is*, not what to do with it.
+    buttonColumn->addSpacing(SPACING_LOOSE);
 
     _saveLocationButton = new QPushButton("Save Location");
     _saveLocationButton->setIcon(createIcon(":/icons/actions/save.svg"));
@@ -155,6 +153,12 @@ void DataPathsWidget::setupUI() {
     _progressBar = new QProgressBar();
     _progressBar->setVisible(false);
     _layout->addWidget(_progressBar);
+
+    _statusLabel = new QLabel();
+    _statusLabel->setWordWrap(true);
+    _statusLabel->setStyleSheet(ui::theme::styles::statusNormal());
+    _statusLabel->setVisible(false);
+    _layout->addWidget(_statusLabel);
 }
 
 void DataPathsWidget::setupConnections() {
@@ -170,9 +174,8 @@ void DataPathsWidget::setupConnections() {
 }
 
 std::vector<std::filesystem::path> DataPathsWidget::getDataPaths() const {
-    // The table shows the highest priority at the top, but the stored order is lowest-priority-first
-    // (that is the order the loader mounts, where the last-mounted source wins). So read the rows
-    // top-to-bottom and reverse them to recover the stored order.
+    // The table shows highest priority first, but the stored order is lowest-first - the order the
+    // loader mounts, where the last-mounted source wins. So reverse the rows to recover it.
     std::vector<std::filesystem::path> paths;
 
     for (int row = _pathsTable->rowCount() - 1; row >= 0; --row) {
@@ -250,13 +253,13 @@ bool DataPathsWidget::addPathRow(const std::filesystem::path& path, bool atTop) 
     bool isDefaultPath = Application::isDefaultResourcesPath(normalizedPath);
 
     auto* priorityItem = new QTableWidgetItem();
-    priorityItem->setTextAlignment(Qt::AlignCenter);
+    // Right-aligned so the numbers stack; centred, 1 and 10 start at different x positions.
+    priorityItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
     auto* pathItem = new QTableWidgetItem(pathStr);
 
-    // Tooltip and colour reflect the path type and validity; the icon is derived by iconForRow (and
-    // refreshed when the script-source marker changes). The script-source state isn't known yet here
-    // (setScriptSourcePaths runs after the rows are built), so pass false — the refresh corrects it.
+    // The script-source state isn't known yet (setScriptSourcePaths runs after the rows are built), so
+    // pass false here; the later refresh corrects the icon.
     auto& settings = *_settings;
     if (settings.validateDataPath(normalizedPath)) {
         if (isDefaultPath) {
@@ -295,14 +298,15 @@ void DataPathsWidget::renumberPriorities() {
         QTableWidgetItem* item = _pathsTable->item(row, PriorityColumn);
         if (!item) {
             item = new QTableWidgetItem();
-            item->setTextAlignment(Qt::AlignCenter);
+            item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
             _pathsTable->setItem(row, PriorityColumn, item);
         }
+        // Arrow leads so the digits stay flush right, in line with the rows that have none.
         QString text = QString::number(row + 1);
         if (row == 0) {
-            text += " ▲"; // highest
+            text = "▲ " + text; // highest
         } else if (row == rows - 1 && rows > 1) {
-            text += " ▼"; // lowest
+            text = "▼ " + text; // lowest
         }
         item->setText(text);
     }
@@ -348,6 +352,8 @@ void DataPathsWidget::validatePaths() {
 }
 
 void DataPathsWidget::setStatusMessage(const QString& message, const QString& styleClass) {
+    // In this section: one line shared with the game location meant the later message won.
+    ui::setStatusText(_statusLabel, message, styleClass);
     Q_EMIT statusChanged(message, styleClass);
 }
 
@@ -355,11 +361,11 @@ void DataPathsWidget::updateButtonStates() {
     const int row = selectedRow();
     if (row >= 0) {
         const bool protectedRow = isProtectedRow(row);
+        // Priority is the user's call, so any row moves; only removal is blocked. The old rule kept
+        // rows from passing the built-in folder to keep it lowest, which it never was - its DATs sit below.
         _removeButton->setEnabled(!protectedRow);
-        // The built-in resources path is pinned to the bottom (lowest priority): it cannot move,
-        // and no other row may be pushed below it.
-        _moveUpButton->setEnabled(row > 0 && !protectedRow && !isProtectedRow(row - 1));
-        _moveDownButton->setEnabled(row < _pathsTable->rowCount() - 1 && !protectedRow && !isProtectedRow(row + 1));
+        _moveUpButton->setEnabled(row > 0);
+        _moveDownButton->setEnabled(row < _pathsTable->rowCount() - 1);
     } else {
         _removeButton->setEnabled(false);
         _moveUpButton->setEnabled(false);
@@ -367,8 +373,7 @@ void DataPathsWidget::updateButtonStates() {
     }
 
     // Both markers are checkable toggles: enabled for a real folder, checked when the selected row
-    // already carries that marker (clicking clears it). The constant short label keeps the button
-    // row uniform; the check state and the row badge show whether it is set.
+    // already carries the marker, so clicking clears it.
     const bool markable = isMarkableRow(row);
     _saveLocationButton->setEnabled(markable);
     _saveLocationButton->setChecked(markable && !_writableDataPath.empty() && pathAtRow(row) == _writableDataPath);
@@ -464,9 +469,8 @@ void DataPathsWidget::onToggleScriptSource() {
 void DataPathsWidget::refreshSaveLocationMarkers() {
     const auto paths = getDataPaths();
 
-    // Where saves would land right now. Mirrors resource::findWritableDataPath(paths, marker) but
-    // resolves the fallback locally so a stale marker doesn't warn-log on every table repaint —
-    // the warning belongs to actual save operations.
+    // Where saves would land right now. Mirrors resource::findWritableDataPath but resolves the
+    // fallback locally, so a stale marker does not warn-log on every repaint.
     std::optional<std::filesystem::path> effective;
     if (std::error_code ec; !_writableDataPath.empty()
         && std::find(paths.begin(), paths.end(), _writableDataPath) != paths.end()
@@ -510,9 +514,8 @@ void DataPathsWidget::refreshSaveLocationMarkers() {
         }
         item->setToolTip(tooltip);
 
-        // The icon carries the entry TYPE (folder / .dat / script-source folder / invalid). The
-        // save-location role is shown by the font weight above, not the icon, so a folder that is
-        // both a script source and the save location keeps its script icon and shows both in bold.
+        // The icon carries the entry TYPE; the save-location role is shown by font weight, so a folder that
+        // is both keeps its script icon.
         item->setIcon(iconForRow(rowPath, isSource));
     }
 }
@@ -549,9 +552,8 @@ void DataPathsWidget::removeSelectedPath() {
 }
 
 int DataPathsWidget::addFolderExpanded(const std::filesystem::path& folder, bool atTop) {
-    // expandDataPaths returns the folder before its DATs (legacy mount order). Inserting each atTop
-    // reverses that into the table (DATs above the folder); to get the same table layout when appending
-    // at the bottom, append in reverse. Either way the DATs keep their legacy priority over the folder.
+    // expandDataPaths returns the folder before its DATs, and inserting each atTop reverses that. To
+    // get the same layout when appending, append in reverse; the DATs keep priority over the folder.
     auto expanded = util::expandDataPaths({ folder });
     if (!atTop) {
         std::reverse(expanded.begin(), expanded.end());
@@ -649,12 +651,6 @@ void DataPathsWidget::moveSelectedPath(int offset) {
 
     const int targetRow = row + offset;
     if (targetRow < 0 || targetRow >= _pathsTable->rowCount()) {
-        return;
-    }
-
-    // Keep the built-in resources path pinned to the bottom: never move it, and never swap a
-    // row into its slot (which would make the built-in outrank a user source).
-    if (isProtectedRow(row) || isProtectedRow(targetRow)) {
         return;
     }
 
