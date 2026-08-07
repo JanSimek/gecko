@@ -37,6 +37,7 @@
         <file alias="actions/view-exits.svg">icons/door-exit.svg</file>
         <file alias="actions/map-edges.svg">icons/tabler/actions/border-all.svg</file>
         <file alias="actions/view-unreachable.svg">icons/tabler/actions/ban.svg</file>
+        <file alias="actions/world-map.svg">icons/tabler/actions/map-pin.svg</file>
         
         <!-- File Types -->
         <file alias="filetypes/map.svg">icons/tabler/filetypes/map-2.svg</file>

@@ -44,6 +44,7 @@ class SFMLWidget;
 class EditorWidget;
 class LoadingWidget;
 class WelcomeWidget;
+class WorldMapWidget;
 class SelectionPanel;
 class MapInfoPanel;
 class ScriptsPanel;
@@ -161,6 +162,8 @@ private slots:
     void showStampPatternDialog();
     void showFillDialog();
     void showMapBrowserDialog();
+    /// Switches the central area between the world map and whatever was showing before it.
+    void toggleWorldMap(bool show);
 
 public slots:
     void showStatusMessage(const QString& message);
@@ -279,6 +282,11 @@ private:
     // Current widgets
     EditorWidget* _currentEditorWidget;
     WelcomeWidget* _welcomeWidget;
+    /// Built the first time the world map is opened — rendering it costs a couple of megabytes and
+    /// most sessions never ask for it.
+    WorldMapWidget* _worldMapWidget = nullptr;
+    /// The stack page to return to when the world map is closed.
+    QWidget* _pageBeforeWorldMap = nullptr;
 
     // Menu items
     QMenuBar* _menuBar;
@@ -385,6 +393,7 @@ private:
     QAction* _showSpatialScriptsAction;
     QAction* _showMapEdgesAction;
     QAction* _showUnreachableAction;
+    QAction* _worldMapAction = nullptr;
     QAction* _mergeOutlinesAction;
     QAction* _edgeScrollAction;
 

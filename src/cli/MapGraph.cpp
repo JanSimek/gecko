@@ -1,6 +1,6 @@
 #include "cli/MapGraph.h"
 
-#include "cli/ConfigLoad.h"
+#include "resource/ConfigLoad.h"
 #include "cli/MapAnalyzer.h" // collectMapExits, listMapPaths, MapExit
 #include "cli/MapLoad.h"     // loadMap
 #include "editor/Reachability.h"
@@ -301,7 +301,7 @@ int buildMapGraph(resource::GameResources& resources, const MapGraphOptions& opt
         return 1;
     }
 
-    const CityTxt city = loadConfig<CityTxt>(resources, { "data/city.txt", "city.txt" },
+    const CityTxt city = resource::loadConfig<CityTxt>(resources, { "data/city.txt", "city.txt" },
         [](const std::string& text) { return parseCityTxt(text); });
     const StringMap areaOf = mapToArea(city, names);
     Nodes nodes;

@@ -3,15 +3,16 @@
 #include <initializer_list>
 #include <string>
 
-#include "resource/GameResources.h"
+#include "GameResources.h"
 
-namespace geck::cli {
+namespace geck::resource {
 
 /// Load a Fallout text config (maps.txt / city.txt / worldmap.txt / quests.txt …) by trying each
 /// candidate VFS path in turn and parsing the first that exists with `parse` (a callable taking the
 /// file text and returning T). Returns a default-constructed T when none is mounted, so callers
-/// degrade gracefully. One place for the "data/<x> then <x>, read bytes, parse" idiom the world
-/// tools share.
+/// degrade gracefully. One place for the "data/<x> then <x>, read bytes, parse" idiom shared by the
+/// headless world tools and the editor's worldmap view. (Both candidates are needed: Fallout ships
+/// these under data/, but a data directory mounted at its own root exposes them unprefixed.)
 template <typename T, typename Parse>
 T loadConfig(resource::GameResources& resources, std::initializer_list<const char*> paths, Parse parse) {
     for (const char* path : paths) {
@@ -22,4 +23,4 @@ T loadConfig(resource::GameResources& resources, std::initializer_list<const cha
     return T{};
 }
 
-} // namespace geck::cli
+} // namespace geck::resource

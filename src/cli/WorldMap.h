@@ -1,12 +1,25 @@
 #pragma once
 
 #include <iosfwd>
+#include <string>
 
 namespace geck::resource {
 class GameResources;
 }
 
 namespace geck::cli {
+
+struct WorldMapOptions {
+    /// When set, the worldmap is also drawn to this PNG instead of only being described as JSON.
+    std::string renderPath;
+    /// Draw the city circles (the engine's translucent green markers). Off gives the bare terrain.
+    bool markers = true;
+};
+
+/// Renders the worldmap exactly as the game draws it — the `art/intrface/wrldmp*` tile grid with the
+/// area circles blended over it through the engine's own palette blend tables — to a PNG. Returns 0
+/// on success. Reports the image size to `out`.
+int renderWorldMap(resource::GameResources& resources, const WorldMapOptions& options, std::ostream& out);
 
 /// The worldmap layer, from data/city.txt: every area (a city / town / encounter location) with its
 /// name, worldmap position, size, known-at-start flag and the maps it contains (its entrances), plus

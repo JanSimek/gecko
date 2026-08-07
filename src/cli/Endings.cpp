@@ -1,6 +1,6 @@
 #include "cli/Endings.h"
 
-#include "cli/ConfigLoad.h"
+#include "resource/ConfigLoad.h"
 #include "cli/GlobalVars.h" // loadGameGam
 #include "format/endgame/EndgameTxt.h"
 #include "format/gam/Gam.h"
@@ -30,7 +30,7 @@ namespace {
 } // namespace
 
 int buildEndings(resource::GameResources& resources, std::ostream& out) {
-    const EndgameTxt endgame = loadConfig<EndgameTxt>(resources, { "data/endgame.txt", "endgame.txt" },
+    const EndgameTxt endgame = resource::loadConfig<EndgameTxt>(resources, { "data/endgame.txt", "endgame.txt" },
         [](const std::string& text) { return parseEndgameTxt(text); });
     if (endgame.endings.empty()) {
         out << "{\"endings\":[],\"stats\":{\"endings\":0}}\n";

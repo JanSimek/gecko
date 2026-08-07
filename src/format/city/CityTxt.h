@@ -13,13 +13,17 @@
 ///
 /// @verbatim
 /// [Area 00]                ; Arroyo
-/// area_name=Arroyo         ; internal name (the displayed name may also live in worldmap.msg)
+/// area_name=Arroyo         ; internal name (the displayed name comes from map.msg[1500 + index])
 /// world_pos=184,133        ; x,y on the worldmap — the basis for distances between places
 /// start_state=On           ; On = known/visible at game start
 /// size=Medium              ; Small / Medium / Large
+/// townmap_art_idx=156      ; intrface.lst index of the town-map background
+/// townmap_label_art_idx=370; intrface.lst index of the town-map label strip
 /// entrance_0=On,350,275,Arroyo Bridge,-1,-1,3
 /// ;           state, x, y, map (a maps.txt lookup_name), elevation, tile, orientation
 /// @endverbatim
+///
+/// The engine keys its area loop on `townmap_art_idx`: an `[Area NN]` without it ends the list.
 ///
 /// @see fallout2-ce `worldmap.cc` (`wmAreaInit`)
 /// @see https://fallout.wiki/wiki/CITY.TXT_File_Format
@@ -45,13 +49,49 @@ struct CityEntrance {
 /// `wmAreaInit` (fallout2-ce worldmap.cc). The display name may also live in worldmap.msg.
 struct CityArea {
     int index = -1;
-    std::string name;     ///< area_name
-    int worldX = 0;       ///< world_pos x (worldmap position)
-    int worldY = 0;       ///< world_pos y
-    bool startOn = false; ///< start_state On = known/visible at game start
-    std::string size;     ///< small / medium / large
+    std::string name;              ///< area_name
+    int worldX = 0;                ///< world_pos x (worldmap position)
+    int worldY = 0;                ///< world_pos y
+    bool startOn = false;          ///< start_state On = known/visible at game start
+    bool locked = false;           ///< lock_state On = the area cannot become known through play
+    std::string size;              ///< small / medium / large
+    int townMapArtIndex = -1;      ///< townmap_art_idx: intrface.lst index of the town-map background
+    int townMapLabelArtIndex = -1; ///< townmap_label_art_idx: intrface.lst index of its label strip
     std::vector<CityEntrance> entrances;
 };
+
+/// The worldmap circle sizes a `size` key names, in the order the engine's `wmAreaSizeStrs` lists
+/// them — the ordinal picks the marker art (`wrldspr0/1/2.frm`, 12/25/49 pixels square).
+enum class CityAreaSize {
+    Small = 0,
+    Medium = 1,
+    Large = 2,
+};
+
+/// Maps a `size` value (already lowercased by the reader) onto its ordinal. Unknown values fall
+/// back to Large, matching the engine's `wmAreaSlotInit` default.
+inline CityAreaSize cityAreaSize(const std::string& size) {
+    if (size == "small") {
+        return CityAreaSize::Small;
+    }
+    if (size == "medium") {
+        return CityAreaSize::Medium;
+    }
+    return CityAreaSize::Large;
+}
+
+/// The engine's own name for a size (`wmAreaSizeStrs`), for display.
+inline const char* cityAreaSizeName(CityAreaSize size) {
+    switch (size) {
+        case CityAreaSize::Small:
+            return "small";
+        case CityAreaSize::Medium:
+            return "medium";
+        case CityAreaSize::Large:
+            break;
+    }
+    return "large";
+}
 
 /// Parsed `data/city.txt`: the worldmap areas, looked up by their `[Area NN]` index.
 struct CityTxt {

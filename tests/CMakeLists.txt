@@ -15,6 +15,7 @@ add_executable(general_tests
     general/test_map_name_resolver.cpp
     general/test_city_txt.cpp
     general/test_worldmap_txt.cpp
+    general/test_palette_blend.cpp
     general/test_quests_txt.cpp
     general/test_endgame_txt.cpp
     general/test_gvar_refs.cpp
