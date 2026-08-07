@@ -3,6 +3,7 @@
 #include "Application.h"
 #include "resource/WritableDataRoot.h"
 #include "ui/IconHelper.h"
+#include "ui/common/StatusStyle.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/common/ButtonStyle.h"
 #include "util/GameDataPathResolver.h"
@@ -22,23 +23,6 @@
 #include <spdlog/spdlog.h>
 
 namespace geck {
-
-namespace {
-    /// Applies one of the shared status styles by name, so both sections read the same vocabulary.
-    void applyStatusStyle(QLabel* label, const QString& styleClass) {
-        if (styleClass == "warning") {
-            label->setStyleSheet(geck::ui::theme::styles::statusWarning());
-        } else if (styleClass == "error") {
-            label->setStyleSheet(geck::ui::theme::styles::statusError());
-        } else if (styleClass == "success") {
-            label->setStyleSheet(geck::ui::theme::styles::statusSuccess());
-        } else if (styleClass == "info") {
-            label->setStyleSheet(geck::ui::theme::styles::statusInfo());
-        } else {
-            label->setStyleSheet(geck::ui::theme::styles::statusNormal());
-        }
-    }
-} // namespace
 
 using namespace ui::constants;
 
@@ -380,9 +364,7 @@ void DataPathsWidget::validatePaths() {
 void DataPathsWidget::setStatusMessage(const QString& message, const QString& styleClass) {
     // Shown in this section rather than in one line shared with the game location, where whichever
     // of the two spoke last erased the other's message.
-    _statusLabel->setText(message);
-    _statusLabel->setVisible(!message.isEmpty());
-    applyStatusStyle(_statusLabel, styleClass);
+    ui::setStatusText(_statusLabel, message, styleClass);
     Q_EMIT statusChanged(message, styleClass);
 }
 

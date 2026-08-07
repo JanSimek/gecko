@@ -3,6 +3,7 @@
 #include "ui/IconHelper.h"
 #include "ui/Settings.h"
 #include "ui/common/ButtonStyle.h"
+#include "ui/common/StatusStyle.h"
 #include "ui/theme/ThemeManager.h"
 
 #include <QApplication>
@@ -17,23 +18,6 @@
 #include <array>
 
 namespace geck {
-
-namespace {
-    /// Applies one of the shared status styles by name, so both sections read the same vocabulary.
-    void applyStatusStyle(QLabel* label, const QString& styleClass) {
-        if (styleClass == "warning") {
-            label->setStyleSheet(geck::ui::theme::styles::statusWarning());
-        } else if (styleClass == "error") {
-            label->setStyleSheet(geck::ui::theme::styles::statusError());
-        } else if (styleClass == "success") {
-            label->setStyleSheet(geck::ui::theme::styles::statusSuccess());
-        } else if (styleClass == "info") {
-            label->setStyleSheet(geck::ui::theme::styles::statusInfo());
-        } else {
-            label->setStyleSheet(geck::ui::theme::styles::statusNormal());
-        }
-    }
-} // namespace
 
 namespace {
 
@@ -194,9 +178,7 @@ void GameLocationWidget::setDataDirectory(const std::filesystem::path& location)
 void GameLocationWidget::setStatusMessage(const QString& message, const QString& styleClass) {
     // Kept in this section: sharing one line with the data paths meant adding a path wiped out a
     // warning about the executable.
-    _statusLabel->setText(message);
-    _statusLabel->setVisible(!message.isEmpty());
-    applyStatusStyle(_statusLabel, styleClass);
+    ui::setStatusText(_statusLabel, message, styleClass);
     Q_EMIT statusChanged(message, styleClass);
 }
 
