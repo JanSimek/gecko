@@ -67,8 +67,7 @@ void GameLocationWidget::setupUI() {
     // A form puts each label beside its field instead of on a line of its own, which halves the
     // rows this panel needs and lines the two paths up with each other.
     auto* pathForm = new QFormLayout();
-    // Left-aligned: right alignment gives labels of different lengths ragged left edges. VCenter
-    // keeps the text on the centre line of a row whose height comes from the field beside it.
+    // Left-aligned: right alignment leaves labels of different lengths with ragged left edges.
     pathForm->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     pathForm->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
     pathForm->setHorizontalSpacing(ui::theme::spacing::NORMAL);
@@ -125,9 +124,8 @@ void GameLocationWidget::setupUI() {
     for (QPushButton* btn : { _browseExecutableButton, _browseDataDirectoryButton, _autoDetectButton }) {
         geck::ui::styleActionButton(btn);
     }
-    // Every control in a row gets the same height, so their centre lines coincide. Without this the
-    // label keeps its natural 26px against a 30px field and QFormLayout aligns the two at the top,
-    // which leaves the label text sitting two pixels high.
+    // One height per row so the centre lines coincide: QFormLayout otherwise top-aligns a 26px
+    // label against a 30px field, leaving its text two pixels high.
     for (QWidget* rowWidget : { static_cast<QWidget*>(_executableLocationEdit),
              static_cast<QWidget*>(_dataDirectoryEdit), static_cast<QWidget*>(_executableLabel),
              static_cast<QWidget*>(_dataDirectoryLabel) }) {
@@ -174,8 +172,7 @@ void GameLocationWidget::setDataDirectory(const std::filesystem::path& location)
 }
 
 void GameLocationWidget::setStatusMessage(const QString& message, const QString& styleClass) {
-    // Kept in this section: sharing one line with the data paths meant adding a path wiped out a
-    // warning about the executable.
+    // In this section: a shared line meant adding a data path wiped out the executable warning.
     ui::setStatusText(_statusLabel, message, styleClass);
     Q_EMIT statusChanged(message, styleClass);
 }

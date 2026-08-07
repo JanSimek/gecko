@@ -57,10 +57,8 @@ QScrollArea* SettingsDialog::wrapInScrollArea(QWidget* content) {
     area->setFrameShape(QFrame::NoFrame);
     area->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
-    // Transparent, so the tab page's own background is the only one on screen. A scroll area fills
-    // its viewport with QPalette::Window by default, which is a different shade from the pane a
-    // QTabWidget paints - that mismatch is what made each section read as a lighter panel sitting
-    // on the page.
+    // Transparent: the viewport's default QPalette::Window fill is a different shade from the tab
+    // pane, which made each section look like a panel laid on the page.
     area->viewport()->setAutoFillBackground(false);
     content->setAutoFillBackground(false);
     return area;
@@ -73,9 +71,7 @@ void SettingsDialog::setupUI() {
 
     setupTabs();
 
-    // Dialog-level only, for things like the save confirmation. Section messages render inside
-    // their own section, next to the controls they are about, so two of them can be shown at once
-    // instead of the later one erasing the earlier.
+    // Dialog-level only (the save confirmation); sections report inside themselves.
     _statusLabel = new QLabel();
     _statusLabel->setStyleSheet(ui::theme::styles::statusNormal());
     _statusLabel->setVisible(false);
@@ -187,9 +183,7 @@ void SettingsDialog::setupGeneralTab() {
     _generalTabLayout->setSpacing(SPACING_LOOSE);
 
     _dataPathsWidget = new DataPathsWidget(_settings);
-    // A heading, not a box. Flat alone still leaves the style painting a frame and a slightly
-    // different fill, so each section reads as a panel on the page; drawing neither means the page
-    // provides the single background behind the whole tab.
+    // A heading, not a box: flat alone still paints a frame and a slightly different fill.
     _dataPathsWidget->setFlat(true);
     _dataPathsWidget->setStyleSheet(ui::theme::styles::sectionGroupBox());
     _generalTabLayout->addWidget(_dataPathsWidget, /*stretch=*/1); // grows with the dialog (the data-paths list)

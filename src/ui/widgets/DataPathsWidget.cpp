@@ -79,8 +79,7 @@ void DataPathsWidget::setupUI() {
     listRow->addWidget(_pathsTable, /*stretch=*/1);
 
     auto* buttonColumn = new QVBoxLayout();
-    // Explicitly flush with the top of the list: a nested layout otherwise inherits margins from
-    // the style, which offsets the first button below the list's top edge.
+    // Flush with the top of the list: a nested layout otherwise inherits margins from the style.
     buttonColumn->setContentsMargins(0, 0, 0, 0);
     buttonColumn->setSpacing(SPACING_NORMAL);
     _controlLayout = buttonColumn;
@@ -112,8 +111,7 @@ void DataPathsWidget::setupUI() {
 
     // Checkable so the short label stays constant while the check state shows whether the selected
     // folder is marked (the label used to grow to "Clear …", clipping in the button row).
-    // Below this: what a path *is*, not what to do with it. The gap does the grouping - a rule
-    // between two buttons reads as a disabled control at this size.
+    // Below this: what a path *is*, not what to do with it. A rule here reads as a disabled control.
     buttonColumn->addSpacing(SPACING_LOOSE);
 
     _saveLocationButton = new QPushButton("Save Location");
@@ -258,8 +256,7 @@ bool DataPathsWidget::addPathRow(const std::filesystem::path& path, bool atTop) 
     bool isDefaultPath = Application::isDefaultResourcesPath(normalizedPath);
 
     auto* priorityItem = new QTableWidgetItem();
-    // Right-aligned so the numbers stack in a column; centring makes 1 and 10 start at different
-    // x positions and the list reads as ragged.
+    // Right-aligned so the numbers stack; centred, 1 and 10 start at different x positions.
     priorityItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
     auto* pathItem = new QTableWidgetItem(pathStr);
@@ -308,8 +305,7 @@ void DataPathsWidget::renumberPriorities() {
             item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
             _pathsTable->setItem(row, PriorityColumn, item);
         }
-        // Arrow first: right-aligned text keeps the digits flush against the column edge, so a
-        // trailing arrow would push them out of line with the rows that have none.
+        // Arrow leads so the digits stay flush right, in line with the rows that have none.
         QString text = QString::number(row + 1);
         if (row == 0) {
             text = "▲ " + text; // highest
@@ -360,8 +356,7 @@ void DataPathsWidget::validatePaths() {
 }
 
 void DataPathsWidget::setStatusMessage(const QString& message, const QString& styleClass) {
-    // Shown in this section rather than in one line shared with the game location, where whichever
-    // of the two spoke last erased the other's message.
+    // In this section: one line shared with the game location meant the later message won.
     ui::setStatusText(_statusLabel, message, styleClass);
     Q_EMIT statusChanged(message, styleClass);
 }
@@ -370,10 +365,8 @@ void DataPathsWidget::updateButtonStates() {
     const int row = selectedRow();
     if (row >= 0) {
         const bool protectedRow = isProtectedRow(row);
-        // The built-in resources folder cannot be removed - the editor needs it - but priority is
-        // the user's call, so every row can be reordered. The old rule refused to move a row past
-        // the built-in folder to keep it lowest, which it never was: the DATs expanded out of it
-        // sit below it, so the rule only managed to strand rows above it with Move Down greyed out.
+        // Priority is the user's call, so any row moves; only removal is blocked. The old rule kept
+        // rows from passing the built-in folder to keep it lowest, which it never was - its DATs sit below.
         _removeButton->setEnabled(!protectedRow);
         _moveUpButton->setEnabled(row > 0);
         _moveDownButton->setEnabled(row < _pathsTable->rowCount() - 1);

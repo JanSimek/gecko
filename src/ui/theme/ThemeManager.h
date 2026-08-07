@@ -298,8 +298,7 @@ namespace ui {
                 return QString("QGroupBox { font-weight: bold; }");
             }
 
-            /// A section heading rather than a box: the group draws its title and nothing else, so
-            /// the page it sits on supplies the one background behind everything.
+            /// A section heading rather than a box: title only, so the page supplies the background.
             inline QString sectionGroupBox() {
                 return QString("QGroupBox { background: transparent; border: none; margin-top: %1px; }"
                                "QGroupBox::title { subcontrol-origin: margin; left: 0px; }")
@@ -559,9 +558,8 @@ namespace ui {
         button->setMinimumHeight(constants::sizes::ACTION_BUTTON_HEIGHT);
     }
 
-    /// Show @p message on a status label in the style named by @p styleClass ("warning", "error",
-    /// "success", "info", anything else being neutral), hiding the label when there is nothing to
-    /// say. Sections that report their own status all speak the same vocabulary this way.
+    /// Show @p message on a status label in the named style ("warning", "error", "success", "info",
+    /// anything else neutral), hiding the label when there is nothing to say.
     inline void setStatusText(QLabel* label, const QString& message, const QString& styleClass) {
         if (label == nullptr) {
             return;
