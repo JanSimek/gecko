@@ -271,8 +271,11 @@ void TilePalettePanel::onTileClicked(int tileIndex) {
         return;
     }
 
+    // No selectRowForTile() here: this runs from the view's own currentChanged, so the row is
+    // already current, and re-applying it would scrollTo(PositionAtCenter) and recentre the grid
+    // under the still-pressed cursor - the click then landed on whatever item the scroll brought
+    // under the mouse. Programmatic callers sync the view themselves.
     _selectedTileIndex = tileIndex;
-    selectRowForTile(tileIndex);
 
     // Selecting a tile to paint clears any active map selection so clicks place tiles.
     bool hasExistingSelection = _selectionManager && _selectionManager->hasSelection();

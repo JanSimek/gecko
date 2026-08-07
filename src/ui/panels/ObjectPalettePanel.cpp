@@ -382,8 +382,12 @@ QString ObjectPalettePanel::getCategoryDisplayName(ObjectCategory category) cons
 }
 
 void ObjectPalettePanel::onObjectClicked(int objectIndex) {
+    // No selectRowForObject() here: this runs from the view's own currentChanged, so the row is
+    // already current, and re-applying it would scrollTo(PositionAtCenter) and recentre the grid
+    // under the still-pressed cursor - the click then landed on whatever item the scroll brought
+    // under the mouse. Programmatic callers (revealProto, the search filter) sync the view
+    // themselves.
     _selectedObjectIndex = objectIndex;
-    selectRowForObject(objectIndex);
 
     Q_EMIT objectSelected(objectIndex, _currentCategory);
 
