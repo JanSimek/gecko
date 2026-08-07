@@ -1,11 +1,12 @@
 #pragma once
 
 #include "BaseWidget.h"
-#include "ui/widgets/PaginationWidget.h"
 #include "ui/theme/ThemeManager.h"
+
 #include <QGroupBox>
-#include <QScrollArea>
 #include <QLineEdit>
+#include <QScrollArea>
+#include <QVBoxLayout>
 #include <memory>
 
 namespace geck {
@@ -74,16 +75,6 @@ protected:
      * @param itemsPerPage Number of items per page
      * @return The created pagination widget
      */
-    [[nodiscard]] PaginationWidget* createPaginationControls(int itemsPerPage) {
-        _paginationWidget = new PaginationWidget(this);
-        _itemsPerPage = itemsPerPage; // Store for derived classes to use
-
-        if (_mainLayout) {
-            _mainLayout->addWidget(_paginationWidget);
-        }
-
-        return _paginationWidget;
-    }
 
     /**
      * @brief Creates a standard scroll area with grid layout
@@ -126,7 +117,6 @@ protected:
     // Protected members accessible to derived classes
     QVBoxLayout* _mainLayout = nullptr;
     QLineEdit* _searchLineEdit = nullptr;
-    PaginationWidget* _paginationWidget = nullptr;
     QScrollArea* _scrollArea = nullptr;
     QWidget* _scrollContent = nullptr;
     QGridLayout* _gridLayout = nullptr;
@@ -147,9 +137,6 @@ protected slots:
      * @brief Called when page changes
      * Derived classes should override to update displayed items
      */
-    virtual void onPageChanged(int page) {
-        _currentPage = page;
-    }
 };
 
 } // namespace geck

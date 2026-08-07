@@ -44,12 +44,9 @@ set(GECK_APP_SOURCES
     ui/common/BaseWidget.cpp
     ui/common/BaseDialog.h
     ui/common/BaseDialog.cpp
-    ui/common/BasePaletteWidget.h
     ui/common/BasePanel.h
-    ui/common/GridPalettePanel.h
     ui/palette/PaletteModel.h
     ui/palette/PaletteModel.cpp
-    ui/common/GridPalettePanel.cpp
     ui/common/InventoryItemUiHelper.h
     ui/common/InventoryItemUiHelper.cpp
 
@@ -140,8 +137,6 @@ set(GECK_APP_SOURCES
     ui/widgets/SFMLWidget.cpp
     ui/widgets/LoadingWidget.h
     ui/widgets/LoadingWidget.cpp
-    ui/widgets/PaginationWidget.h
-    ui/widgets/PaginationWidget.cpp
     ui/widgets/DataPathsWidget.h
     ui/widgets/DataPathsWidget.cpp
     ui/widgets/IntCellDelegate.h

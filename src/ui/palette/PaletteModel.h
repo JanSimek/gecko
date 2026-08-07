@@ -1,7 +1,9 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QMimeData>
 #include <QPixmap>
+#include <QStringList>
 #include <QString>
 
 #include <functional>
@@ -30,6 +32,8 @@ class PaletteModel : public QAbstractListModel {
 public:
     /// Produces the icon for an item. Called once per item; the result is cached.
     using IconProvider = std::function<QPixmap(const PaletteItem&)>;
+    /// Produces the drag payload for an item. Without one, rows are not draggable.
+    using MimeProvider = std::function<QMimeData*(const PaletteItem&)>;
 
     /// The engine index of the item in a row, for callers holding a QModelIndex.
     static constexpr int EngineIndexRole = Qt::UserRole + 1;
@@ -38,6 +42,8 @@ public:
 
     void setItems(std::vector<PaletteItem> items);
     void setIconProvider(IconProvider provider);
+    /// Hands dragging to the view: it starts the drag, the model supplies the payload.
+    void setMimeProvider(QString mimeType, MimeProvider provider);
 
     [[nodiscard]] const PaletteItem* itemAt(int row) const;
     /// The row showing @p engineIndex, or -1. Linear: palettes are built once and searched rarely.
@@ -46,10 +52,15 @@ public:
     [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override;
     [[nodiscard]] QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     [[nodiscard]] Qt::ItemFlags flags(const QModelIndex& index) const override;
+    [[nodiscard]] QStringList mimeTypes() const override;
+    [[nodiscard]] QMimeData* mimeData(const QModelIndexList& indexes) const override;
+    [[nodiscard]] Qt::DropActions supportedDragActions() const override;
 
 private:
     std::vector<PaletteItem> _items;
     IconProvider _iconProvider;
+    QString _mimeType;
+    MimeProvider _mimeProvider;
     mutable std::unordered_map<int, QPixmap> _iconCache; ///< keyed by row
 };
 

@@ -20,6 +20,11 @@ void PaletteModel::setIconProvider(IconProvider provider) {
     endResetModel();
 }
 
+void PaletteModel::setMimeProvider(QString mimeType, MimeProvider provider) {
+    _mimeType = std::move(mimeType);
+    _mimeProvider = std::move(provider);
+}
+
 const PaletteItem* PaletteModel::itemAt(int row) const {
     if (row < 0 || row >= static_cast<int>(_items.size())) {
         return nullptr;
@@ -72,7 +77,27 @@ Qt::ItemFlags PaletteModel::flags(const QModelIndex& index) const {
     if (!index.isValid()) {
         return Qt::NoItemFlags;
     }
-    return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+    Qt::ItemFlags itemFlags = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+    if (_mimeProvider) {
+        itemFlags |= Qt::ItemIsDragEnabled;
+    }
+    return itemFlags;
+}
+
+QStringList PaletteModel::mimeTypes() const {
+    return _mimeProvider ? QStringList{ _mimeType } : QStringList{};
+}
+
+QMimeData* PaletteModel::mimeData(const QModelIndexList& indexes) const {
+    if (!_mimeProvider || indexes.isEmpty()) {
+        return nullptr;
+    }
+    const PaletteItem* item = itemAt(indexes.first().row());
+    return item ? _mimeProvider(*item) : nullptr;
+}
+
+Qt::DropActions PaletteModel::supportedDragActions() const {
+    return Qt::CopyAction;
 }
 
 } // namespace geck::ui

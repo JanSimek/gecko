@@ -2,7 +2,10 @@
 
 #include "ui/palette/PaletteModel.h"
 
+#include <QMimeData>
 #include <QPixmap>
+
+#include <memory>
 
 using geck::ui::PaletteItem;
 using geck::ui::PaletteModel;
@@ -50,6 +53,25 @@ TEST_CASE("PaletteModel serves rows to a view", "[qt][palette]") {
         model.setItems({ { 3, "rock", "Tile #3" } });
         (void)model.data(model.index(0, 0), Qt::DecorationRole);
         CHECK(calls == 2);
+    }
+
+    SECTION("Rows are draggable only once a payload provider exists") {
+        CHECK_FALSE(model.flags(model.index(0, 0)) & Qt::ItemIsDragEnabled);
+        CHECK(model.mimeTypes().isEmpty());
+        CHECK(model.mimeData({ model.index(0, 0) }) == nullptr);
+
+        model.setMimeProvider("application/x-geck-object", [](const PaletteItem& item) {
+            auto* data = new QMimeData;
+            data->setData("application/x-geck-object", QByteArray::number(item.engineIndex));
+            return data;
+        });
+
+        CHECK(model.flags(model.index(0, 0)) & Qt::ItemIsDragEnabled);
+        CHECK(model.mimeTypes() == QStringList{ "application/x-geck-object" });
+
+        std::unique_ptr<QMimeData> payload(model.mimeData({ model.index(1, 0) }));
+        REQUIRE(payload != nullptr);
+        CHECK(payload->data("application/x-geck-object") == QByteArray("12"));
     }
 
     SECTION("An out-of-range row yields nothing rather than misreporting") {
