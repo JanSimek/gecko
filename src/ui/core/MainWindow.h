@@ -218,6 +218,9 @@ private:
     /// If the current map has unsaved edits, prompts Save/Discard/Cancel. Returns true if it is safe
     /// to discard the map (saved or explicitly discarded), false if the user cancelled.
     bool maybeSaveChanges();
+    /// Play writes the map as it stands into the game folder, so unsaved edits are played either
+    /// way. This asks whether to save them to the user's own file as well.
+    bool maybeSaveBeforePlay();
     QIcon themedIcon(const QString& iconPath) const;
     QMenu* ensurePluginMenu();
     // A map just opened: re-apply the persisted dock layout that was transiently hidden for the

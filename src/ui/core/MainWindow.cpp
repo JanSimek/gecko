@@ -1566,6 +1566,36 @@ bool MainWindow::maybeSaveChanges() {
     return choice == QMessageBox::Discard; // Discard proceeds; Cancel (or closed) aborts
 }
 
+bool MainWindow::maybeSaveBeforePlay() {
+    if (!_mapModified || !_currentEditorWidget || !_currentEditorWidget->getMap()) {
+        return true;
+    }
+
+    const QString name = QString::fromStdString(_currentEditorWidget->getMap()->filename());
+    QMessageBox prompt(this);
+    prompt.setIcon(QMessageBox::Question);
+    prompt.setWindowTitle(tr("Unsaved Changes"));
+    prompt.setText(tr("\"%1\" has unsaved changes.").arg(name));
+    // Say what Play does with them, since it is not obvious that the game shows edits the user
+    // never saved: Play writes the map as it stands into the game folder.
+    prompt.setInformativeText(tr("Play copies the map as it is now into the game folder, so these "
+                                 "changes are played either way.\n\nSave them to your own file too?"));
+    QPushButton* save = prompt.addButton(QMessageBox::Save);
+    QPushButton* playOnly = prompt.addButton(tr("Play Without Saving"), QMessageBox::DestructiveRole);
+    prompt.addButton(QMessageBox::Cancel);
+    prompt.setDefaultButton(save);
+    prompt.exec();
+
+    if (prompt.clickedButton() == save) {
+        if (_currentEditorWidget->saveMap(writableMapsDir())) {
+            handleMapSaved();
+            return true;
+        }
+        return false; // save cancelled or failed - do not launch behind the user's back
+    }
+    return prompt.clickedButton() == playOnly;
+}
+
 void MainWindow::closeEvent(QCloseEvent* event) {
     if (!maybeSaveChanges()) {
         event->ignore(); // user cancelled the quit to keep their unsaved map
@@ -2574,6 +2604,10 @@ void MainWindow::showAbout() {
 }
 
 void MainWindow::onPlayGame() {
+    if (!maybeSaveBeforePlay()) {
+        return;
+    }
+
     const Map::MapFile* mapFile = _currentEditorWidget ? &_currentEditorWidget->getMapFile() : nullptr;
     std::string mapFilename = _currentEditorWidget ? _currentEditorWidget->getMap()->filename() : "";
 
