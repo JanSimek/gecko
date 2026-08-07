@@ -23,6 +23,23 @@
 
 namespace geck {
 
+namespace {
+    /// Applies one of the shared status styles by name, so both sections read the same vocabulary.
+    void applyStatusStyle(QLabel* label, const QString& styleClass) {
+        if (styleClass == "warning") {
+            label->setStyleSheet(geck::ui::theme::styles::statusWarning());
+        } else if (styleClass == "error") {
+            label->setStyleSheet(geck::ui::theme::styles::statusError());
+        } else if (styleClass == "success") {
+            label->setStyleSheet(geck::ui::theme::styles::statusSuccess());
+        } else if (styleClass == "info") {
+            label->setStyleSheet(geck::ui::theme::styles::statusInfo());
+        } else {
+            label->setStyleSheet(geck::ui::theme::styles::statusNormal());
+        }
+    }
+} // namespace
+
 using namespace ui::constants;
 
 namespace {
@@ -158,6 +175,12 @@ void DataPathsWidget::setupUI() {
     _progressBar = new QProgressBar();
     _progressBar->setVisible(false);
     _layout->addWidget(_progressBar);
+
+    _statusLabel = new QLabel();
+    _statusLabel->setWordWrap(true);
+    _statusLabel->setStyleSheet(ui::theme::styles::statusNormal());
+    _statusLabel->setVisible(false);
+    _layout->addWidget(_statusLabel);
 }
 
 void DataPathsWidget::setupConnections() {
@@ -355,6 +378,11 @@ void DataPathsWidget::validatePaths() {
 }
 
 void DataPathsWidget::setStatusMessage(const QString& message, const QString& styleClass) {
+    // Shown in this section rather than in one line shared with the game location, where whichever
+    // of the two spoke last erased the other's message.
+    _statusLabel->setText(message);
+    _statusLabel->setVisible(!message.isEmpty());
+    applyStatusStyle(_statusLabel, styleClass);
     Q_EMIT statusChanged(message, styleClass);
 }
 
@@ -362,11 +390,13 @@ void DataPathsWidget::updateButtonStates() {
     const int row = selectedRow();
     if (row >= 0) {
         const bool protectedRow = isProtectedRow(row);
+        // The built-in resources folder cannot be removed - the editor needs it - but priority is
+        // the user's call, so every row can be reordered. The old rule refused to move a row past
+        // the built-in folder to keep it lowest, which it never was: the DATs expanded out of it
+        // sit below it, so the rule only managed to strand rows above it with Move Down greyed out.
         _removeButton->setEnabled(!protectedRow);
-        // The built-in resources path is pinned to the bottom (lowest priority): it cannot move,
-        // and no other row may be pushed below it.
-        _moveUpButton->setEnabled(row > 0 && !protectedRow && !isProtectedRow(row - 1));
-        _moveDownButton->setEnabled(row < _pathsTable->rowCount() - 1 && !protectedRow && !isProtectedRow(row + 1));
+        _moveUpButton->setEnabled(row > 0);
+        _moveDownButton->setEnabled(row < _pathsTable->rowCount() - 1);
     } else {
         _removeButton->setEnabled(false);
         _moveUpButton->setEnabled(false);
@@ -656,12 +686,6 @@ void DataPathsWidget::moveSelectedPath(int offset) {
 
     const int targetRow = row + offset;
     if (targetRow < 0 || targetRow >= _pathsTable->rowCount()) {
-        return;
-    }
-
-    // Keep the built-in resources path pinned to the bottom: never move it, and never swap a
-    // row into its slot (which would make the built-in outrank a user source).
-    if (isProtectedRow(row) || isProtectedRow(targetRow)) {
         return;
     }
 

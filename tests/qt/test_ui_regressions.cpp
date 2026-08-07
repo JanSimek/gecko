@@ -836,6 +836,19 @@ TEST_CASE("DataPathsWidget shows highest priority on top and preserves stored or
     // so the number is what the text ends with.
     CHECK(table->item(0, 0)->text().endsWith("1"));
     CHECK(table->item(2, 0)->text().endsWith("3"));
+
+    // Every row can be reordered: priority is the user's call. The built-in resources folder used
+    // to block this - a row directly above it had Move Down greyed out, which stranded any path
+    // added after it, since new paths land on top.
+    table->setCurrentCell(0, 1);
+    for (QPushButton* b : widget.findChildren<QPushButton*>()) {
+        if (b->text() == "Move Down") {
+            CHECK(b->isEnabled());
+            b->click();
+        }
+    }
+    CHECK(table->item(1, 1)->text().toStdString() == "/data/mymod.dat"); // moved one step down
+    CHECK(table->item(0, 1)->text().toStdString() == "/data/patch.dat");
 }
 
 #ifdef GECK_SCRIPTING_ENABLED

@@ -73,14 +73,13 @@ void SettingsDialog::setupUI() {
 
     setupTabs();
 
-    _statusLabel = new QLabel(READY_STATUS);
+    // Dialog-level only, for things like the save confirmation. Section messages render inside
+    // their own section, next to the controls they are about, so two of them can be shown at once
+    // instead of the later one erasing the earlier.
+    _statusLabel = new QLabel();
     _statusLabel->setStyleSheet(ui::theme::styles::statusNormal());
+    _statusLabel->setVisible(false);
     _mainLayout->addWidget(_statusLabel);
-    // Everything it reports concerns the data paths, so it has no meaning on the other tabs.
-    connect(_tabWidget, &QTabWidget::currentChanged, this, [this](int index) {
-        _statusLabel->setVisible(_tabWidget->tabText(index) == "General");
-    });
-    _statusLabel->setVisible(_tabWidget->tabText(_tabWidget->currentIndex()) == "General");
 
     _progressBar = new QProgressBar();
     _progressBar->setVisible(false);
@@ -209,9 +208,7 @@ void SettingsDialog::setupGeneralTab() {
     _tabWidget->addTab(wrapInScrollArea(_generalTab), "General");
 
     connect(_dataPathsWidget, &DataPathsWidget::dataPathsChanged, this, &SettingsDialog::onWidgetChanged);
-    connect(_dataPathsWidget, &DataPathsWidget::statusChanged, this, &SettingsDialog::onStatusChanged);
     connect(_gameLocationWidget, &GameLocationWidget::configurationChanged, this, &SettingsDialog::onWidgetChanged);
-    connect(_gameLocationWidget, &GameLocationWidget::statusChanged, this, &SettingsDialog::onStatusChanged);
 }
 
 void SettingsDialog::setupEditorTab() {
@@ -327,6 +324,7 @@ void SettingsDialog::updateUI() {
 
 void SettingsDialog::setMainStatus(const QString& message, const QString& styleClass) {
     _statusLabel->setText(message);
+    _statusLabel->setVisible(!message.isEmpty());
 
     if (styleClass == "warning") {
         _statusLabel->setStyleSheet(ui::theme::styles::statusWarning());
@@ -344,10 +342,6 @@ void SettingsDialog::setMainStatus(const QString& message, const QString& styleC
 void SettingsDialog::onWidgetChanged() {
     _hasChanges = true;
     updateUI();
-}
-
-void SettingsDialog::onStatusChanged(const QString& message, const QString& styleClass) {
-    setMainStatus(message, styleClass);
 }
 
 void SettingsDialog::onAccept() {

@@ -73,6 +73,7 @@ private:
     QHBoxLayout* _controlLayout;
     QPushButton* _autoDetectButton;
     QProgressBar* _progressBar;
+    QLabel* _statusLabel = nullptr; // this section's own status line
 };
 
 } // namespace geck

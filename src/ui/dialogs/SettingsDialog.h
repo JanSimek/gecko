@@ -50,7 +50,6 @@ private slots:
     void onAccept();
     void onApply();
     void onReset();
-    void onStatusChanged(const QString& message, const QString& styleClass);
 
 private:
     /// Puts a tab's content in a scroll area so a short dialog scrolls rather than overlapping.
