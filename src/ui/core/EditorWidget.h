@@ -120,10 +120,8 @@ public:
             resetEdgeHoverCursor(); // a lingering resize cursor would suggest a still-grabbable side
         }
     }
-    // The unreachable-areas overlay recomputes lazily in render() from a cached signature. Enabling
-    // it invalidates the cache so it always recomputes from the current map — this is the manual
-    // "refresh" for the count-neutral edits the signature can't see (moving a blocker, flipping a
-    // blocking flag): toggle the overlay off and on to force a fresh flood-fill.
+    // Recomputes lazily in render() from a cached signature. Enabling invalidates the cache, which is
+    // the manual refresh for count-neutral edits the signature cannot see.
     void setShowUnreachableAreas(bool show) {
         _session.visibility().showUnreachable = show;
         if (show) {
@@ -162,15 +160,12 @@ public:
     void enterPlayerPositionSelectionMode();
     void centerViewOnPlayerPosition();
 
-    // Enter a one-shot "click a hex on the map" mode: the next left-click passes its hex index to
-    // `onFinished`, then returns to Select; Escape (or leaving the mode) calls it with std::nullopt.
-    // Reuses the player-position pick plumbing so callers (e.g. the Spatial Script dialog) don't
-    // duplicate it. The caller stays responsible for any UI (e.g. hiding a non-modal dialog).
+    // One-shot "click a hex" mode: the next left-click passes its hex to `onFinished`, Escape passes
+    // nullopt. The caller stays responsible for any UI, such as hiding a non-modal dialog.
     void beginHexPick(std::function<void(std::optional<int>)> onFinished, const QString& prompt);
 
-    // Find the object that owns the script with the given SID (its `map_scripts_pid`), switch to its
-    // elevation, select it and center the view on it. Returns false (leaving the current selection
-    // untouched) when no object on the map owns that script. Used by the Scripts panel's double-click.
+    // Find the object owning the script with this SID, switch to its elevation, select and centre on
+    // it. False (selection untouched) when no object owns it.
     bool revealScriptObject(int sid);
 
     // Tile placement
@@ -192,9 +187,8 @@ public:
     // tool's own hint while one runs. The same text hintChanged carries.
     [[nodiscard]] QString currentHintText() const;
 
-    // Load the freehand fill brush with the palette's tile and activate it (re-loading in
-    // place when it is already the active tool). False when the brush is unavailable or
-    // no tile is selected.
+    // Load the freehand fill brush with the palette's tile and activate it. False when the brush is
+    // unavailable or no tile is selected.
     bool activateFillBrush(int tileId, bool isRoof);
     // The active registered tool's id ("" when none) — lets MainWindow tell tool-backed
     // PluginTool sessions apart when syncing toolbar toggle state.
@@ -228,12 +222,9 @@ public:
     void beginStampPattern(pattern::Pattern pattern);
     void cycleStampVariant();
 
-    // --- Area fill over the current selection (driven by a Luau script) ----------------------------
-    // These drive the Fill dialog: it snapshots the area once, previews on each parameter change
-    // (a ghost overlay), and commits the previewed plan on Apply — all without a new EditorMode.
-    //
-    // The current selection projected to a (sorted) EditArea: selected floor/roof tiles, plus the
-    // hexes covering them (so object scatter works over a tile selection) and any selected hexes.
+    // --- Area fill over the current selection (driven by a Luau script) ---
+    // The current selection as a sorted EditArea: selected floor/roof tiles, the hexes covering them
+    // (so scatter works over a tile selection) and any selected hexes.
     EditArea selectionFillArea() const;
     // True when the selection has any fillable target (floor/roof tiles or hexes), i.e. not a
     // pure-object selection. Gates the Fill action's enabled state.
@@ -248,12 +239,8 @@ public:
     const pattern::FillPlan& fillPlan() const { return _fillPlan; }
 
 #ifdef GECK_SCRIPTING_ENABLED
-    // --- Procedural fill — a Luau script paints the selection --------------------------------------
-    // `source` is a Luau script run (under a wall-clock budget) against the selection via the plan
-    // sink: its api:paintFloor/scatter/… calls RECORD into a fresh plan instead of committing, so the
-    // result previews as a ghost and applyFillPreview() replays it as one undo entry. Returns the
-    // run's ScriptResult (ok/error/print output); on failure it clears the preview and leaves the
-    // plan empty.
+    // `source` is a Luau script run under a wall-clock budget against the selection via the plan sink:
+    // its api calls record instead of committing, so the result previews and applies as one undo entry.
     ScriptResult previewLuaFill(const EditArea& area, const std::string& source, uint32_t seed);
 #endif
 
@@ -377,9 +364,8 @@ public:
     };
     [[nodiscard]] std::optional<SpatialScriptInfo> spatialScriptInfo(uint32_t sid) const;
 
-    // Map-edge (.edg) editing (undoable). All operate on the current elevation and emit
-    // mapEdgeChanged() so the Map Edges panel refreshes. addEdgeZone seeds a full-grid zone and
-    // selects it; deleteSelectedEdgeZone / toggleEdgeClipSide act on the current selection/elevation.
+    // Map-edge (.edg) editing, undoable, on the current elevation; each emits mapEdgeChanged() so the
+    // Map Edges panel refreshes.
     void addEdgeZone();
     void deleteSelectedEdgeZone();
     void toggleEdgeClipSide(int side); // 0=left,1=top,2=right,3=bottom
@@ -452,22 +438,16 @@ private:
         const std::unordered_map<const MapObject*, std::shared_ptr<Object>>& objectsByMapObject,
         const std::optional<std::pair<int, int>>& tileDelta) const;
 
-    // If the spatial-script overlay is visible and a marker sits on the clicked hex (current
-    // elevation), select that script (clearing any object/tile selection) and return true. A second
-    // quick click on the same marker also fires spatialScriptEditActivated. A miss clears the spatial
-    // selection and returns false so normal object selection proceeds.
+    // If a spatial marker sits on the clicked hex, select that script and return true; a second quick
+    // click also fires spatialScriptEditActivated. A miss clears the selection and returns false.
     bool trySelectSpatialScriptAt(sf::Vector2f worldPos);
 
-    // If the map-edge overlay is visible and the click lands near a zone's border on the current
-    // elevation, select that zone (clearing object/tile/spatial selection) and return true. Selection
-    // is by border proximity, not area, so a click in a zone's interior falls through to normal object
-    // selection. A miss clears the edge selection and returns false.
+    // If the click lands near a zone's border, select that zone and return true. By border proximity,
+    // not area, so a click inside a zone falls through to object selection.
     bool trySelectEdgeZoneAt(sf::Vector2f worldPos);
 
-    // Edge side-drag, layered onto the existing object-drag gesture. edgeSideAtForDrag returns the
-    // {zone, side} whose side lies within grab range of worldPos (nullopt if none). begin selects that
-    // zone and snapshots the edge; preview moves the side live (no undo); commit records the whole
-    // gesture as one undo entry; cancel restores the snapshot.
+    // Edge side-drag layered onto the object-drag gesture: begin snapshots, preview moves the side
+    // live, commit records the gesture as one undo entry, cancel restores the snapshot.
     std::optional<std::pair<int, int>> edgeSideAtForDrag(sf::Vector2f worldPos) const;
     bool beginEdgeSideDrag(sf::Vector2f worldPos);
     void previewEdgeSideDrag(sf::Vector2f worldPos);
@@ -513,16 +493,14 @@ private:
     selection::SelectionResult handleRangeSelection(sf::Vector2f worldPos);
 
     void clearDragPreview();
-    // isDeselect (Ctrl+drag): the covered selected items un-highlight live (preview of removal).
-    // isAdditive (Alt+drag): keep the existing selection highlighted while the covered area is
-    // tinted as an add preview. Plain drag (both false) tints the covered area as a replace.
+    // Ctrl+drag un-highlights the covered items (removal preview); Alt+drag tints them as an add;
+    // a plain drag tints them as a replace.
     void updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos, bool isDeselect, bool isAdditive);
     // Add-preview helpers: tint the covered tiles/objects and record them for clearDragPreview.
     void previewAreaTiles(const sf::FloatRect& area, bool roof, bool includeEmpty);
     void previewAreaObjects(const sf::FloatRect& area);
-    // Exit-grid "Draw edge" live preview: recompute the prospective on-line hexes (the gap-free hex
-    // line through the committed vertices + the live cursor) and the tint from the tool's current
-    // destination kind, for the renderer to draw the polyline and marked hexes.
+    // Exit-grid "Draw edge" preview: the prospective on-line hexes through the committed vertices plus
+    // the live cursor, tinted by the tool's destination kind.
     void updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide);
     void clearMarkExitsLinePreview();
     void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
@@ -535,9 +513,8 @@ private:
     std::shared_ptr<MapObject> createScrollBlockerObject(int hexPosition);
     void createScrollBlockersFromHexes(const std::vector<int>& borderHexes);
 
-    // Input system setup. setupInputCallbacks() builds the callback struct from these
-    // cohesive groups; each populates its slice (lambdas capture this and drive the
-    // relevant managers/selection/mode logic).
+    // Input system setup: setupInputCallbacks() builds the callback struct from these groups, each
+    // populating its own slice.
     void setupInputCallbacks();
     void bindSelectionCallbacks(InputHandler::Callbacks& callbacks);
     void bindInteractionCallbacks(InputHandler::Callbacks& callbacks);
@@ -563,9 +540,8 @@ private:
     SFMLWidget* _sfmlWidget;
     class MainWindow* _mainWindow;
 
-    // Owns the editor's per-map state and the Qt-free helpers that act on it (object
-    // picking, selection visuals). Declared before the managers below so it outlives
-    // them: several hold references into the session (e.g. the undo stack).
+    // Owns the editor's per-map state and the Qt-free helpers acting on it. Declared before the
+    // managers below so it outlives them - several hold references into it.
     EditorController _controller;
     // Reference into the controller's session so the many _session.x() call sites stay
     // unchanged while the controller owns the storage.
@@ -633,10 +609,8 @@ private:
     // updateEdgeHoverCursor.
     int _edgeHoverCursorSide = -1;
 
-    // Cached "unreachable areas" overlay: the walkable hexes on the current elevation stranded from
-    // every entry point (player start + exit grids). The flood-fill (geck::reachability) is too heavy
-    // to run per frame, so render() recomputes it only when the map pointer, elevation, or object
-    // count changes — a cheap signature that catches load/new, elevation switch, and object add/remove.
+    // Cached unreachable-areas overlay. The flood-fill is too heavy per frame, so render() recomputes
+    // only when the map pointer, elevation or object count changes.
     std::vector<int> _unreachableHexes;
     const Map* _unreachableCacheMap = nullptr;
     int _unreachableCacheElevation = -1;
@@ -671,10 +645,8 @@ private:
     void updateStampPreview(sf::Vector2f worldPos);
     void clearStampPreview();
 
-    // A3 fill preview: a semi-transparent ghost of the previewed FillPlan (floor under, objects,
-    // roof over) drawn through the same RenderData.stampPreview path, plus the pristine plan replayed
-    // on Apply. The ghosts are rebuilt from the plan's data so the plan itself stays untouched (its
-    // objects render at full opacity once committed). Stamp and fill previews are never live at once.
+    // Fill preview: a ghost of the previewed FillPlan drawn through the stamp-preview path, plus the
+    // pristine plan replayed on Apply. Stamp and fill previews are never live at once.
     std::vector<sf::Sprite> _fillPreviewFloorTiles;
     std::vector<std::shared_ptr<Object>> _fillPreviewObjects;
     std::vector<sf::Sprite> _fillPreviewRoofTiles;
@@ -689,9 +661,8 @@ private:
     // beginHexPick): the next click routes here instead of emitting playerPositionSelected.
     std::function<void(std::optional<int>)> _hexPickCallback;
 
-    // Exit-grid "Draw edge" preview state (MarkExits mode). _exitGridLineActive gates the renderer;
-    // the vertices/cursor draw the polyline; the hexes are the prospective on-line hexes (recomputed
-    // each mouse move); the tint reflects the tool's current destination kind.
+    // Exit-grid "Draw edge" state: _exitGridLineActive gates the renderer, the vertices and cursor
+    // draw the polyline, the hexes are recomputed each mouse move.
     std::vector<sf::Vector2f> _exitGridLineVertices;
     sf::Vector2f _exitGridLineCursor;
     bool _exitGridLineActive = false;
