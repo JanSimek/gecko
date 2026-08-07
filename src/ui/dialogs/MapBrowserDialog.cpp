@@ -35,9 +35,8 @@ namespace geck {
 
 namespace {
     constexpr int THUMBNAIL_SIZE = 128;
-    // The preview is rendered once at this resolution (the renderer's own cap), then
-    // scaled to fit the preview pane as it is resized. 160 is a floor so the pane can be
-    // dragged small without the preview vanishing.
+    // Rendered once at this resolution, then scaled to the preview pane. 160 is a floor so the pane
+    // can be dragged small without the preview vanishing.
     constexpr int PREVIEW_RENDER_SIZE = 512;
     constexpr int PREVIEW_MIN_SIZE = 160;
     constexpr int CELL_PADDING_W = 24;
@@ -53,9 +52,8 @@ namespace {
         return pm;
     }
 
-    // Draws each cell as the thumbnail with a two-line caption: the maps.txt lookup name in bold on top,
-    // the .map filename below in a muted colour. When a map has no maps.txt entry, the filename is the
-    // only (bold) line.
+    // Each cell is the thumbnail with a two-line caption: the maps.txt name in bold, the .map filename
+    // below. With no maps.txt entry the filename is the only line.
     class MapItemDelegate : public QStyledItemDelegate {
     public:
         using QStyledItemDelegate::QStyledItemDelegate;
@@ -111,9 +109,8 @@ MapBrowserDialog::MapBrowserDialog(resource::GameResources& resources,
     setWindowTitle("Open Map");
     resize(860, 560);
 
-    // Cache misses render on a background worker (private resource stack, own GL context) so
-    // the dialog never blocks on a map parse; without data paths the old synchronous path
-    // remains as the fallback.
+    // Cache misses render on a background worker with its own resource stack and GL context, so the
+    // dialog never blocks on a map parse; without data paths the synchronous path remains.
     if (!dataPaths.empty()) {
         _renderThread = new QThread(this);
         _renderWorker = new MapRenderWorker(std::move(dataPaths));
@@ -144,9 +141,8 @@ MapBrowserDialog::MapBrowserDialog(resource::GameResources& resources,
     _previewImage = new QLabel(this);
     _previewImage->setAlignment(Qt::AlignCenter);
     _previewImage->setMinimumSize(PREVIEW_MIN_SIZE, PREVIEW_MIN_SIZE);
-    // Ignore the pixmap's own size hint so the label fills whatever the splitter gives it
-    // (and the scaled pixmap never feeds back into the layout); rescalePreview fits the
-    // image to that size on every resize.
+    // Ignore the pixmap's size hint so the label fills whatever the splitter gives it and the scaled
+    // pixmap never feeds back into the layout.
     _previewImage->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     _previewImage->installEventFilter(this);
     _previewName = new QLabel(this);
@@ -173,9 +169,8 @@ MapBrowserDialog::MapBrowserDialog(resource::GameResources& resources,
     layout->addWidget(splitter, 1);
     layout->addWidget(buttons);
 
-    // Drives lazy thumbnail rendering: each timeout renders one visible cell, then the
-    // event loop runs before the next, so scrolling/typing stay responsive. Stops itself
-    // once every visible cell is rendered; scroll/filter restart it for newly-shown cells.
+    // One visible cell per timeout, so the event loop runs between renders and scrolling stays
+    // responsive. Stops itself once every visible cell is done.
     _thumbnailTimer = new QTimer(this);
     _thumbnailTimer->setInterval(0);
     connect(_thumbnailTimer, &QTimer::timeout, this, &MapBrowserDialog::renderNextVisibleThumbnail);
@@ -243,9 +238,8 @@ QListWidgetItem* MapBrowserDialog::nextUnrenderedVisibleItem() const {
             offscreenCandidate = item;
         }
     }
-    // Nothing visible left: keep warming the off-screen cells. Each render lands in the
-    // persisted thumbnail cache, so one open browse warms the whole library for every
-    // later scroll, filter, and session.
+    // Nothing visible left: keep warming off-screen cells into the persisted cache, so one browse
+    // warms the library for later sessions.
     return offscreenCandidate;
 }
 

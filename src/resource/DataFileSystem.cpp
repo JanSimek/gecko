@@ -30,9 +30,8 @@ void DataFileSystem::addDataPath(const std::filesystem::path& path) {
 
 namespace {
 
-    // Resolves a user-supplied data path to the actual directory or archive to mount.
-    // Returns nullopt when the path cannot be used: a macOS .app bundle without a
-    // recognized Fallout 2 layout, or an empty/unresolvable path.
+    // Resolves a user-supplied data path to the directory or archive to mount. nullopt when it cannot
+    // be used: a macOS .app without a recognised Fallout 2 layout, or an unresolvable path.
     std::optional<std::filesystem::path> resolveMountRoot(const std::filesystem::path& path) {
         if (path.extension() == ".dat") {
             return path;
@@ -40,9 +39,8 @@ namespace {
         if (auto resolved = util::resolveGameDataRoot(path); resolved && !resolved->empty()) {
             return *resolved;
         }
-        // resolveGameDataRoot returns nullopt for macOS .app bundles without a valid GOG
-        // wrapper. Do not fall through to mounting the raw .app root (NativeFileSystem
-        // would traverse Wine dosdevices symlinks).
+        // Never fall through to mounting a raw .app root - NativeFileSystem would traverse Wine dosdevices
+        // symlinks.
         if (path.extension() == ".app") {
             spdlog::warn("macOS bundle '{}' does not contain a recognized Fallout 2 data layout", path.string());
             return std::nullopt;
@@ -112,9 +110,8 @@ std::optional<std::vector<uint8_t>> DataFileSystem::readRawBytes(const std::file
 
         return data;
     } catch (const FileReaderException& e) {
-        // A corrupt/truncated archive entry (e.g. a failed zlib inflate) must not crash the
-        // app: surface it as "no data" so callers (thumbnail rendering, map loading) can
-        // degrade gracefully instead of letting the throw reach an abort().
+        // A corrupt or truncated archive entry must not crash the app: surface it as "no data" so callers
+        // degrade gracefully instead of letting the throw reach abort().
         spdlog::warn("DataFileSystem::readRawBytes: failed to read '{}': {}", path.string(), e.what());
         return std::nullopt;
     }
@@ -165,11 +162,9 @@ void DataFileSystem::refresh() {
         return;
     }
 
-    // Snapshot the mounts in their current (priority) order. A NativeFileSystem builds its listing once
-    // at Initialize() and never rescans, and Shutdown() wipes its base path (so re-Initialize() can't
-    // rebuild it) — the only way to pick up files written on disk this session is a fresh instance. So
-    // remove every mount and re-add it in the SAME order (priority preserved): directory mounts are
-    // recreated and re-scanned; immutable DAT mounts are reused as-is.
+    // A NativeFileSystem builds its listing once at Initialize() and Shutdown() wipes its base path, so
+    // only a fresh instance picks up files written this session. Remove and re-add every mount in the
+    // same order: directories are recreated and rescanned, immutable DAT mounts reused.
     std::vector<vfspp::IFileSystemPtr> mounts(fileSystemsOpt->get().begin(), fileSystemsOpt->get().end());
 
     for (const auto& fileSystem : mounts) {
@@ -226,9 +221,8 @@ std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesyste
 
     const std::string fullVfsPath = normalizeVfsPath(path).generic_string();
 
-    // Every mounted filesystem is registered under the "/" alias and keys its
-    // entries by virtual path (alias + forward-slashed name), so the full VFS
-    // path is the lookup key for both DAT and native filesystems.
+    // Every mount is registered under the "/" alias and keys entries by virtual path, so the full VFS
+    // path is the lookup key for DAT and native filesystems alike.
     const auto fileSystemsOpt = _vfs->GetFilesystems("/");
     if (!fileSystemsOpt) {
         return std::nullopt;
