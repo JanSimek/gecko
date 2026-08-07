@@ -113,9 +113,8 @@ void MapInfoPanel::setupUI() {
     _filenameEdit = new QLineEdit();
     headerLayout->addRow("Filename:", _filenameEdit);
 
-    // Editable friendly names from maps.txt / map.msg (blank + read-only when game data is unmounted or
-    // the map isn't registered). Editing a name marks the map modified; the value is written to a
-    // writable copy when the map is saved (see persistMapNames).
+    // Editable friendly names from maps.txt / map.msg, blank and read-only when the map isn't
+    // registered. Edits are written to a writable copy on save (persistMapNames).
     _displayNameEdit = new QLineEdit();
     _displayNameEdit->setObjectName("mapDisplayName");
     headerLayout->addRow("Map name:", _displayNameEdit);
@@ -481,9 +480,8 @@ void MapInfoPanel::populateGlobalVars() {
         infoItem->setForeground(0, QBrush(ui::theme::colors::statusInfoRgb()));
         infoItem->setForeground(1, QBrush(ui::theme::colors::statusInfoRgb()));
     } else {
-        // The i-th _mvars row is the i-th MAP_GLOBAL_VARS variable in the .gam. Make the Value cell
-        // editable and stash that index in its UserRole so onGlobalVarChanged can write straight to
-        // Gam::setMapGlobalVar(i, ...).
+        // The i-th row is the i-th MAP_GLOBAL_VARS variable in the .gam; the index goes in UserRole so
+        // onGlobalVarChanged can write straight to Gam::setMapGlobalVar(i, ...).
         for (int i = 0; i < static_cast<int>(_mvars.size()); ++i) {
             const auto& [key, value] = _mvars[static_cast<size_t>(i)];
             QTreeWidgetItem* item = new QTreeWidgetItem(_globalVarsTree);
@@ -547,9 +545,8 @@ void MapInfoPanel::updateMapNameDisplay() {
     }
 
     const auto& header = _map->getMapFile().header;
-    // Resolve by the actual file basename, NOT header.filename: the .map's 16-byte filename field is
-    // upper-cased and NUL-padded (e.g. "ARTEMPLE.MAP\0\0\0\0"), which never matches maps.txt. _map's
-    // path filename ("artemple.map") is what maps.txt uses (and what the CLI/MCP resolve by).
+    // Resolve by the file basename, NOT header.filename: the .map's 16-byte field is upper-cased and
+    // NUL-padded ("ARTEMPLE.MAP\0..."), which never matches maps.txt.
     const std::string file = _map->filename();
     const int index = _mapNames->indexOf(file);
     const int elevation = static_cast<int>(header.player_default_elevation);
@@ -570,9 +567,8 @@ void MapInfoPanel::updateOverlayHint() {
     if (!_overlayHintLabel || !_displayNameEdit) {
         return;
     }
-    // The names are editable only for a registered map. When they are, but there is no writable folder
-    // in the Data Paths to save them to (every path is a read-only archive), hint the user to add one —
-    // the editor never creates or mounts a hidden writable location.
+    // Names are editable only for a registered map; with no writable folder in the Data Paths, hint
+    // the user to add one - the editor never mounts a hidden writable location.
     const bool editable = !_displayNameEdit->isReadOnly();
     const bool hasWritablePath = _settings && _settings->resolveWritableDataPath().has_value();
     const bool needsWritablePath = editable && !hasWritablePath;
@@ -596,9 +592,8 @@ void MapInfoPanel::loadScriptVars() {
     }
 
     try {
-        // The map's own script (header.script_id, 1-based) names a scripts.lst entry. Resolve its
-        // filename and scrname.msg description independently of the .gam file (which only carries the
-        // map's global variables), so the name shows even for a map that has no .gam.
+        // header.script_id is 1-based into scripts.lst. Resolved independently of the .gam so the name
+        // shows even for a map that has none.
         if (const int map_script_id = _map->getMapFile().header.script_id; map_script_id > 0) {
             auto scripts = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
             const auto& scriptList = scripts->list();
@@ -616,11 +611,9 @@ void MapInfoPanel::loadScriptVars() {
             }
         }
 
-        // For a BASE map the engine re-reads the map's global variables from the map's .gam
-        // MAP_GLOBAL_VARS section (fallout2-ce map.cc), ignoring the .map's own map_global_vars block. So
-        // the .gam — not the .map — is both the source of truth for the displayed value AND where edits
-        // are written back. Parse it losslessly so an edited value can be written without disturbing
-        // names, spacing, or comments.
+        // For a BASE map the engine re-reads globals from the .gam's MAP_GLOBAL_VARS (fallout2-ce map.cc),
+        // ignoring the .map's own block - so the .gam is both source of truth and write target. Parsed
+        // losslessly so an edit does not disturb names, spacing or comments.
         const std::string baseName = _map->filename().substr(0, _map->filename().find("."));
         _gamPath = "maps/" + baseName + ".gam";
         if (const auto bytes = _resources.files().readRawBytes(_gamPath); bytes.has_value()) {
@@ -684,9 +677,8 @@ void MapInfoPanel::clearMapInfo() {
 }
 
 void MapInfoPanel::onFieldChanged() {
-    // Ignore the valueChanged/toggled signals that fire while updateMapInfo() is populating the widgets
-    // from the map; otherwise a half-updated widget set would be written back, corrupting fields that
-    // haven't been refreshed yet (e.g. script_id reset to the stale spin value during load).
+    // Ignore the signals that fire while updateMapInfo() populates the widgets, or a half-updated set
+    // gets written back - e.g. script_id reset to the stale spin value during load.
     if (_suppressFieldChanged || !_map) {
         return;
     }
@@ -1057,9 +1049,8 @@ void MapInfoPanel::onGlobalVarChanged(QTreeWidgetItem* item, int column) {
         return;
     }
 
-    // The .gam is the source of truth for a BASE map's global variables: rewrite the value in the
-    // MAP_GLOBAL_VARS line (preserving its name/spacing/comment) and flag the .gam dirty so it's written
-    // alongside the .map on save.
+    // The .gam is the source of truth for a BASE map's globals: rewrite the value in place, preserving
+    // name, spacing and comment, and flag it dirty so it is written alongside the .map.
     _gamDoc->setMapGlobalVar(static_cast<std::size_t>(index), value);
     _mvars[static_cast<size_t>(index)].second = value; // keep the display copy in sync
     // Mirror the edit into the .map's stored global-var block so the two stay in sync — the engine
@@ -1196,9 +1187,8 @@ void MapInfoPanel::persistMapNames() {
 
     const int index = _mapNames->indexOf(_map->filename()); // by basename, not the NUL-padded header field
     if (index < 0) {
-        // We only get here with pending edits (checked above). The map's current name isn't in maps.txt
-        // — typically because Save As renamed it to a file with no registry entry — so there's nowhere to
-        // write the edits. Warn rather than dropping them silently.
+        // Pending edits, but the map's name isn't in maps.txt - typically after a Save As - so there is
+        // nowhere to write them. Warn rather than dropping them silently.
         QMessageBox::warning(this, "Save Map Names",
             QString("Map name edits weren't saved: \"%1\" isn't registered in maps.txt.")
                 .arg(QString::fromStdString(_map->filename())));
@@ -1224,9 +1214,8 @@ void MapInfoPanel::persistMapVars() {
         return;
     }
 
-    // Validate before writing: never persist a .gam that an edit corrupted. The round-trip check confirms
-    // the file will re-read to the same map-global variables. On any Error, list them and bail without
-    // touching the file — mirroring how the maps.txt save path hard-blocks on Error.
+    // Never persist a .gam an edit corrupted: the round-trip check confirms it re-reads to the same
+    // variables, and any Error bails without touching the file.
     const std::vector<writer::GamIssue> issues = writer::validateGam(*_gamDoc);
     if (writer::hasErrors(issues)) {
         QString details;
@@ -1276,9 +1265,8 @@ void MapInfoPanel::writeNameEdits(const std::filesystem::path& writableRoot, int
             return;
         }
 
-        // Reflect the edit this session: re-mount the target so the VFS's file listing includes the
-        // freshly-written file (vfspp caches the listing at mount time). Re-mounted last, the copy
-        // shadows the archives. Then drop the cached map.msg and rebuild the resolver.
+        // Re-mount the target so the VFS listing includes the freshly-written file - vfspp caches the
+        // listing at mount time - then drop the cached map.msg and rebuild the resolver.
         _resources.files().addDataPath(writableRoot);
         _resources.repository().clear();
         _mapNames = std::make_unique<resource::MapNameResolver>(_resources);
