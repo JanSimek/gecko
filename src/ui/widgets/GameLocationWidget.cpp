@@ -2,8 +2,6 @@
 #include "util/GameDataPathResolver.h"
 #include "ui/IconHelper.h"
 #include "ui/Settings.h"
-#include "ui/common/ButtonStyle.h"
-#include "ui/common/StatusStyle.h"
 #include "ui/theme/ThemeManager.h"
 
 #include <QApplication>

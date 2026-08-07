@@ -3,9 +3,7 @@
 #include "Application.h"
 #include "resource/WritableDataRoot.h"
 #include "ui/IconHelper.h"
-#include "ui/common/StatusStyle.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/common/ButtonStyle.h"
 #include "util/GameDataPathResolver.h"
 
 #include <QApplication>
