@@ -19,9 +19,8 @@ namespace {
 
 } // namespace
 
-BlendTables::BlendTables(const Pal& pal) {
-    _pal = pal.rgbConversionTable();
-
+BlendTables::BlendTables(const Pal& pal)
+    : _pal(pal.rgbConversionTable()) {
     // colorPaletteLoad: mark the slots the palette actually maps and zero the rest, then Color2RGB
     // (6-bit channels halved to 5) for every index.
     const auto& colors = pal.palette();

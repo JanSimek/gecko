@@ -176,7 +176,7 @@ void WorldMapView::revealArea(int areaIndex) {
     }
 }
 
-void WorldMapView::paintEvent(QPaintEvent* event) {
+void WorldMapView::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.fillRect(rect(), palette().window());
     if (_image.isNull()) {
@@ -201,8 +201,6 @@ void WorldMapView::paintEvent(QPaintEvent* event) {
         painter.setBrush(Qt::NoBrush);
         painter.drawRect(marker.adjusted(-2, -2, 2, 2));
     }
-
-    Q_UNUSED(event);
 }
 
 void WorldMapView::drawLabels(QPainter& painter) const {
@@ -278,8 +276,8 @@ void WorldMapView::mouseMoveEvent(QMouseEvent* event) {
     }
 
     const QPointF world = toWorld(event->position());
-    const int worldX = static_cast<int>(std::floor(world.x()));
-    const int worldY = static_cast<int>(std::floor(world.y()));
+    const auto worldX = static_cast<int>(std::floor(world.x()));
+    const auto worldY = static_cast<int>(std::floor(world.y()));
     const worldmap::AreaMarker* area = _scene->areaAt(worldX, worldY);
     if (area != _hovered) {
         _hovered = area;
@@ -338,11 +336,11 @@ void WorldMapView::leaveEvent(QEvent* event) {
 
 bool WorldMapView::event(QEvent* event) {
     if (event->type() == QEvent::ToolTip && _scene != nullptr) {
-        auto* help = static_cast<QHelpEvent*>(event);
+        const auto* help = static_cast<const QHelpEvent*>(event);
         const QPointF world = toWorld(QPointF(help->pos()));
-        const worldmap::AreaMarker* area = _scene->areaAt(static_cast<int>(std::floor(world.x())),
-            static_cast<int>(std::floor(world.y())));
-        if (area != nullptr) {
+        if (const worldmap::AreaMarker* area = _scene->areaAt(static_cast<int>(std::floor(world.x())),
+                static_cast<int>(std::floor(world.y())));
+            area != nullptr) {
             QToolTip::showText(help->globalPos(), tooltipFor(*area), this);
         } else {
             QToolTip::hideText();
@@ -353,22 +351,26 @@ bool WorldMapView::event(QEvent* event) {
 }
 
 QString WorldMapView::tooltipFor(const worldmap::AreaMarker& area) const {
-    QString text = QStringLiteral("<b>%1</b>").arg(QString::fromStdString(area.label()));
+    // The tooltip is rich text and every string in it comes out of game data files, so escape them
+    // rather than trust that no name ever contains '<' or '&'.
+    const auto escaped = [](const std::string& value) { return QString::fromStdString(value).toHtmlEscaped(); };
+
+    QString text = QStringLiteral("<b>%1</b>").arg(escaped(area.label()));
     if (area.label() != area.name) {
-        text += QStringLiteral(" <i>(%1)</i>").arg(QString::fromStdString(area.name));
+        text += QStringLiteral(" <i>(%1)</i>").arg(escaped(area.name));
     }
     text += QStringLiteral("<br>Area %1 &middot; %2")
                 .arg(area.index)
                 .arg(QString::fromLatin1(cityAreaSizeName(area.size)));
     if (!area.terrain.empty()) {
-        text += QStringLiteral(" &middot; %1").arg(QString::fromStdString(area.terrain));
+        text += QStringLiteral(" &middot; %1").arg(escaped(area.terrain));
     }
     text += QStringLiteral("<br>%1").arg(area.knownAtStart ? QStringLiteral("Known at start")
                                                            : QStringLiteral("Discovered through play"));
     if (!area.mapFiles.empty()) {
         QStringList maps;
         for (const std::string& mapFile : area.mapFiles) {
-            maps << QString::fromStdString(mapFile);
+            maps << escaped(mapFile);
         }
         text += QStringLiteral("<br>%1").arg(maps.join(QStringLiteral(", ")));
     }

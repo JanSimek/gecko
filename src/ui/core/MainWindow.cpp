@@ -2697,6 +2697,15 @@ void MainWindow::showMapBrowserDialog() {
     }
 }
 
+std::string MainWindow::findMountedMapPath(const QString& mapFileName) const {
+    for (const auto& path : _resourcesShared->files().list("*.map")) {
+        if (QString::fromStdString(path.filename().string()).compare(mapFileName, Qt::CaseInsensitive) == 0) {
+            return path.generic_string();
+        }
+    }
+    return {};
+}
+
 void MainWindow::toggleWorldMap(bool show) {
     if (!show) {
         // Back to whatever was showing before — the open map, or the welcome screen if it has since
@@ -2714,19 +2723,17 @@ void MainWindow::toggleWorldMap(bool show) {
     if (_worldMapWidget == nullptr) {
         _worldMapWidget = new WorldMapWidget(*_resourcesShared, this);
         connect(_worldMapWidget, &WorldMapWidget::openMapRequested, this, [this](const QString& mapFileName) {
-            // The worldmap knows areas by .map filename; the loader wants the VFS path, so find the
-            // mounted file whose name matches.
-            for (const auto& path : _resourcesShared->files().list("*.map")) {
-                if (QString::fromStdString(path.filename().string()).compare(mapFileName, Qt::CaseInsensitive) == 0) {
-                    if (_worldMapAction != nullptr) {
-                        _worldMapAction->setChecked(false); // leave the world map for the editor
-                    }
-                    handleMapLoadRequest(path.generic_string(), false);
-                    return;
-                }
+            // The worldmap knows areas by .map filename; the loader wants the VFS path.
+            const std::string mapPath = findMountedMapPath(mapFileName);
+            if (mapPath.empty()) {
+                QtDialogs::showError(this, "Map Not Found",
+                    QString("%1 is not in the mounted game data.").arg(mapFileName));
+                return;
             }
-            QtDialogs::showError(this, "Map Not Found",
-                QString("%1 is not in the mounted game data.").arg(mapFileName));
+            if (_worldMapAction != nullptr) {
+                _worldMapAction->setChecked(false); // leave the world map for the editor
+            }
+            handleMapLoadRequest(mapPath, false);
         });
         _centralStack->addWidget(_worldMapWidget);
     }

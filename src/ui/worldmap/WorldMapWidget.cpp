@@ -111,7 +111,7 @@ void WorldMapWidget::setupUi() {
 
     _areaList = new QListWidget(side);
     _areaList->setMinimumWidth(AREA_LIST_WIDTH);
-    connect(_areaList, &QListWidget::currentItemChanged, this, [this](QListWidgetItem* item, QListWidgetItem*) {
+    connect(_areaList, &QListWidget::currentItemChanged, this, [this](const QListWidgetItem* item, QListWidgetItem*) {
         if (item != nullptr) {
             _view->revealArea(item->data(AREA_INDEX_ROLE).toInt());
         }

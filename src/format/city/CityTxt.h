@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 /// @file
@@ -70,24 +71,26 @@ enum class CityAreaSize {
 
 /// Maps a `size` value (already lowercased by the reader) onto its ordinal. Unknown values fall
 /// back to Large, matching the engine's `wmAreaSlotInit` default.
-inline CityAreaSize cityAreaSize(const std::string& size) {
+inline CityAreaSize cityAreaSize(std::string_view size) {
+    using enum CityAreaSize;
     if (size == "small") {
-        return CityAreaSize::Small;
+        return Small;
     }
     if (size == "medium") {
-        return CityAreaSize::Medium;
+        return Medium;
     }
-    return CityAreaSize::Large;
+    return Large;
 }
 
 /// The engine's own name for a size (`wmAreaSizeStrs`), for display.
 inline const char* cityAreaSizeName(CityAreaSize size) {
+    using enum CityAreaSize;
     switch (size) {
-        case CityAreaSize::Small:
+        case Small:
             return "small";
-        case CityAreaSize::Medium:
+        case Medium:
             return "medium";
-        case CityAreaSize::Large:
+        case Large:
             break;
     }
     return "large";

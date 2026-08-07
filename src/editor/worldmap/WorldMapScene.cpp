@@ -68,6 +68,7 @@ std::unique_ptr<WorldMapScene> WorldMapScene::load(resource::GameResources& reso
     if (!scene->rasteriseTiles(resources)) {
         return nullptr;
     }
+    scene->loadMarkerSprites(resources);
     scene->buildAreas(resources);
     scene->composeMarkers();
     return scene;
@@ -120,15 +121,21 @@ bool WorldMapScene::rasteriseTiles(resource::GameResources& resources) {
         spdlog::warn("WorldMapScene: {} worldmap tile(s) have no usable art", _missingArt.size());
     }
 
+    return true;
+}
+
+void WorldMapScene::loadMarkerSprites(resource::GameResources& resources) {
     // The city circles are interface art too; load them once for every area to blend against.
-    for (int size = 0; size < static_cast<int>(_sprites.size()); ++size) {
-        const std::string path = resources.frmResolver().resolve(interfaceFid(CITY_SPRITE_BASE_INDEX + size));
+    for (std::size_t size = 0; size < _sprites.size(); ++size) {
+        const int lstIndex = CITY_SPRITE_BASE_INDEX + static_cast<int>(size);
+        const std::string path = resources.frmResolver().resolve(interfaceFid(lstIndex));
         const Frame* frame = path.empty() ? nullptr : firstFrame(resources, path);
         if (frame == nullptr) {
-            spdlog::warn("WorldMapScene: city marker art {} is missing", CITY_SPRITE_BASE_INDEX + size);
+            spdlog::warn("WorldMapScene: city marker art {} is missing", lstIndex);
             continue;
         }
-        Sprite& sprite = _sprites[static_cast<std::size_t>(size)];
+
+        Sprite& sprite = _sprites[size];
         sprite.width = frame->width();
         sprite.height = frame->height();
         sprite.indices.resize(static_cast<std::size_t>(sprite.width) * sprite.height);
@@ -139,8 +146,6 @@ bool WorldMapScene::rasteriseTiles(resource::GameResources& resources) {
             }
         }
     }
-
-    return true;
 }
 
 void WorldMapScene::buildAreas(resource::GameResources& resources) {
@@ -160,7 +165,7 @@ void WorldMapScene::buildAreas(resource::GameResources& resources) {
         // the worldmap is that minus where the view sits inside the window.
         marker.x = area.worldX - WM_VIEW_X;
         marker.y = area.worldY - WM_VIEW_Y;
-        const Sprite& sprite = _sprites[static_cast<std::size_t>(marker.size)];
+        const Sprite& sprite = spriteFor(marker.size);
         marker.width = sprite.width;
         marker.height = sprite.height;
 
@@ -179,12 +184,14 @@ void WorldMapScene::buildAreas(resource::GameResources& resources) {
 }
 
 bool WorldMapScene::blendMarker(const AreaMarker& area) {
-    const Sprite& sprite = _sprites[static_cast<std::size_t>(area.size)];
+    const Sprite& sprite = spriteFor(area.size);
     if (!sprite.valid() || !_greenBlend.has_value()) {
         return false;
     }
 
-    // Clip to the canvas; the engine clips to its 450x443 viewport for the same reason.
+    // Clip to the canvas; the engine clips to its 450x443 viewport for the same reason. Indices are
+    // computed per pixel rather than by offsetting a row pointer by area.x, which would be out of
+    // bounds (and so undefined) for a marker hanging off the left edge.
     const int startX = std::max(0, -area.x);
     const int startY = std::max(0, -area.y);
     const int endX = std::min(sprite.width, _width - area.x);
@@ -192,11 +199,13 @@ bool WorldMapScene::blendMarker(const AreaMarker& area) {
 
     for (int y = startY; y < endY; ++y) {
         const std::uint8_t* src = &sprite.indices[static_cast<std::size_t>(y) * sprite.width];
-        std::uint8_t* dest = &_indices[static_cast<std::size_t>(area.y + y) * _width + area.x];
+        const std::size_t destRow = static_cast<std::size_t>(area.y + y) * _width;
         for (int x = startX; x < endX; ++x) {
-            if (src[x] != 0) { // index 0 is transparent
-                dest[x] = _greenBlend->blendPixel(src[x], dest[x]);
+            if (src[x] == 0) {
+                continue; // index 0 is transparent
             }
+            std::uint8_t& dest = _indices[destRow + static_cast<std::size_t>(area.x + x)];
+            dest = _greenBlend->blendPixel(src[x], dest);
         }
     }
     return true;

@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace geck::resource {
@@ -51,7 +52,13 @@ struct AreaMarker {
     /// The label the game shows, falling back to the internal name when map.msg has nothing.
     [[nodiscard]] const std::string& label() const { return displayName.empty() ? name : displayName; }
 
+    /// The engine's hit test (`wmMatchWorldPosToArea`), edges included — it compares `<= x + width`,
+    /// so the clickable box really is one pixel wider than the sprite. Kept as-is so clicking here
+    /// picks the same area the game would. A marker with no art has no box at all.
     [[nodiscard]] bool contains(int px, int py) const {
+        if (width <= 0 || height <= 0) {
+            return false;
+        }
         return px >= x && py >= y && px <= x + width && py <= y + height;
     }
 };
@@ -83,11 +90,12 @@ public:
     [[nodiscard]] const std::vector<AreaMarker>& areas() const { return _areas; }
 
     /// The area whose marker covers a worldmap pixel, or nullptr. Matches the engine's rectangular
-    /// hit test (`wmMatchWorldPosToArea`): the lowest-numbered area wins where markers overlap.
+    /// hit test (`wmMatchWorldPosToArea`), which stops at its first hit while walking the area list
+    /// in the order city.txt declares them — so where markers overlap, the earlier section wins.
     [[nodiscard]] const AreaMarker* areaAt(int px, int py) const;
 
-    /// Redraws with markers shown or hidden. Only the marker rectangles are recomputed, so this is
-    /// cheap enough to drive a toggle.
+    /// Redraws with markers shown or hidden. Recomposes the whole canvas (a few milliseconds for
+    /// the shipped 1400x1500 worldmap), which is fine for a toggle.
     void setMarkersVisible(bool visible);
     [[nodiscard]] bool markersVisible() const { return _markersVisible; }
 
@@ -107,6 +115,7 @@ private:
     WorldMapScene() = default;
 
     bool rasteriseTiles(resource::GameResources& resources);
+    void loadMarkerSprites(resource::GameResources& resources);
     void buildAreas(resource::GameResources& resources);
     void composeMarkers();
     void expandToPixels();
@@ -133,6 +142,11 @@ private:
         [[nodiscard]] bool valid() const { return width > 0 && height > 0; }
     };
     std::array<Sprite, 3> _sprites;
+
+    /// The marker art for a city size. The one place the size ordinal is used as an index.
+    [[nodiscard]] const Sprite& spriteFor(CityAreaSize size) const {
+        return _sprites[static_cast<std::size_t>(static_cast<std::underlying_type_t<CityAreaSize>>(size))];
+    }
 
     std::vector<AreaMarker> _areas;
     std::vector<std::string> _missingArt;

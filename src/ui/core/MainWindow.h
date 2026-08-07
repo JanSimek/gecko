@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <filesystem>
 #include <utility>
 #include <SFML/Window/Event.hpp>
@@ -270,6 +271,10 @@ private:
     void restoreDefaultLayout();
 
     void convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed);
+
+    /// The VFS path of a mounted .map with this filename (any case), or "" if none has it. The
+    /// world map identifies an area's maps by filename, while the loader wants a path.
+    [[nodiscard]] std::string findMountedMapPath(const QString& mapFileName) const;
 
     QStackedWidget* _centralStack;
     QTimer* _gameLoopTimer;
