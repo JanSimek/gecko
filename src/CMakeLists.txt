@@ -47,6 +47,8 @@ set(GECK_APP_SOURCES
     ui/common/BasePaletteWidget.h
     ui/common/BasePanel.h
     ui/common/GridPalettePanel.h
+    ui/palette/PaletteModel.h
+    ui/palette/PaletteModel.cpp
     ui/common/GridPalettePanel.cpp
     ui/common/InventoryItemUiHelper.h
     ui/common/InventoryItemUiHelper.cpp
