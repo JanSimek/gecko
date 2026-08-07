@@ -832,7 +832,10 @@ TEST_CASE("DataPathsWidget shows highest priority on top and preserves stored or
     REQUIRE(table->rowCount() == 3);
     CHECK(table->item(0, 1)->text().toStdString() == "/data/mymod.dat"); // top row = highest priority
     CHECK(table->item(2, 1)->text().toStdString() == "/data/base.dat");  // bottom row = lowest
-    CHECK(table->item(0, 0)->text().startsWith("1"));                    // priority counts from 1 at the top
+    // Priority counts from 1 at the top. The cell is right-aligned with the marker arrow leading,
+    // so the number is what the text ends with.
+    CHECK(table->item(0, 0)->text().endsWith("1"));
+    CHECK(table->item(2, 0)->text().endsWith("3"));
 }
 
 #ifdef GECK_SCRIPTING_ENABLED
