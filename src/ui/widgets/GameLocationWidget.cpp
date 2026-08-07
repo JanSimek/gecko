@@ -25,6 +25,18 @@ namespace {
             || lowercaseFileName.endsWith(".app");
     }
 
+    /// Whether a macOS .app actually has a binary to launch (they live in Contents/MacOS).
+    bool bundleHasLaunchableBinary(const std::filesystem::path& bundle) {
+        std::error_code ec;
+        const std::filesystem::path macosDir = bundle / "Contents" / "MacOS";
+        for (const auto& entry : std::filesystem::directory_iterator(macosDir, ec)) {
+            if (entry.is_regular_file(ec)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool directoryHasFalloutExecutable(const std::filesystem::path& dir) {
         static constexpr std::array<const char*, 8> kExecutableNames = {
             "fallout2.exe", "Fallout2.exe", "fallout2", "Fallout2",
@@ -320,15 +332,25 @@ void GameLocationWidget::onAutoDetect() {
     }
 }
 
+void GameLocationWidget::validateSelection() {
+    validateGameLocation(_executableLocationEdit->text().trimmed());
+}
+
 void GameLocationWidget::validateGameLocation(const QString& gamePath) {
     const std::filesystem::path path(gamePath.toStdString());
 
-    if (std::filesystem::is_regular_file(path)) {
+    if (!std::filesystem::exists(path)) {
+        setStatusMessage("Warning: Selected path does not exist.", "error");
+        return;
+    }
+
+    // A macOS .app is a directory, but it is an executable choice rather than an installation
+    // folder: its binary sits in Contents/MacOS, so the installation check can never pass on one
+    // and every bundle was reported as "may not be a valid Fallout 2 installation".
+    if (std::filesystem::is_regular_file(path) || path.extension() == ".app") {
         validateExecutableFile(path);
     } else if (std::filesystem::is_directory(path)) {
         validateInstallDirectory(path);
-    } else {
-        setStatusMessage("Warning: Selected path does not exist.", "error");
     }
 }
 
@@ -336,6 +358,11 @@ void GameLocationWidget::validateExecutableFile(const std::filesystem::path& pat
     const QString fileName = QString::fromStdString(path.filename().string()).toLower();
     if (!looksLikeFalloutExecutable(fileName)) {
         setStatusMessage("Warning: Selected file may not be a valid Fallout 2 executable.", "warning");
+        return;
+    }
+    // Any .app satisfies the name test, so check a bundle can actually be launched.
+    if (path.extension() == ".app" && !bundleHasLaunchableBinary(path)) {
+        setStatusMessage("Warning: Selected application bundle contains no executable.", "warning");
         return;
     }
 
