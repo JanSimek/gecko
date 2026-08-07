@@ -1,4 +1,5 @@
 #include "GameLocationWidget.h"
+#include "state/GameLauncher.h"
 #include "util/GameDataPathResolver.h"
 #include "ui/IconHelper.h"
 #include "ui/Settings.h"
@@ -81,6 +82,7 @@ void GameLocationWidget::setupUI() {
     _executableLayout = new QHBoxLayout();
     _executableLayout->setSpacing(ui::theme::spacing::NORMAL);
     _executableLocationEdit = new QLineEdit();
+    _executableLocationEdit->setObjectName("executableLocationEdit");
     _executableLocationEdit->setPlaceholderText("Path to the Fallout 2 executable (e.g. fallout2.exe)...");
     _executableLayout->addWidget(_executableLocationEdit);
 
@@ -97,6 +99,8 @@ void GameLocationWidget::setupUI() {
     _dataDirectoryLayout = new QHBoxLayout();
     _dataDirectoryLayout->setSpacing(ui::theme::spacing::NORMAL);
     _dataDirectoryEdit = new QLineEdit();
+    _dataDirectoryEdit->setObjectName("dataDirectoryEdit"); // found by name in tests
+
     _dataDirectoryEdit->setPlaceholderText("Folder containing data/ (e.g. .../GOG.com/Fallout 2)...");
     _dataDirectoryEdit->setToolTip(
         "The game folder itself - the one that contains data/, master.dat and the executable.\n"
@@ -168,6 +172,11 @@ std::filesystem::path GameLocationWidget::getDataDirectory() const {
 }
 
 void GameLocationWidget::setDataDirectory(const std::filesystem::path& location) {
+    // A bundle-derived directory outranks anything stored: the setting was never what the engine
+    // read, so restoring it here would just put the stale value back on screen.
+    if (_dataDirectoryEdit->isReadOnly()) {
+        return;
+    }
     _dataDirectoryEdit->setText(QString::fromStdString(location.string()));
 }
 
@@ -178,7 +187,31 @@ void GameLocationWidget::setStatusMessage(const QString& message, const QString&
 }
 
 void GameLocationWidget::onExecutableLocationChanged() {
+    applyBundleDataDirectoryLock();
     Q_EMIT configurationChanged();
+}
+
+void GameLocationWidget::applyBundleDataDirectoryLock() {
+    // A macOS .app fixes the game root itself - the engine chdir's to the bundle's base path on
+    // startup - so for one of those this field cannot influence anything. Show the directory that
+    // will actually be used instead of a value with no effect. Only when the bundle really resolves:
+    // an unreadable Info.plist gives nothing, and there the setting genuinely is used.
+    const std::optional<std::filesystem::path> bundleRoot = macOsBundleDataRoot(getExecutableLocation());
+
+    if (bundleRoot.has_value()) {
+        _dataDirectoryEdit->setReadOnly(true);
+        _dataDirectoryEdit->setText(QString::fromStdString(bundleRoot->string()));
+        _dataDirectoryEdit->setToolTip(tr("Set by the application bundle: Fallout 2 switches to this "
+                                          "directory on startup, so it is the one the map is written to. "
+                                          "Pick a different executable to change it."));
+        _browseDataDirectoryButton->setEnabled(false);
+    } else if (_dataDirectoryEdit->isReadOnly()) {
+        // Moved off a bundle: hand the field back, and drop the value that came from the old one.
+        _dataDirectoryEdit->setReadOnly(false);
+        _dataDirectoryEdit->clear();
+        _dataDirectoryEdit->setToolTip({});
+        _browseDataDirectoryButton->setEnabled(true);
+    }
 }
 
 void GameLocationWidget::onDataDirectoryChanged() {

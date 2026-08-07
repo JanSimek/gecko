@@ -49,6 +49,8 @@ private slots:
 private:
     void setupUI();
     void setupConnections();
+    /// Derives the data directory from a macOS .app and locks the field, or releases it again.
+    void applyBundleDataDirectoryLock();
     void validateGameLocation(const QString& gamePath);
     void validateExecutableFile(const std::filesystem::path& path);
     void validateInstallDirectory(const std::filesystem::path& path);
