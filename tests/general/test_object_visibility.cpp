@@ -33,10 +33,12 @@ TEST_CASE("isObjectVisible follows the layer toggles that decide what is drawn",
     critter.pro_pid = typePid(Pro::OBJECT_TYPE::CRITTER, 50);
     critter.frm_pid = 50;
 
-    // Scroll blockers are identified by FRM base id == 1 (scrblk.frm).
+    // A scroll blocker is proto 0x0500000C and nothing else — the exact pid the engine matches in
+    // _obj_scroll_blocking_at(). Its art is art/misc/scrblk.frm; see the ammo case below for why
+    // the art cannot be the test.
     MapObject blocker;
-    blocker.pro_pid = typePid(Pro::OBJECT_TYPE::MISC, 620);
-    blocker.frm_pid = 1;
+    blocker.pro_pid = 0x0500000C;
+    blocker.frm_pid = 0x05000001;
 
     REQUIRE_FALSE(regular.isWallObject());
     REQUIRE(wall.isWallObject());
@@ -87,4 +89,46 @@ TEST_CASE("isObjectVisible follows the layer toggles that decide what is drawn",
         CHECK(isObjectVisible(critter, vis));
         CHECK_FALSE(isObjectVisible(blocker, vis));
     }
+}
+
+TEST_CASE("A scroll blocker is the engine's proto, not whatever uses scrblk art", "[rendering][visibility]") {
+    // The engine's rule, from _obj_scroll_blocking_at(): `obj->pid == 0x500000C`, art irrelevant.
+    // Testing the FRM's low 24 bits instead made every object drawn with art index 1 a blocker -
+    // art/items/ammo.frm is FID 0x00000001 - so ammo boxes vanished from the editor while loading,
+    // saving and rendering in game perfectly well.
+    MapObject ammo;
+    ammo.pro_pid = typePid(Pro::OBJECT_TYPE::ITEM, 29);
+    ammo.frm_pid = 0x00000001; // art/items/ammo.frm
+
+    MapObject blocker;
+    blocker.pro_pid = WallBlockers::SCROLL_BLOCKER_PID;
+    blocker.frm_pid = WallBlockers::SCROLL_BLOCKER_FRM_PID;
+
+    CHECK(blocker.pro_pid == 0x0500000Cu); // the literal the engine compares against
+    CHECK_FALSE(ammo.isScrollBlocker());
+    CHECK(blocker.isScrollBlocker());
+
+    // Every other art type that collides on index 1 in shipped maps.
+    for (const uint32_t artType : { 0u, 1u, 2u, 3u, 4u }) {
+        MapObject other;
+        other.pro_pid = typePid(Pro::OBJECT_TYPE::SCENERY, 7);
+        other.frm_pid = (artType << 24) | 1u;
+        CHECK_FALSE(other.isScrollBlocker());
+    }
+
+    // Proto 24 is "Flare": drawing it with blocker art does not make it one, and the editor must
+    // not write it for the Scroll Blocker Rectangle tool.
+    MapObject flare;
+    flare.pro_pid = 0x05000000 | WallBlockers::GENERIC_PROTO_ID;
+    flare.frm_pid = WallBlockers::SCROLL_BLOCKER_FRM_PID;
+    CHECK_FALSE(flare.isScrollBlocker());
+
+    VisibilitySettings vis;
+    vis.showObjects = true;
+    vis.showCritters = true;
+    vis.showWalls = true;
+    vis.showScrollBlockers = false;
+
+    CHECK(isObjectVisible(ammo, vis)); // stays drawn with the blocker layer off
+    CHECK_FALSE(isObjectVisible(blocker, vis));
 }

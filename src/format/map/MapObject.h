@@ -93,9 +93,11 @@ struct MapObject {
     uint32_t fidBaseId() const { return frm_pid & FileFormat::BASE_ID_MASK; }
 
     bool isScrollBlocker() const {
-        // Scroll blockers are visual indicators only (FRM-based, not proto-based)
-        // They use scrblk.frm (FRM baseId == 1)
-        return fidBaseId() == 1;
+        // Same test the engine makes: _obj_scroll_blocking_at() matches `obj->pid == 0x500000C`
+        // exactly and never looks at the art (fallout2-ce object.cc). Identifying these by their
+        // FRM instead classified every object drawn with art index 1 as a blocker - art/items/
+        // ammo.frm is FID 0x00000001 - which hid ammo boxes behind the scroll-blocker layer.
+        return pro_pid == WallBlockers::SCROLL_BLOCKER_PID;
     }
 
     bool isWallObject() const;

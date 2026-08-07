@@ -990,11 +990,12 @@ std::shared_ptr<MapObject> EditorWidget::createScrollBlockerObject(int hexPositi
     mapObject->direction = 0;
     mapObject->frame_number = 0;
 
-    // scrblk.frm: MISC type (0x05) with base ID 1
-    mapObject->frm_pid = 0x05000000 | WallBlockers::SCROLL_BLOCKER_BASE_ID;
+    mapObject->frm_pid = WallBlockers::SCROLL_BLOCKER_FRM_PID; // art/misc/scrblk.frm
 
-    // MISC type, generic small object proto
-    mapObject->pro_pid = 0x05000000 | WallBlockers::GENERIC_PROTO_ID;
+    // Must be the engine's scroll-blocker proto: _obj_scroll_blocking_at() matches this exact pid
+    // and nothing else, so blockers written with any other proto (this used to write 24, "Flare")
+    // are inert in game however they are drawn.
+    mapObject->pro_pid = WallBlockers::SCROLL_BLOCKER_PID;
 
     // Scroll blockers don't block movement, they are visual indicators only
     mapObject->flags = 0;

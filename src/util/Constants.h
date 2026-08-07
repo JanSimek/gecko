@@ -113,8 +113,13 @@ namespace WallBlockers {
     constexpr uint32_t NORMAL_WALL_BLOCKER_PID = 0x05000000 | 620;   ///< Proto 620 - Normal wall blocker
     constexpr uint32_t SHOOT_THROUGH_BLOCKER_PID = 0x05000000 | 621; ///< Proto 621 - Shoot-through wall blocker
 
-    // Base ID for scroll blocker visualization (from FRM_PID)
-    constexpr uint32_t SCROLL_BLOCKER_BASE_ID = 1; ///< Base ID for scroll blocker FRM
+    // Scroll blockers. The engine identifies them by this exact proto and never looks at the art:
+    // _obj_scroll_blocking_at() tests `obj->pid == 0x500000C` (fallout2-ce object.cc), which
+    // tileSetCenter() consults to refuse a scroll. Proto 12 is "Scroll Blocker"; proto 24, which
+    // this editor used to write, is "Flare" - the engine ignores those entirely.
+    constexpr uint32_t SCROLL_BLOCKER_PID = 0x05000000 | 12;                         ///< Proto 12 - Scroll Blocker
+    constexpr uint32_t SCROLL_BLOCKER_BASE_ID = 1;                                   ///< scrblk.frm's art index, within MISC art
+    constexpr uint32_t SCROLL_BLOCKER_FRM_PID = 0x05000000 | SCROLL_BLOCKER_BASE_ID; ///< art/misc/scrblk.frm
 
     // Flag bit for blocking objects
     constexpr uint32_t BLOCKING_FLAG = 0x00000010; ///< Flag indicating object blocks movement
