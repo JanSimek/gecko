@@ -295,6 +295,14 @@ namespace ui {
                 return QString("QGroupBox { font-weight: bold; }");
             }
 
+            /// A section heading rather than a box: the group draws its title and nothing else, so
+            /// the page it sits on supplies the one background behind everything.
+            inline QString sectionGroupBox() {
+                return QString("QGroupBox { background: transparent; border: none; margin-top: %1px; }"
+                               "QGroupBox::title { subcontrol-origin: margin; left: 0px; }")
+                    .arg(spacing::NORMAL);
+            }
+
             // Progress bar style (loading dialogs)
             inline QString progressBarStyle() {
                 return QString(

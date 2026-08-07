@@ -93,10 +93,6 @@ void SettingsDialog::setupUI() {
 
 void SettingsDialog::setupTabs() {
     _tabWidget = new QTabWidget();
-    // Document mode drops the pane the tab widget paints behind its pages. That pane is a lighter
-    // shade than the dialog, which is what made each page look like a panel laid on the dialog
-    // rather than part of it; without it the pages sit on the dialog's own background.
-    _tabWidget->setDocumentMode(true);
 
     setupGeneralTab();
     setupViewportTab();
@@ -192,14 +188,16 @@ void SettingsDialog::setupGeneralTab() {
     _generalTabLayout->setSpacing(SPACING_LOOSE);
 
     _dataPathsWidget = new DataPathsWidget(_settings);
-    // Flat: the tab already paints a page and the scroll area another, so a filled, bordered box
-    // on top made every section look like a panel inside a panel. Flat is Qt's section style -
-    // title plus a rule.
+    // A heading, not a box. Flat alone still leaves the style painting a frame and a slightly
+    // different fill, so each section reads as a panel on the page; drawing neither means the page
+    // provides the single background behind the whole tab.
     _dataPathsWidget->setFlat(true);
+    _dataPathsWidget->setStyleSheet(ui::theme::styles::sectionGroupBox());
     _generalTabLayout->addWidget(_dataPathsWidget, /*stretch=*/1); // grows with the dialog (the data-paths list)
 
     _gameLocationWidget = new GameLocationWidget();
     _gameLocationWidget->setFlat(true);
+    _gameLocationWidget->setStyleSheet(ui::theme::styles::sectionGroupBox());
     _generalTabLayout->addWidget(_gameLocationWidget); // hugs its content; no excess vertical space
 
     // No trailing addStretch(): the data-paths list (stretch 1) absorbs the extra height instead of an
