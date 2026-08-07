@@ -75,10 +75,14 @@ void DataPathsWidget::setupUI() {
     // column cannot wrap, so it needs no width to reserve and no height to negotiate: the buttons
     // stay beside what they act on however narrow the dialog gets.
     auto* listRow = new QHBoxLayout();
+    listRow->setContentsMargins(0, 0, 0, 0);
     listRow->setSpacing(SPACING_NORMAL);
     listRow->addWidget(_pathsTable, /*stretch=*/1);
 
     auto* buttonColumn = new QVBoxLayout();
+    // Explicitly flush with the top of the list: a nested layout otherwise inherits margins from
+    // the style, which offsets the first button below the list's top edge.
+    buttonColumn->setContentsMargins(0, 0, 0, 0);
     buttonColumn->setSpacing(SPACING_NORMAL);
     _controlLayout = buttonColumn;
 
@@ -299,11 +303,13 @@ void DataPathsWidget::renumberPriorities() {
             item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
             _pathsTable->setItem(row, PriorityColumn, item);
         }
+        // Arrow first: right-aligned text keeps the digits flush against the column edge, so a
+        // trailing arrow would push them out of line with the rows that have none.
         QString text = QString::number(row + 1);
         if (row == 0) {
-            text += " ▲"; // highest
+            text = "▲ " + text; // highest
         } else if (row == rows - 1 && rows > 1) {
-            text += " ▼"; // lowest
+            text = "▼ " + text; // lowest
         }
         item->setText(text);
     }

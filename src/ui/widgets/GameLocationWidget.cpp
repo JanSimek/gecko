@@ -126,9 +126,13 @@ void GameLocationWidget::setupUI() {
     for (QPushButton* btn : { _browseExecutableButton, _browseDataDirectoryButton, _autoDetectButton }) {
         geck::ui::styleActionButton(btn);
     }
-    // Match the field height to the button beside it, or each row reads as two misaligned controls.
-    for (QLineEdit* edit : { _executableLocationEdit, _dataDirectoryEdit }) {
-        edit->setMinimumHeight(ui::constants::sizes::ACTION_BUTTON_HEIGHT);
+    // Every control in a row gets the same height, so their centre lines coincide. Without this the
+    // label keeps its natural 26px against a 30px field and QFormLayout aligns the two at the top,
+    // which leaves the label text sitting two pixels high.
+    for (QWidget* rowWidget : { static_cast<QWidget*>(_executableLocationEdit),
+             static_cast<QWidget*>(_dataDirectoryEdit), static_cast<QWidget*>(_executableLabel),
+             static_cast<QWidget*>(_dataDirectoryLabel) }) {
+        rowWidget->setMinimumHeight(ui::constants::sizes::ACTION_BUTTON_HEIGHT);
     }
 
     _layout->addLayout(_controlLayout);
