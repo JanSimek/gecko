@@ -97,10 +97,11 @@ std::shared_ptr<MapObject> PatternStamper::makeMapObject(const ObjectPlacement& 
     mapObject->elevation = static_cast<uint32_t>(elevation);
     mapObject->direction = placement.direction;
     mapObject->frame_number = 0;
-    if (const auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(placement.hex)); hex.has_value()) {
-        mapObject->x = static_cast<uint32_t>(hex->get().x());
-        mapObject->y = static_cast<uint32_t>(hex->get().y());
-    }
+    // x/y are a pixel offset FROM the hex's screen position, not a position: the engine renders at
+    // tileToScreenXY(tile) + art offset + (x, y). Storing the hex's own screen coordinates here
+    // pushes the object thousands of pixels off its hex, so it never appears in game.
+    mapObject->x = 0;
+    mapObject->y = 0;
     mapObject->pro_pid = placement.proPid;
     mapObject->frm_pid = placement.frmPid;
     mapObject->flags = placement.flags;

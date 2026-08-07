@@ -615,10 +615,9 @@ bool MapScriptApi::placeObject(uint32_t proPid, uint32_t frmPid, int hex, uint32
     mapObject->position = hex;
     mapObject->elevation = static_cast<uint32_t>(_elevation);
     mapObject->direction = direction;
-    if (auto h = hexgridRef().getHexByPosition(static_cast<uint32_t>(hex)); h.has_value()) {
-        mapObject->x = static_cast<uint32_t>(h->get().x());
-        mapObject->y = static_cast<uint32_t>(h->get().y());
-    }
+    // Offset from the hex, not a position - see the note in placeExitGridMarker.
+    mapObject->x = 0;
+    mapObject->y = 0;
     mapObject->pro_pid = proPid;
     mapObject->frm_pid = frmPid;
 
@@ -1181,10 +1180,11 @@ bool MapScriptApi::placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid
     mapObject->position = hex;
     mapObject->elevation = static_cast<uint32_t>(_elevation);
     mapObject->direction = 0;
-    if (auto h = hexgridRef().getHexByPosition(static_cast<uint32_t>(hex)); h.has_value()) {
-        mapObject->x = static_cast<uint32_t>(h->get().x());
-        mapObject->y = static_cast<uint32_t>(h->get().y());
-    }
+    // x/y are a pixel offset FROM the hex's screen position, not a position: the engine renders at
+    // tileToScreenXY(tile) + art offset + (x, y). Storing the hex's own screen coordinates here
+    // pushes the object thousands of pixels off its hex, so it never appears in game.
+    mapObject->x = 0;
+    mapObject->y = 0;
     mapObject->pro_pid = proPid;
     mapObject->frm_pid = frmPid;
     mapObject->exit_map = dest.map;

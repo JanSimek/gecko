@@ -2675,11 +2675,11 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     mapObject->direction = placementDirection;
     mapObject->frame_number = 0;
 
-    auto hexCoords = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexPosition));
-    if (hexCoords) {
-        mapObject->x = static_cast<uint32_t>(hexCoords->get().x());
-        mapObject->y = static_cast<uint32_t>(hexCoords->get().y());
-    }
+    // x/y are a pixel offset FROM the hex's screen position, not a position: the engine renders at
+    // tileToScreenXY(tile) + art offset + (x, y). Storing the hex's own screen coordinates here
+    // pushes the object thousands of pixels off its hex, so it never appears in game.
+    mapObject->x = 0;
+    mapObject->y = 0;
 
     // Only use actual PIDs from ObjectInfo - fail rather than substitute placeholder PIDs
     if (!_previewObjectInfo || !_previewObjectInfo->pro) {

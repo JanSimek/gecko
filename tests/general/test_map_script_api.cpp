@@ -362,6 +362,34 @@ TEST_CASE("MapScriptApi setPlayerStart writes the map header", "[scripting]") {
     CHECK_THROWS(api.setPlayerStart(hex, 0, Map::ELEVATION_COUNT)); // elevation out of range
 }
 
+TEST_CASE("Placed objects store a zero pixel offset, not the hex's screen position", "[scripting]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    // A MapObject's x/y are a pixel offset FROM its hex, not a position: the engine renders at
+    // tileToScreenXY(tile) + art offset + (x, y), and sx/sy are recomputed every frame. Writing
+    // the hex's own screen coordinates here (thousands of pixels for any hex past the top-left
+    // corner) blits the object outside the view, so it loads but is never visible in game.
+    // Pick a hex far from the origin - at hex 0 the bug would store 0 and hide itself.
+    constexpr int FAR_HEX = 20100;
+    REQUIRE(api.placeObject(0x02000066u, 0x02000000u, FAR_HEX, 0));
+    REQUIRE(api.placeExitGrid(20200, 5, 12345, 1, 3));
+
+    const auto& objs = fx.mapFile().map_objects[ELEV];
+    REQUIRE(objs.size() == 2);
+    for (const auto& object : objs) {
+        CHECK(object->x == 0u);
+        CHECK(object->y == 0u);
+    }
+
+    // The hex those objects sit on does have a large screen position - the value that used to leak
+    // into x/y. Without this the test would pass on a hexgrid that reported 0,0 for every hex.
+    const auto hex = fx.hexgrid.getHexByPosition(FAR_HEX);
+    REQUIRE(hex.has_value());
+    CHECK(hex->get().x() > 0);
+    CHECK(hex->get().y() > 0);
+}
+
 TEST_CASE("MapScriptApi placeExitGrid records a MISC exit-grid object", "[scripting]") {
     ControllerFixture fx;
     // data-only: exit-grid art isn't mounted, but the .map fields are what matters here.
