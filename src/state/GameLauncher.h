@@ -90,6 +90,21 @@ EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDi
 std::string applyManagedModsOrderBlock(const std::string& existingContent, const std::vector<std::string>& entries);
 
 /**
+ * @brief The directory a macOS .app bundle will actually treat as the game root, or nullopt.
+ *
+ * SDL calls chdir(SDL_GetBasePath()) at startup on macOS, and fallout2-ce resolves master_patches
+ * ("data") against the working directory - so for a bundled build the engine's root is fixed by the
+ * bundle, and the working directory a launcher sets is discarded. Which directory that is comes
+ * from the bundle's own Info.plist: SDL_FILESYSTEM_BASE_DIR_TYPE is "parent" (the folder holding
+ * the .app - what fallout2-ce ships), "bundle" (the .app itself), or absent/anything else, SDL's
+ * default being Contents/Resources.
+ *
+ * @return the resolved root, or nullopt when @p executablePath is not a bundle or the key cannot be
+ *         read - callers then keep the configured directory rather than act on a guess.
+ */
+std::optional<std::filesystem::path> macOsBundleDataRoot(const std::filesystem::path& executablePath);
+
+/**
  * @brief Reports configuration problems that would make the game load data the editor is not
  * editing (pure).
  *

@@ -3,6 +3,7 @@
 #include "state/GameLauncher.h"
 
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -302,4 +303,106 @@ TEST_CASE("collectLaunchConfigurationWarnings reports incoherent launch setups",
         REQUIRE(warnings[0].find("/elsewhere/data") != std::string::npos);
         REQUIRE(warnings[0].find("/other#path/data") != std::string::npos);
     }
+}
+
+namespace {
+
+// A minimal .app: only Contents/Info.plist matters to macOsBundleDataRoot.
+std::filesystem::path makeBundle(const std::filesystem::path& root, const std::string& plistBody) {
+    const std::filesystem::path bundle = root / "Fallout II Community Edition.app";
+    std::filesystem::create_directories(bundle / "Contents");
+    if (!plistBody.empty()) {
+        std::ofstream(bundle / "Contents" / "Info.plist") << plistBody;
+    }
+    return bundle;
+}
+
+std::string plistWith(const std::string& baseDirType) {
+    return R"(<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>fallout2-ce</string>
+    <key>SDL_FILESYSTEM_BASE_DIR_TYPE</key>
+    <string>)"
+        + baseDirType + R"(</string>
+    <key>CFBundleName</key>
+    <string>Fallout II Community Edition</string>
+</dict>
+</plist>
+)";
+}
+
+} // namespace
+
+TEST_CASE("macOsBundleDataRoot follows the bundle's own SDL base-dir type", "[game_launcher]") {
+    // On macOS the engine chdir's to SDL_GetBasePath() at startup and resolves master_patches
+    // ("data") against it, so a bundle decides the game root and the launcher's working directory
+    // is discarded. Reading the key rather than assuming it keeps a differently packaged build
+    // working; fallout2-ce itself ships "parent".
+    const std::filesystem::path root
+        = std::filesystem::temp_directory_path() / "geck_bundle_root_test";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root);
+
+    SECTION("\"parent\" resolves to the folder holding the .app") {
+        const auto bundle = makeBundle(root, plistWith("parent"));
+        const auto resolved = macOsBundleDataRoot(bundle);
+
+        REQUIRE(resolved.has_value());
+        CHECK(*resolved == root);
+    }
+
+    SECTION("\"bundle\" resolves to the .app itself") {
+        const auto bundle = makeBundle(root, plistWith("bundle"));
+        const auto resolved = macOsBundleDataRoot(bundle);
+
+        REQUIRE(resolved.has_value());
+        CHECK(*resolved == bundle);
+    }
+
+    SECTION("A missing key means SDL's default, Contents/Resources") {
+        const auto bundle = makeBundle(root, R"(<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>fallout2-ce</string>
+</dict>
+</plist>
+)");
+        const auto resolved = macOsBundleDataRoot(bundle);
+
+        REQUIRE(resolved.has_value());
+        CHECK(*resolved == bundle / "Contents" / "Resources");
+    }
+
+    SECTION("A plain executable is not a bundle") {
+        CHECK_FALSE(macOsBundleDataRoot(root / "fallout2-ce").has_value());
+        CHECK_FALSE(macOsBundleDataRoot("/games/fallout2/fallout2.exe").has_value());
+    }
+
+    SECTION("A .app without an Info.plist yields nothing rather than a guess") {
+        const auto bundle = makeBundle(root, "");
+        CHECK_FALSE(macOsBundleDataRoot(bundle).has_value());
+    }
+
+    SECTION("The key is not confused with a neighbouring one of the same value") {
+        // <string> elements follow every <key>; only the one after OUR key counts.
+        const auto bundle = makeBundle(root, R"(<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>parent</string>
+    <key>SDL_FILESYSTEM_BASE_DIR_TYPE</key>
+    <string>bundle</string>
+</dict>
+</plist>
+)");
+        const auto resolved = macOsBundleDataRoot(bundle);
+
+        REQUIRE(resolved.has_value());
+        CHECK(*resolved == bundle); // "bundle", not the earlier "parent"
+    }
+
+    std::filesystem::remove_all(root);
 }
