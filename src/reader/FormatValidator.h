@@ -71,7 +71,6 @@ public:
         int32_t pid = utils.readBE32Signed();
 
         utils.setPosition(0);
-        spdlog::debug("PRO format validation passed: PID=0x{:08X}", pid);
     }
 
     static void validateFrmFile(BinaryUtils& utils, const std::filesystem::path& filePath) {

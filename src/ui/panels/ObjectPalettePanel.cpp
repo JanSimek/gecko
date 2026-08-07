@@ -105,8 +105,9 @@ void ObjectPalettePanel::setupObjectView() {
     });
     // The view starts the drag; the model only supplies the payload the map drop handler expects.
     _model->setMimeProvider(ui::mime::GECK_OBJECT, [this](const ui::PaletteItem& item) {
+        // No setText(): with no drag pixmap the platform falls back to showing the plain text, which
+        // put "geck/object" next to the cursor. The custom type is what the map's drop handler reads.
         auto* data = new QMimeData;
-        data->setText("geck/object");
         data->setData(ui::mime::GECK_OBJECT,
             QByteArray::number(item.engineIndex) + "," + QByteArray::number(static_cast<int>(_currentCategory)));
         return data;
@@ -236,13 +237,17 @@ void ObjectPalettePanel::rebuildItems() {
     const auto& objects = getObjectList(_currentCategory);
     std::vector<ui::PaletteItem> items;
     items.reserve(objects.size());
-    for (const auto& info : objects) {
+    // The index is the position in this list, which is what getObjectInfo() and revealProto() use.
+    // ObjectInfo::listIndex is the .lst line instead, and the two diverge as soon as a proto fails
+    // to load and its entry is skipped - placing then looked up the wrong object, or none.
+    for (int position = 0; position < static_cast<int>(objects.size()); ++position) {
+        const auto& info = objects[static_cast<size_t>(position)];
         if (!info) {
             continue;
         }
         const QString label = info->displayName.isEmpty() ? info->proFileName : info->displayName;
         const QString tooltip = label == info->proFileName ? label : label + "\n" + info->proFileName;
-        items.push_back({ info->listIndex, label, tooltip });
+        items.push_back({ position, label, tooltip });
     }
 
     _model->setItems(std::move(items));

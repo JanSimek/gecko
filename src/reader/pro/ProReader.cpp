@@ -17,7 +17,6 @@ std::unique_ptr<Pro> ProReader::read() {
         FormatValidator::validateProFile(getBinaryUtils(), _path);
 
         auto& utils = getBinaryUtils();
-        spdlog::debug("Reading PRO file: {}", _path.string());
 
         auto pro = std::make_unique<Pro>(_path);
 
@@ -237,8 +236,6 @@ std::unique_ptr<Pro> ProReader::read() {
                     spdlog::debug("Critter PRO missing damage type field (412-byte format, likely Fallout 1 compatibility)");
                 }
 
-                spdlog::debug("ProReader: Loaded critter data - headFID: {}, aiPacket: {}, teamNumber: {}",
-                    critterData.headFID, critterData.aiPacket, critterData.teamNumber);
                 break;
             }
             case Pro::OBJECT_TYPE::SCENERY: {
@@ -277,18 +274,14 @@ std::unique_ptr<Pro> ProReader::read() {
                     }
                 }
 
-                spdlog::debug("ProReader: Loaded scenery data - materialId: {}, soundId: {}, type: {}",
-                    sceneryData.materialId, sceneryData.soundId, static_cast<int>(subtypeId));
                 break;
             }
             case Pro::OBJECT_TYPE::WALL: {
                 pro->wallData.materialId = utils.readBE32();
-                spdlog::debug("ProReader: Loaded wall data - materialId: {}", pro->wallData.materialId);
                 break;
             }
             case Pro::OBJECT_TYPE::TILE: {
                 pro->tileData.materialId = utils.readBE32();
-                spdlog::debug("ProReader: Loaded tile data - materialId: {}", pro->tileData.materialId);
                 break;
             }
             case Pro::OBJECT_TYPE::MISC: {

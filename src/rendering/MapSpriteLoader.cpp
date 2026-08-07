@@ -104,7 +104,6 @@ void MapSpriteLoader::loadObjectSprites(
         const Frm* frm = _resources.repository().find<Frm>(frmName);
 
         if (!frm) {
-            spdlog::debug("FRM '{}' not in cache, attempting on-demand loading", frmName);
             try {
                 frm = _resources.repository().load<Frm>(frmName);
                 if (!frm) {
@@ -114,7 +113,10 @@ void MapSpriteLoader::loadObjectSprites(
                     objectsSkipped++;
                     continue;
                 }
-                spdlog::debug("Successfully loaded FRM '{}' on-demand", frmName);
+                // One line per object, and only for a cache miss: the three-per-object stream this
+                // replaced made --debug take minutes on a full map.
+                spdlog::debug("Loaded on demand: FRM '{}' for object at {} (frm_pid=0x{:08X}, pro_pid=0x{:08X})",
+                    frmName, object->position, object->frm_pid, object->pro_pid);
             } catch (const std::exception& e) {
                 spdlog::error("Failed to load FRM '{}' for object at position {}: {}", frmName, object->position, e.what());
                 _lastLoadErrors.failedFrmNames.insert(frmName);
@@ -239,9 +241,6 @@ void MapSpriteLoader::createWallBlockerOverlay(
     std::vector<sf::Sprite>& wallBlockerOverlays) const {
     bool blocks = object_query::blocksMovement(*mapObject, _resources);
 
-    spdlog::debug("createWallBlockerOverlay: hex {}, pro_pid 0x{:08X}, blocks: {}",
-        hexPosition, mapObject->pro_pid, blocks);
-
     if (!blocks) {
         return;
     }
@@ -266,7 +265,6 @@ void MapSpriteLoader::createWallBlockerOverlay(
         overlaySprite.setColor(sf::Color(255, 255, 255, OverlayColors::WALL_BLOCKER_ALPHA));
 
         wallBlockerOverlays.push_back(std::move(overlaySprite));
-        spdlog::debug("Created wall blocker overlay for object at hex {} (pro_pid {})", hexPosition, mapObject->pro_pid);
     } catch (const std::exception& e) {
         spdlog::warn("Failed to create wall blocker overlay for object at hex {}: {}", hexPosition, e.what());
     }
