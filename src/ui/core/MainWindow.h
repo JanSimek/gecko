@@ -276,6 +276,10 @@ private:
     /// world map identifies an area's maps by filename, while the loader wants a path.
     [[nodiscard]] std::string findMountedMapPath(const QString& mapFileName) const;
 
+    /// Clears the World Map action for callers that switch the central page themselves (opening or
+    /// closing a map). Silently, so unchecking does not bounce the page back again.
+    void clearWorldMapAction();
+
     QStackedWidget* _centralStack;
     QTimer* _gameLoopTimer;
     std::shared_ptr<resource::GameResources> _resourcesShared;

@@ -166,6 +166,7 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     _currentEditorWidget = editorWidget.release();
     _centralStack->addWidget(_currentEditorWidget);
     _centralStack->setCurrentWidget(_currentEditorWidget);
+    clearWorldMapAction(); // the map replaced whatever page was showing, world map included
 
     _currentEditorWidget->setMainWindow(this);
     {
@@ -217,6 +218,13 @@ void MainWindow::setupUI() {
     _welcomeWidget = new WelcomeWidget(this);
     connect(_welcomeWidget, &WelcomeWidget::newMapRequested, this, &MainWindow::newMapRequested);
     connect(_welcomeWidget, &WelcomeWidget::browseMapsRequested, this, &MainWindow::showMapBrowserDialog);
+    // Go through the menu action rather than toggleWorldMap() directly, so its checked state keeps
+    // matching what is on screen.
+    connect(_welcomeWidget, &WelcomeWidget::worldMapRequested, this, [this] {
+        if (_worldMapAction != nullptr) {
+            _worldMapAction->setChecked(true);
+        }
+    });
     connect(_welcomeWidget, &WelcomeWidget::preferencesRequested, this, &MainWindow::showPreferences);
     _centralStack->addWidget(_welcomeWidget);
     _centralStack->setCurrentWidget(_welcomeWidget);
@@ -2538,6 +2546,7 @@ void MainWindow::closeCurrentMap() {
     _currentEditorWidget = nullptr;
 
     _centralStack->setCurrentWidget(_welcomeWidget);
+    clearWorldMapAction(); // the welcome screen is showing now, not the world map
 
     // No map is open now: clear the dirty flag and reset the title off the closed map, otherwise the
     // title bar keeps the closed map's name (and a stale "*") while the welcome screen is shown.
@@ -2695,6 +2704,14 @@ void MainWindow::showMapBrowserDialog() {
     if (!mapPath.isEmpty()) {
         handleMapLoadRequest(mapPath.toStdString(), false);
     }
+}
+
+void MainWindow::clearWorldMapAction() {
+    if (_worldMapAction != nullptr && _worldMapAction->isChecked()) {
+        const QSignalBlocker blocker(_worldMapAction);
+        _worldMapAction->setChecked(false);
+    }
+    _pageBeforeWorldMap = nullptr;
 }
 
 std::string MainWindow::findMountedMapPath(const QString& mapFileName) const {
