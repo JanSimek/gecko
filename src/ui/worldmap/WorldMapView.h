@@ -71,6 +71,14 @@ private:
     [[nodiscard]] QPointF toWidget(const QPointF& worldPos) const;
 
     void drawLabels(QPainter& painter) const;
+    /// Draws the area circles as geometry rather than magnified sprite pixels. See
+    /// VECTOR_MARKER_ZOOM in the .cpp for why and when.
+    void drawVectorMarkers(QPainter& painter) const;
+    /// True while the circles are being drawn as geometry, so the scene must leave them out of the
+    /// bitmap. Keeps the scene and the painter from both drawing them.
+    [[nodiscard]] bool usingVectorMarkers() const;
+    /// Pushes usingVectorMarkers() through to the scene after anything that changes the zoom.
+    void syncSceneMarkers();
     void setZoom(double zoom, const QPointF& anchorWidgetPos);
     void clampPan();
     /// Runs the pending fit once the widget has a real size to fit to.
@@ -94,6 +102,9 @@ private:
     const worldmap::AreaMarker* _selected = nullptr;
     const worldmap::AreaMarker* _hovered = nullptr;
     bool _labelsVisible = true;
+    /// What the user asked for. Whether the circles then come from the scene's bitmap or are
+    /// painted as geometry is a matter of zoom — see usingVectorMarkers().
+    bool _markersVisible = true;
 };
 
 } // namespace geck

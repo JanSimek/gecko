@@ -139,6 +139,39 @@ TEST_CASE("BlendTable interpolates the destination towards the tint", "[palette]
     }
 }
 
+// The worldmap view redraws the area circles as geometry when magnified, on the grounds that a
+// blend row is nothing more exotic than a linear interpolation towards the tint: _buildBlendTable
+// row j computes (tint*j + dest*(7-j)) / 7 per RGB555 channel. Pin that down, because it is what
+// lets a radial gradient stand in for the sprite without inventing colours.
+TEST_CASE("a blend row is a linear interpolation towards the tint", "[palette]") {
+    const auto pal = makeCubePal();
+    const BlendTables tables(*pal);
+    const BlendTable green(tables, GREEN_RGB);
+
+    const int tint555 = tables.toRgb555(tables.fromRgb555(rgb555(GREEN_RGB)));
+    const int tintR = (tint555 & 0x7C00) >> 10;
+    const int tintG = (tint555 & 0x3E0) >> 5;
+    const int tintB = tint555 & 0x1F;
+
+    for (int dest = 0; dest < 256; ++dest) {
+        if (!tables.isMapped(static_cast<uint8_t>(dest))) {
+            continue;
+        }
+        const int dest555 = tables.toRgb555(static_cast<uint8_t>(dest));
+        const int destR = (dest555 & 0x7C00) >> 10;
+        const int destG = (dest555 & 0x3E0) >> 5;
+        const int destB = dest555 & 0x1F;
+
+        for (int row = 1; row <= 7; ++row) {
+            const int mixed = ((tintR * row + destR * (7 - row)) / 7) << 10
+                | ((tintG * row + destG * (7 - row)) / 7) << 5
+                | ((tintB * row + destB * (7 - row)) / 7);
+            CHECK(green.lookup(static_cast<uint8_t>(row), static_cast<uint8_t>(dest))
+                == tables.fromRgb555(mixed));
+        }
+    }
+}
+
 TEST_CASE("blendPixel reproduces the worldmap circle's translucent tint", "[palette]") {
     const auto pal = makeCubePal();
     const BlendTables tables(*pal);

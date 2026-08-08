@@ -145,7 +145,49 @@ void WorldMapScene::loadMarkerSprites(resource::GameResources& resources) {
                     = frame->index(static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y));
             }
         }
+        buildMarkerProfile(sprite);
     }
+}
+
+void WorldMapScene::buildMarkerProfile(Sprite& sprite) const {
+    // Average the tint weight of every pixel at each distance from the centre. The sprites are
+    // drawn circles, so their weight really is a function of radius, and this recovers it without
+    // assuming anything about the shape beyond that.
+    const int buckets = std::max(1, sprite.width / 2);
+    std::vector<double> total(static_cast<std::size_t>(buckets), 0.0);
+    std::vector<int> count(static_cast<std::size_t>(buckets), 0);
+
+    const double centreX = (sprite.width - 1) / 2.0;
+    const double centreY = (sprite.height - 1) / 2.0;
+    const double maxRadius = std::max(1.0, std::min(centreX, centreY));
+
+    for (int y = 0; y < sprite.height; ++y) {
+        for (int x = 0; x < sprite.width; ++x) {
+            const double dx = x - centreX;
+            const double dy = y - centreY;
+            const double radius = std::sqrt(dx * dx + dy * dy);
+            const auto bucket = static_cast<int>(radius / maxRadius * (buckets - 1) + 0.5);
+            if (bucket < 0 || bucket >= buckets) {
+                continue; // the sprite's corners lie outside the circle
+            }
+
+            // Index 0 is transparent, i.e. no tint at all; otherwise the grey level is the weight.
+            const std::uint8_t index = sprite.indices[static_cast<std::size_t>(y) * sprite.width + x];
+            total[static_cast<std::size_t>(bucket)] += index == 0 ? 0.0 : _tables->grayLevel(index) / 7.0;
+            ++count[static_cast<std::size_t>(bucket)];
+        }
+    }
+
+    sprite.profile.assign(static_cast<std::size_t>(buckets), 0.0F);
+    for (std::size_t i = 0; i < sprite.profile.size(); ++i) {
+        if (count[i] > 0) {
+            sprite.profile[i] = static_cast<float>(total[i] / count[i]);
+        }
+    }
+}
+
+const std::vector<float>& WorldMapScene::markerProfile(CityAreaSize size) const {
+    return spriteFor(size).profile;
 }
 
 void WorldMapScene::buildAreas(resource::GameResources& resources) {

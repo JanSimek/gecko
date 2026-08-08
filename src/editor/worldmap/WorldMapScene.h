@@ -102,6 +102,17 @@ public:
     /// The engine's `COLOR_GREEN` as RGB, for drawing labels in the same green the circles use.
     [[nodiscard]] std::uint32_t labelColor() const { return _labelColor; }
 
+    /// A marker's radial opacity profile, sampled from the middle of the circle outwards: entry
+    /// `i` covers radius `i / (size() - 1)` of the sprite's half-width, and holds the weight
+    /// (0-1) with which the tint is mixed into the terrain there.
+    ///
+    /// This is the same number the bitmap blend uses. `_buildBlendTable` row `j` computes
+    /// `(tint*j + dest*(7-j)) / 7` per channel — a plain linear interpolation with weight `j/7`,
+    /// where `j` is the sprite pixel's grey level. Reading the profile out lets a renderer draw
+    /// the circle as geometry at any magnification and still land on the engine's colours; only
+    /// the palette quantisation is left behind. Empty when the sprite is missing.
+    [[nodiscard]] const std::vector<float>& markerProfile(CityAreaSize size) const;
+
     /// The terrain name at a worldmap pixel, or "" when the subtile grid isn't loaded.
     [[nodiscard]] std::string terrainAt(int px, int py) const;
 
@@ -114,8 +125,18 @@ public:
 private:
     WorldMapScene() = default;
 
+    /// The three marker sprites (`wrldspr0/1/2.frm`), as raw palette indices with their sizes.
+    struct Sprite {
+        int width = 0;
+        int height = 0;
+        std::vector<std::uint8_t> indices;
+        std::vector<float> profile; ///< see markerProfile()
+        [[nodiscard]] bool valid() const { return width > 0 && height > 0; }
+    };
+
     bool rasteriseTiles(resource::GameResources& resources);
     void loadMarkerSprites(resource::GameResources& resources);
+    void buildMarkerProfile(Sprite& sprite) const;
     void buildAreas(resource::GameResources& resources);
     void composeMarkers();
     void expandToPixels();
@@ -134,13 +155,6 @@ private:
     std::vector<std::uint8_t> _indices;        ///< the working canvas: background + blended markers
     std::vector<std::uint8_t> _pixels;         ///< _indices expanded to RGBA
 
-    /// The three marker sprites (`wrldspr0/1/2.frm`), as raw palette indices with their sizes.
-    struct Sprite {
-        int width = 0;
-        int height = 0;
-        std::vector<std::uint8_t> indices;
-        [[nodiscard]] bool valid() const { return width > 0 && height > 0; }
-    };
     std::array<Sprite, 3> _sprites;
 
     /// The marker art for a city size. The one place the size ordinal is used as an index.

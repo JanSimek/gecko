@@ -6,6 +6,7 @@
 #include <QHelpEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QRadialGradient>
 #include <QToolTip>
 #include <QWheelEvent>
 
@@ -26,10 +27,26 @@ namespace {
 
     // The engine puts the city name three pixels under its circle (wmInterfaceDrawCircleOverlay).
     constexpr int LABEL_GAP = 3;
-    constexpr int LABEL_POINT_SIZE = 9;
 
-    // Below this the labels crowd into each other and stop being readable, so they are dropped.
-    constexpr double LABEL_MIN_ZOOM = 0.5;
+    // Labels grow with the map so they stay anchored to it, but within a readable range: the base
+    // size is what the engine's own font comes to at 1:1.
+    constexpr double LABEL_BASE_POINT_SIZE = 9.0;
+    constexpr int LABEL_MIN_POINT_SIZE = 8;
+    constexpr int LABEL_MAX_POINT_SIZE = 20;
+
+    // Zoomed this far out a label is smaller than the circle it belongs to; overlap culling takes
+    // care of the rest.
+    constexpr double LABEL_MIN_ZOOM = 0.25;
+
+    // Gap a label must keep from its neighbours before it is dropped, in widget pixels.
+    constexpr double LABEL_CLEARANCE = 6.0;
+
+    // Past this magnification the 12/25/49-pixel marker sprites are visibly blocky, so the circles
+    // are drawn as geometry instead. That stays true to the engine: its blend table row j mixes
+    // `(tint*j + dest*(7-j)) / 7`, a linear interpolation with weight j/7, and WorldMapScene hands
+    // that weight out as a radial profile — so the only thing left behind is palette quantisation.
+    // Below the threshold the exact blended bitmap is used, which is what fidelity at 1:1 needs.
+    constexpr double VECTOR_MARKER_ZOOM = 1.5;
 
 } // namespace
 
@@ -73,15 +90,30 @@ void WorldMapView::fitIfPending() {
 }
 
 void WorldMapView::setMarkersVisible(bool visible) {
-    if (!_scene || _scene->markersVisible() == visible) {
+    if (_markersVisible == visible) {
         return;
     }
-    _scene->setMarkersVisible(visible);
+    _markersVisible = visible;
+    syncSceneMarkers();
+    update();
+}
+
+bool WorldMapView::usingVectorMarkers() const {
+    return _markersVisible && _zoom >= VECTOR_MARKER_ZOOM;
+}
+
+void WorldMapView::syncSceneMarkers() {
+    // The scene bakes the circles into its bitmap; leave them out whenever the painter is drawing
+    // them as geometry, or the two would stack.
+    const bool wantBitmapMarkers = _markersVisible && !usingVectorMarkers();
+    if (!_scene || _scene->markersVisible() == wantBitmapMarkers) {
+        return;
+    }
+    _scene->setMarkersVisible(wantBitmapMarkers);
     // The recompose rewrote the buffer in place; the QImage still points at it, but tell Qt the
     // pixels changed by rebuilding the wrapper (QImage caches nothing else here).
     _image = QImage(_scene->pixels().data(), _scene->width(), _scene->height(),
         _scene->width() * 4, QImage::Format_RGBA8888);
-    update();
 }
 
 void WorldMapView::setLabelsVisible(bool visible) {
@@ -112,6 +144,7 @@ void WorldMapView::zoomToFit() {
     _zoom = std::clamp(fit, MIN_ZOOM, MAX_FIT_ZOOM);
     _topLeft = QPointF(0, 0);
     clampPan();
+    syncSceneMarkers();
     update();
 }
 
@@ -134,6 +167,7 @@ void WorldMapView::setZoom(double zoom, const QPointF& anchorWidgetPos) {
     _zoom = clamped;
     _topLeft = anchorWorld - anchorWidgetPos / _zoom;
     clampPan();
+    syncSceneMarkers();
     update();
 }
 
@@ -183,12 +217,16 @@ void WorldMapView::paintEvent(QPaintEvent*) {
         return;
     }
 
-    // Nearest-neighbour keeps the 8-bit art crisp when magnified, which is how the game shows it;
-    // smoothing only helps when shrinking below 1:1.
-    painter.setRenderHint(QPainter::SmoothPixmapTransform, _zoom < 1.0);
+    // The tile art is a rendered relief map, not pixel art, and 1400x1500 is all of it there is —
+    // so interpolate rather than blocking it up, in both directions.
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
     const QRectF target(toWidget(QPointF(0, 0)), QSizeF(_image.width() * _zoom, _image.height() * _zoom));
     painter.drawImage(target, _image);
+
+    if (usingVectorMarkers()) {
+        drawVectorMarkers(painter);
+    }
 
     if (_labelsVisible && _zoom >= LABEL_MIN_ZOOM) {
         drawLabels(painter);
@@ -203,33 +241,110 @@ void WorldMapView::paintEvent(QPaintEvent*) {
     }
 }
 
+void WorldMapView::drawVectorMarkers(QPainter& painter) const {
+    const QColor tint(QRgb(0xFF000000 | _scene->labelColor()));
+    const QRectF visible = rect();
+
+    const QPainter::RenderHints hints = painter.renderHints();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+
+    for (const worldmap::AreaMarker& area : _scene->areas()) {
+        const std::vector<float>& profile = _scene->markerProfile(area.size);
+        if (profile.empty() || area.width <= 0) {
+            continue;
+        }
+
+        const QPointF centre = toWidget(QPointF(area.x + area.width / 2.0, area.y + area.height / 2.0));
+        const double radius = area.width / 2.0 * _zoom;
+        const QRectF box(centre.x() - radius, centre.y() - radius, radius * 2, radius * 2);
+        if (!visible.intersects(box)) {
+            continue;
+        }
+
+        // The profile is the tint weight from the middle outwards, so it maps straight onto a
+        // radial gradient's stops — the bright rim and the softer interior come out of the sprite's
+        // own numbers rather than being invented here.
+        QRadialGradient gradient(centre, radius);
+        for (std::size_t i = 0; i < profile.size(); ++i) {
+            QColor stop = tint;
+            stop.setAlphaF(std::clamp(profile[i], 0.0F, 1.0F));
+            gradient.setColorAt(static_cast<double>(i) / (profile.size() - 1), stop);
+        }
+        painter.setBrush(gradient);
+        painter.drawEllipse(box);
+    }
+
+    painter.setRenderHints(hints);
+}
+
 void WorldMapView::drawLabels(QPainter& painter) const {
     const QColor green(QRgb(0xFF000000 | _scene->labelColor()));
 
     QFont font = painter.font();
-    font.setPointSize(LABEL_POINT_SIZE);
+    font.setPointSize(std::clamp(static_cast<int>(std::lround(LABEL_BASE_POINT_SIZE * _zoom)),
+        LABEL_MIN_POINT_SIZE, LABEL_MAX_POINT_SIZE));
     painter.setFont(font);
     const QFontMetrics metrics(font);
 
-    const QRectF visible = rect();
+    // Several areas share almost the same spot (the special encounters near the coast especially),
+    // so drawing every label turns them into a smear. Lay them out biggest-circle-first and drop
+    // any that would land on one already placed: the important places keep their names, and what
+    // is dropped comes back as you zoom in and the boxes stop touching.
+    struct Placed {
+        QRectF box;
+        QString text;
+    };
+    std::vector<const worldmap::AreaMarker*> order;
+    order.reserve(_scene->areas().size());
     for (const worldmap::AreaMarker& area : _scene->areas()) {
-        const QString label = QString::fromStdString(area.label());
+        order.push_back(&area);
+    }
+    std::stable_sort(order.begin(), order.end(),
+        [this](const worldmap::AreaMarker* a, const worldmap::AreaMarker* b) {
+            // The one the user is pointing at or has picked always keeps its name.
+            const int priorityA = (a == _selected || a == _hovered) ? 1 : 0;
+            const int priorityB = (b == _selected || b == _hovered) ? 1 : 0;
+            if (priorityA != priorityB) {
+                return priorityA > priorityB;
+            }
+            return a->width > b->width;
+        });
+
+    const QRectF visible = rect();
+    std::vector<Placed> placed;
+    placed.reserve(order.size());
+
+    for (const worldmap::AreaMarker* area : order) {
+        const QString label = QString::fromStdString(area->label());
         if (label.isEmpty()) {
             continue;
         }
         // Centred under the circle, as the engine places it.
-        const QPointF anchor = toWidget(QPointF(area.x + area.width / 2.0, area.y + area.height + LABEL_GAP));
+        const QPointF anchor = toWidget(QPointF(area->x + area->width / 2.0, area->y + area->height + LABEL_GAP));
         const int textWidth = metrics.horizontalAdvance(label);
         const QRectF box(anchor.x() - textWidth / 2.0, anchor.y(), textWidth, metrics.height());
         if (!visible.intersects(box)) {
             continue;
         }
 
-        // The engine draws the name shadowed so it stays legible over bright terrain.
+        // Test with a margin, so names that merely touch are culled too: side by side they read as
+        // one run-on string ("Den Den Slave Run Desert") even though the boxes never overlap.
+        const QRectF spaced = box.adjusted(-LABEL_CLEARANCE, -LABEL_CLEARANCE, LABEL_CLEARANCE, LABEL_CLEARANCE);
+        const bool collides = std::any_of(placed.begin(), placed.end(),
+            [&spaced](const Placed& other) { return other.box.intersects(spaced); });
+        if (collides) {
+            continue;
+        }
+        placed.push_back({ box, label });
+    }
+
+    // The engine draws the name shadowed so it stays legible over bright terrain.
+    for (const Placed& entry : placed) {
         painter.setPen(Qt::black);
-        painter.drawText(box.translated(1, 1), Qt::AlignCenter, label);
+        painter.drawText(entry.box.translated(1, 1), Qt::AlignCenter, entry.text);
         painter.setPen(green);
-        painter.drawText(box, Qt::AlignCenter, label);
+        painter.drawText(entry.box, Qt::AlignCenter, entry.text);
     }
 }
 
