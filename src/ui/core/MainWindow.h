@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <filesystem>
 #include <utility>
 #include <SFML/Window/Event.hpp>
@@ -44,6 +45,7 @@ class SFMLWidget;
 class EditorWidget;
 class LoadingWidget;
 class WelcomeWidget;
+class WorldMapWidget;
 class SelectionPanel;
 class MapInfoPanel;
 class ScriptsPanel;
@@ -161,6 +163,8 @@ private slots:
     void showStampPatternDialog();
     void showFillDialog();
     void showMapBrowserDialog();
+    /// Switches the central area between the world map and whatever was showing before it.
+    void toggleWorldMap(bool show);
 
 public slots:
     void showStatusMessage(const QString& message);
@@ -268,6 +272,14 @@ private:
 
     void convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed);
 
+    /// The VFS path of a mounted .map with this filename (any case), or "" if none has it. The
+    /// world map identifies an area's maps by filename, while the loader wants a path.
+    [[nodiscard]] std::string findMountedMapPath(const QString& mapFileName) const;
+
+    /// Clears the World Map action for callers that switch the central page themselves (opening or
+    /// closing a map). Silently, so unchecking does not bounce the page back again.
+    void clearWorldMapAction();
+
     QStackedWidget* _centralStack;
     QTimer* _gameLoopTimer;
     std::shared_ptr<resource::GameResources> _resourcesShared;
@@ -279,6 +291,11 @@ private:
     // Current widgets
     EditorWidget* _currentEditorWidget;
     WelcomeWidget* _welcomeWidget;
+    /// Built the first time the world map is opened — rendering it costs a couple of megabytes and
+    /// most sessions never ask for it.
+    WorldMapWidget* _worldMapWidget = nullptr;
+    /// The stack page to return to when the world map is closed.
+    QWidget* _pageBeforeWorldMap = nullptr;
 
     // Menu items
     QMenuBar* _menuBar;
@@ -385,6 +402,7 @@ private:
     QAction* _showSpatialScriptsAction;
     QAction* _showMapEdgesAction;
     QAction* _showUnreachableAction;
+    QAction* _worldMapAction = nullptr;
     QAction* _mergeOutlinesAction;
     QAction* _edgeScrollAction;
 

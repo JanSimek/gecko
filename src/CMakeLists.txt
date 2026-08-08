@@ -157,6 +157,12 @@ set(GECK_APP_SOURCES
     ui/widgets/AnimationController.cpp
     ui/widgets/WelcomeWidget.h
     ui/widgets/WelcomeWidget.cpp
+
+    # Qt6 UI World map (a view of the game's worldmap data, not of any one map)
+    ui/worldmap/WorldMapView.h
+    ui/worldmap/WorldMapView.cpp
+    ui/worldmap/WorldMapWidget.h
+    ui/worldmap/WorldMapWidget.cpp
     ui/widgets/ProCommonFieldsWidget.h
     ui/widgets/ProCommonFieldsWidget.cpp
     
@@ -432,6 +438,9 @@ add_library(vault STATIC
 
     util/GameDataPathResolver.h
     util/GameDataPathResolver.cpp
+
+    util/PaletteBlend.h
+    util/PaletteBlend.cpp
 )
 
 target_include_directories(vault PUBLIC
@@ -472,6 +481,7 @@ add_library(gecko_resource STATIC
     resource/ResourceInitializer.h
     resource/ResourceInitializer.cpp
 
+    resource/ConfigLoad.h
     resource/MapNameResolver.h
     resource/MapNameResolver.cpp
     resource/MapCompleteness.h
@@ -537,6 +547,8 @@ add_library(gecko_core STATIC
     editor/Hex.cpp
     editor/helper/ObjectQueries.h
     editor/helper/ObjectQueries.cpp
+    editor/worldmap/WorldMapScene.h
+    editor/worldmap/WorldMapScene.cpp
 )
 add_library(gecko::core ALIAS gecko_core)
 
@@ -686,7 +698,6 @@ if(GECK_BUILD_CLI)
         cli/WorldMap.cpp
         cli/WorldEncounters.h
         cli/WorldEncounters.cpp
-        cli/ConfigLoad.h
         cli/GlobalVars.h
         cli/GlobalVars.cpp
         cli/Quests.h

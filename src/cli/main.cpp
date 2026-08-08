@@ -54,6 +54,7 @@ struct CliArgs {
     geck::cli::ReachabilityOptions reach;
     geck::cli::DescribeMapOptions describeMapOpts;
     geck::cli::MapGraphOptions graphOpts;
+    geck::cli::WorldMapOptions worldOpts;
 };
 
 void printUsage(const char* program) {
@@ -119,9 +120,12 @@ void printUsage(const char* program) {
               << "      The exit-grid connectivity graph: how maps link via exit grids WITHIN a location\n"
               << "      (+ worldmap hand-off edges), named via maps.txt/map.msg. Not inter-city travel\n"
               << "      (that's the world map / city.txt). No map arguments = every map.\n"
-              << "  " << program << " map world --data <dir-or-.dat> [--data <...>]\n"
+              << "  " << program << " map world [--render <file.png>] [--no-markers]\n"
+              << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      The worldmap layer from city.txt: every area (location) with its world position,\n"
               << "      size, the maps it contains, and the straight-line distances between all areas.\n"
+              << "      --render draws the worldmap itself to a PNG instead — the wrldmp tile grid with\n"
+              << "      the area circles blended over it the way the engine does; --no-markers omits them.\n"
               << "  " << program << " map encounters --data <dir-or-.dat> [--data <...>]\n"
               << "      The worldmap terrain types and random-encounter group tables from worldmap.txt.\n"
               << "  " << program << " map gvars --data <dir-or-.dat> [--data <...>]\n"
@@ -265,6 +269,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim" || arg == "--crop-hex" || arg == "--crop-extent"))
         || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"))
         || (out.describeScript && (arg == "--index" || arg == "--locale"))
+        || (out.world && arg == "--render")
         || (out.reachability && arg == "--map")
         || (out.describeMap && arg == "--map")
         || (out.dumpGrid && (arg == "--map" || arg == "--elevation"));
@@ -488,7 +493,15 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         out.graphOpts.maps.push_back(arg);
         return 1;
     }
-    if (out.world) { // world takes no arguments beyond --data (handled above)
+    if (out.world) {
+        if (arg == "--render") {
+            out.worldOpts.renderPath = args[i + 1];
+            return 2;
+        }
+        if (arg == "--no-markers") {
+            out.worldOpts.markers = false;
+            return 1;
+        }
         std::cerr << "error: unexpected argument: " << arg << "\n";
         printUsage(program);
         return 0;
@@ -847,6 +860,9 @@ int main(int argc, char** argv) {
         return geck::cli::buildMapGraph(resources, cli.graphOpts, std::cout);
     }
     if (cli.world) {
+        if (!cli.worldOpts.renderPath.empty()) {
+            return geck::cli::renderWorldMap(resources, cli.worldOpts, std::cout);
+        }
         return geck::cli::buildWorldMap(resources, std::cout);
     }
     if (cli.encounters) {

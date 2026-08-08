@@ -6,6 +6,7 @@
 #include "util/GameDataPathResolver.h"
 #include "ui/widgets/LoadingWidget.h"
 #include "ui/widgets/WelcomeWidget.h"
+#include "ui/worldmap/WorldMapWidget.h"
 #include "ui/widgets/SFMLWidget.h"
 #include "ui/panels/SelectionPanel.h"
 #include "ui/panels/MapInfoPanel.h"
@@ -165,6 +166,7 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     _currentEditorWidget = editorWidget.release();
     _centralStack->addWidget(_currentEditorWidget);
     _centralStack->setCurrentWidget(_currentEditorWidget);
+    clearWorldMapAction(); // the map replaced whatever page was showing, world map included
 
     _currentEditorWidget->setMainWindow(this);
     {
@@ -216,6 +218,13 @@ void MainWindow::setupUI() {
     _welcomeWidget = new WelcomeWidget(this);
     connect(_welcomeWidget, &WelcomeWidget::newMapRequested, this, &MainWindow::newMapRequested);
     connect(_welcomeWidget, &WelcomeWidget::browseMapsRequested, this, &MainWindow::showMapBrowserDialog);
+    // Go through the menu action rather than toggleWorldMap() directly, so its checked state keeps
+    // matching what is on screen.
+    connect(_welcomeWidget, &WelcomeWidget::worldMapRequested, this, [this] {
+        if (_worldMapAction != nullptr) {
+            _worldMapAction->setChecked(true);
+        }
+    });
     connect(_welcomeWidget, &WelcomeWidget::preferencesRequested, this, &MainWindow::showPreferences);
     _centralStack->addWidget(_welcomeWidget);
     _centralStack->setCurrentWidget(_welcomeWidget);
@@ -517,6 +526,16 @@ void MainWindow::setupMenuBar() {
     updateFillSelectionAction();
 
     _viewMenu = _menuBar->addMenu("&View");
+
+    // The world map is a whole screen rather than a per-map toggle, so it leads the menu and is
+    // separated from the rendering switches below. It needs mounted game data, not an open map.
+    _worldMapAction = _viewMenu->addAction(createIcon(":/icons/actions/world-map.svg"), "&World Map");
+    _worldMapAction->setCheckable(true);
+    _worldMapAction->setShortcut(QKeySequence("Ctrl+Shift+M"));
+    _worldMapAction->setStatusTip("Show the Fallout 2 world map with its area markers");
+    connect(_worldMapAction, &QAction::toggled, this, &MainWindow::toggleWorldMap);
+    _viewMenu->addSeparator();
+
     struct ViewToggleSpec {
         QAction** actionRef;
         const char* iconPath;
@@ -1425,6 +1444,17 @@ void MainWindow::rebuildGameResourcesFromSettings() {
     const std::string loaderErrorMessage = loaderPtr ? loaderPtr->errorMessage() : std::string();
 
     _resourcesShared = std::move(newResources);
+    // The world map holds art and city.txt from the old resources; drop it so the next Show rebuilds
+    // it against the new mounts (and so nothing keeps the retired GameResources alive).
+    if (_worldMapWidget != nullptr) {
+        if (_worldMapAction != nullptr) {
+            _worldMapAction->setChecked(false);
+        }
+        _centralStack->removeWidget(_worldMapWidget);
+        _worldMapWidget->deleteLater();
+        _worldMapWidget = nullptr;
+        _pageBeforeWorldMap = nullptr;
+    }
     rebuildResourcePanels();
     startThumbnailPrewarm(); // new mounts can mean new maps and new source identities
     refreshFileBrowser();
@@ -2516,6 +2546,7 @@ void MainWindow::closeCurrentMap() {
     _currentEditorWidget = nullptr;
 
     _centralStack->setCurrentWidget(_welcomeWidget);
+    clearWorldMapAction(); // the welcome screen is showing now, not the world map
 
     // No map is open now: clear the dirty flag and reset the title off the closed map, otherwise the
     // title bar keeps the closed map's name (and a stale "*") while the welcome screen is shown.
@@ -2673,6 +2704,67 @@ void MainWindow::showMapBrowserDialog() {
     if (!mapPath.isEmpty()) {
         handleMapLoadRequest(mapPath.toStdString(), false);
     }
+}
+
+void MainWindow::clearWorldMapAction() {
+    if (_worldMapAction != nullptr && _worldMapAction->isChecked()) {
+        const QSignalBlocker blocker(_worldMapAction);
+        _worldMapAction->setChecked(false);
+    }
+    _pageBeforeWorldMap = nullptr;
+}
+
+std::string MainWindow::findMountedMapPath(const QString& mapFileName) const {
+    for (const auto& path : _resourcesShared->files().list("*.map")) {
+        if (QString::fromStdString(path.filename().string()).compare(mapFileName, Qt::CaseInsensitive) == 0) {
+            return path.generic_string();
+        }
+    }
+    return {};
+}
+
+void MainWindow::toggleWorldMap(bool show) {
+    if (!show) {
+        // Back to whatever was showing before — the open map, or the welcome screen if it has since
+        // been closed and the remembered page is gone.
+        QWidget* target = _pageBeforeWorldMap;
+        if (target == nullptr || _centralStack->indexOf(target) < 0) {
+            target = _currentEditorWidget != nullptr ? static_cast<QWidget*>(_currentEditorWidget)
+                                                     : static_cast<QWidget*>(_welcomeWidget);
+        }
+        _centralStack->setCurrentWidget(target);
+        _pageBeforeWorldMap = nullptr;
+        return;
+    }
+
+    if (_worldMapWidget == nullptr) {
+        _worldMapWidget = new WorldMapWidget(*_resourcesShared, this);
+        connect(_worldMapWidget, &WorldMapWidget::openMapRequested, this, [this](const QString& mapFileName) {
+            // The worldmap knows areas by .map filename; the loader wants the VFS path.
+            const std::string mapPath = findMountedMapPath(mapFileName);
+            if (mapPath.empty()) {
+                QtDialogs::showError(this, "Map Not Found",
+                    QString("%1 is not in the mounted game data.").arg(mapFileName));
+                return;
+            }
+            if (_worldMapAction != nullptr) {
+                _worldMapAction->setChecked(false); // leave the world map for the editor
+            }
+            handleMapLoadRequest(mapPath, false);
+        });
+        _centralStack->addWidget(_worldMapWidget);
+    }
+
+    // Rendering the whole worldmap takes a moment, so do it on first show and after the data paths
+    // change (reload() is cheap to call again and reports its own failure in place of the map).
+    if (!_worldMapWidget->hasScene()) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        _worldMapWidget->reload();
+        QApplication::restoreOverrideCursor();
+    }
+
+    _pageBeforeWorldMap = _centralStack->currentWidget();
+    _centralStack->setCurrentWidget(_worldMapWidget);
 }
 
 void MainWindow::showStatusMessage(const QString& message) {

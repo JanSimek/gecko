@@ -14,6 +14,10 @@ std::array<uint8_t, Pal::NUM_CONVERSION_VALUES>& Pal::rgbConversionTable() {
     return _rgbConversionTable;
 }
 
+const std::array<uint8_t, Pal::NUM_CONVERSION_VALUES>& Pal::rgbConversionTable() const {
+    return _rgbConversionTable;
+}
+
 void Pal::setRgbConversionTable(const std::array<uint8_t, NUM_CONVERSION_VALUES>& rgbConversionTable) {
     _rgbConversionTable = rgbConversionTable;
 }

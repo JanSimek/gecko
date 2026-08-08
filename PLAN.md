@@ -220,8 +220,9 @@ Open items:
 - **Corpus / world index** — index `analyze` + the semantic facts across all shipped maps so an
   agent can query *examples* ("how do shipped towns place and wire shopkeepers?") — improves
   generation, not just analysis.
-- **`worldmap.txt`** — the per-position sub-tile *encounter* chances are still unparsed (only
-  the terrain field is kept).
+- **`worldmap.txt`** — the per-position sub-tile *encounter* chances and fill flags are still
+  unparsed (of each subtile line only the terrain is kept; the tile's `art_idx`,
+  `walk_mask_name` and `encounter_difficulty` are read).
 - **`worldmap.msg`** — random-encounter descriptions (`[3000 + 50*tableId + entryId]`,
   fallout2-ce worldmap.cc:3595); runtime-index-tied to the encounter table/entry ordering, so
   not a small add. (Area/city labels turned out to live in map.msg and are already surfaced.)
@@ -232,6 +233,37 @@ Open items:
 
 *(MCP server guard note: per-call cancellation / progress notifications are deliberately not
 planned — the stdio loop is synchronous and tool calls are short.)*
+
+---
+
+# World map
+
+**Shipped (view-only):** `View > World Map` renders the worldmap the way the game draws it —
+the `wrldmp*` tile grid (whose yellow subtile lines are part of the art) with each area's circle
+blended over it. `WorldMapScene` (gecko_core) composes it in **palette-index space** and expands
+to RGBA only at the end, so the markers are pixel-identical to the engine rather than an
+approximation; `util/PaletteBlend` is the port of fallout2-ce's `_buildBlendTable` /
+`_commonGrayTable` / `intensityColorTable`. Also on `gecko-cli map world --render <png>`.
+
+**Guard note — do not re-derive:** `city.txt`'s `world_pos` is measured from the engine's 640x480
+interface window, so a marker's real worldmap position is `world_pos - (WM_VIEW_X, WM_VIEW_Y)` =
+`- (22, 21)`. The engine applies the same bias when drawing and when hit-testing, and the
+hard-coded new-game start position (173, 122) only lands inside Arroyo's circle with it. Asserted
+in `test_city_txt.cpp`.
+
+Open items, roughly in order:
+
+- **Town-map view** — per-area screen from `townmap_art_idx` / `townmap_label_art_idx` (both now
+  parsed) with the `entrance_N` hotspots drawn at their `townX,townY`; double-click already opens
+  an area's first map, this would let you pick *which* entrance.
+- **Overlays** — terrain type, per-subtile encounter chance (needs the unparsed subtile fields,
+  see the worldmap.txt item above), the `.msk` travel masks (1bpp, 44-byte rows; reproduce the
+  engine's own `1 << ((x/8) & 3)` indexing rather than "fixing" it), tile `encounter_difficulty`.
+- **Editing** — drag markers, change size/state/entrances. Writing `city.txt` / `worldmap.txt`
+  should follow the lossless round-trip pattern used for `maps.txt` (`MapsTxtSerializer`): both
+  files are heavily commented and hand-maintained, so a rewrite-from-model would destroy them.
+- **Labels** are Qt text in the engine's green, not the engine's bitmap font — the AAF fonts
+  don't survive being scaled, and the view zooms. Revisit only if 1:1 fidelity is wanted.
 
 ---
 

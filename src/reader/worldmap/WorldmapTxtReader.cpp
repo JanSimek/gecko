@@ -38,6 +38,19 @@ namespace {
     // A [Tile NN] subtile line: key "row_column" (row 0-6, column 0-5) -> "terrain, fill, chances, …".
     // We keep the terrain (the first field).
     void applyTileField(WorldmapTile& tile, const std::string& key, const std::string& value) {
+        if (key == "art_idx") {
+            tile.artIndex = intOr(value, -1);
+            return;
+        }
+        if (key == "walk_mask_name") {
+            tile.walkMaskName = value;
+            return;
+        }
+        if (key == "encounter_difficulty") {
+            tile.encounterDifficulty = intOr(value, 0);
+            return;
+        }
+
         const auto underscore = key.find('_');
         if (underscore == std::string::npos) {
             return;
