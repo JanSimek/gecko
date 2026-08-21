@@ -11,6 +11,7 @@
 #include <QListWidget>
 #include <QSplitter>
 #include <QStackedWidget>
+#include <QStringList>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -72,26 +73,41 @@ void WorldMapWidget::setupUi() {
     connect(actual, &QToolButton::clicked, this, [this] { _view->zoomToActualSize(); });
     toolbar->addWidget(actual);
 
+    // Missing art is the scene's own diagnosis; without it on screen the user just sees black
+    // tiles, or markers that cannot be clicked, with nothing to explain why.
+    _warning = new QLabel(this);
+    _warning->setStyleSheet(ui::theme::styles::statusWarning());
+    _warning->setVisible(false);
+    toolbar->addWidget(_warning);
+
     toolbar->addStretch();
+
+    // Two labels, not one: the summary is about the map and the readout about the pointer, and a
+    // single label meant the area count vanished on the first mouse move.
+    _summary = new QLabel(this);
+    _summary->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    toolbar->addWidget(_summary);
 
     _status = new QLabel(this);
     _status->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    _status->setMinimumWidth(AREA_LIST_WIDTH);
+    _status->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     toolbar->addWidget(_status);
     layout->addLayout(toolbar);
 
     auto* splitter = new QSplitter(Qt::Horizontal, this);
 
     // Left: the map (or, when there is no worldmap data, an explanation in its place).
-    auto* canvasStack = new QStackedWidget(splitter);
-    _view = new WorldMapView(canvasStack);
-    canvasStack->addWidget(_view);
+    _canvasStack = new QStackedWidget(splitter);
+    _view = new WorldMapView(_canvasStack);
+    _canvasStack->addWidget(_view);
 
-    _placeholder = new QLabel(canvasStack);
+    _placeholder = new QLabel(_canvasStack);
     _placeholder->setAlignment(Qt::AlignCenter);
     _placeholder->setWordWrap(true);
     _placeholder->setStyleSheet(ui::theme::styles::statusError());
-    canvasStack->addWidget(_placeholder);
-    splitter->addWidget(canvasStack);
+    _canvasStack->addWidget(_placeholder);
+    splitter->addWidget(_canvasStack);
 
     connect(_view, &WorldMapView::areaSelected, this, &WorldMapWidget::onAreaSelected);
     connect(_view, &WorldMapView::areaActivated, this, &WorldMapWidget::onAreaActivated);
@@ -136,41 +152,50 @@ void WorldMapWidget::setupUi() {
     layout->addWidget(splitter, 1);
 
     // The stack starts on the placeholder until a load succeeds.
-    canvasStack->setCurrentWidget(_placeholder);
+    _canvasStack->setCurrentWidget(_placeholder);
     _placeholder->setText(tr("No world map loaded."));
 }
 
 bool WorldMapWidget::reload() {
-    auto* canvasStack = qobject_cast<QStackedWidget*>(_view->parentWidget());
-
     _scene = worldmap::WorldMapScene::load(_resources);
     _view->setScene(_scene);
     _selectedMapFile.clear();
     _openMapButton->setEnabled(false);
+    _status->clear();
+    _warning->setVisible(false);
 
     if (!_scene) {
         _placeholder->setText(tr("The world map needs city.txt, worldmap.txt and color.pal from the "
                                  "game data. Add a Fallout 2 data folder or master.dat in "
                                  "Preferences, then try again."));
-        if (canvasStack != nullptr) {
-            canvasStack->setCurrentWidget(_placeholder);
-        }
+        _canvasStack->setCurrentWidget(_placeholder);
         _areaList->clear();
-        _status->clear();
+        _summary->clear();
         return false;
     }
 
-    if (canvasStack != nullptr) {
-        canvasStack->setCurrentWidget(_view);
-    }
+    _canvasStack->setCurrentWidget(_view);
     refreshAreaList();
-
-    if (!_scene->missingArt().empty()) {
-        spdlog::warn("World map: {} tile(s) drew black because their art is missing",
-            _scene->missingArt().size());
-    }
-    _status->setText(tr("%1 areas").arg(_scene->areas().size()));
+    showMissingArt();
+    _summary->setText(tr("%1 areas").arg(_scene->areas().size()));
     return true;
+}
+
+void WorldMapWidget::showMissingArt() {
+    const std::vector<std::string>& missing = _scene->missingArt();
+    if (missing.empty()) {
+        return;
+    }
+
+    spdlog::warn("World map: {} piece(s) of art are missing", missing.size());
+
+    QStringList details;
+    for (const std::string& entry : missing) {
+        details << QString::fromStdString(entry);
+    }
+    _warning->setText(tr("%n art file(s) missing", "", static_cast<int>(missing.size())));
+    _warning->setToolTip(details.join(QLatin1Char('\n')));
+    _warning->setVisible(true);
 }
 
 void WorldMapWidget::refreshAreaList() {

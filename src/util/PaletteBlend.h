@@ -96,7 +96,8 @@ private:
 class BlendTable {
 public:
     /// Builds the table for @p tintRgb (a 0xRRGGBB colour, snapped to the nearest palette entry
-    /// first, as the engine's `COLOR_*` macros do). Mirrors `_buildBlendTable`.
+    /// first, as the engine's `COLOR_*` macros do). Mirrors `_buildBlendTable`. @p tables must
+    /// outlive the table, which keeps referring to it for @ref blendPixel.
     BlendTable(const BlendTables& tables, std::uint32_t tintRgb);
 
     /// The blend of destination index @p dest at grey level @p gray (0-7).
@@ -117,7 +118,10 @@ public:
 private:
     static constexpr std::size_t ROWS = 8;
 
-    const BlendTables& _tables;
+    // A pointer rather than a reference: a blend table is a value a renderer may well want to keep
+    // several of (one per tint) and reassign as the palette changes, and a reference member would
+    // make it unassignable for no gain.
+    const BlendTables* _tables;
     std::array<std::uint8_t, ROWS * 256> _rows{};
 };
 

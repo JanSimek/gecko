@@ -31,15 +31,35 @@ namespace {
         return (INTERFACE_FID_TYPE << 24) | static_cast<std::uint32_t>(lstIndex);
     }
 
-    // The first frame of an FRM as raw palette indices. Every image the worldmap uses is a single
-    // static frame, so there is no direction or animation to pick.
-    const Frame* firstFrame(resource::GameResources& resources, const std::string& artPath) {
-        const Frm* frm = resources.repository().load<Frm>(artPath);
-        if (frm == nullptr || frm->directions().empty()) {
+    // The first frame of the interface art at an intrface.lst index, as raw palette indices; every
+    // image the worldmap uses is a single static frame, so there is no direction or animation to
+    // pick. @p artPath receives whatever the FID resolved to, for reporting.
+    //
+    // Both halves of the lookup throw when the mounted data is short of what the worldmap wants:
+    // resolve() on a missing or too-short intrface.lst, load() on a dangling LST entry or an
+    // unreadable FRM. A worldmap is still worth drawing with a tile or two missing, and an editor
+    // must not die of it, so every art lookup funnels through here and reports failure the way the
+    // callers already handle it -- by returning nullptr.
+    const Frame* interfaceFrame(resource::GameResources& resources, int lstIndex, std::string& artPath) {
+        artPath.clear();
+        if (lstIndex < 0) {
             return nullptr;
         }
-        const auto& frames = frm->directions()[0].frames();
-        return frames.empty() ? nullptr : &frames[0];
+        try {
+            artPath = resources.frmResolver().resolve(interfaceFid(lstIndex));
+            if (artPath.empty()) {
+                return nullptr;
+            }
+            const Frm* frm = resources.repository().load<Frm>(artPath);
+            if (frm == nullptr || frm->directions().empty()) {
+                return nullptr;
+            }
+            const auto& frames = frm->directions()[0].frames();
+            return frames.empty() ? nullptr : &frames[0];
+        } catch (const std::exception& error) {
+            spdlog::warn("WorldMapScene: interface art {} could not be loaded: {}", lstIndex, error.what());
+            return nullptr;
+        }
     }
 
 } // namespace
@@ -56,7 +76,16 @@ std::unique_ptr<WorldMapScene> WorldMapScene::load(resource::GameResources& reso
     scene->_world = resource::loadConfig<WorldmapTxt>(resources, { "data/worldmap.txt", "worldmap.txt" },
         [](const std::string& text) { return parseWorldmapTxt(text); });
 
-    const Pal* pal = resources.repository().load<Pal>("color.pal");
+    // Every blend the worldmap does is a lookup through color.pal, so without it there is nothing
+    // to draw. load() throws rather than returning null when the file is not mounted, which is the
+    // common case for a data path that has the text files but no art.
+    const Pal* pal = nullptr;
+    try {
+        pal = resources.repository().load<Pal>("color.pal");
+    } catch (const std::exception& error) {
+        spdlog::warn("WorldMapScene: color.pal could not be loaded ({}); cannot draw the worldmap", error.what());
+        return nullptr;
+    }
     if (pal == nullptr) {
         spdlog::warn("WorldMapScene: color.pal is not mounted; cannot draw the worldmap");
         return nullptr;
@@ -95,8 +124,8 @@ bool WorldMapScene::rasteriseTiles(resource::GameResources& resources) {
             break; // a partial trailing row the engine would not show either
         }
 
-        const std::string artPath = artIndex >= 0 ? resources.frmResolver().resolve(interfaceFid(artIndex)) : std::string();
-        const Frame* frame = artPath.empty() ? nullptr : firstFrame(resources, artPath);
+        std::string artPath;
+        const Frame* frame = interfaceFrame(resources, artIndex, artPath);
         if (frame == nullptr) {
             std::ostringstream missing;
             missing << "[Tile " << tile << "] art_idx=" << artIndex;
@@ -128,10 +157,15 @@ void WorldMapScene::loadMarkerSprites(resource::GameResources& resources) {
     // The city circles are interface art too; load them once for every area to blend against.
     for (std::size_t size = 0; size < _sprites.size(); ++size) {
         const int lstIndex = CITY_SPRITE_BASE_INDEX + static_cast<int>(size);
-        const std::string path = resources.frmResolver().resolve(interfaceFid(lstIndex));
-        const Frame* frame = path.empty() ? nullptr : firstFrame(resources, path);
+        std::string path;
+        const Frame* frame = interfaceFrame(resources, lstIndex, path);
         if (frame == nullptr) {
-            spdlog::warn("WorldMapScene: city marker art {} is missing", lstIndex);
+            // Without its circle a marker has no art, no hit box and no label anchor, so an area of
+            // this size becomes invisible and unclickable. Report it rather than leave the user with
+            // a map that silently ignores every click.
+            std::ostringstream missing;
+            missing << "[Marker " << cityAreaSizeName(static_cast<CityAreaSize>(size)) << "] art_idx=" << lstIndex;
+            _missingArt.push_back(missing.str());
             continue;
         }
 

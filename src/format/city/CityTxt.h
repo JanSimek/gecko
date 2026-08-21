@@ -24,7 +24,12 @@
 /// ;           state, x, y, map (a maps.txt lookup_name), elevation, tile, orientation
 /// @endverbatim
 ///
-/// The engine keys its area loop on `townmap_art_idx`: an `[Area NN]` without it ends the list.
+/// The engine walks `[Area 00]`, `[Area 01]`, … in order and stops at the first index whose
+/// section is missing or has no `townmap_art_idx` **key** (`wmAreaInit`). The value is not the
+/// test — `townmap_art_idx=-1` is ordinary, and 42 of the Restoration Project's 61 areas carry
+/// it. This reader keeps every `[Area NN]` it finds instead: the model does not record whether a
+/// key was present, and every shipped city.txt is contiguous from 0 with the key on every
+/// section, so the rule has nothing to bite on.
 ///
 /// @see fallout2-ce `worldmap.cc` (`wmAreaInit`)
 /// @see https://fallout.wiki/wiki/CITY.TXT_File_Format

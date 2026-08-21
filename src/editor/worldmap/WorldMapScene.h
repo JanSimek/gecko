@@ -9,7 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <type_traits>
+#include <tuple>
 #include <vector>
 
 namespace geck::resource {
@@ -116,11 +116,10 @@ public:
     /// The terrain name at a worldmap pixel, or "" when the subtile grid isn't loaded.
     [[nodiscard]] std::string terrainAt(int px, int py) const;
 
-    /// Tile art that could not be resolved or loaded, as `[Tile NN] art_idx=N` descriptions. Empty
-    /// on a clean load; a caller should surface these rather than silently show black tiles.
+    /// Art that could not be resolved or loaded, as `[Tile NN] art_idx=N` / `[Marker size]`
+    /// descriptions. Empty on a clean load; a caller should surface these rather than silently show
+    /// black tiles, or markers that are invisible and so cannot be clicked.
     [[nodiscard]] const std::vector<std::string>& missingArt() const { return _missingArt; }
-
-    [[nodiscard]] const WorldmapTxt& worldmapTxt() const { return _world; }
 
 private:
     WorldMapScene() = default;
@@ -157,9 +156,12 @@ private:
 
     std::array<Sprite, 3> _sprites;
 
-    /// The marker art for a city size. The one place the size ordinal is used as an index.
+    /// The marker art for a city size. The one place the size ordinal is used as an index; the
+    /// enum's three values are exactly the three sprites, which cityAreaSize() guarantees by
+    /// falling back to Large.
     [[nodiscard]] const Sprite& spriteFor(CityAreaSize size) const {
-        return _sprites[static_cast<std::size_t>(static_cast<std::underlying_type_t<CityAreaSize>>(size))];
+        static_assert(static_cast<std::size_t>(CityAreaSize::Large) + 1 == std::tuple_size_v<decltype(_sprites)>);
+        return _sprites[static_cast<std::size_t>(size)];
     }
 
     std::vector<AreaMarker> _areas;

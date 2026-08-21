@@ -8,6 +8,7 @@
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QStackedWidget;
 class QToolButton;
 
 namespace geck::resource {
@@ -49,6 +50,9 @@ Q_SIGNALS:
 private:
     void setupUi();
     void refreshAreaList();
+    /// Puts the scene's missingArt() on screen, so black tiles and unclickable markers have a
+    /// visible cause rather than only a log line.
+    void showMissingArt();
     void onAreaSelected(const worldmap::AreaMarker* area);
     void onAreaActivated(const worldmap::AreaMarker* area);
     void onHovered(int worldX, int worldY, const worldmap::AreaMarker* area);
@@ -56,8 +60,11 @@ private:
 
     resource::GameResources& _resources;
 
+    QStackedWidget* _canvasStack = nullptr; ///< the map, or the placeholder in its place
     WorldMapView* _view = nullptr;
     QLabel* _status = nullptr;      ///< live pointer readout: position, terrain, area
+    QLabel* _summary = nullptr;     ///< what was loaded; not overwritten by the readout
+    QLabel* _warning = nullptr;     ///< missing art, hidden when there is none
     QLabel* _placeholder = nullptr; ///< shown instead of the map when there is no worldmap data
     QLineEdit* _filter = nullptr;
     QListWidget* _areaList = nullptr;

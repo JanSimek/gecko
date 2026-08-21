@@ -75,7 +75,8 @@ private:
     /// VECTOR_MARKER_ZOOM in the .cpp for why and when.
     void drawVectorMarkers(QPainter& painter) const;
     /// True while the circles are being drawn as geometry, so the scene must leave them out of the
-    /// bitmap. Keeps the scene and the painter from both drawing them.
+    /// bitmap. Keeps the scene and the painter from both drawing them. Decided by syncSceneMarkers()
+    /// rather than recomputed here, because the zoom threshold has hysteresis.
     [[nodiscard]] bool usingVectorMarkers() const;
     /// Pushes usingVectorMarkers() through to the scene after anything that changes the zoom.
     void syncSceneMarkers();
@@ -105,6 +106,9 @@ private:
     /// What the user asked for. Whether the circles then come from the scene's bitmap or are
     /// painted as geometry is a matter of zoom — see usingVectorMarkers().
     bool _markersVisible = true;
+    /// Which of the two the view is currently on. Kept rather than derived so the zoom threshold
+    /// can have hysteresis; maintained by syncSceneMarkers().
+    bool _vectorMarkers = false;
 };
 
 } // namespace geck

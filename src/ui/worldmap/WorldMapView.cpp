@@ -48,6 +48,11 @@ namespace {
     // Below the threshold the exact blended bitmap is used, which is what fidelity at 1:1 needs.
     constexpr double VECTOR_MARKER_ZOOM = 1.5;
 
+    // Switching between the two costs a full recompose of the 1400x1500 index canvas, so leave the
+    // vector range a little lower than it is entered. Without the gap a wheel notch that lands on
+    // the threshold recomposes twice per notch.
+    constexpr double VECTOR_MARKER_ZOOM_EXIT = 1.35;
+
 } // namespace
 
 WorldMapView::WorldMapView(QWidget* parent)
@@ -99,13 +104,16 @@ void WorldMapView::setMarkersVisible(bool visible) {
 }
 
 bool WorldMapView::usingVectorMarkers() const {
-    return _markersVisible && _zoom >= VECTOR_MARKER_ZOOM;
+    return _vectorMarkers;
 }
 
 void WorldMapView::syncSceneMarkers() {
+    const double threshold = _vectorMarkers ? VECTOR_MARKER_ZOOM_EXIT : VECTOR_MARKER_ZOOM;
+    _vectorMarkers = _markersVisible && _zoom >= threshold;
+
     // The scene bakes the circles into its bitmap; leave them out whenever the painter is drawing
     // them as geometry, or the two would stack.
-    const bool wantBitmapMarkers = _markersVisible && !usingVectorMarkers();
+    const bool wantBitmapMarkers = _markersVisible && !_vectorMarkers;
     if (!_scene || _scene->markersVisible() == wantBitmapMarkers) {
         return;
     }
@@ -251,7 +259,9 @@ void WorldMapView::drawVectorMarkers(QPainter& painter) const {
 
     for (const worldmap::AreaMarker& area : _scene->areas()) {
         const std::vector<float>& profile = _scene->markerProfile(area.size);
-        if (profile.empty() || area.width <= 0) {
+        // Two stops are the minimum a gradient can interpolate between; a one-bucket profile would
+        // divide by zero below. Only art far smaller than the shipped 12/25/49 px gets there.
+        if (profile.size() < 2 || area.width <= 0) {
             continue;
         }
 
@@ -445,7 +455,10 @@ void WorldMapView::wheelEvent(QWheelEvent* event) {
 }
 
 void WorldMapView::leaveEvent(QEvent* event) {
-    _hovered = nullptr;
+    if (_hovered != nullptr) {
+        _hovered = nullptr;
+        update(); // the pointer kept a label alive through the overlap culling; let it be culled now
+    }
     QWidget::leaveEvent(event);
 }
 
@@ -482,6 +495,10 @@ QString WorldMapView::tooltipFor(const worldmap::AreaMarker& area) const {
     }
     text += QStringLiteral("<br>%1").arg(area.knownAtStart ? QStringLiteral("Known at start")
                                                            : QStringLiteral("Discovered through play"));
+    if (area.locked) {
+        // city.txt lock_state: the engine refuses to reveal the area through normal play.
+        text += QStringLiteral(" &middot; locked");
+    }
     if (!area.mapFiles.empty()) {
         QStringList maps;
         for (const std::string& mapFile : area.mapFiles) {

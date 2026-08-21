@@ -318,6 +318,11 @@ the running game (day/night, critter wander/AI) is **Large** and probably not wo
   machine (~130 LOC + 3 members) would trim `MainWindow`, but it stays `QDockWidget`/`QAction`-
   bound with no pure testable core. Fold it into the next change that touches dock/panel
   behavior rather than doing it as standalone churn.
+- **Central-page switching.** The central `QStackedWidget` now has three modes (welcome, editor,
+  world map) and `MainWindow` restores them by hand: `_pageBeforeWorldMap`, a silent
+  `clearWorldMapAction()` for the paths that switch pages themselves, and a checkable action whose
+  state has to be kept in step. Correct today, but a fourth mode should not add a fourth ad-hoc
+  restore path — fold it into a small page controller when one arrives.
 
 **Evaluated and intentionally NOT pursued (guard — churn > value):**
 - **PRO/MAP serialization visitor** — the type-specific tails (mixed field widths, optional-on-

@@ -74,7 +74,7 @@ BlendTables::BlendTables(const Pal& pal)
 }
 
 BlendTable::BlendTable(const BlendTables& tables, std::uint32_t tintRgb)
-    : _tables(tables) {
+    : _tables(&tables) {
     // The engine's COLOR_* macros are _colorTable lookups, so the tint is snapped to the palette
     // before _buildBlendTable reads its channels back out.
     const std::uint8_t tint = tables.fromRgb555(rgb555(tintRgb));
@@ -112,8 +112,8 @@ BlendTable::BlendTable(const BlendTables& tables, std::uint32_t tintRgb)
 }
 
 std::uint8_t BlendTable::blendPixel(std::uint8_t src, std::uint8_t dest) const {
-    const std::uint8_t blended = lookup(_tables.grayLevel(src), dest);
-    return _tables.intensity(blended, FULL_INTENSITY / 512);
+    const std::uint8_t blended = lookup(_tables->grayLevel(src), dest);
+    return _tables->intensity(blended, FULL_INTENSITY / 512);
 }
 
 } // namespace geck::palette
