@@ -156,8 +156,13 @@ TEST_CASE("Choosing an executable notifies once, not once per field it touches",
     int notifications = 0;
     QObject::connect(&widget, &GameLocationWidget::configurationChanged, [&notifications] { ++notifications; });
 
+    // cppcheck cannot follow a signal to its connected lambda, so it reads `notifications` as never
+    // incremented and calls every comparison below constant. The suppressions say that, rather than
+    // weakening the assertions - counting exactly one notification is the whole point of this case.
+
     SECTION("selecting a bundle") {
         widget.setExecutableLocation(makeBundle(root, "parent"));
+        // cppcheck-suppress knownConditionTrueFalse
         CHECK(notifications == 1);
     }
 
@@ -166,11 +171,13 @@ TEST_CASE("Choosing an executable notifies once, not once per field it touches",
         notifications = 0;
 
         widget.setExecutableLocation(root / "fallout2-ce"); // clears the derived value
+        // cppcheck-suppress knownConditionTrueFalse
         CHECK(notifications == 1);
     }
 
     SECTION("a user editing the data directory still notifies") {
         widget.setDataDirectory("/games/fallout2");
+        // cppcheck-suppress knownConditionTrueFalse
         CHECK(notifications == 1); // the field is only silenced while we drive it
     }
 }
