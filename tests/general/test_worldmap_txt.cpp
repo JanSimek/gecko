@@ -71,16 +71,35 @@ terrain_types=Desert:1, Mountain:4, Ocean:2
 [Tile Data]
 num_horizontal_tiles=2
 [Tile 0]
+art_idx=339
+encounter_difficulty=0
+walk_mask_name=wrldmp00
 0_0=Desert, No_Fill, None, None, None, Desert1
 1_0=Mountain, No_Fill, None, None, None, Mtn
 0_1=Ocean, Fill_W, None, None, None, Fish
 [Tile 1]
+art_idx=340
+encounter_difficulty=3
 0_0=Mountain, No_Fill, None, None, None, Mtn
 )";
     const WorldmapTxt world = parseWorldmapTxt(std::string{ kTiles });
 
     CHECK(world.numHorizontalTiles == 2);
     REQUIRE(world.tiles.size() == 2);
+
+    // art_idx is what the background is made of: an intrface.lst index, resolved as a FID with the
+    // OBJ_TYPE_INTERFACE type byte (the shipped tiles are art/intrface/wrldmp00.frm upwards).
+    CHECK(world.tiles[0].artIndex == 339);
+    CHECK(world.tiles[0].walkMaskName == "wrldmp00");
+    CHECK(world.tiles[0].encounterDifficulty == 0);
+    CHECK(world.tiles[1].artIndex == 340);
+    CHECK(world.tiles[1].encounterDifficulty == 3);
+    CHECK(world.tiles[1].walkMaskName.empty()); // no mask = walkable throughout
+
+    // A 2x1 grid of 350x300 tiles.
+    CHECK(world.numVerticalTiles() == 1);
+    CHECK(world.widthPixels() == 700);
+    CHECK(world.heightPixels() == 300);
     // terrainAt: row = (x%350)/50, col = (y%300)/50, tile = (y/300)*numHoriz + x/350.
     CHECK(world.terrainAt(0, 0) == "Desert");     // tile 0, row 0, col 0
     CHECK(world.terrainAt(60, 0) == "Mountain");  // row 1 (60/50)

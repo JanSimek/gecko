@@ -62,9 +62,26 @@ inline constexpr int WM_SUBTILE_SIZE = 50;
 inline constexpr int SUBTILE_GRID_WIDTH = 7;  // subtile columns per tile (the "row" key index, 0-6)
 inline constexpr int SUBTILE_GRID_HEIGHT = 6; // subtile rows per tile (the "column" key index, 0-5)
 
-/// One worldmap tile's subtile terrain grid, indexed [row][column] to match the engine's
-/// "row_column" keys (row 0-6 across, column 0-5 down).
+// Where the worldmap view sits inside the engine's 640x480 interface window (WM_VIEW_X/WM_VIEW_Y).
+// This matters outside the interface too: city.txt's world_pos is measured from the window origin,
+// not the view's, so a marker's true position on the worldmap is world_pos minus these. fallout2-ce
+// applies the same bias when drawing (wmInterfaceRefresh) and when hit-testing
+// (wmMatchWorldPosToArea), so the two agree.
+inline constexpr int WM_VIEW_X = 22;
+inline constexpr int WM_VIEW_Y = 21;
+
+/// One worldmap tile: its background art plus the subtile terrain grid, indexed [row][column] to
+/// match the engine's "row_column" keys (row 0-6 across, column 0-5 down).
 struct WorldmapTile {
+    /// `art_idx` — an intrface.lst index, i.e. FID `buildFid(OBJ_TYPE_INTERFACE, artIndex)`. The
+    /// shipped tiles resolve to `art/intrface/wrldmp00.frm` … `wrldmp19.frm`, each 350x300 with the
+    /// yellow subtile grid already drawn in. -1 when the section had no art_idx.
+    int artIndex = -1;
+    /// `walk_mask_name` — the stem of a `data/<name>.msk` travel mask (1 bit per pixel, 44-byte
+    /// rows), empty when the tile is walkable throughout.
+    std::string walkMaskName;
+    /// `encounter_difficulty` — added to the tile's encounter difficulty rolls.
+    int encounterDifficulty = 0;
     std::array<std::array<std::string, SUBTILE_GRID_HEIGHT>, SUBTILE_GRID_WIDTH> terrain;
 };
 
@@ -75,6 +92,19 @@ struct WorldmapTxt {
     std::vector<Encounter> encounters;
     std::vector<WorldmapTile> tiles; ///< the worldmap tile grid, indexed by [Tile NN]
     int numHorizontalTiles = 0;      ///< [Tile Data] num_horizontal_tiles (worldmap width, in tiles)
+
+    /// Tile rows, i.e. `tiles.size() / numHorizontalTiles` (the engine's
+    /// `wmMaxTileNum / wmNumHorizontalTiles`). 0 when the tile grid isn't loaded.
+    int numVerticalTiles() const {
+        if (numHorizontalTiles <= 0) {
+            return 0;
+        }
+        return static_cast<int>(tiles.size()) / numHorizontalTiles;
+    }
+
+    /// The whole worldmap's size in pixels — 1400x1500 for the shipped 4x5 grid of 350x300 tiles.
+    int widthPixels() const { return numHorizontalTiles * WM_TILE_WIDTH; }
+    int heightPixels() const { return numVerticalTiles() * WM_TILE_HEIGHT; }
 
     const Encounter* findEncounter(const std::string& name) const {
         for (const auto& encounter : encounters) {

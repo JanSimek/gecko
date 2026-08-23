@@ -65,6 +65,12 @@ namespace {
             area.startOn = toLower(value) == "on";
         } else if (key == "size") {
             area.size = toLower(value);
+        } else if (key == "lock_state") {
+            area.locked = toLower(value) == "on";
+        } else if (key == "townmap_art_idx") {
+            area.townMapArtIndex = intOr(value, -1);
+        } else if (key == "townmap_label_art_idx") {
+            area.townMapLabelArtIndex = intOr(value, -1);
         } else if (key.rfind("entrance_", 0) == 0) {
             area.entrances.push_back(parseEntrance(value));
         }

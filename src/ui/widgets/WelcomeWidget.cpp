@@ -62,14 +62,17 @@ void WelcomeWidget::createActionButtons() {
     // File menu's New Map / Browse Maps actions. MainWindow connects these signals to those handlers.
     _newMapButton = new QPushButton(createIcon(":/icons/actions/new.svg"), "New Map", this);
     _browseButton = new QPushButton(createIcon(":/icons/actions/open.svg"), "Browse Maps…", this);
+    // The world map needs mounted game data but no open map, so it belongs on this screen too.
+    _worldMapButton = new QPushButton(createIcon(":/icons/actions/world-map.svg"), "World Map", this);
     _preferencesButton = new QPushButton(createIcon(":/icons/actions/settings.svg"), "Preferences…", this);
-    for (QPushButton* button : { _newMapButton, _browseButton, _preferencesButton }) {
+    for (QPushButton* button : { _newMapButton, _browseButton, _worldMapButton, _preferencesButton }) {
         button->setCursor(Qt::PointingHandCursor);
         button->setMinimumWidth(150);
     }
 
     connect(_newMapButton, &QPushButton::clicked, this, &WelcomeWidget::newMapRequested);
     connect(_browseButton, &QPushButton::clicked, this, &WelcomeWidget::browseMapsRequested);
+    connect(_worldMapButton, &QPushButton::clicked, this, &WelcomeWidget::worldMapRequested);
     connect(_preferencesButton, &QPushButton::clicked, this, &WelcomeWidget::preferencesRequested);
 
     auto* buttonRow = new QHBoxLayout();
@@ -77,6 +80,8 @@ void WelcomeWidget::createActionButtons() {
     buttonRow->addWidget(_newMapButton);
     buttonRow->addSpacing(ui::theme::spacing::NORMAL);
     buttonRow->addWidget(_browseButton);
+    buttonRow->addSpacing(ui::theme::spacing::NORMAL);
+    buttonRow->addWidget(_worldMapButton);
     buttonRow->addSpacing(ui::theme::spacing::NORMAL);
     buttonRow->addWidget(_preferencesButton);
     buttonRow->addStretch();

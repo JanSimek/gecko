@@ -1,18 +1,21 @@
 #include "cli/WorldMap.h"
 
-#include "cli/ConfigLoad.h"
+#include "editor/worldmap/WorldMapScene.h"
 #include "format/city/CityTxt.h"
 #include "format/worldmap/WorldmapTxt.h"
 #include "reader/city/CityTxtReader.h"
 #include "reader/worldmap/WorldmapTxtReader.h"
+#include "resource/ConfigLoad.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
 
+#include <SFML/Graphics/Image.hpp>
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <iostream>
 #include <ostream>
 #include <string>
 
@@ -109,8 +112,32 @@ namespace {
 
 } // namespace
 
+int renderWorldMap(resource::GameResources& resources, const WorldMapOptions& options, std::ostream& out) {
+    const auto scene = worldmap::WorldMapScene::load(resources);
+    if (!scene) {
+        std::cerr << "error: no worldmap in the mounted data (needs city.txt, worldmap.txt and color.pal)\n";
+        return 1;
+    }
+    scene->setMarkersVisible(options.markers);
+
+    for (const std::string& missing : scene->missingArt()) {
+        std::cerr << "warning: worldmap tile art missing: " << missing << "\n";
+    }
+
+    sf::Image image({ static_cast<unsigned>(scene->width()), static_cast<unsigned>(scene->height()) },
+        scene->pixels().data());
+    if (!image.saveToFile(options.renderPath)) {
+        std::cerr << "error: could not write " << options.renderPath << "\n";
+        return 1;
+    }
+
+    out << "wrote " << options.renderPath << " (" << scene->width() << "x" << scene->height() << "), "
+        << scene->areas().size() << " areas\n";
+    return 0;
+}
+
 int buildWorldMap(resource::GameResources& resources, std::ostream& out) {
-    const CityTxt city = loadConfig<CityTxt>(resources, { "data/city.txt", "city.txt" },
+    const CityTxt city = resource::loadConfig<CityTxt>(resources, { "data/city.txt", "city.txt" },
         [](const std::string& text) { return parseCityTxt(text); });
     if (city.areas.empty()) {
         out << "{\"areas\":[],\"distances\":[],\"stats\":{\"areas\":0}}\n";
@@ -125,7 +152,7 @@ int buildWorldMap(resource::GameResources& resources, std::ostream& out) {
     }
 
     // worldmap.txt is optional here: it enriches areas with terrain + adds terrain-weighted travelCost.
-    const WorldmapTxt world = loadConfig<WorldmapTxt>(resources, { "data/worldmap.txt", "worldmap.txt" },
+    const WorldmapTxt world = resource::loadConfig<WorldmapTxt>(resources, { "data/worldmap.txt", "worldmap.txt" },
         [](const std::string& text) { return parseWorldmapTxt(text); });
 
     const resource::MapNameResolver names(resources); // resolves entrance lookup_names -> .map files

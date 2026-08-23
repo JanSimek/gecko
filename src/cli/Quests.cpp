@@ -1,6 +1,6 @@
 #include "cli/Quests.h"
 
-#include "cli/ConfigLoad.h"
+#include "resource/ConfigLoad.h"
 #include "cli/GlobalVars.h" // loadGameGam
 #include "format/gam/Gam.h"
 #include "format/msg/Msg.h"
@@ -44,7 +44,7 @@ namespace {
 } // namespace
 
 int buildQuests(resource::GameResources& resources, std::ostream& out) {
-    const QuestsTxt quests = loadConfig<QuestsTxt>(resources, { "data/quests.txt", "quests.txt" },
+    const QuestsTxt quests = resource::loadConfig<QuestsTxt>(resources, { "data/quests.txt", "quests.txt" },
         [](const std::string& text) { return parseQuestsTxt(text); });
     if (quests.quests.empty()) {
         out << "{\"quests\":[],\"stats\":{\"quests\":0}}\n";

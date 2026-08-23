@@ -1,6 +1,6 @@
 #include "cli/WorldEncounters.h"
 
-#include "cli/ConfigLoad.h"
+#include "resource/ConfigLoad.h"
 #include "format/worldmap/WorldmapTxt.h"
 #include "reader/worldmap/WorldmapTxtReader.h"
 #include "resource/GameResources.h"
@@ -40,7 +40,7 @@ namespace {
 } // namespace
 
 int buildWorldEncounters(resource::GameResources& resources, std::ostream& out) {
-    const WorldmapTxt world = loadConfig<WorldmapTxt>(resources, { "data/worldmap.txt", "worldmap.txt" },
+    const WorldmapTxt world = resource::loadConfig<WorldmapTxt>(resources, { "data/worldmap.txt", "worldmap.txt" },
         [](const std::string& text) { return parseWorldmapTxt(text); });
     if (world.terrains.empty() && world.encounters.empty()) {
         out << "{\"terrains\":[],\"encounters\":[],\"stats\":{\"terrains\":0,\"encounters\":0}}\n";
