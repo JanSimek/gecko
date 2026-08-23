@@ -143,3 +143,34 @@ TEST_CASE("An .app is validated as an executable, not as an installation folder"
         CHECK(lastStatus.contains("installation"));
     }
 }
+
+TEST_CASE("Choosing an executable notifies once, not once per field it touches", "[qt][settings]") {
+    // Deriving the data directory writes to that field, and its own textChanged would raise a
+    // second configurationChanged nested inside the first - the dialog then re-entered its refresh
+    // while still handling the executable change.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const std::filesystem::path root = tempDir.path().toStdString();
+
+    GameLocationWidget widget;
+    int notifications = 0;
+    QObject::connect(&widget, &GameLocationWidget::configurationChanged, [&notifications] { ++notifications; });
+
+    SECTION("selecting a bundle") {
+        widget.setExecutableLocation(makeBundle(root, "parent"));
+        CHECK(notifications == 1);
+    }
+
+    SECTION("releasing the field again") {
+        widget.setExecutableLocation(makeBundle(root, "parent"));
+        notifications = 0;
+
+        widget.setExecutableLocation(root / "fallout2-ce"); // clears the derived value
+        CHECK(notifications == 1);
+    }
+
+    SECTION("a user editing the data directory still notifies") {
+        widget.setDataDirectory("/games/fallout2");
+        CHECK(notifications == 1); // the field is only silenced while we drive it
+    }
+}

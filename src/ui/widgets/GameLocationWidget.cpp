@@ -7,6 +7,7 @@
 
 #include <QApplication>
 #include <QFormLayout>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QFileDialog>
 #include <QDir>
@@ -209,6 +210,11 @@ void GameLocationWidget::applyBundleDataDirectoryLock() {
     // will actually be used instead of a value with no effect. Only when the bundle really resolves:
     // an unreadable Info.plist gives nothing, and there the setting genuinely is used.
     const std::optional<std::filesystem::path> bundleRoot = macOsBundleDataRoot(getExecutableLocation());
+
+    // The edits below are ours, not the user's: onExecutableLocationChanged emits one
+    // configurationChanged for the whole update, and letting the field raise its own would nest a
+    // second dialog refresh inside the first.
+    const QSignalBlocker dataDirectoryBlocker(_dataDirectoryEdit);
 
     if (bundleRoot.has_value()) {
         _dataDirectoryEdit->setReadOnly(true);
