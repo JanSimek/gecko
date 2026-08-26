@@ -87,7 +87,12 @@ TEST_CASE("Choosing an .app fills the data directory from it and locks the field
         // empty field would stop the user pointing Play anywhere at all.
         const std::filesystem::path bundle = root / "Broken.app";
         std::filesystem::create_directories(bundle / "Contents");
-        std::ofstream(bundle / "Contents" / "Info.plist") << "bplist00" << '\x01' << '\x02';
+        // A real binary plist: the XML reader chokes on it, which is the point. Byte values, not
+        // escapes - the bounded \x{..} form the analyser asks for is C++23.
+        constexpr char kBinaryPlist[] = { 'b', 'p', 'l', 'i', 's', 't', '0', '0', 0x01, 0x02 };
+        std::ofstream plist(bundle / "Contents" / "Info.plist", std::ios::binary);
+        plist.write(kBinaryPlist, sizeof(kBinaryPlist));
+        plist.close();
 
         widget.setExecutableLocation(bundle);
 
