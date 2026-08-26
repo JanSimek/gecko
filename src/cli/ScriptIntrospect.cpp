@@ -529,7 +529,9 @@ int findText(resource::GameResources& resources, const FindTextOptions& options,
             } else if (scope.game && hasPrefix(generic, gamePrefix)) {
                 msgGame.push_back(generic);
             }
-        } else if (ext == ".ssl" && scope.source) {
+        } else if ((ext == ".ssl" || ext == ".h") && scope.source) {
+            // Headers carry the GVAR_*/EXP_* defines and most of the macro layer, so a source search
+            // that skipped them would miss the definition of the very constant being looked up.
             sslPaths.push_back(generic);
         }
     }
