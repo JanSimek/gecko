@@ -136,9 +136,15 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
             }
             break;
         default:
-            throw ParseException("Unknown object type " + std::to_string(objectTypeId) + " for proto "
-                    + std::to_string(object->pro_pid),
-                _path, _stream.position());
+            // The engine tolerates an object whose PID names no known type: objectDataRead
+            // (fallout2-ce proto.cc) falls out of its type switch through `default: break`, so such a
+            // record is the common block alone, with no type-specific tail — and objectDataWrite does
+            // the same on the way out. RPU's epamain1/epamain2 each carry 17 records with pid -1, and
+            // rejecting them made both maps unreadable. Keep the object, so a load/save round-trip
+            // reproduces it byte for byte.
+            spdlog::debug("Object with unrecognised type {} (pid {}) carries no type-specific data, as in the engine",
+                objectTypeId, static_cast<int32_t>(object->pro_pid));
+            break;
     }
 
     return object;

@@ -327,3 +327,47 @@ TEST_CASE("MAP non-exit MISC object writes no trailing exit data", "[map][roundt
     CHECK(exitObj.exit_elevation == 903);
     CHECK(exitObj.exit_orientation == 904);
 }
+
+// An object whose PID names no known type is legal, not corruption: the engine's objectDataRead and
+// objectDataWrite (fallout2-ce proto.cc) both fall out of their type switch through `default:`, so
+// such a record is the 22-field common block alone, with no type-specific tail. RPU's epamain1.map
+// and epamain2.map each carry 17 of them with pid -1, and rejecting them made both maps unreadable.
+// Reader and writer have to agree here, or every object after one shifts by the width of a tail that
+// was never on disk.
+TEST_CASE("MAP round-trip keeps an object whose PID has no known type", "[map][roundtrip]") {
+    StubProvider provider; // deliberately empty: pid -1 resolves to no proto, as in the shipped maps
+
+    auto original = Map::createEmptyMapFile();
+    auto& objects = original.map_objects[0];
+
+    auto untyped = std::make_shared<MapObject>();
+    fillBase(*untyped, 42);
+    untyped->pro_pid = 0xFFFFFFFFu; // the engine's "no proto" sentinel
+    untyped->elevation = 0;
+    objects.push_back(untyped);
+
+    // A wall behind it: if the untyped record consumed the wrong number of bytes, this one is read
+    // from the wrong offset and its base fields come back as garbage.
+    auto wall = std::make_shared<MapObject>();
+    fillBase(*wall, 43);
+    wall->pro_pid = pidOf(Pro::OBJECT_TYPE::WALL, 100);
+    wall->elevation = 0;
+    objects.push_back(wall);
+
+    TempFile mapFile{ "geck_map_roundtrip_untyped", ".map" };
+    const auto& path = mapFile.path();
+    {
+        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
+        writer.openFile(path);
+        REQUIRE(writer.write(original));
+    } // destructor flushes and closes before we read it back
+
+    MapReader reader{ [&](uint32_t pid) { return provider.load(pid); } };
+    auto reloaded = reader.openFile(path);
+    REQUIRE(reloaded != nullptr);
+
+    const auto& got = reloaded->getMapFile().map_objects.at(0);
+    REQUIRE(got.size() == 2);
+    checkBase(*got[0], *untyped);
+    checkBase(*got[1], *wall);
+}

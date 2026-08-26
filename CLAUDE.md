@@ -90,6 +90,16 @@ regressions). There is no ctest label registration for filtering by category.
 - Hex positions can be 0-39,999 (valid range)
 - Tile positions can be 0-9,999 (valid range)
 
+#### Objects With No Known Type
+An object record whose PID names no known type is **legal, not corruption**. The engine's
+`objectDataRead` / `objectDataWrite` (fallout2-ce `proto.cc`) both fall out of their type switch
+through `default:`, so the record is the 22-field common block alone, with no type-specific tail.
+RPU's `epamain1.map` and `epamain2.map` each carry 17 such records with `pid == -1`.
+
+Reader and writer must agree here: rejecting them made both maps unreadable, and consuming the
+wrong number of bytes shifts every object after one by the width of a tail that was never on disk.
+Guarded by "MAP round-trip keeps an object whose PID has no known type".
+
 #### Script Index Bases
 **IMPORTANT**: Three different numbers name the same script, and mixing them up returns the
 *neighbouring* script rather than an error:
