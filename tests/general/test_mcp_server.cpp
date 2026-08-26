@@ -36,7 +36,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             names.push_back(tool["name"].get<std::string>());
             CHECK(tool.contains("inputSchema"));
         }
-        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "reachability", "describe_map", "map_graph", "world_map", "world_encounters", "quests", "gvars", "endings", "find_gvar", "generate", "render_map", "extract_pattern", "script_api", "frm_info", "resolve_fid", "list_frms", "render_frm", "resource_find", "resource_list", "resource_missing" }) {
+        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "find_script", "find_text", "reachability", "describe_map", "map_graph", "world_map", "world_encounters", "quests", "gvars", "endings", "find_gvar", "generate", "render_map", "extract_pattern", "script_api", "frm_info", "resolve_fid", "list_frms", "render_frm", "resource_find", "resource_list", "resource_missing" }) {
             CHECK(std::find(names.begin(), names.end(), expected) != names.end());
         }
     }
@@ -66,6 +66,26 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             }
         }
         CHECK(seen == 2);
+    }
+
+    // The 0-based programIndex is the engine's own index base (see cli/ScriptIntrospect.h), so the
+    // 1-based SCRIPT_* constants from headers/scripts.h name the NEXT script if passed unadjusted.
+    // Defaulting a missing selector to 0 would describe obj_dude just as silently, so both
+    // script-selecting tools insist on one and say which base they mean.
+    SECTION("the script tools demand a selector and name the index base") {
+        for (const char* tool : { "describe_script", "find_script" }) {
+            const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 6 }, { "method", "tools/call" },
+                { "params", { { "name", tool }, { "arguments", json::object() } } } });
+            CHECK(resp["result"]["isError"] == true);
+            const auto text = resp["result"]["content"][0]["text"].get<std::string>();
+            CHECK(text.find("1-based") != std::string::npos);
+        }
+    }
+
+    SECTION("find_text requires a pattern") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 7 }, { "method", "tools/call" },
+            { "params", { { "name", "find_text" }, { "arguments", json::object() } } } });
+        CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("a notification (no id) gets no response") {

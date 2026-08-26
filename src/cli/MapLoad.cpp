@@ -43,7 +43,8 @@ namespace {
     }
 } // namespace
 
-std::unique_ptr<Map> loadMap(resource::GameResources& resources, const std::string& mapPath) {
+std::unique_ptr<Map> loadMap(resource::GameResources& resources, const std::string& mapPath,
+    std::string* error) {
     // Prefer the VFS so a map inside a DAT ("/maps/desert1.map") or a mounted data directory
     // resolves the same way the editor sees it.
     auto bytes = resources.files().readRawBytes(mapPath);
@@ -57,6 +58,9 @@ std::unique_ptr<Map> loadMap(resource::GameResources& resources, const std::stri
         bytes = readDiskBytes(mapPath);
     }
     if (!bytes) {
+        if (error != nullptr) {
+            *error = "not found in the mounted data or on disk";
+        }
         return nullptr;
     }
     try {
@@ -64,6 +68,9 @@ std::unique_ptr<Map> loadMap(resource::GameResources& resources, const std::stri
         return reader.openFile(mapPath, *bytes);
     } catch (const std::exception& e) {
         spdlog::debug("loadMap: parse failed for {}: {}", mapPath, e.what());
+        if (error != nullptr) {
+            *error = e.what();
+        }
         return nullptr;
     }
 }

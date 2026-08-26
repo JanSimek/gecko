@@ -252,14 +252,52 @@ namespace {
         return runAnalyze(resources, args, /*paletteOnly*/ true);
     }
 
+    // A script selector: 'name' (unambiguous) or the 0-based 'programIndex'. One of the two is
+    // required — defaulting to index 0 would silently describe obj_dude instead of erroring.
+    void readScriptSelector(const json& args, std::string& name, int& programIndex) {
+        name = optString(args, "name");
+        programIndex = static_cast<int>(optInt(args, "programIndex", -1, -1, INT32_MAX));
+        if (name.empty() && programIndex < 0) {
+            throw ToolError{ "pass 'name' (e.g. \"epac17\") or a 0-based 'programIndex'. Note the "
+                             "SCRIPT_* constants in headers/scripts.h are 1-based: subtract 1" };
+        }
+    }
+
     json toolDescribeScript(resource::GameResources& resources, const json& args) {
         cli::DescribeScriptOptions opts;
-        opts.programIndex = static_cast<int>(requireInt(args, "programIndex", 0, INT32_MAX));
+        readScriptSelector(args, opts.name, opts.programIndex);
         if (const std::string locale = optString(args, "locale"); !locale.empty()) {
             opts.locale = locale;
         }
         std::ostringstream oss;
         const int rc = cli::describeScript(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolFindScript(resource::GameResources& resources, const json& args) {
+        cli::FindScriptOptions opts;
+        readScriptSelector(args, opts.name, opts.programIndex);
+        opts.maps = optMaps(args);
+        opts.resolveOnly = optBool(args, "resolveOnly", false);
+        std::ostringstream oss;
+        const int rc = cli::findScript(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolFindText(resource::GameResources& resources, const json& args) {
+        cli::FindTextOptions opts;
+        opts.pattern = requireString(args, "pattern");
+        opts.regex = optBool(args, "regex", false);
+        opts.caseSensitive = optBool(args, "caseSensitive", false);
+        opts.limit = static_cast<int>(optInt(args, "limit", 200, 1, 5000));
+        if (const std::string scope = optString(args, "scope"); !scope.empty()) {
+            opts.scope = scope;
+        }
+        if (const std::string locale = optString(args, "locale"); !locale.empty()) {
+            opts.locale = locale;
+        }
+        std::ostringstream oss;
+        const int rc = cli::findText(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -640,14 +678,47 @@ namespace {
             json({ { "type", "object" }, { "properties", { { "pid", { { "type", "integer" } } } } }, { "required", json::array({ "pid" }) } }),
             [](resource::GameResources& r, const json& a) { return toolProtoInfo(r, a); }, "" });
         t.push_back({ "describe_script",
-            "Describe a Fallout 2 script by its scripts.lst program index (the 0-based script_id "
-            "analyze reports for a critter/object). Returns the filename, the .ssl source if a "
-            "script-source tree is mounted (e.g. the FRP scripts_src — hasSource flags whether it was "
-            "found), and the dialog .msg lines ([{id,text}]). Lets you read what an NPC does and says. "
-            "Optional 'locale' picks the dialog language subdir (default english). Args: programIndex, "
-            "optional locale.",
-            json({ { "type", "object" }, { "properties", { { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "required", json::array({ "programIndex" }) } }),
+            "Read one script: its .ssl source (when a source tree such as the FRP scripts_src is "
+            "mounted — hasSource flags whether it was found) and its dialog .msg lines ([{id,text}]), "
+            "so you can see what an NPC does and says. Select it by 'name' — the scripts.lst basename, "
+            "e.g. epac17, which is unambiguous, and a fragment comes back as a successful "
+            "{ambiguous:true, matches:[...]} result rather than a guess — or by "
+            "the 0-based 'programIndex' that analyze/describe_map report as a critter's script_id. "
+            "INDEX BASE, worth getting right: programIndex is the engine's own 0-based scripts.lst "
+            "index, while the SCRIPT_* constants in the FRP headers/scripts.h are 1-based line numbers, "
+            "so SCRIPT_EPAC17 (1413) is programIndex 1412 — passing such a constant unadjusted names "
+            "the NEXT script rather than failing. Every result echoes 'sslConstant' (= programIndex + "
+            "1) so the two can be cross-checked. Optional 'locale' picks the dialog language subdir "
+            "(default english). Args: name or programIndex, optional locale.",
+            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "anyOf", json::array({ json{ { "required", json::array({ "name" }) } }, json{ { "required", json::array({ "programIndex" }) } } }) } }),
             [](resource::GameResources& r, const json& a) { return toolDescribeScript(r, a); }, "" });
+        t.push_back({ "find_script",
+            "Find WHERE a script lives: resolve it by 'name' (or 0-based 'programIndex', same index "
+            "base as describe_script) and report every shipped map that places it — the map's own "
+            "header script ('asMapScript') plus per-section map_scripts counts ([{section,count}]) and "
+            "an 'instances' total. The inverse of describe_script: which map is this NPC on, rather "
+            "than what does this script say. A 'name' fragment matching several scripts.lst entries "
+            "returns {ambiguous:true, matches:[...]} instead of guessing — which is also how you get "
+            "from a half-remembered name to an exact one. Scans every mounted map by default (a few "
+            "seconds); pass 'maps' to scope it, or resolveOnly=true to skip the scan and just get the "
+            "programIndex<->name mapping. Args: name or programIndex, optional maps (array), "
+            "resolveOnly.",
+            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } }, { "resolveOnly", { { "type", "boolean" } } } } }, { "anyOf", json::array({ json{ { "required", json::array({ "name" }) } }, json{ { "required", json::array({ "programIndex" }) } } }) } }),
+            [](resource::GameResources& r, const json& a) { return toolFindScript(r, a); }, "" });
+        t.push_back({ "find_text",
+            "Search the mounted game text for a pattern and get every hit back with the script it "
+            "belongs to — answers which script mentions X in one call, instead of grepping a checkout. "
+            "'scope' picks the corpus: dialog (the per-script dialog .msg), game (game/*.msg — item, "
+            "perk and quest text), source (.ssl, needs a script-source tree mounted) or all (default). "
+            "Matches are [{kind,script,file,path,id|line,text}]: dialog/game hits carry the message "
+            "'id', source hits the 'line' number. 'script' is the basename to hand straight to "
+            "describe_script or find_script, and is NULL for game/*.msg hits, which are item/perk/quest "
+            "text owned by no script — use 'file' there. Substring and case-insensitive by default; set regex=true "
+            "for ECMAScript syntax, caseSensitive=true to respect case. 'limit' caps the matches "
+            "(default 200) and 'truncated' says whether it bit. Args: pattern (required), optional "
+            "scope, regex, caseSensitive, limit, locale.",
+            json({ { "type", "object" }, { "properties", { { "pattern", { { "type", "string" } } }, { "scope", { { "type", "string" } } }, { "regex", { { "type", "boolean" } } }, { "caseSensitive", { { "type", "boolean" } } }, { "limit", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "required", json::array({ "pattern" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolFindText(r, a); }, "" });
         t.push_back({ "reachability",
             "Per-elevation reachability for one map. Floods walkable hexes from the entry points "
             "(player start + exit grids — you can arrive at an exit coming from the adjacent map): "

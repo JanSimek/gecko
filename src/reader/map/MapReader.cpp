@@ -41,6 +41,18 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
 
     auto pro = _proLoadCallback(object->pro_pid);
 
+    // ITEM and SCENERY read a type-specific tail whose LENGTH depends on the proto's subtype, so a
+    // missing proto is not a cosmetic gap: guessing the tail would desynchronise the stream and
+    // corrupt every object after it. Fail explicitly and name the PID (per the engine-data rule —
+    // no substitute values), so the answer is "this proto is not mounted", not a silent bad parse.
+    if (pro == nullptr
+        && (static_cast<Pro::OBJECT_TYPE>(objectTypeId) == Pro::OBJECT_TYPE::ITEM
+            || static_cast<Pro::OBJECT_TYPE>(objectTypeId) == Pro::OBJECT_TYPE::SCENERY)) {
+        throw ParseException("proto " + std::to_string(object->pro_pid) + " (type " + std::to_string(objectTypeId)
+                + ", index " + std::to_string(object->protoId()) + ") could not be loaded, so its object tail length is unknown",
+            _path, _stream.position());
+    }
+
     switch (static_cast<Pro::OBJECT_TYPE>(objectTypeId)) {
         case Pro::OBJECT_TYPE::ITEM: {
             uint32_t subtype_id = pro->objectSubtypeId();
@@ -61,7 +73,9 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
                 case Pro::ITEM_TYPE::DRUG:
                     break;
                 default:
-                    throw std::runtime_error{ "Unknown item type " + std::to_string(objectTypeId) };
+                    throw ParseException("Unknown item type " + std::to_string(subtype_id) + " for proto "
+                            + std::to_string(object->pro_pid),
+                        _path, _stream.position());
             }
         } break;
         case Pro::OBJECT_TYPE::CRITTER: {
@@ -105,7 +119,9 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
                 case Pro::SCENERY_TYPE::GENERIC:
                     break;
                 default:
-                    throw std::runtime_error{ "Unknown scenery type: " + std::to_string(subtype_id) };
+                    throw ParseException("Unknown scenery type " + std::to_string(subtype_id) + " for proto "
+                            + std::to_string(object->pro_pid),
+                        _path, _stream.position());
             }
         } break;
         case Pro::OBJECT_TYPE::WALL:
@@ -120,7 +136,15 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
             }
             break;
         default:
-            throw ParseException("Unknown object type: " + std::to_string(objectTypeId), _path, _stream.position());
+            // The engine tolerates an object whose PID names no known type: objectDataRead
+            // (fallout2-ce proto.cc) falls out of its type switch through `default: break`, so such a
+            // record is the common block alone, with no type-specific tail — and objectDataWrite does
+            // the same on the way out. RPU's epamain1/epamain2 each carry 17 records with pid -1, and
+            // rejecting them made both maps unreadable. Keep the object, so a load/save round-trip
+            // reproduces it byte for byte.
+            spdlog::debug("Object with unrecognised type {} (pid {}) carries no type-specific data, as in the engine",
+                objectTypeId, static_cast<int32_t>(object->pro_pid));
+            break;
     }
 
     return object;

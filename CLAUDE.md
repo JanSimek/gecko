@@ -90,6 +90,41 @@ regressions). There is no ctest label registration for filtering by category.
 - Hex positions can be 0-39,999 (valid range)
 - Tile positions can be 0-9,999 (valid range)
 
+#### Objects With No Known Type
+An object record whose PID names no known type is **legal, not corruption**. The engine's
+`objectDataRead` / `objectDataWrite` (fallout2-ce `proto.cc`) both fall out of their type switch
+through `default:`, so the record is the 22-field common block alone, with no type-specific tail.
+RPU's `epamain1.map` and `epamain2.map` each carry 17 such records with `pid == -1`.
+
+Reader and writer must agree here: rejecting them made both maps unreadable, and consuming the
+wrong number of bytes shifts every object after one by the width of a tail that was never on disk.
+Guarded by "MAP round-trip keeps an object whose PID has no known type".
+
+#### Script Index Bases
+**IMPORTANT**: Three different numbers name the same script, and mixing them up returns the
+*neighbouring* script rather than an error:
+
+| Number | Base | Where it lives |
+| --- | --- | --- |
+| `programIndex` — what gecko speaks | **0-based** | the `scripts.lst` array index, and an object's `MapScript::script_id` |
+| map header `script_id` | 1-based | `Map::MapHeader::script_id` |
+| SSL `SCRIPT_*` (FRP `headers/scripts.h`) | 1-based | the `scripts.lst` *line* number; also sfall `set_script()` ids |
+
+gecko speaks the engine's internal 0-based index everywhere, because that is what map files actually
+store and what the engine indexes `scripts.lst` with (fallout2-ce `scripts.cc`,
+`scriptsGetFileName`). This is deliberate, and follows the engine-fidelity rule below. The 1-based
+forms are the engine's own *inputs*, and the engine itself decrements them, so gecko normalises on
+the way in at the same two places: `MapAnalyzer` resolves the header's `script_id - 1` (fallout2-ce
+`map.cc`, `script->index = gMapHeader.scriptIndex - 1`), and sfall's `set_script()` opcode
+decrements before validating (fallout2-ce `sfall_opcodes.cc`).
+
+##### Common Mistake
+- `SCRIPT_EPAC17 (1413)` from `headers/scripts.h` is `programIndex` **1412**. Passing the constant
+  straight through names `epac18` — a plausible wrong answer, never an error.
+- Prefer the `name` argument on `describe_script` / `find_script`; it has no index base to get wrong.
+- Every script-shaped result echoes `sslConstant` (== `programIndex + 1`) so the two can be
+  cross-checked at a glance. See `src/cli/ScriptIntrospect.h` for the full note.
+
 ## Drag and Drop Implementation
 
 ### Object Positioning

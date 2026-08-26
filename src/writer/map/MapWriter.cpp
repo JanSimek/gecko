@@ -315,8 +315,10 @@ void MapWriter::writeObject(const MapObject& object) {
             }
             break;
         default:
-            throw ValidationException("Unknown object type", getPath(),
-                "object type " + std::to_string(objectTypeId));
+            // Mirrors MapReader, and the engine's own objectDataWrite (fallout2-ce proto.cc): an
+            // unrecognised object type writes no type-specific tail. Emitting nothing here is what
+            // lets a map holding such records (RPU's EPA mains) round-trip unchanged.
+            break;
     }
 
     // Write inventory objects if any

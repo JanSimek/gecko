@@ -23,7 +23,10 @@ namespace cli {
 
     /// Read and parse a map from the mounted data. Returns nullptr (logging at debug) if the map can't
     /// be read or parsed, so callers can skip or report as they prefer. Shared by analyze and render.
-    std::unique_ptr<Map> loadMap(resource::GameResources& resources, const std::string& mapPath);
+    /// Pass `error` to recover the reason — the parse exception's message, or a note that the file was
+    /// not found — so a skipped map can be reported rather than silently dropped.
+    std::unique_ptr<Map> loadMap(resource::GameResources& resources, const std::string& mapPath,
+        std::string* error = nullptr);
 
 } // namespace cli
 } // namespace geck
