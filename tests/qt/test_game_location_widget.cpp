@@ -15,8 +15,8 @@ namespace {
 
 // Read-only state is not exposed on the widget's API, so reach the field by objectName - by
 // position would silently follow a reordered layout onto the wrong edit.
-QLineEdit* dataDirectoryEdit(GameLocationWidget& widget) {
-    auto* edit = widget.findChild<QLineEdit*>("dataDirectoryEdit");
+const QLineEdit* dataDirectoryEdit(const GameLocationWidget& widget) {
+    const QLineEdit* edit = widget.findChild<QLineEdit*>("dataDirectoryEdit");
     REQUIRE(edit != nullptr);
     return edit;
 }
@@ -48,7 +48,7 @@ TEST_CASE("Choosing an .app fills the data directory from it and locks the field
     const std::filesystem::path root = tempDir.path().toStdString();
 
     GameLocationWidget widget;
-    QLineEdit* dataDir = dataDirectoryEdit(widget);
+    const QLineEdit* dataDir = dataDirectoryEdit(widget);
 
     SECTION("A bundle drives the field and takes it out of the user's hands") {
         widget.setExecutableLocation(makeBundle(root, "parent"));
@@ -75,7 +75,8 @@ TEST_CASE("Choosing an .app fills the data directory from it and locks the field
 
         CHECK_FALSE(dataDir->isReadOnly());
         CHECK(widget.getDataDirectory().empty()); // the bundle's value is not left behind
-        CHECK(dataDir->toolTip().isEmpty());
+        // The row explains itself again; releasing it must not leave it with no tooltip at all.
+        CHECK(dataDir->toolTip().contains("contains data/"));
 
         widget.setDataDirectory("/games/fallout2");
         CHECK(widget.getDataDirectory() == std::filesystem::path("/games/fallout2"));
@@ -86,7 +87,7 @@ TEST_CASE("Choosing an .app fills the data directory from it and locks the field
         // empty field would stop the user pointing Play anywhere at all.
         const std::filesystem::path bundle = root / "Broken.app";
         std::filesystem::create_directories(bundle / "Contents");
-        std::ofstream(bundle / "Contents" / "Info.plist") << "bplist00\x01\x02";
+        std::ofstream(bundle / "Contents" / "Info.plist") << "bplist00" << '\x01' << '\x02';
 
         widget.setExecutableLocation(bundle);
 

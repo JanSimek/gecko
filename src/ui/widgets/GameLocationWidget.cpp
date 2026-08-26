@@ -38,6 +38,12 @@ namespace {
         return false;
     }
 
+    /// The data-directory field's own explanation, restored whenever a bundle stops driving it.
+    const char* dataDirectoryHelp() {
+        return "The game folder itself - the one that contains data/, master.dat and the executable.\n"
+               "Not the data folder inside it.";
+    }
+
     bool directoryHasFalloutExecutable(const std::filesystem::path& dir) {
         static constexpr std::array<const char*, 8> kExecutableNames = {
             "fallout2.exe", "Fallout2.exe", "fallout2", "Fallout2",
@@ -113,11 +119,8 @@ void GameLocationWidget::setupUI() {
     _dataDirectoryLayout->setSpacing(ui::theme::spacing::NORMAL);
     _dataDirectoryEdit = new QLineEdit();
     _dataDirectoryEdit->setObjectName("dataDirectoryEdit"); // found by name in tests
-
     _dataDirectoryEdit->setPlaceholderText("Folder containing data/ (e.g. .../GOG.com/Fallout 2)...");
-    _dataDirectoryEdit->setToolTip(
-        "The game folder itself - the one that contains data/, master.dat and the executable.\n"
-        "Not the data folder inside it.");
+    _dataDirectoryEdit->setToolTip(dataDirectoryHelp());
     _dataDirectoryLayout->addWidget(_dataDirectoryEdit);
 
     _browseDataDirectoryButton = new QPushButton("Browse...");
@@ -227,7 +230,7 @@ void GameLocationWidget::applyBundleDataDirectoryLock() {
         // Moved off a bundle: hand the field back, and drop the value that came from the old one.
         _dataDirectoryEdit->setReadOnly(false);
         _dataDirectoryEdit->clear();
-        _dataDirectoryEdit->setToolTip({});
+        _dataDirectoryEdit->setToolTip(dataDirectoryHelp());
         _browseDataDirectoryButton->setEnabled(true);
     }
 }
