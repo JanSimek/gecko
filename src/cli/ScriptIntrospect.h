@@ -86,7 +86,7 @@ namespace cli {
         bool regex = false;
         bool caseSensitive = false;
         /// "dialog" (per-script dialog .msg), "game" (game/*.msg — item, perk, quest text), "source"
-        /// (.ssl, needs a source tree mounted), or "all".
+        /// (.ssl *and* .h, needs a source tree mounted), or "all".
         std::string scope = "all";
         std::string locale = "english";
         int limit = 200; ///< max matches emitted; the result flags `truncated` when it bites
