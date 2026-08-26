@@ -338,6 +338,9 @@ namespace {
         }
     };
 
+    // `kind` is "dialog" (a per-script .msg, so the basename IS the script) or "game" (item/perk/quest
+    // text owned by no script). Only the former gets a `script`, so a caller cannot feed "perk" into
+    // describe_script and get an unrelated hit; `file` is always the basename.
     void searchMsg(resource::GameResources& resources, const std::string& path, const char* kind,
         const TextMatcher& matcher, MatchSink& sink) {
         const Msg* msg = nullptr;
@@ -356,8 +359,10 @@ namespace {
                 return;
             }
             if (matcher.matches(message.text)) {
-                sink.add({ { "kind", kind }, { "script", stem(path) }, { "path", path },
-                    { "id", id }, { "text", message.text } });
+                const bool scriptOwned = std::string_view(kind) == "dialog";
+                sink.add({ { "kind", kind },
+                    { "script", scriptOwned ? ordered_json(stem(path)) : ordered_json(nullptr) },
+                    { "file", stem(path) }, { "path", path }, { "id", id }, { "text", message.text } });
             }
         }
     }
@@ -377,8 +382,8 @@ namespace {
             const std::string line = text.substr(lineStart,
                 (lineEnd == std::string::npos ? text.size() : lineEnd) - lineStart);
             if (matcher.matches(line)) {
-                sink.add({ { "kind", "source" }, { "script", stem(path) }, { "path", path },
-                    { "line", lineNumber }, { "text", trimmed(line) } });
+                sink.add({ { "kind", "source" }, { "script", stem(path) }, { "file", stem(path) },
+                    { "path", path }, { "line", lineNumber }, { "text", trimmed(line) } });
             }
             if (lineEnd == std::string::npos) {
                 break;
@@ -401,8 +406,10 @@ int describeScript(resource::GameResources& resources, const DescribeScriptOptio
         return 1;
     }
     if (resolved.programIndex < 0) {
+        // The candidate list is a usable answer, not a failure: returning nonzero would make the MCP
+        // wrapper flag isError and contradict the tool's own contract. findScript agrees.
         emit(out, ambiguousResult(resources, *scripts, options.name, resolved.candidates));
-        return 1;
+        return 0;
     }
 
     // programIndex is the 0-based scripts.lst index (== a critter/object's MapScript.script_id), which

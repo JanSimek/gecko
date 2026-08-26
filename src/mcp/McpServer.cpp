@@ -681,7 +681,8 @@ namespace {
             "Read one script: its .ssl source (when a source tree such as the FRP scripts_src is "
             "mounted — hasSource flags whether it was found) and its dialog .msg lines ([{id,text}]), "
             "so you can see what an NPC does and says. Select it by 'name' — the scripts.lst basename, "
-            "e.g. epac17, which is unambiguous, and a fragment comes back as a candidate list — or by "
+            "e.g. epac17, which is unambiguous, and a fragment comes back as a successful "
+            "{ambiguous:true, matches:[...]} result rather than a guess — or by "
             "the 0-based 'programIndex' that analyze/describe_map report as a critter's script_id. "
             "INDEX BASE, worth getting right: programIndex is the engine's own 0-based scripts.lst "
             "index, while the SCRIPT_* constants in the FRP headers/scripts.h are 1-based line numbers, "
@@ -689,7 +690,7 @@ namespace {
             "the NEXT script rather than failing. Every result echoes 'sslConstant' (= programIndex + "
             "1) so the two can be cross-checked. Optional 'locale' picks the dialog language subdir "
             "(default english). Args: name or programIndex, optional locale.",
-            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } } }),
+            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "anyOf", json::array({ json{ { "required", json::array({ "name" }) } }, json{ { "required", json::array({ "programIndex" }) } } }) } }),
             [](resource::GameResources& r, const json& a) { return toolDescribeScript(r, a); }, "" });
         t.push_back({ "find_script",
             "Find WHERE a script lives: resolve it by 'name' (or 0-based 'programIndex', same index "
@@ -702,16 +703,17 @@ namespace {
             "seconds); pass 'maps' to scope it, or resolveOnly=true to skip the scan and just get the "
             "programIndex<->name mapping. Args: name or programIndex, optional maps (array), "
             "resolveOnly.",
-            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } }, { "resolveOnly", { { "type", "boolean" } } } } } }),
+            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } }, { "resolveOnly", { { "type", "boolean" } } } } }, { "anyOf", json::array({ json{ { "required", json::array({ "name" }) } }, json{ { "required", json::array({ "programIndex" }) } } }) } }),
             [](resource::GameResources& r, const json& a) { return toolFindScript(r, a); }, "" });
         t.push_back({ "find_text",
             "Search the mounted game text for a pattern and get every hit back with the script it "
             "belongs to — answers which script mentions X in one call, instead of grepping a checkout. "
             "'scope' picks the corpus: dialog (the per-script dialog .msg), game (game/*.msg — item, "
             "perk and quest text), source (.ssl, needs a script-source tree mounted) or all (default). "
-            "Matches are [{kind,script,path,id|line,text}]: dialog/game hits carry the message 'id', "
-            "source hits the 'line' number, and 'script' is the basename to hand straight to "
-            "describe_script or find_script. Substring and case-insensitive by default; set regex=true "
+            "Matches are [{kind,script,file,path,id|line,text}]: dialog/game hits carry the message "
+            "'id', source hits the 'line' number. 'script' is the basename to hand straight to "
+            "describe_script or find_script, and is NULL for game/*.msg hits, which are item/perk/quest "
+            "text owned by no script — use 'file' there. Substring and case-insensitive by default; set regex=true "
             "for ECMAScript syntax, caseSensitive=true to respect case. 'limit' caps the matches "
             "(default 200) and 'truncated' says whether it bit. Args: pattern (required), optional "
             "scope, regex, caseSensitive, limit, locale.",
