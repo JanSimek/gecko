@@ -83,6 +83,11 @@ private:
     // A row can be marked (as the save location or a script source) only if it's a real folder
     // (not a .dat, not missing, not the protected built-in resources path).
     bool isMarkableRow(int row) const;
+    // Whether `path` is the folder currently marked as the save location. Equivalence, not string
+    // equality: the marker is stored as the user picked it, so a symlink or a redundant "/." would
+    // otherwise read as a different folder here than it does in Settings and WritableDataRoot, and
+    // the badge would call a marker unusable that those two still honour.
+    bool isMarkedSaveLocation(const std::filesystem::path& path) const;
     // Re-derive each row's save-location badge (bold + save icon for the explicit marker, italic for
     // the positional default) from the current rows + marker. Called whenever either changes.
     void refreshSaveLocationMarkers();

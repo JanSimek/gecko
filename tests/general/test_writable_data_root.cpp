@@ -73,6 +73,22 @@ TEST_CASE("findWritableDataPath returns the last directory, skipping archives", 
     fs::remove_all(base);
 }
 
+TEST_CASE("findWritableDataPath writes into an install folder's data tree", "[writableroot]") {
+    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "fwdp_install";
+    fs::remove_all(base);
+    writeFile(base / "master.dat", "x"); // an archive next to data/ is what makes it an install
+    fs::create_directories(base / "data" / "proto");
+
+    // The listed entry is what the save-location badge marks ...
+    CHECK(resource::findWritableDataPathEntry({ base }) == base);
+    // ... while the bytes land in the tree actually mounted for it, which is also where the engine
+    // (master_patches) reads them back from.
+    CHECK(resource::findWritableDataPath({ base }) == base / "data");
+    CHECK(resource::findWritableDataPath({ base }, base) == base / "data");
+
+    fs::remove_all(base);
+}
+
 TEST_CASE("findWritableDataPath honours an explicit save-location marker", "[writableroot]") {
     const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "fwdp_marker";
     fs::remove_all(base);

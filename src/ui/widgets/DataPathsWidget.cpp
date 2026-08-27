@@ -205,7 +205,8 @@ void DataPathsWidget::setDataPaths(const std::vector<std::filesystem::path>& pat
     // A save-location marker whose folder is no longer among the rows can't stay marked.
     if (!_writableDataPath.empty()) {
         const auto current = getDataPaths();
-        if (std::find(current.begin(), current.end(), _writableDataPath) == current.end()) {
+        if (std::none_of(current.begin(), current.end(),
+                [this](const std::filesystem::path& entry) { return isMarkedSaveLocation(entry); })) {
             _writableDataPath.clear();
         }
     }
@@ -376,7 +377,7 @@ void DataPathsWidget::updateButtonStates() {
     // already carries the marker, so clicking clears it.
     const bool markable = isMarkableRow(row);
     _saveLocationButton->setEnabled(markable);
-    _saveLocationButton->setChecked(markable && !_writableDataPath.empty() && pathAtRow(row) == _writableDataPath);
+    _saveLocationButton->setChecked(markable && isMarkedSaveLocation(pathAtRow(row)));
 
     _scriptSourceButton->setEnabled(markable);
     _scriptSourceButton->setChecked(markable
@@ -403,6 +404,10 @@ bool DataPathsWidget::isMarkableRow(int row) const {
     return !path.empty() && std::filesystem::is_directory(path, ec);
 }
 
+bool DataPathsWidget::isMarkedSaveLocation(const std::filesystem::path& path) const {
+    return !_writableDataPath.empty() && resource::sameDataPathEntry(path, _writableDataPath);
+}
+
 void DataPathsWidget::onToggleSaveLocation() {
     const int row = selectedRow();
     if (!isMarkableRow(row)) {
@@ -410,7 +415,7 @@ void DataPathsWidget::onToggleSaveLocation() {
     }
 
     const std::filesystem::path path = pathAtRow(row);
-    if (_writableDataPath == path) {
+    if (isMarkedSaveLocation(path)) {
         _writableDataPath.clear();
         setStatusMessage("Save location cleared — the highest-priority folder will be used.", "info");
     } else {
@@ -469,20 +474,23 @@ void DataPathsWidget::onToggleScriptSource() {
 void DataPathsWidget::refreshSaveLocationMarkers() {
     const auto paths = getDataPaths();
 
-    // Where saves would land right now. Mirrors resource::findWritableDataPath but resolves the
-    // fallback locally, so a stale marker does not warn-log on every repaint.
+    // Which ENTRY saves are attributed to right now — the badge marks a row, so this compares in
+    // data-path terms (findWritableDataPathEntry), not the `data` subfolder the bytes end up in.
+    // Mirrors resource::findWritableDataPath's preference rule — the same equivalence test for
+    // membership, via isMarkedSaveLocation — but resolves the fallback locally, so a stale marker
+    // does not warn-log on every repaint.
     std::optional<std::filesystem::path> effective;
-    if (std::error_code ec; !_writableDataPath.empty()
-        && std::find(paths.begin(), paths.end(), _writableDataPath) != paths.end()
+    if (std::error_code ec; std::any_of(paths.begin(), paths.end(),
+                                [this](const std::filesystem::path& entry) { return isMarkedSaveLocation(entry); })
         && std::filesystem::is_directory(_writableDataPath, ec)) {
         effective = _writableDataPath;
     } else {
-        effective = resource::findWritableDataPath(paths);
+        effective = resource::findWritableDataPathEntry(paths);
     }
 
     // The marker only takes effect while it is usable; when it isn't, the badge (and its claim
     // about where saves land) must follow the actual fallback, not the configured wish.
-    const bool markerUsable = !_writableDataPath.empty() && effective.has_value() && *effective == _writableDataPath;
+    const bool markerUsable = effective.has_value() && isMarkedSaveLocation(*effective);
 
     for (int row = 0; row < _pathsTable->rowCount(); ++row) {
         QTableWidgetItem* item = _pathsTable->item(row, PathColumn);
@@ -490,8 +498,8 @@ void DataPathsWidget::refreshSaveLocationMarkers() {
             continue;
         }
         const std::filesystem::path rowPath = Settings::normalizeDataPath(item->text().toStdString());
-        const bool isExplicit = !_writableDataPath.empty() && rowPath == _writableDataPath;
-        const bool isEffective = effective.has_value() && rowPath == *effective;
+        const bool isExplicit = isMarkedSaveLocation(rowPath);
+        const bool isEffective = effective.has_value() && resource::sameDataPathEntry(rowPath, *effective);
 
         QFont font = _pathsTable->font();
         font.setBold(isExplicit);
@@ -532,7 +540,7 @@ void DataPathsWidget::removeSelectedPath() {
         return;
     }
 
-    const bool removedMarked = !_writableDataPath.empty() && pathAtRow(row) == _writableDataPath;
+    const bool removedMarked = isMarkedSaveLocation(pathAtRow(row));
     if (removedMarked) {
         _writableDataPath.clear();
     }
@@ -552,8 +560,9 @@ void DataPathsWidget::removeSelectedPath() {
 }
 
 int DataPathsWidget::addFolderExpanded(const std::filesystem::path& folder, bool atTop) {
-    // expandDataPaths returns the folder before its DATs, and inserting each atTop reverses that. To
-    // get the same layout when appending, append in reverse; the DATs keep priority over the folder.
+    // expandDataPaths returns a folder's DATs before the folder itself, so the folder's loose files
+    // win. The table shows the stored order reversed (highest priority first), so inserting each row
+    // at the top preserves that order and appending has to reverse it to reach the same result.
     auto expanded = util::expandDataPaths({ folder });
     if (!atTop) {
         std::reverse(expanded.begin(), expanded.end());
@@ -697,7 +706,7 @@ void DataPathsWidget::onCellDoubleClicked(int row, int /*column*/) {
         // Re-picking a marked folder keeps it the save location under its new path.
         const std::filesystem::path oldPath = Settings::normalizeDataPath(currentPath.toStdString());
         const std::filesystem::path newNormalized = Settings::normalizeDataPath(newPath.toStdString());
-        if (!_writableDataPath.empty() && _writableDataPath == oldPath) {
+        if (isMarkedSaveLocation(oldPath)) {
             _writableDataPath = newNormalized;
         }
         // Likewise carry a script-source marker across to the new path.
