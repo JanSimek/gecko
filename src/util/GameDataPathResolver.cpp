@@ -18,6 +18,15 @@ namespace {
         return std::filesystem::is_regular_file(path, ec);
     }
 
+    // The archives the engine opens by name from the folder it runs in (gameDbInit). Their presence
+    // is what separates an INSTALL from the loose data it ships: a data tree and a mod overlay both
+    // hold a `data` folder of their own (ai.txt, city.txt, ...), so that folder alone proves nothing.
+    bool hasEngineArchives(const std::filesystem::path& directory) {
+        return isRegularFile(directory / "master.dat")
+            || isRegularFile(directory / "critter.dat")
+            || isRegularFile(directory / "patch000.dat");
+    }
+
 } // namespace
 
 bool hasFallout2DataLayout(const std::filesystem::path& path) {
@@ -25,10 +34,23 @@ bool hasFallout2DataLayout(const std::filesystem::path& path) {
         return false;
     }
 
-    return isDirectory(path / "data")
-        || isRegularFile(path / "master.dat")
-        || isRegularFile(path / "critter.dat")
-        || isRegularFile(path / "patch000.dat");
+    return isDirectory(path / "data") || hasEngineArchives(path);
+}
+
+std::filesystem::path looseDataDirectory(const std::filesystem::path& gameRoot) {
+    const std::filesystem::path data = gameRoot / "data";
+    if (!hasEngineArchives(gameRoot) || !isDirectory(data)) {
+        return gameRoot; // a data tree or mod folder IS the loose data; a DAT-only install has none
+    }
+    return data;
+}
+
+std::optional<std::filesystem::path> resolveLooseDataDirectory(const std::filesystem::path& path) {
+    const auto gameRoot = resolveGameDataRoot(path);
+    if (!gameRoot || gameRoot->empty()) {
+        return std::nullopt;
+    }
+    return looseDataDirectory(*gameRoot);
 }
 
 // Append a directory's bundled master.dat/critter.dat (present and not already listed) to `out`.
@@ -94,15 +116,17 @@ std::optional<std::filesystem::path> resolveGameDataRoot(const std::filesystem::
     }
 #endif
 
-    if (hasFallout2DataLayout(path)) {
-        return path;
+    // Before the layout test, not after: a data tree keeps a `data` folder of its own (ai.txt,
+    // city.txt, ...), so an install's own "data" would otherwise satisfy hasFallout2DataLayout and
+    // come back as the root — leaving looseDataDirectory() to append onto it and reach data/data.
+    // The parent must be an install, not merely a folder with a `data` child (which every parent of
+    // a path named "data" trivially is).
+    if (path.filename() == "data" && hasEngineArchives(path.parent_path())) {
+        return path.parent_path();
     }
 
-    if (path.filename() == "data") {
-        const std::filesystem::path parent = path.parent_path();
-        if (hasFallout2DataLayout(parent)) {
-            return parent;
-        }
+    if (hasFallout2DataLayout(path)) {
+        return path;
     }
 
     return std::nullopt;

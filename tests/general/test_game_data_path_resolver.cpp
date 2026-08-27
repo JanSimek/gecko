@@ -4,6 +4,7 @@
 #include <fstream>
 #include <thread>
 
+#include "resource/DataFileSystem.h"
 #include "util/GameDataPathResolver.h"
 
 namespace {
@@ -78,6 +79,77 @@ TEST_CASE("hasFallout2DataLayout detects patch000.dat", "[paths]") {
     TempDir tmp;
     touchFile(tmp.root / "patch000.dat");
     REQUIRE(geck::util::hasFallout2DataLayout(tmp.root));
+}
+
+// =============================================================================
+// looseDataDirectory
+// =============================================================================
+
+TEST_CASE("looseDataDirectory is the install root's data folder", "[paths]") {
+    TempDir tmp;
+    createFallout2DataLayout(tmp.root);
+
+    REQUIRE(geck::util::looseDataDirectory(tmp.root) == tmp.root / "data");
+}
+
+TEST_CASE("looseDataDirectory falls back to the root of a DAT-only install", "[paths]") {
+    TempDir tmp;
+    touchFile(tmp.root / "master.dat");
+
+    REQUIRE(geck::util::looseDataDirectory(tmp.root) == tmp.root);
+}
+
+// Appending `data` is only safe because a resolved game root is never a data folder itself, and a
+// data folder is only recognisable by its company: it holds a `data` folder of its own (ai.txt,
+// city.txt, ...) and so satisfies hasFallout2DataLayout exactly like an install root does.
+TEST_CASE("a data folder resolves to its install root even though it looks like one", "[paths]") {
+    TempDir tmp;
+    createFallout2DataLayout(tmp.root);
+    mkdirs(tmp.root / "data/data");
+    mkdirs(tmp.root / "data/proto");
+
+    const auto root = geck::util::resolveGameDataRoot(tmp.root / "data");
+    REQUIRE(root.has_value());
+    REQUIRE(*root == tmp.root);
+    REQUIRE(geck::util::looseDataDirectory(*root) == tmp.root / "data"); // and back, not data/data
+}
+
+// The counterpart to the append: a folder that ships loose data WITHOUT the engine's archives is the
+// data itself (a standalone data tree, or a mod overlay adding files under data/). Descending on its
+// `data` folder would bury art/, proto/ and the rest.
+TEST_CASE("looseDataDirectory leaves a data tree that is not an install alone", "[paths]") {
+    TempDir tmp;
+    mkdirs(tmp.root / "art/scenery");
+    mkdirs(tmp.root / "data"); // its own data/ (ai.txt, city.txt, ...), not an install's
+
+    REQUIRE(geck::util::looseDataDirectory(tmp.root) == tmp.root);
+}
+
+TEST_CASE("DataFileSystem mounts a data tree as given", "[paths][vfs]") {
+    TempDir tmp;
+    touchFile(tmp.root / "data/maps.txt"); // the data tree's own data/maps.txt
+    touchFile(tmp.root / "proto/scenery/scenery.lst");
+
+    geck::resource::DataFileSystem dfs;
+    dfs.addDataPath(tmp.root);
+
+    CHECK(dfs.exists("data/maps.txt"));
+    CHECK(dfs.exists("proto/scenery/scenery.lst"));
+}
+
+// Regression: choosing the install folder as a data path mounted the folder itself, so its loose
+// `data` files landed at "/data/proto/..." - a path nothing looks up - and master.dat answered
+// instead. A Restoration Project map then hit PIDs past the end of vanilla's proto lists and failed
+// to load at all ("PID index out of range").
+TEST_CASE("DataFileSystem mounts an install folder's loose data files", "[paths][vfs]") {
+    TempDir tmp;
+    touchFile(tmp.root / "master.dat");
+    touchFile(tmp.root / "data/proto/scenery/scenery.lst");
+
+    geck::resource::DataFileSystem dfs;
+    dfs.addDataPath(tmp.root);
+
+    REQUIRE(dfs.exists("proto/scenery/scenery.lst"));
 }
 
 // =============================================================================

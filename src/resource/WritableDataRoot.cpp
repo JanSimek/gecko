@@ -1,6 +1,7 @@
 #include "resource/WritableDataRoot.h"
 
 #include "resource/DataFileSystem.h"
+#include "util/GameDataPathResolver.h"
 
 #include <spdlog/spdlog.h>
 
@@ -19,7 +20,7 @@ bool sameDataPathEntry(const std::filesystem::path& a, const std::filesystem::pa
     return a.lexically_normal() == b.lexically_normal();
 }
 
-std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std::filesystem::path>& dataPaths) {
+std::optional<std::filesystem::path> findWritableDataPathEntry(const std::vector<std::filesystem::path>& dataPaths) {
     for (auto it = dataPaths.rbegin(); it != dataPaths.rend(); ++it) {
         std::error_code ec;
         if (std::filesystem::is_directory(*it, ec)) {
@@ -29,6 +30,24 @@ std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std:
     return std::nullopt;
 }
 
+namespace {
+
+    // The directory an entry's edits belong in: an install's loose `data` folder, which is both what
+    // the VFS mounts for it and what the engine reads back. A folder that is no install stands alone.
+    std::filesystem::path writableDirectoryFor(const std::filesystem::path& entry) {
+        return util::resolveLooseDataDirectory(entry).value_or(entry);
+    }
+
+} // namespace
+
+std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std::filesystem::path>& dataPaths) {
+    const auto entry = findWritableDataPathEntry(dataPaths);
+    if (!entry) {
+        return std::nullopt;
+    }
+    return writableDirectoryFor(*entry);
+}
+
 std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std::filesystem::path>& dataPaths,
     const std::filesystem::path& preferred) {
     if (!preferred.empty()) {
@@ -36,7 +55,7 @@ std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std:
             [&preferred](const std::filesystem::path& entry) { return sameDataPathEntry(entry, preferred); });
         std::error_code ec;
         if (listed && std::filesystem::is_directory(preferred, ec)) {
-            return preferred;
+            return writableDirectoryFor(preferred);
         }
         spdlog::warn("Configured save location '{}' is {} — falling back to the highest-priority folder",
             preferred.string(), listed ? "not an existing directory" : "no longer among the data paths");

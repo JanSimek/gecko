@@ -23,21 +23,20 @@ void DataFileSystem::clear() {
     _vfs = std::make_shared<vfspp::VirtualFileSystem>();
 }
 
-void DataFileSystem::addDataPath(const std::filesystem::path& path) {
-    const std::scoped_lock lock(_mutex);
-    addDataPathLocked(path);
-}
-
 namespace {
 
     // Resolves a user-supplied data path to the directory or archive to mount. nullopt when it cannot
     // be used: a macOS .app without a recognised Fallout 2 layout, or an unresolvable path.
+    //
+    // An install mounts its loose `data` folder, not its root (util::looseDataDirectory): every lookup
+    // here is data-relative ("proto/scenery/scenery.lst"), so mounting the root would hide those files
+    // under "/data/..." and let the packaged DATs answer in their place.
     std::optional<std::filesystem::path> resolveMountRoot(const std::filesystem::path& path) {
         if (path.extension() == ".dat") {
             return path;
         }
-        if (auto resolved = util::resolveGameDataRoot(path); resolved && !resolved->empty()) {
-            return *resolved;
+        if (auto resolved = util::resolveLooseDataDirectory(path)) {
+            return resolved;
         }
         // Never fall through to mounting a raw .app root - NativeFileSystem would traverse Wine dosdevices
         // symlinks.
@@ -54,7 +53,8 @@ namespace {
 
 } // namespace
 
-void DataFileSystem::addDataPathLocked(const std::filesystem::path& path) {
+void DataFileSystem::addDataPath(const std::filesystem::path& path) {
+    const std::scoped_lock lock(_mutex);
     const auto mountRoot = resolveMountRoot(path);
     if (!mountRoot) {
         return;

@@ -22,7 +22,15 @@ public:
 /// directory (DAT/archive paths are read-only and skipped), or nullopt if there is none. Editing writes
 /// into a folder the user can see and manage in their Data Paths — there is no hidden auto-mounted
 /// location. Being last means its copies shadow the archives mounted before it.
+///
+/// An install folder resolves to the `data` folder mounted for it (util::looseDataDirectory), so the
+/// copy lands on the read path — both the editor's and the engine's.
 std::optional<std::filesystem::path> findWritableDataPath(const std::vector<std::filesystem::path>& dataPaths);
+
+/// The same choice, left as the listed entry instead of resolved into its `data` tree — for callers
+/// that have to match it against the data-path list itself (the save-location badge in the Data Paths
+/// table marks the row the user chose, not the subfolder the bytes land in).
+std::optional<std::filesystem::path> findWritableDataPathEntry(const std::vector<std::filesystem::path>& dataPaths);
 
 /// Same, but honouring an explicit user choice first: when `preferred` is non-empty, is one of
 /// `dataPaths`, and is an existing directory, it is the writable root regardless of list order.

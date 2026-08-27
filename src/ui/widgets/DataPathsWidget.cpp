@@ -469,15 +469,17 @@ void DataPathsWidget::onToggleScriptSource() {
 void DataPathsWidget::refreshSaveLocationMarkers() {
     const auto paths = getDataPaths();
 
-    // Where saves would land right now. Mirrors resource::findWritableDataPath but resolves the
-    // fallback locally, so a stale marker does not warn-log on every repaint.
+    // Which ENTRY saves are attributed to right now — the badge marks a row, so this compares in
+    // data-path terms (findWritableDataPathEntry), not the `data` subfolder the bytes end up in.
+    // Mirrors resource::findWritableDataPath's preference rule but resolves the fallback locally, so
+    // a stale marker does not warn-log on every repaint.
     std::optional<std::filesystem::path> effective;
     if (std::error_code ec; !_writableDataPath.empty()
         && std::find(paths.begin(), paths.end(), _writableDataPath) != paths.end()
         && std::filesystem::is_directory(_writableDataPath, ec)) {
         effective = _writableDataPath;
     } else {
-        effective = resource::findWritableDataPath(paths);
+        effective = resource::findWritableDataPathEntry(paths);
     }
 
     // The marker only takes effect while it is usable; when it isn't, the badge (and its claim
@@ -552,8 +554,9 @@ void DataPathsWidget::removeSelectedPath() {
 }
 
 int DataPathsWidget::addFolderExpanded(const std::filesystem::path& folder, bool atTop) {
-    // expandDataPaths returns the folder before its DATs, and inserting each atTop reverses that. To
-    // get the same layout when appending, append in reverse; the DATs keep priority over the folder.
+    // expandDataPaths returns a folder's DATs before the folder itself, so the folder's loose files
+    // win. The table shows the stored order reversed (highest priority first), so inserting each row
+    // at the top preserves that order and appending has to reverse it to reach the same result.
     auto expanded = util::expandDataPaths({ folder });
     if (!atTop) {
         std::reverse(expanded.begin(), expanded.end());
