@@ -28,10 +28,12 @@ namespace {
 
     /// Whether a macOS .app actually has a binary to launch (they live in Contents/MacOS).
     bool bundleHasLaunchableBinary(const std::filesystem::path& bundle) {
+        // Stepping the iterator by hand: the range-for form calls the throwing operator++, and this
+        // runs in a Qt slot, where a filesystem_error from an unreadable directory reaches no catch.
         std::error_code ec;
         const std::filesystem::path macosDir = bundle / "Contents" / "MacOS";
-        for (const auto& entry : std::filesystem::directory_iterator(macosDir, ec)) {
-            if (entry.is_regular_file(ec)) {
+        for (std::filesystem::directory_iterator it(macosDir, ec), end; !ec && it != end; it.increment(ec)) {
+            if (it->is_regular_file(ec)) {
                 return true;
             }
         }
@@ -324,7 +326,10 @@ void GameLocationWidget::onAutoDetect() {
         const auto& installation = detectedInstallations.front();
         _executableLocationEdit->setText(QString::fromStdString(installation.path.string()));
         if (const auto dataDirectory = util::resolveGameDataRoot(installation.path)) {
-            _dataDirectoryEdit->setText(QString::fromStdString(dataDirectory->string()));
+            // Through the setter, not the field: setting the executable may already have derived the
+            // directory from a bundle and locked it, and resolveGameDataRoot answers a different
+            // question (where the install lives, not where the engine chdir's to).
+            setDataDirectory(*dataDirectory);
         }
 
         setStatusMessage(QString("Auto-detected installation: %1").arg(QString::fromStdString(installation.description)), "success");
