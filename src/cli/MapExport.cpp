@@ -18,6 +18,7 @@
 #include <spdlog/spdlog.h>
 
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -248,17 +249,34 @@ int exportEntities(resource::GameResources& resources, const ExportOptions& opti
                 }
                 // Inventory contents are the reason this command exists: a container's items are
                 // invisible to analyze/dump_grid, and "where is X" is usually answered by one.
-                for (const auto& carried : object->inventory) {
-                    if (!carried) {
-                        continue;
-                    }
-                    ordered_json holder;
-                    holder["kind"] = kindOf(object->pro_pid);
-                    holder["pid"] = object->pro_pid;
-                    holder["name"] = protoName(object->pro_pid);
-                    entities.push_back(entityRow(*carried, mapPath, elevation, hex, protoName,
-                        holder, ordered_json(nullptr)));
-                }
+                //
+                // The recursion is defensive rather than load-bearing. A map stores only one level of
+                // inventory — MapReader reads a carried object's own item count but never its items,
+                // exactly as the engine does (fallout2-ce objectLoadAllInternal), so a container
+                // inside a container has nothing under it to read. Written to recurse anyway so this
+                // stays correct if that ever changes, and so the shape of the code matches the shape
+                // of the data it claims to walk.
+                const std::function<void(const MapObject&, const ordered_json&)> emitCarried
+                    = [&](const MapObject& holderObject, const ordered_json& holderRef) {
+                          for (const auto& carried : holderObject.inventory) {
+                              if (!carried) {
+                                  continue;
+                              }
+                              entities.push_back(entityRow(*carried, mapPath, elevation, hex, protoName,
+                                  holderRef,
+                                  scriptOf(*map, carried->map_scripts_pid, scriptsLst, resources)));
+                              ordered_json nested;
+                              nested["kind"] = kindOf(carried->pro_pid);
+                              nested["pid"] = carried->pro_pid;
+                              nested["name"] = protoName(carried->pro_pid);
+                              emitCarried(*carried, nested);
+                          }
+                      };
+                ordered_json holder;
+                holder["kind"] = kindOf(object->pro_pid);
+                holder["pid"] = object->pro_pid;
+                holder["name"] = protoName(object->pro_pid);
+                emitCarried(*object, holder);
             }
         }
     }

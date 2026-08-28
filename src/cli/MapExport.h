@@ -35,9 +35,15 @@ namespace cli {
     /// object records, and the remaining 2% — items and critters — is what anyone actually searches.
     /// Emitting everything turns a few hundred KB of index into tens of MB for no gain.
     ///
-    /// Emits one JSON object to `out`: { maps: [...], entities: [...] }. Returns 0 on success,
-    /// non-zero if no maps were found. Maps that fail to parse are reported in `mapsUnreadable`
-    /// rather than skipped silently — an absent item is only meaningful if that list is empty.
+    /// Emits one JSON object to `out`:
+    ///   { maps: [{file,name,displayName,mapIndex,lookupName}],
+    ///     mapsUnreadable: [{map,reason}],
+    ///     entityCount: N,
+    ///     entities: [{kind,pid,proto,name,map,elevation,hex,col,row,qty?,holder?,script?,exit?,hexes?}] }
+    ///
+    /// Returns 0 on success, non-zero if no maps were found. Maps that fail to parse are reported in
+    /// `mapsUnreadable` rather than skipped silently — an absent item is only meaningful if that list
+    /// is empty.
     int exportEntities(resource::GameResources& resources, const ExportOptions& options, std::ostream& out);
 
 } // namespace cli
