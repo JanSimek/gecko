@@ -20,13 +20,13 @@ enum class ActionScope {
 /// One row of the shipped keyboard-shortcut table.
 struct ActionSpec {
     /// Stable identifier. Persisted in settings.json, so it is never renamed once shipped.
-    const char* id;
+    const char* id = nullptr;
     /// What the Preferences page shows, e.g. "Selection Panel".
-    const char* label;
+    const char* label = nullptr;
     /// Preferences grouping: "File" | "Edit" | "View" | "Panels" | "Navigation" | "Tools".
-    const char* category;
+    const char* category = nullptr;
     /// QKeySequence portable text ("Ctrl+S", "Alt+1"); empty means "use standardKey".
-    const char* defaultKeys;
+    const char* defaultKeys = nullptr;
     /// Set instead of defaultKeys where Qt's platform-correct binding is the default: several of
     /// these differ per platform (Preferences is Ctrl+, only on macOS, Quit is unbound on Windows),
     /// so resolving at runtime keeps each platform's convention instead of freezing one of them

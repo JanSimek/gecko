@@ -2,6 +2,9 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cstddef>
+#include <span>
+
 #include "ui/Settings.h"
 
 namespace geck {
@@ -26,9 +29,13 @@ KeyBindingRegistry::KeyBindingRegistry(std::shared_ptr<Settings> settings, QObje
 }
 
 const ActionSpec* KeyBindingRegistry::spec(const QString& id) {
-    for (const ActionSpec& candidate : actionSpecs()) {
-        if (id == QLatin1StringView(candidate.id)) {
-            return &candidate;
+    // Indexed off the span's data pointer rather than by taking the address of a range-for
+    // reference: the table it views has static storage, but the span itself is a temporary, and
+    // returning &element out of a loop over one reads as a dangling return to cppcheck.
+    const std::span<const ActionSpec> specs = actionSpecs();
+    for (std::size_t index = 0; index < specs.size(); ++index) {
+        if (id == QLatin1StringView(specs[index].id)) {
+            return specs.data() + index;
         }
     }
     return nullptr;
