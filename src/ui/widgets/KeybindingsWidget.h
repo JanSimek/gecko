@@ -52,12 +52,14 @@ private:
     void setupUI();
     void populate();
     void refreshRow(QTreeWidgetItem* item);
+    /// Repaint every row. One edit can change two rows (both sides of a conflict), so this is the
+    /// honest granularity for a table this size.
+    void refreshAllRows();
     /// The pending key for an action: the edit in progress if there is one, else the registry's.
     QKeySequence pendingShortcut(const QString& id) const;
     /// The action `keys` is pending on, or an empty string. Mirrors the registry's rule, but over
     /// the uncommitted edits — otherwise a swap made in one sitting would look conflict-free.
     QString pendingConflict(const QString& id, const QKeySequence& keys) const;
-    QTreeWidgetItem* itemForAction(const QString& id) const;
 
     KeyBindingRegistry* _registry = nullptr;
     QLineEdit* _filterEdit = nullptr;

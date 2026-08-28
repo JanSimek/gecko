@@ -129,7 +129,11 @@ void KeyBindingRegistry::bind(const QString& id, QAction* action) {
     if (!action || spec(id) == nullptr) {
         return;
     }
-    _actionSinks[id].append(QPointer<QAction>(action));
+    // Prune here as well as on rebind: canvas shortcuts are re-bound on every map load, so a list
+    // whose dead entries were only cleared by a rebind would grow with nulls across a session.
+    QList<QPointer<QAction>>& sinks = _actionSinks[id];
+    sinks.removeIf([](const QPointer<QAction>& sink) { return sink.isNull(); });
+    sinks.append(QPointer<QAction>(action));
     action->setShortcut(shortcut(id));
 }
 
@@ -137,7 +141,9 @@ void KeyBindingRegistry::bind(const QString& id, QShortcut* shortcutSink) {
     if (!shortcutSink || spec(id) == nullptr) {
         return;
     }
-    _shortcutSinks[id].append(QPointer<QShortcut>(shortcutSink));
+    QList<QPointer<QShortcut>>& sinks = _shortcutSinks[id];
+    sinks.removeIf([](const QPointer<QShortcut>& sink) { return sink.isNull(); });
+    sinks.append(QPointer<QShortcut>(shortcutSink));
     shortcutSink->setKey(shortcut(id));
 }
 

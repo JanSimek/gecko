@@ -40,6 +40,8 @@
 #include "ui/widgets/DataPathsWidget.h"
 #include "ui/widgets/ObjectPreviewWidget.h"
 #include "ui/widgets/SFMLWidget.h"
+#include "ui/input/ActionSpec.h"
+#include "ui/input/KeyBindingRegistry.h"
 #include "ui/widgets/ProInfoPanelWidget.h"
 #include "ui/widgets/ProPreviewPanelWidget.h"
 #include "ui/widgets/WelcomeWidget.h"
@@ -1578,6 +1580,19 @@ TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge
     QApplication::processEvents();
     CHECK(inspectReturn->isEnabled());
     CHECK(inspectEnter->isEnabled());
+
+    // Numpad Enter is a companion of the reveal key, not a binding of its own: rebind reveal
+    // elsewhere and it clears, so numpad Enter never keeps working a key the user moved away.
+    auto* registry = window.findChild<geck::KeyBindingRegistry*>();
+    REQUIRE(registry != nullptr);
+
+    registry->setShortcut(geck::actions::PANEL_SELECTION_REVEAL, QKeySequence("Ctrl+Alt+I"));
+    CHECK(inspectReturn->key() == QKeySequence("Ctrl+Alt+I"));
+    CHECK(inspectEnter->key().isEmpty());
+
+    registry->resetToDefault(geck::actions::PANEL_SELECTION_REVEAL);
+    CHECK(inspectReturn->key() == QKeySequence(Qt::Key_Return));
+    CHECK(inspectEnter->key() == QKeySequence(Qt::Key_Enter));
 }
 
 TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map's .gam", "[qt][mapinfo]") {

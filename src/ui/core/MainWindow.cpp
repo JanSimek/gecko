@@ -131,9 +131,12 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
     // Before setupUI(): every menu, toolbar and canvas binding below asks the registry for its
     // key rather than carrying a literal, so it has to exist first.
     _keyBindings = std::make_unique<KeyBindingRegistry>(_settings, this);
-    connect(_keyBindings.get(), &KeyBindingRegistry::bindingChanged, this, [this](const QString&, const QKeySequence&) {
+    connect(_keyBindings.get(), &KeyBindingRegistry::bindingChanged, this, [this](const QString& id, const QKeySequence&) {
         if (_hintLabel && _currentEditorWidget) {
             _hintLabel->setText(_currentEditorWidget->currentHintText());
+        }
+        if (id == QLatin1StringView(actions::PANEL_SELECTION_REVEAL)) {
+            syncInspectSelectionCompanionKey();
         }
     });
 
@@ -400,11 +403,15 @@ void MainWindow::installCanvasShortcuts() {
     };
 
     _inspectSelectionShortcut = addCanvasShortcut(actions::PANEL_SELECTION_REVEAL, inspectSelection);
+
     // Numpad Enter is a distinct key code that no QKeySequence on Return catches, and it is the
-    // same command rather than a second binding — so it is a fixed companion, not a table row.
-    _inspectSelectionEnterShortcut = new QShortcut(QKeySequence(Qt::Key_Enter), canvas);
+    // same command rather than a second binding — so it is a companion of the reveal key, not a
+    // table row of its own. It exists only while that key IS Return: rebound elsewhere, the
+    // companion clears, so numpad Enter never keeps working a shortcut the user moved away.
+    _inspectSelectionEnterShortcut = new QShortcut(canvas);
     _inspectSelectionEnterShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(_inspectSelectionEnterShortcut, &QShortcut::activated, this, inspectSelection);
+    syncInspectSelectionCompanionKey();
 
     // Navigation and tool keys. Single letters belong on the canvas: window-scoped they would fire
     // while a palette grid, a tree or a non-editable combo has focus, and typing "b" in such a
@@ -448,6 +455,15 @@ void MainWindow::installCanvasShortcuts() {
             _currentEditorWidget->viewport().fitMapInView();
         }
     });
+}
+
+void MainWindow::syncInspectSelectionCompanionKey() {
+    if (!_inspectSelectionEnterShortcut || !_keyBindings) {
+        return;
+    }
+    const bool revealIsOnReturn = (_keyBindings->shortcut(actions::PANEL_SELECTION_REVEAL)
+        == QKeySequence(Qt::Key_Return));
+    _inspectSelectionEnterShortcut->setKey(revealIsOnReturn ? QKeySequence(Qt::Key_Enter) : QKeySequence());
 }
 
 void MainWindow::editSelectedObjectScriptSource() {

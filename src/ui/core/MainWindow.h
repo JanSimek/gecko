@@ -246,6 +246,9 @@ private:
     // (Re)install the shortcuts scoped to the map canvas. Called whenever an EditorWidget is
     // installed, since the SFML widget they hang off is rebuilt with it.
     void installCanvasShortcuts();
+    // Numpad Enter mirrors the inspect-selection key, but only while that key is Return — see
+    // installCanvasShortcuts(). Re-run whenever that binding changes.
+    void syncInspectSelectionCompanionKey();
     // Ctrl+Shift+E: open the .ssl of the script attached to the selected object (the same
     // ScriptSourceService flow as the Selection panel's "Edit Source..." button).
     void editSelectedObjectScriptSource();

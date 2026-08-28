@@ -136,6 +136,23 @@ void KeybindingsWidget::populate() {
         row->setToolTip(COLUMN_ACTION, tr("%1 — %2 scope").arg(QString::fromLatin1(spec.id), spec.scope == ActionScope::Canvas ? tr("map view") : tr("application")));
         refreshRow(row);
     }
+
+    // The tree was rebuilt: without this, a reload/apply would show every row while the filter
+    // box still holds the text that was hiding most of them.
+    if (_filterEdit != nullptr) {
+        onFilterChanged(_filterEdit->text());
+    }
+}
+
+void KeybindingsWidget::refreshAllRows() {
+    // One edit can change two rows' colours — the one typed into and whichever was conflicting
+    // with it before or after — so the whole (small) tree is repainted rather than guessing which.
+    for (int group = 0; group < _tree->topLevelItemCount(); ++group) {
+        QTreeWidgetItem* category = _tree->topLevelItem(group);
+        for (int row = 0; row < category->childCount(); ++row) {
+            refreshRow(category->child(row));
+        }
+    }
 }
 
 void KeybindingsWidget::refreshRow(QTreeWidgetItem* item) {
@@ -186,18 +203,6 @@ QString KeybindingsWidget::pendingConflict(const QString& id, const QKeySequence
     return {};
 }
 
-QTreeWidgetItem* KeybindingsWidget::itemForAction(const QString& id) const {
-    for (int group = 0; group < _tree->topLevelItemCount(); ++group) {
-        QTreeWidgetItem* category = _tree->topLevelItem(group);
-        for (int row = 0; row < category->childCount(); ++row) {
-            if (actionIdOf(category->child(row)) == id) {
-                return category->child(row);
-            }
-        }
-    }
-    return nullptr;
-}
-
 void KeybindingsWidget::onEditFinished(QTreeWidgetItem* item, const QKeySequence& keys) {
     const QString id = actionIdOf(item);
     if (id.isEmpty() || !_registry) {
@@ -220,11 +225,7 @@ void KeybindingsWidget::onEditFinished(QTreeWidgetItem* item, const QKeySequence
     }
 
     _pending.insert(id, keys);
-    refreshRow(item);
-    // The other row's colour changes too: it is now half of a conflict, or no longer part of one.
-    if (QTreeWidgetItem* otherItem = itemForAction(conflict)) {
-        refreshRow(otherItem);
-    }
+    refreshAllRows();
     onSelectionChanged();
     Q_EMIT changed();
 }
@@ -270,7 +271,8 @@ void KeybindingsWidget::onResetSelected() {
     }
 
     _pending.insert(id, _registry->defaultShortcut(id));
-    refreshRow(item);
+    // Resetting can resolve a conflict, which recolours the row on the other side of it too.
+    refreshAllRows();
     onSelectionChanged();
     Q_EMIT statusChanged(QString(), QStringLiteral("normal"));
     Q_EMIT changed();
@@ -286,13 +288,7 @@ void KeybindingsWidget::onResetAll() {
         _pending.insert(id, _registry->defaultShortcut(id));
     }
 
-    for (int group = 0; group < _tree->topLevelItemCount(); ++group) {
-        QTreeWidgetItem* category = _tree->topLevelItem(group);
-        for (int row = 0; row < category->childCount(); ++row) {
-            refreshRow(category->child(row));
-        }
-    }
-
+    refreshAllRows();
     onSelectionChanged();
     Q_EMIT statusChanged(QString(), QStringLiteral("normal"));
     Q_EMIT changed();
