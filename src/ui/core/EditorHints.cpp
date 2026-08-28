@@ -21,11 +21,13 @@ QString hintForContext(EditorMode mode, bool hasSelection, const QString& active
 
     switch (mode) {
         case Select:
-            // Only the keys that genuinely act on a selection: Rotate's "R" toolbar
-            // shortcut (live whenever not stamping) and Delete/Backspace. With nothing
-            // selected neither does anything, so the hint is empty.
+            // Only the keys that genuinely act on a selection: Rotate's canvas "R" (live
+            // whenever not stamping), Enter to inspect it in the Selection panel, and
+            // Delete/Backspace. With nothing selected none of them does anything, so the hint
+            // is empty.
             if (hasSelection) {
-                return joinHints({ QStringLiteral("R: rotate"),
+                return joinHints({ QStringLiteral("Enter: inspect"),
+                    QStringLiteral("R: rotate"),
                     QStringLiteral("Delete: remove") });
             }
             return QString();

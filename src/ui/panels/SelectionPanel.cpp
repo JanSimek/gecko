@@ -1218,23 +1218,19 @@ void SelectionPanel::updateScriptSection() {
     _attachedScriptProgramIndex = -1;
     if (attached) {
         const uint32_t sid = static_cast<uint32_t>(mapObject->map_scripts_pid);
-        const int section = MapScript::sidSection(sid);
-        if (section >= 0 && section < Map::SCRIPT_SECTIONS) {
-            for (const auto& s : _map->getMapFile().map_scripts[section]) {
-                if (s.pid == sid) {
-                    _attachedScriptProgramIndex = static_cast<int>(s.script_id);
-                    auto* lst = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
-                    if (lst && s.script_id < lst->list().size()) {
-                        text = QString::fromStdString(lst->list().at(s.script_id));
-                        const std::string desc = resource::scriptDescription(_resources, static_cast<int>(s.script_id));
-                        if (!desc.empty()) {
-                            text += " — " + QString::fromStdString(desc);
-                        }
-                    } else {
-                        text = QString("Script #%1").arg(s.script_id);
-                    }
-                    break;
+        // Shared with the Ctrl+Shift+E path in MainWindow, so the two resolve the same script.
+        if (const std::optional<int> programIndex = _map->scriptProgramIndexForSid(sid)) {
+            _attachedScriptProgramIndex = *programIndex;
+            const auto scriptId = static_cast<size_t>(*programIndex);
+            auto* lst = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
+            if (lst && scriptId < lst->list().size()) {
+                text = QString::fromStdString(lst->list().at(scriptId));
+                const std::string desc = resource::scriptDescription(_resources, *programIndex);
+                if (!desc.empty()) {
+                    text += " — " + QString::fromStdString(desc);
                 }
+            } else {
+                text = QString("Script #%1").arg(*programIndex);
             }
         }
     }

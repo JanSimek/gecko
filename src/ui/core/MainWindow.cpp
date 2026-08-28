@@ -18,6 +18,7 @@
 #include "ui/panels/CompletenessView.h"
 #include "resource/MapCompleteness.h"
 #include "ui/rendering/ThumbnailPrewarmer.h"
+#include "viewport/ViewportController.h"
 #ifdef GECK_SCRIPTING_ENABLED
 #include "ui/panels/ScriptConsoleWidget.h"
 #include "scripting/LuaScriptRuntime.h" // ScriptResult
@@ -381,6 +382,73 @@ void MainWindow::installCanvasShortcuts() {
     // Return and numpad Enter are distinct key codes; one QShortcut catches only its own.
     _inspectSelectionShortcut = addCanvasShortcut(QKeySequence(Qt::Key_Return), inspectSelection);
     _inspectSelectionEnterShortcut = addCanvasShortcut(QKeySequence(Qt::Key_Enter), inspectSelection);
+
+    // Navigation and tool keys. Single letters belong on the canvas: window-scoped they would fire
+    // while a palette grid, a tree or a non-editable combo has focus, and typing "b" in such a
+    // place would start placing scroll blockers.
+    addCanvasShortcut(QKeySequence(Qt::Key_S), [this]() {
+        if (_selectToolAction) {
+            _selectToolAction->trigger();
+        }
+    });
+    addCanvasShortcut(QKeySequence(Qt::Key_G), [this]() {
+        if (_showHexGridAction) {
+            _showHexGridAction->toggle();
+        }
+    });
+    addCanvasShortcut(QKeySequence(Qt::Key_B), [this]() {
+        if (_scrollBlockerRectAction) {
+            _scrollBlockerRectAction->trigger();
+        }
+    });
+    _rotateShortcut = addCanvasShortcut(QKeySequence(Qt::Key_R), [this]() {
+        if (_rotateAction) {
+            _rotateAction->trigger();
+        }
+    });
+
+    addCanvasShortcut(QKeySequence(Qt::Key_Home), [this]() {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->centerViewOnPlayerPosition();
+        }
+    });
+    addCanvasShortcut(QKeySequence(Qt::Key_F), [this]() {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->viewport().fitMapInView();
+        }
+    });
+}
+
+void MainWindow::editSelectedObjectScriptSource() {
+    if (!_currentEditorWidget || !_scriptSourceService) {
+        return;
+    }
+
+    const Map* map = _currentEditorWidget->getMap();
+    const selection::SelectionManager* selectionManager = _currentEditorWidget->getSelectionManager();
+    if (!map || !selectionManager) {
+        return;
+    }
+
+    // The first selected object that actually owns a script. A selection of tiles, or of objects
+    // with nothing attached, is a no-op with a word in the status bar rather than a dialog.
+    for (const selection::SelectedItem& item : selectionManager->getCurrentSelection().items) {
+        if (!item.isObject()) {
+            continue;
+        }
+        const std::shared_ptr<Object> object = item.getObject();
+        const std::shared_ptr<MapObject> mapObject = object ? object->getMapObjectPtr() : nullptr;
+        if (!mapObject || mapObject->map_scripts_pid == -1) {
+            continue;
+        }
+        const auto sid = static_cast<uint32_t>(mapObject->map_scripts_pid);
+        if (const std::optional<int> programIndex = map->scriptProgramIndexForSid(sid)) {
+            _scriptSourceService->editScriptSource(*programIndex);
+            return;
+        }
+    }
+
+    showStatusMessage(tr("No script attached to the selection"));
 }
 
 QAction* MainWindow::addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef,
@@ -539,9 +607,14 @@ void MainWindow::setupMenuBar() {
     addMenuAction(_editMenu, ":/icons/actions/deselect.svg", "&Deselect All", &MainWindow::deselectAllRequested, QKeySequence("Ctrl+D"), "Clear all selections");
 
     _editMenu->addSeparator();
-    addMenuAction(_editMenu, ":/icons/actions/scroll-blocker.svg", "Scroll &Blocker Rectangle", &MainWindow::toggleScrollBlockerRectangleMode, QKeySequence("B"), "Draw rectangle and place scroll blockers on borders");
+    // No shortcut on the action itself: "B" is canvas-scoped (installCanvasShortcuts), so it cannot
+    // fire while a palette grid or a tree has focus.
+    _scrollBlockerRectAction = addMenuAction(_editMenu, ":/icons/actions/scroll-blocker.svg", "Scroll &Blocker Rectangle", &MainWindow::toggleScrollBlockerRectangleMode, QKeySequence(), "Draw rectangle and place scroll blockers on borders (B)");
     addMenuAction(_editMenu, ":/icons/actions/save.svg", "Save Selection as &Pattern...", &MainWindow::showSavePatternDialog, QKeySequence(), "Save the current selection as a reusable prefab pattern");
     addMenuAction(_editMenu, ":/icons/actions/open.svg", "S&tamp Pattern...", &MainWindow::showStampPatternDialog, QKeySequence(), "Load a prefab pattern and click to place it");
+    // Jump from a scripted object straight to its .ssl. Window-scoped: it is a command, not a
+    // single letter, so it costs nothing while a filter box has focus.
+    addMenuAction(_editMenu, ":/icons/actions/settings.svg", "&Edit Script Source", &MainWindow::editSelectedObjectScriptSource, QKeySequence("Ctrl+Shift+E"), "Open the .ssl of the script attached to the selected object");
 #ifdef GECK_SCRIPTING_ENABLED
     // Fill is driven entirely by Luau fill scripts, so it is offered only when scripting is built in.
     // Every use of _fillSelectionAction below is null-guarded, so leaving it null disables the feature.
@@ -732,12 +805,16 @@ void MainWindow::setupMenuBar() {
         const char* text;
         int elevation;
         bool checked;
+        int shortcutKey;
     };
 
+    // Ctrl+digit, the counterpart to the panels' Alt+digit. updateElevationMenu() enables only the
+    // elevations the open map actually has, and a shortcut on a disabled action is a no-op — so a
+    // map with one elevation ignores Ctrl+2 rather than switching to a level that isn't there.
     const std::array<ElevationActionSpec, 3> elevationSpecs = { {
-        { &_elevation1Action, "Elevation &1", ELEVATION_1, true },
-        { &_elevation2Action, "Elevation &2", ELEVATION_2, false },
-        { &_elevation3Action, "Elevation &3", ELEVATION_3, false },
+        { &_elevation1Action, "Elevation &1", ELEVATION_1, true, Qt::Key_1 },
+        { &_elevation2Action, "Elevation &2", ELEVATION_2, false, Qt::Key_2 },
+        { &_elevation3Action, "Elevation &3", ELEVATION_3, false, Qt::Key_3 },
     } };
 
     for (const ElevationActionSpec& spec : elevationSpecs) {
@@ -745,6 +822,7 @@ void MainWindow::setupMenuBar() {
         action->setCheckable(true);
         action->setChecked(spec.checked);
         action->setData(spec.elevation);
+        action->setShortcut(QKeySequence(Qt::CTRL | static_cast<Qt::Key>(spec.shortcutKey)));
         action->setDisabled(true);
         elevationGroup->addAction(action);
         connect(action, &QAction::triggered, this, [this, elevation = spec.elevation]() { elevationChanged(elevation); });
@@ -887,9 +965,9 @@ void MainWindow::setupToolBar() {
 
     _mainToolBar->addSeparator();
 
-    // Stored so it can be disabled while stamping a pattern — otherwise its "R" shortcut
-    // swallows the key before it reaches the viewport, where R cycles pattern variants.
-    _rotateAction = addToolAction(":/icons/actions/rotate.svg", "Rotate", &MainWindow::rotateObjectRequested, "Rotate selected object", QKeySequence("R"));
+    // "R" is canvas-scoped (installCanvasShortcuts) rather than a shortcut on this action, so it
+    // only fires with the map view focused. The button itself stays enabled in every mode.
+    _rotateAction = addToolAction(":/icons/actions/rotate.svg", "Rotate", &MainWindow::rotateObjectRequested, "Rotate selected object (R)");
 
     _mainToolBar->addSeparator();
 
@@ -1067,9 +1145,11 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
     }
 
     // Free up "R" for the viewport while stamping or while a registered tool runs (object
-    // placement); otherwise the toolbar shortcut would swallow the key before it reaches the editor.
-    if (_rotateAction) {
-        _rotateAction->setEnabled(mode != EditorMode::StampPattern && mode != EditorMode::PluginTool);
+    // placement); otherwise the shortcut would swallow the key before it reaches the editor, where
+    // R cycles a stamp's orientation variants. The toolbar button stays enabled either way — only
+    // the key stands down.
+    if (_rotateShortcut) {
+        _rotateShortcut->setEnabled(mode != EditorMode::StampPattern && mode != EditorMode::PluginTool);
     }
 }
 

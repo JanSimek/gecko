@@ -242,6 +242,9 @@ private:
     // (Re)install the shortcuts scoped to the map canvas. Called whenever an EditorWidget is
     // installed, since the SFML widget they hang off is rebuilt with it.
     void installCanvasShortcuts();
+    // Ctrl+Shift+E: open the .ssl of the script attached to the selected object (the same
+    // ScriptSourceService flow as the Selection panel's "Edit Source..." button).
+    void editSelectedObjectScriptSource();
     std::array<QDockWidget*, 6> managedDocks() const;
     std::array<DockActionPair, 6> managedDockActionPairs() const;
     void applyDefaultDockPlacements();
@@ -386,12 +389,18 @@ private:
     QAction* _objectPalettePanelAction;
     QAction* _fileBrowserPanelAction;
     QAction* _logPanelAction = nullptr;
+    // Edit-menu "Scroll Blocker Rectangle"; its key lives on the canvas, so the action is held to
+    // be triggered from there.
+    QAction* _scrollBlockerRectAction = nullptr;
 
     // "Inspect the selection": reveals the Selection panel from the canvas. Lives on the SFML
     // widget (WidgetWithChildrenShortcut), so Return typed in a panel's filter box is untouched.
     // Return and numpad Enter are separate key codes, hence the pair.
     QPointer<QShortcut> _inspectSelectionShortcut;
     QPointer<QShortcut> _inspectSelectionEnterShortcut;
+    // Canvas "R". Held so it can stand down while stamping or while a registered tool runs, where
+    // R belongs to the viewport (stamp variants) instead.
+    QPointer<QShortcut> _rotateShortcut;
 
     // Toolbar actions
     QAction* _selectionModeAction;

@@ -92,6 +92,11 @@ public:
     const std::optional<MapEdge>& edge() const { return _edge; }
     void setEdge(std::optional<MapEdge> edge) { _edge = std::move(edge); }
 
+    /// The scripts.lst program index (0-based, what gecko speaks — see CLAUDE.md "Script Index
+    /// Bases") of the map script an object's SID names, or nullopt when this map has no script
+    /// with that SID. The SID's section picks which of the five script lists to search.
+    std::optional<int> scriptProgramIndexForSid(uint32_t sid) const;
+
     /// Builds a blank Fallout 2 map: default header, three empty elevations of
     /// EMPTY_TILE tiles, and no scripts or objects.
     static MapFile createEmptyMapFile();

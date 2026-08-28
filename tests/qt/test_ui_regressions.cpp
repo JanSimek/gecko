@@ -1404,6 +1404,59 @@ TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exi
     CHECK(editor->currentMode() == geck::EditorMode::Select);
 }
 
+// The editor-navigation keys. Elevation is the everyday one: Ctrl+digit, the counterpart of the
+// panels' Alt+digit. They start disabled and updateElevationMenu() enables only what the open map
+// has, so the key is a no-op on a map without that elevation rather than a switch to nothing.
+TEST_CASE("Elevation actions carry Ctrl+digit and stay no-ops until a map has that elevation", "[qt][mainwindow][keys]") {
+    removeTestSettings();
+
+    auto resources = std::make_shared<geck::resource::GameResources>();
+    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
+    window.show();
+    QTest::qWait(250);
+
+    struct ExpectedShortcut {
+        const char* actionText;
+        QKeySequence keys;
+    };
+
+    const std::array<ExpectedShortcut, 3> expected = { {
+        { "Elevation 1", QKeySequence(Qt::CTRL | Qt::Key_1) },
+        { "Elevation 2", QKeySequence(Qt::CTRL | Qt::Key_2) },
+        { "Elevation 3", QKeySequence(Qt::CTRL | Qt::Key_3) },
+    } };
+
+    for (const ExpectedShortcut& entry : expected) {
+        QAction* action = findAction(window, entry.actionText);
+        REQUIRE(action != nullptr);
+        CHECK(action->shortcut() == entry.keys);
+        CHECK_FALSE(action->isEnabled()); // no map open
+    }
+}
+
+// B and R used to be window-scoped QAction shortcuts, which fired while a palette grid or a tree
+// had focus — typing "b" in such a place started placing scroll blockers. Both now live on the
+// canvas, so the actions themselves must carry no shortcut.
+TEST_CASE("Single-letter tool keys are off the window-scoped actions", "[qt][mainwindow][keys]") {
+    removeTestSettings();
+
+    auto resources = std::make_shared<geck::resource::GameResources>();
+    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
+    window.show();
+    QTest::qWait(250);
+
+    for (const char* text : { "Scroll Blocker Rectangle", "Rotate" }) {
+        QAction* action = findAction(window, text);
+        REQUIRE(action != nullptr);
+        CHECK(action->shortcut().isEmpty());
+    }
+
+    // Ctrl+Shift+E is a command, not a single letter, so it stays window-scoped.
+    QAction* editSource = findAction(window, "Edit Script Source");
+    REQUIRE(editSource != nullptr);
+    CHECK(editSource->shortcut() == QKeySequence("Ctrl+Shift+E"));
+}
+
 // "Inspect the selection": Return (and numpad Enter, a distinct key code) reveals the Selection
 // panel. Both are scoped to the canvas so a Return typed in a panel's filter box is left alone, and
 // both must stand down in MarkExits mode, where Enter finalizes the in-progress Draw-edge polyline
@@ -1439,11 +1492,14 @@ TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge
         CHECK(shortcut->context() == Qt::WidgetWithChildrenShortcut);
         keys.append(shortcut->key());
     }
-    CHECK(keys.contains(QKeySequence(Qt::Key_Return)));
-    CHECK(keys.contains(QKeySequence(Qt::Key_Enter)));
+    for (const QKeySequence& expected : { QKeySequence(Qt::Key_Return), QKeySequence(Qt::Key_Enter),
+             QKeySequence(Qt::Key_S), QKeySequence(Qt::Key_G), QKeySequence(Qt::Key_B),
+             QKeySequence(Qt::Key_R), QKeySequence(Qt::Key_Home), QKeySequence(Qt::Key_F) }) {
+        CHECK(keys.contains(expected));
+    }
 
-    // Only these two are asserted on by key rather than sweeping every canvas shortcut, so a
-    // shortcut added later for something else cannot fail this test.
+    // Shortcuts are looked up by key rather than swept as a group, so one added later for
+    // something else cannot fail this test.
     const auto shortcutFor = [&canvasShortcuts](const QKeySequence& wanted) -> const QShortcut* {
         for (const QShortcut* shortcut : canvasShortcuts) {
             if (shortcut->key() == wanted) {
@@ -1460,12 +1516,37 @@ TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge
     CHECK(inspectReturn->isEnabled());
     CHECK(inspectEnter->isEnabled());
 
-    // Draw edge: Enter belongs to the polyline, so the reveal keys step aside.
+    // Stamping: R belongs to the viewport, where it cycles the pattern's orientation variants, so
+    // the canvas shortcut stands down and the key falls through to InputHandler. The toolbar
+    // button stays enabled — only the key steps aside.
+    const QShortcut* rotate = shortcutFor(QKeySequence(Qt::Key_R));
+    REQUIRE(rotate != nullptr);
+    QAction* rotateAction = findAction(window, "Rotate");
+    REQUIRE(rotateAction != nullptr);
+
+    editorWidget->setMode(geck::EditorMode::StampPattern);
+    QApplication::processEvents();
+    CHECK_FALSE(rotate->isEnabled());
+    CHECK(rotateAction->isEnabled());
+
+    editorWidget->setMode(geck::EditorMode::Select);
+    QApplication::processEvents();
+    CHECK(rotate->isEnabled());
+
+    // Draw edge: Enter belongs to the polyline, so the two reveal keys step aside.
     editorWidget->setMarkExitsMode(true);
     QApplication::processEvents();
     REQUIRE(editorWidget->currentMode() == geck::EditorMode::MarkExits);
     CHECK_FALSE(inspectReturn->isEnabled());
     CHECK_FALSE(inspectEnter->isEnabled());
+
+    // ...and only those two: the navigation keys are unaffected by the mode.
+    const QShortcut* centerOnPlayer = shortcutFor(QKeySequence(Qt::Key_Home));
+    const QShortcut* fitMap = shortcutFor(QKeySequence(Qt::Key_F));
+    REQUIRE(centerOnPlayer != nullptr);
+    REQUIRE(fitMap != nullptr);
+    CHECK(centerOnPlayer->isEnabled());
+    CHECK(fitMap->isEnabled());
 
     // Leaving the mode hands them back.
     editorWidget->setMode(geck::EditorMode::Select);

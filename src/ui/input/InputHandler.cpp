@@ -337,9 +337,9 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
             _callbacks.onDeleteObjects();
         }
     } else if (event.code == sf::Keyboard::Key::R) {
-        // The Rotate toolbar shortcut is disabled by the editor while stamping (and while a
-        // registered tool runs), so R reaches us here: in stamp mode it cycles the pattern's
-        // orientation variants. A registered tool sees R first via onToolKeyPressed above.
+        // The canvas "R" shortcut stands down while stamping (and while a registered tool runs),
+        // so R reaches us here: in stamp mode it cycles the pattern's orientation variants.
+        // A registered tool sees R first via onToolKeyPressed above.
         if (_mode == EditorMode::StampPattern && _callbacks.onStampCycleVariant) {
             _callbacks.onStampCycleVariant();
         }
