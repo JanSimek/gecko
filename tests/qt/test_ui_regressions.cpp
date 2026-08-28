@@ -1442,24 +1442,36 @@ TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge
     CHECK(keys.contains(QKeySequence(Qt::Key_Return)));
     CHECK(keys.contains(QKeySequence(Qt::Key_Enter)));
 
-    for (const QShortcut* shortcut : canvasShortcuts) {
-        CHECK(shortcut->isEnabled());
-    }
+    // Only these two are asserted on by key rather than sweeping every canvas shortcut, so a
+    // shortcut added later for something else cannot fail this test.
+    const auto shortcutFor = [&canvasShortcuts](const QKeySequence& wanted) -> const QShortcut* {
+        for (const QShortcut* shortcut : canvasShortcuts) {
+            if (shortcut->key() == wanted) {
+                return shortcut;
+            }
+        }
+        return nullptr;
+    };
+
+    const QShortcut* inspectReturn = shortcutFor(QKeySequence(Qt::Key_Return));
+    const QShortcut* inspectEnter = shortcutFor(QKeySequence(Qt::Key_Enter));
+    REQUIRE(inspectReturn != nullptr);
+    REQUIRE(inspectEnter != nullptr);
+    CHECK(inspectReturn->isEnabled());
+    CHECK(inspectEnter->isEnabled());
 
     // Draw edge: Enter belongs to the polyline, so the reveal keys step aside.
     editorWidget->setMarkExitsMode(true);
     QApplication::processEvents();
     REQUIRE(editorWidget->currentMode() == geck::EditorMode::MarkExits);
-    for (const QShortcut* shortcut : canvasShortcuts) {
-        CHECK_FALSE(shortcut->isEnabled());
-    }
+    CHECK_FALSE(inspectReturn->isEnabled());
+    CHECK_FALSE(inspectEnter->isEnabled());
 
     // Leaving the mode hands them back.
     editorWidget->setMode(geck::EditorMode::Select);
     QApplication::processEvents();
-    for (const QShortcut* shortcut : canvasShortcuts) {
-        CHECK(shortcut->isEnabled());
-    }
+    CHECK(inspectReturn->isEnabled());
+    CHECK(inspectEnter->isEnabled());
 }
 
 TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map's .gam", "[qt][mapinfo]") {
