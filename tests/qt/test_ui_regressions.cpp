@@ -10,6 +10,7 @@
 #include <QGroupBox>
 #include <QLabel>
 #include <QStackedWidget>
+#include <QShortcut>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -38,6 +39,7 @@
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/widgets/DataPathsWidget.h"
 #include "ui/widgets/ObjectPreviewWidget.h"
+#include "ui/widgets/SFMLWidget.h"
 #include "ui/widgets/ProInfoPanelWidget.h"
 #include "ui/widgets/ProPreviewPanelWidget.h"
 #include "ui/widgets/WelcomeWidget.h"
@@ -790,6 +792,84 @@ TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][main
     REQUIRE_FALSE(selectionAction->isChecked());
 }
 
+// The panel shortcut family: Alt+1..6 on the six managed panels, Alt+` on the Log dock
+// (docs/keybindings-plan.md). Alt+digit rather than Ctrl+digit so Ctrl+1..3 stays free for the
+// elevations and a panel's filter box never swallows the key.
+TEST_CASE("Panel menu actions carry their Alt shortcuts", "[qt][mainwindow][keys]") {
+    removeTestSettings();
+
+    auto resources = std::make_shared<geck::resource::GameResources>();
+    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
+    window.show();
+    QTest::qWait(250);
+
+    struct ExpectedShortcut {
+        const char* actionText;
+        QKeySequence keys;
+    };
+
+    const std::array<ExpectedShortcut, 7> expected = { {
+        { "Map Information", QKeySequence(Qt::ALT | Qt::Key_1) },
+        { "Selection", QKeySequence(Qt::ALT | Qt::Key_2) },
+        { "Scripts", QKeySequence(Qt::ALT | Qt::Key_3) },
+        { "Tile Palette", QKeySequence(Qt::ALT | Qt::Key_4) },
+        { "Object Palette", QKeySequence(Qt::ALT | Qt::Key_5) },
+        { "Virtual File System Browser", QKeySequence(Qt::ALT | Qt::Key_6) },
+        { "Log", QKeySequence(Qt::ALT | Qt::Key_QuoteLeft) },
+    } };
+
+    for (const ExpectedShortcut& entry : expected) {
+        QAction* action = findAction(window, entry.actionText);
+        REQUIRE(action != nullptr);
+        CHECK(action->shortcut() == entry.keys);
+    }
+}
+
+// The reason the panel keys reveal rather than plain-toggle: panels are tabbed, so a dock Qt calls
+// visible may be sitting behind another tab. Toggling would take it away exactly when the user asked
+// to see it.
+TEST_CASE("A panel action raises a tabbed-behind dock instead of hiding it", "[qt][mainwindow][keys]") {
+    removeTestSettings();
+
+    auto resources = std::make_shared<geck::resource::GameResources>();
+    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
+    window.show();
+    QTest::qWait(250);
+
+    auto* mapInfoDock = window.findChild<QDockWidget*>("MapInfoDock");
+    auto* selectionDock = window.findChild<QDockWidget*>("SelectionDock");
+    auto* selectionAction = findAction(window, "Selection");
+    REQUIRE(mapInfoDock != nullptr);
+    REQUIRE(selectionDock != nullptr);
+    REQUIRE(selectionAction != nullptr);
+
+    window.tabifyDockWidget(mapInfoDock, selectionDock);
+    mapInfoDock->show();
+    selectionDock->show();
+    mapInfoDock->raise(); // Map Info is the tab on top, Selection is behind it
+    QApplication::processEvents();
+    QTest::qWait(50);
+
+    REQUIRE_FALSE(selectionDock->isHidden());          // visible to Qt...
+    REQUIRE(selectionDock->visibleRegion().isEmpty()); // ...but not on screen
+
+    selectionAction->trigger();
+    QApplication::processEvents();
+    QTest::qWait(50);
+
+    CHECK_FALSE(selectionDock->isHidden());
+    CHECK_FALSE(selectionDock->visibleRegion().isEmpty()); // raised to the front tab
+    CHECK(selectionAction->isChecked());
+
+    // Now that it is the tab on top, the same action puts it away.
+    selectionAction->trigger();
+    QApplication::processEvents();
+    QTest::qWait(50);
+
+    CHECK(selectionDock->isHidden());
+    CHECK_FALSE(selectionAction->isChecked());
+}
+
 // File > Close Map returns to the welcome screen. It must exist with the standard Close shortcut,
 // and triggering it with nothing open must be a safe no-op (no editor spawned, no crash) — the
 // handler guards on hasActiveMap() before touching the teardown path.
@@ -1322,6 +1402,64 @@ TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exi
 
     editor->setMode(geck::EditorMode::Select);
     CHECK(editor->currentMode() == geck::EditorMode::Select);
+}
+
+// "Inspect the selection": Return (and numpad Enter, a distinct key code) reveals the Selection
+// panel. Both are scoped to the canvas so a Return typed in a panel's filter box is left alone, and
+// both must stand down in MarkExits mode, where Enter finalizes the in-progress Draw-edge polyline
+// (InputHandler). Constructing an EditorWidget eagerly loads art/misc/HEX.frm, so this needs game
+// data mounted; without it we skip.
+TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge mode", "[qt][mainwindow][keys]") {
+    removeTestSettings();
+
+    auto resources = std::make_shared<geck::resource::GameResources>();
+    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
+    window.show();
+    QTest::qWait(250);
+
+    std::unique_ptr<geck::EditorWidget> editor;
+    try {
+        editor = std::make_unique<geck::EditorWidget>(*resources, makeMap("inspect.map"));
+    } catch (const std::exception& e) {
+        SKIP(std::string("EditorWidget needs mounted game data (HEX.frm): ") + e.what());
+    }
+    window.setEditorWidget(std::move(editor));
+    QApplication::processEvents();
+
+    auto* editorWidget = window.findChild<geck::EditorWidget*>();
+    REQUIRE(editorWidget != nullptr);
+    geck::SFMLWidget* canvas = editorWidget->getSFMLWidget();
+    REQUIRE(canvas != nullptr);
+
+    // The keys hang off the canvas, not the window: WidgetWithChildrenShortcut is what keeps them
+    // out of the panels' text fields.
+    const QList<QShortcut*> canvasShortcuts = canvas->findChildren<QShortcut*>();
+    QList<QKeySequence> keys;
+    for (const QShortcut* shortcut : canvasShortcuts) {
+        CHECK(shortcut->context() == Qt::WidgetWithChildrenShortcut);
+        keys.append(shortcut->key());
+    }
+    CHECK(keys.contains(QKeySequence(Qt::Key_Return)));
+    CHECK(keys.contains(QKeySequence(Qt::Key_Enter)));
+
+    for (const QShortcut* shortcut : canvasShortcuts) {
+        CHECK(shortcut->isEnabled());
+    }
+
+    // Draw edge: Enter belongs to the polyline, so the reveal keys step aside.
+    editorWidget->setMarkExitsMode(true);
+    QApplication::processEvents();
+    REQUIRE(editorWidget->currentMode() == geck::EditorMode::MarkExits);
+    for (const QShortcut* shortcut : canvasShortcuts) {
+        CHECK_FALSE(shortcut->isEnabled());
+    }
+
+    // Leaving the mode hands them back.
+    editorWidget->setMode(geck::EditorMode::Select);
+    QApplication::processEvents();
+    for (const QShortcut* shortcut : canvasShortcuts) {
+        CHECK(shortcut->isEnabled());
+    }
 }
 
 TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map's .gam", "[qt][mapinfo]") {

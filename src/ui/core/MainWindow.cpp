@@ -176,6 +176,11 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - initStart).count());
     }
 
+    // The canvas exists only once init() has built it, and it is rebuilt per map, so the
+    // canvas-scoped shortcuts are re-installed here (parented to the widget, so the old ones go
+    // with it). Before connectToEditorWidget(), whose syncToolModeActions() seeds their enabled state.
+    installCanvasShortcuts();
+
     connectToEditorWidget();
     connect(_currentEditorWidget, &EditorWidget::undoStackChanged, this, &MainWindow::updateUndoRedoActions);
     // Any edit (or undo/redo) marks the map dirty for the close/title prompts.
@@ -314,37 +319,88 @@ void MainWindow::connectMenuSignals() {
     updateUndoRedoActions();
 }
 
-QAction* MainWindow::addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef) {
-    auto showDock = [this](QDockWidget* targetDock, bool visible) {
-        if (!targetDock) {
+void MainWindow::revealPanel(QDockWidget* dock, QAction* action) {
+    if (!dock) {
+        return;
+    }
+
+    // Panels are tabbed, so "visible" is not the same as "on screen": a dock sitting behind
+    // another tab is visible to Qt but hidden to the user, and a plain toggle would take it away
+    // just as they asked for it. Raise those instead, and hide only the tab already on top.
+    const bool onTop = !dock->isHidden() && !dock->visibleRegion().isEmpty();
+
+    if (onTop) {
+        dock->hide();
+    } else {
+        dock->show();
+        if (!dock->isFloating() && dockWidgetArea(dock) != Qt::NoDockWidgetArea) {
+            dock->raise();
+        }
+        // Put the caret in the panel so it can be used straight away. A panel whose widget takes
+        // no focus simply keeps it where it was.
+        if (QWidget* panel = dock->widget()) {
+            panel->setFocus(Qt::ShortcutFocusReason);
+        }
+    }
+
+    // show()/hide() fire visibilityChanged, which re-syncs the menu check state; a raise fires
+    // nothing, so re-assert it here for the tabbed-behind case.
+    if (action) {
+        const QSignalBlocker blocker(*action);
+        action->setChecked(!dock->isHidden());
+    }
+}
+
+void MainWindow::installCanvasShortcuts() {
+    SFMLWidget* canvas = _currentEditorWidget ? _currentEditorWidget->getSFMLWidget() : nullptr;
+    if (!canvas) {
+        return;
+    }
+
+    // "Inspect the selection": reveal the Selection panel for whatever was just clicked. Scoped to
+    // the canvas so a Return pressed in a panel's filter box or a spin box is left alone, and a
+    // no-op with an empty selection (there is nothing to inspect).
+    const auto inspectSelection = [this]() {
+        if (!_currentEditorWidget) {
             return;
         }
-
-        if (visible) {
-            targetDock->show();
-            if (!targetDock->isFloating() && dockWidgetArea(targetDock) != Qt::NoDockWidgetArea) {
-                targetDock->raise();
-            }
+        const selection::SelectionManager* selectionManager = _currentEditorWidget->getSelectionManager();
+        if (!selectionManager || !selectionManager->hasSelection()) {
             return;
         }
-
-        targetDock->hide();
+        revealPanel(_selectionDock, _selectionPanelAction);
     };
 
+    const auto addCanvasShortcut = [this, canvas](QKeySequence keys, auto handler) {
+        auto* shortcut = new QShortcut(std::move(keys), canvas);
+        shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(shortcut, &QShortcut::activated, this, std::move(handler));
+        return shortcut;
+    };
+
+    // Return and numpad Enter are distinct key codes; one QShortcut catches only its own.
+    _inspectSelectionShortcut = addCanvasShortcut(QKeySequence(Qt::Key_Return), inspectSelection);
+    _inspectSelectionEnterShortcut = addCanvasShortcut(QKeySequence(Qt::Key_Enter), inspectSelection);
+}
+
+QAction* MainWindow::addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef,
+    const QKeySequence& shortcut) {
     actionRef = _panelsMenu->addAction(label);
     actionRef->setCheckable(true);
     actionRef->setChecked(true);
     QAction* action = actionRef;
+    if (!shortcut.isEmpty()) {
+        action->setShortcut(shortcut);
+    }
 
-    connect(action, &QAction::toggled, this, [this, dock, showDock](bool visible) {
-        if (_suppressDockStateSave) {
-            return;
-        }
-
-        spdlog::debug("{} action toggled: {}", dock->windowTitle().toStdString(), visible);
-        // showDock() flips the dock, which fires QDockWidget::visibilityChanged below; that handler
-        // persists the new layout, so there's nothing to save here.
-        showDock(dock, visible);
+    // triggered(), not toggled(): the check state Qt flips before this runs is only a request —
+    // revealPanel() decides from the dock's own state and re-asserts the box. Using triggered()
+    // also means the programmatic setChecked() calls elsewhere cannot reach here.
+    connect(action, &QAction::triggered, this, [this, dock, action]() {
+        spdlog::debug("{} panel action triggered", dock->windowTitle().toStdString());
+        // revealPanel() flips the dock, which fires QDockWidget::visibilityChanged below; that
+        // handler persists the new layout, so there's nothing to save here.
+        revealPanel(dock, action);
     });
 
     connect(dock, &QDockWidget::visibilityChanged, this, [this, dock, action](bool visible) {
@@ -1002,6 +1058,14 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
         }
     }
 
+    // Enter finalizes the in-progress "Draw edge" polyline (InputHandler), so the inspect-selection
+    // shortcut must stand down in that mode rather than eat the key.
+    for (QShortcut* shortcut : { _inspectSelectionShortcut.data(), _inspectSelectionEnterShortcut.data() }) {
+        if (shortcut) {
+            shortcut->setEnabled(mode != EditorMode::MarkExits);
+        }
+    }
+
     // Free up "R" for the viewport while stamping or while a registered tool runs (object
     // placement); otherwise the toolbar shortcut would swallow the key before it reaches the editor.
     if (_rotateAction) {
@@ -1255,9 +1319,22 @@ void MainWindow::setupDockWidgets() {
         consoleAction->setText(tr("Script &Console"));
         _viewMenu->addAction(consoleAction);
 #endif
-        QAction* logAction = _logDock->toggleViewAction();
-        logAction->setText(tr("&Log"));
-        _viewMenu->addAction(logAction);
+        // Not _logDock->toggleViewAction(): that one plain-toggles, and the Log dock shares the
+        // bottom area with the Script Console, so Alt+` needs to raise it when it is tabbed
+        // behind. The check state is kept in step with the dock below instead.
+        _logPanelAction = _viewMenu->addAction(tr("&Log"));
+        _logPanelAction->setCheckable(true);
+        _logPanelAction->setChecked(!_logDock->isHidden());
+        _logPanelAction->setShortcut(QKeySequence(Qt::ALT | Qt::Key_QuoteLeft));
+        connect(_logPanelAction, &QAction::triggered, this, [this]() { revealPanel(_logDock, _logPanelAction); });
+        // The Log dock sits outside the managed-layout persistence, so this only mirrors state.
+        connect(_logDock, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+            if (!_logPanelAction) {
+                return;
+            }
+            const QSignalBlocker blocker(*_logPanelAction);
+            _logPanelAction->setChecked(visible);
+        });
     }
 
     // MainWindow signals → current editor widget (connected once; both sender
@@ -2325,19 +2402,23 @@ void MainWindow::setupPanelsMenu() {
         const char* label;
         QDockWidget* dock;
         QAction** actionRef;
+        int shortcutKey; // Alt+<digit>; the family is deliberate, see docs/keybindings-plan.md
     };
 
+    // Alt+digit rather than Ctrl+digit: it keeps Ctrl+1..3 free for the elevations, and Alt+digit
+    // is not text, so a panel's filter box never swallows it.
     const std::array<PanelToggleSpec, 6> panelToggleSpecs = { {
-        { "Map &Information", _mapInfoDock, &_mapInfoPanelAction },
-        { "Scri&pts", _scriptsDock, &_scriptsPanelAction },
-        { "&Selection", _selectionDock, &_selectionPanelAction },
-        { "&Tile Palette", _tilePaletteDock, &_tilePalettePanelAction },
-        { "&Object Palette", _objectPaletteDock, &_objectPalettePanelAction },
-        { "&Virtual File System Browser", _fileBrowserDock, &_fileBrowserPanelAction },
+        { "Map &Information", _mapInfoDock, &_mapInfoPanelAction, Qt::Key_1 },
+        { "Scri&pts", _scriptsDock, &_scriptsPanelAction, Qt::Key_3 },
+        { "&Selection", _selectionDock, &_selectionPanelAction, Qt::Key_2 },
+        { "&Tile Palette", _tilePaletteDock, &_tilePalettePanelAction, Qt::Key_4 },
+        { "&Object Palette", _objectPaletteDock, &_objectPalettePanelAction, Qt::Key_5 },
+        { "&Virtual File System Browser", _fileBrowserDock, &_fileBrowserPanelAction, Qt::Key_6 },
     } };
 
     for (const PanelToggleSpec& spec : panelToggleSpecs) {
-        addPanelToggleAction(spec.label, spec.dock, *spec.actionRef);
+        addPanelToggleAction(spec.label, spec.dock, *spec.actionRef,
+            QKeySequence(Qt::ALT | static_cast<Qt::Key>(spec.shortcutKey)));
     }
 }
 

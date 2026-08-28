@@ -9,6 +9,8 @@
 #include <QIcon>
 #include <QTimer>
 #include <QKeyEvent>
+#include <QKeySequence>
+#include <QShortcut>
 #include <QPointer>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -231,7 +233,15 @@ private:
     void showPanelsForMap();
     void hidePanelsForNoMap();
     void setDockVisibility(QDockWidget* dock, QAction* action, bool visible);
-    QAction* addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef);
+    QAction* addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef,
+        const QKeySequence& shortcut = {});
+    // Show/raise/hide a panel dock for its menu item or keyboard shortcut. Docks are tabbed, so a
+    // dock Qt calls visible may be sitting behind another tab: raise it rather than hide it, and
+    // only hide when it is already the tab on top. `action` (optional) is re-checked to match.
+    void revealPanel(QDockWidget* dock, QAction* action);
+    // (Re)install the shortcuts scoped to the map canvas. Called whenever an EditorWidget is
+    // installed, since the SFML widget they hang off is rebuilt with it.
+    void installCanvasShortcuts();
     std::array<QDockWidget*, 6> managedDocks() const;
     std::array<DockActionPair, 6> managedDockActionPairs() const;
     void applyDefaultDockPlacements();
@@ -375,6 +385,13 @@ private:
     QAction* _tilePalettePanelAction;
     QAction* _objectPalettePanelAction;
     QAction* _fileBrowserPanelAction;
+    QAction* _logPanelAction = nullptr;
+
+    // "Inspect the selection": reveals the Selection panel from the canvas. Lives on the SFML
+    // widget (WidgetWithChildrenShortcut), so Return typed in a panel's filter box is untouched.
+    // Return and numpad Enter are separate key codes, hence the pair.
+    QPointer<QShortcut> _inspectSelectionShortcut;
+    QPointer<QShortcut> _inspectSelectionEnterShortcut;
 
     // Toolbar actions
     QAction* _selectionModeAction;
