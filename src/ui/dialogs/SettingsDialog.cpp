@@ -1,5 +1,6 @@
 #include "SettingsDialog.h"
 #include "ui/widgets/DataPathsWidget.h"
+#include "ui/widgets/KeybindingsWidget.h"
 #include "ui/widgets/GameLocationWidget.h"
 #include "ui/widgets/TextEditorWidget.h"
 #include "ui/theme/ThemeManager.h"
@@ -21,7 +22,7 @@ namespace geck {
 using namespace ui::constants;
 using namespace ui::defaults;
 
-SettingsDialog::SettingsDialog(std::shared_ptr<Settings> settings, QWidget* parent)
+SettingsDialog::SettingsDialog(std::shared_ptr<Settings> settings, KeyBindingRegistry* registry, QWidget* parent)
     : QDialog(parent)
     , _mainLayout(nullptr)
     , _tabWidget(nullptr)
@@ -37,6 +38,7 @@ SettingsDialog::SettingsDialog(std::shared_ptr<Settings> settings, QWidget* pare
     , _buttonBox(nullptr)
     , _applyButton(nullptr)
     , _resetButton(nullptr)
+    , _keyBindingRegistry(registry)
     , _settings(std::move(settings))
     , _hasChanges(false) {
 
@@ -93,6 +95,7 @@ void SettingsDialog::setupTabs() {
     setupViewportTab();
     setupEditorTab();
     setupColorsTab();
+    setupKeybindingsTab();
 
     _mainLayout->addWidget(_tabWidget);
 }
@@ -221,6 +224,36 @@ void SettingsDialog::setupEditorTab() {
     connect(_textEditorWidget, &TextEditorWidget::configurationChanged, this, &SettingsDialog::onWidgetChanged);
 }
 
+void SettingsDialog::selectTab(const QString& title) {
+    for (int index = 0; index < _tabWidget->count(); ++index) {
+        if (_tabWidget->tabText(index) == title) {
+            _tabWidget->setCurrentIndex(index);
+            return;
+        }
+    }
+}
+
+void SettingsDialog::setupKeybindingsTab() {
+    if (_keyBindingRegistry == nullptr) {
+        return; // no registry (a bare-constructed dialog) -> no tab, rather than an empty one
+    }
+
+    _keybindingsWidget = new KeybindingsWidget(_keyBindingRegistry);
+    _keybindingsWidget->setFlat(true);
+    _keybindingsWidget->setStyleSheet(ui::theme::styles::sectionGroupBox());
+
+    auto* tab = new QWidget();
+    auto* layout = new QVBoxLayout(tab);
+    layout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
+    layout->setSpacing(SPACING_LOOSE);
+    layout->addWidget(_keybindingsWidget, /*stretch=*/1);
+
+    _tabWidget->addTab(tab, "Keyboard Shortcuts");
+
+    connect(_keybindingsWidget, &KeybindingsWidget::changed, this, &SettingsDialog::onWidgetChanged);
+    connect(_keybindingsWidget, &KeybindingsWidget::statusChanged, this, &SettingsDialog::setMainStatus);
+}
+
 void SettingsDialog::setupButtonBox() {
     _buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 
@@ -267,6 +300,10 @@ void SettingsDialog::loadSettings() {
         updateColorButton(it.key());
     }
 
+    if (_keybindingsWidget) {
+        _keybindingsWidget->reload();
+    }
+
     _hasChanges = false;
     updateUI();
 }
@@ -299,6 +336,12 @@ void SettingsDialog::saveSettings() {
 
     for (auto it = _selectionColors.constBegin(); it != _selectionColors.constEnd(); ++it) {
         settings.setSelectionColor(it.key(), it.value());
+    }
+
+    // Rebinds take effect here (the registry re-keys every menu, toolbar and canvas sink) and are
+    // written through to Settings, which the save() below puts on disk.
+    if (_keybindingsWidget) {
+        _keybindingsWidget->applyChanges();
     }
 
     settings.save();

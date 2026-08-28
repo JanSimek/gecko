@@ -2,6 +2,8 @@
 
 #include <QString>
 
+#include <functional>
+
 #include "ui/core/EditorMode.h"
 
 namespace geck {
@@ -15,6 +17,15 @@ namespace geck {
 // For EditorMode::PluginTool, `activeToolHint` carries the active tool's own hint items
 // (ITool::statusHint(), one per line); when non-empty they are joined with the standard
 // separator, otherwise the generic PluginTool hint is returned.
-QString hintForContext(EditorMode mode, bool hasSelection, const QString& activeToolHint = {});
+//
+// `keyFor` resolves a keybinding-table action id (ui/input/ActionSpec.h) to the key it is
+// currently on, so the hint follows a rebind instead of advertising a key that no longer works.
+// Left unset — as tests do — the shipped defaults are named. The keys that are NOT table rows
+// (Esc, Space, Delete, the Draw-edge Enter) are tool state-machine keys: they are meaningful only
+// inside their mode, are dispatched in SFML key codes rather than QKeySequence, and are not
+// rebindable, so they stay written out here.
+using HintKeyLookup = std::function<QString(const QString& actionId)>;
+QString hintForContext(EditorMode mode, bool hasSelection, const QString& activeToolHint = {},
+    const HintKeyLookup& keyFor = {});
 
 } // namespace geck

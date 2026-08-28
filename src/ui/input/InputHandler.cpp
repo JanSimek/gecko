@@ -343,12 +343,6 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
         if (_mode == EditorMode::StampPattern && _callbacks.onStampCycleVariant) {
             _callbacks.onStampCycleVariant();
         }
-    } else if (event.code == sf::Keyboard::Key::P) {
-        // Eyedropper: sample whatever is under the cursor. Key events carry no view/target to convert
-        // pixels, so reuse the last cursor position tracked on mouse move (like the flip key).
-        if (_callbacks.onPick) {
-            _callbacks.onPick(_mouseLastWorldPos);
-        }
     } else if (event.code == sf::Keyboard::Key::Space) {
         // In "Draw edge" mode, Space flips which side the edge's bars sit on, then re-fires the preview
         // at the last cursor so the flipped side is visible before finalising.

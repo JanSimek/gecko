@@ -13,7 +13,7 @@ change what the slices below can safely claim.
 
 | Claim in the doc | What the code actually does |
 |---|---|
-| `F11` / `F16` are bound (spatial-script dialog / kill-type) | **Not bound anywhere.** `F11` appears only in `SFMLWidget::convertQtKeyToSf()` (`src/ui/widgets/SFMLWidget.cpp:316`), which is a Qt→SFML key-code translation table, not a binding. Both keys are free. |
+| `F11` / `F16` are bound (spatial-script dialog / kill-type) | **Not bound anywhere** (confirmed). `F11` appears only in `SFMLWidget::convertQtKeyToSf()` (`src/ui/widgets/SFMLWidget.cpp:316`), which is a Qt→SFML key-code translation table, not a binding. Both keys are free. |
 | — (missing) | **`P` is bound**: eyedropper, samples whatever is under the cursor into the matching palette (`src/ui/input/InputHandler.cpp:346`). Canvas-scoped already. |
 | — (missing) | **`Space` is bound**: in "Draw edge" mode it flips which side the exit-grid bars sit on (`src/ui/input/InputHandler.cpp:352`). Tool-modal. |
 | `Enter` is free | **`Enter` is already bound in `MarkExits` mode** — it finalizes the in-progress Draw-edge polyline (`src/ui/input/InputHandler.cpp:330`). The proposed `Enter` → Selection panel *must* stand down while that tool is active. |
@@ -102,7 +102,16 @@ void MainWindow::revealPanel(QDockWidget* dock) {
 
 `dock->hide()` / `show()` both fire `QDockWidget::visibilityChanged`, which the existing handler
 at `MainWindow.cpp:344` already uses to re-sync the menu action's check state and persist the
-layout — so the menu checkmarks stay correct for free.
+layout. ~~So the menu checkmarks stay correct for free.~~ **Not quite**: raising a tabbed-behind
+dock fires nothing, and a shortcut on a checkable `QAction` makes Qt flip the checkmark *before*
+the handler runs — so `revealPanel()` re-asserts `setChecked(!dock->isHidden())` under a
+`QSignalBlocker`, and the handler moved from `toggled` to `triggered` so the flipped state is
+treated as a request rather than the truth.
+
+**Semantics as shipped:** hidden → show + raise + focus; visible but tabbed behind → raise + focus;
+visible and on top → hide. Deliberately no "is it focused" test: with one, a *menu* click on a
+ticked item (focus is elsewhere by then) would raise-and-focus instead of hiding, so putting a
+panel away from the menu would take two clicks.
 
 ### 2.2 Wiring the `Alt+…` family
 
@@ -110,11 +119,12 @@ layout — so the menu checkmarks stay correct for free.
 `revealPanel()` instead of the inline `showDock` lambda. `setupPanelsMenu()`
 (`MainWindow.cpp:2308`) grows a `shortcut` field in its `PanelToggleSpec` array.
 
-Ordering gotcha: `setupPanelsMenu()` runs from `setupMenuBar()`, but `_logDock` is not created
-until `setupDockWidgets()` (`MainWindow.cpp:1242`). Attach `` Alt+` `` where the log action is
-already configured — `MainWindow.cpp:1252`, right after
-`logAction->setText(tr("&Log"))` — using `_logDock->toggleViewAction()`, and route it through
-`revealPanel()` rather than the raw toggle action so it gets the same reveal semantics.
+~~Ordering gotcha: `setupPanelsMenu()` runs from `setupMenuBar()`~~ — **not so**: `setupUI()` calls
+`setupMenuBar()`, `setupToolBar()`, `setupDockWidgets()`, *then* `setupPanelsMenu()`, so `_logDock`
+already exists. `` Alt+` `` is still attached where the log action is configured
+(`setupDockWidgets()`), but for a different reason: `_logDock->toggleViewAction()` is Qt's own
+plain-toggle action, so the Log dock gets its own checkable action routed through `revealPanel()`
+instead, with a `visibilityChanged` connection keeping the check state in step.
 
 ### 2.3 `Return` → reveal Selection panel
 
@@ -184,10 +194,12 @@ this class.
 ### 3.2 Migrating `B` and `R` to canvas scope
 
 Drop the `QKeySequence("B")` at `MainWindow.cpp:482` and the `QKeySequence("R")` at
-`MainWindow.cpp:828`; replace with canvas `QShortcut`s triggering the same actions. Then delete
-the `_rotateAction->setEnabled(...)` guard at `MainWindow.cpp:999` and update the comment at
-`InputHandler.cpp:339-342`, which documents the workaround — `R` will now reach the viewport
-without the toolbar action being disabled first.
+`MainWindow.cpp:828`; replace with canvas `QShortcut`s triggering the same actions. ~~Then delete
+the `_rotateAction->setEnabled(...)` guard at `MainWindow.cpp:999`.~~ **The guard cannot be
+deleted, only moved**: a canvas `QShortcut` consumes the key just as a window-scoped `QAction`
+shortcut does, so `R` still has to stand down in `StampPattern` / `PluginTool` for the viewport to
+see it. What the move buys is that the *shortcut* is disabled instead of the action, so the
+toolbar button no longer greys out. The comment at `InputHandler.cpp:339-342` is updated to match.
 
 **Files:** `src/ui/core/MainWindow.{h,cpp}`, `src/viewport/ViewportController.{h,cpp}`,
 `src/ui/input/InputHandler.cpp` (comment only).
@@ -392,11 +404,18 @@ address Copilot / SonarCloud comments before considering a slice done.
 
 ## 8. Open decisions
 
+*(Answered during implementation — see the resolutions under each.)*
+
 1. **`Ctrl+Shift+E` behaviour when the selection has no script** — no-op, or offer to attach one?
    Recommend no-op with a status-bar message, matching the `Return` no-op convention.
+   → **Shipped as the no-op**: the first selected object that owns a script wins; otherwise the
+   status bar says "No script attached to the selection".
 2. **Should slice 3 ship a "Keyboard shortcuts" reference (printable list)?** Cheap once the
    table exists — a read-only view of the same tree — and it is the discoverability half of the
    motivating gap. Recommend yes, in the Help menu.
+   → **Help › Keyboard Shortcuts… shipped**, but as a jump to the Preferences page rather than a
+   second read-only view: same table, nothing to drift, and the list is where rebinding happens.
+   A printable/exportable list was not built.
 3. **macOS `Alt` = Option.** `Alt+digit` does not collide with menu mnemonics on macOS (there
    are none) and `QLineEdit` will not see it as text, so the family is safe; worth a manual
    check on the first macOS build since Option-digit types glyphs in some contexts.

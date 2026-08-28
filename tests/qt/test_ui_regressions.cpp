@@ -1404,6 +1404,31 @@ TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exi
     CHECK(editor->currentMode() == geck::EditorMode::Select);
 }
 
+// Two enabled actions on one key make Qt fire neither and warn about an ambiguous overload, and
+// nothing else notices — the menus and the toolbar both hand out shortcuts, so this sweeps the
+// whole live window rather than just the shipped table.
+TEST_CASE("No two actions in the window share a shortcut", "[qt][mainwindow][keys]") {
+    removeTestSettings();
+
+    auto resources = std::make_shared<geck::resource::GameResources>();
+    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
+    window.show();
+    QTest::qWait(250);
+
+    QHash<QString, QString> owners; // key text -> the action already holding it
+    for (const QAction* action : window.findChildren<QAction*>()) {
+        const QKeySequence keys = action->shortcut();
+        if (keys.isEmpty()) {
+            continue;
+        }
+        const QString text = keys.toString();
+        INFO("key " << text.toStdString() << " wanted by " << normalizeActionText(action->text()).toStdString()
+                    << " and " << owners.value(text).toStdString());
+        CHECK_FALSE(owners.contains(text));
+        owners.insert(text, normalizeActionText(action->text()));
+    }
+}
+
 // The editor-navigation keys. Elevation is the everyday one: Ctrl+digit, the counterpart of the
 // panels' Alt+digit. They start disabled and updateElevationMenu() enables only what the open map
 // has, so the key is a no-op on a map without that elevation rather than a switch to nothing.

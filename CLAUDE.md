@@ -242,6 +242,39 @@ Use the established base class hierarchy for consistency:
 | `BasePanel` | Palette/browser panels | `createSearchControls()`, `createPaginationControls()` |
 | `BasePaletteWidget` | Grid items (tiles, objects) | Selection painting, drag handling |
 
+### Keyboard Shortcuts
+
+Every shortcut is a row in one table — `src/ui/input/ActionSpec.h` (`actionSpecs()`) — read by the
+menus, the toolbar, the canvas and the Preferences page. Do **not** add a `QKeySequence` literal to
+`MainWindow`; add a row and bind a sink:
+
+```cpp
+#include "ui/input/ActionSpec.h"
+
+// A menu/toolbar action (window scope): the registry sets the key and re-keys it on rebind.
+_keyBindings->bind(actions::PANEL_SELECTION, action);
+
+// A canvas shortcut (only while the map view has focus) — see installCanvasShortcuts().
+auto* shortcut = new QShortcut(canvas);
+shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+_keyBindings->bind(actions::TOOL_ROTATE, shortcut);
+```
+
+- **Scope**: single letters must be `ActionScope::Canvas`. Window-scoped, they fire while a palette
+  grid or a tree has focus (typing "b" in one would place scroll blockers). Commands with modifiers
+  can be `Application`.
+- **Ids are persisted** in `settings.json` (`"keyBindings"`, overrides only), so never rename one
+  that has shipped. Only entries differing from the default are written, so a later release can
+  still move a default for users who never rebound it.
+- **One key, one action** — across both scopes, since a window-scoped shortcut also fires while the
+  canvas has focus. `KeyBindingRegistry::conflictingActionId()` enforces this and `test_keybindings`
+  guards the shipped table; two actions on one key makes Qt fire neither.
+- **Tool state-machine keys stay out of the table**: `Esc`, `Space`, `Delete`/`Backspace`, the
+  Draw-edge `Enter` and the stamp `R` live in `InputHandler`, are dispatched as SFML key codes, and
+  are meaningful only inside their mode. A canvas `QShortcut` *consumes* the key before
+  `InputHandler` sees it, so any shortcut sharing one of those keys must be disabled for that mode
+  (see `syncToolModeActions`).
+
 ### MIME Types for Drag and Drop
 
 Use constants from `src/ui/dragdrop/MimeTypes.h`:
@@ -297,5 +330,5 @@ On feature branches, follow this workflow:
 
 ---
 
-*Last updated: 2026-06-10*
+*Last updated: 2026-08-28*
 *This file should be updated whenever significant architectural decisions or fixes are made.*

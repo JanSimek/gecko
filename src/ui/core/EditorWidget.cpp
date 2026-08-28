@@ -1499,15 +1499,6 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         }
     };
 
-    // Eyedropper: sample what is under the cursor and load it into the matching palette.
-    callbacks.onPick = [this](sf::Vector2f worldPos) {
-        pickAtCursor(worldPos);
-        // Raising a palette dock can move keyboard focus off the viewport; put it back so the next
-        // P / Esc / placement click still arrives here (these keys flow through the SFML widget).
-        if (auto* sfml = getSFMLWidget()) {
-            sfml->setFocus();
-        }
-    };
     callbacks.onToolMousePressed = [this](sf::Vector2f worldPos, sf::Mouse::Button button) {
         return dispatchToolMousePressed(worldPos, button);
     };
@@ -1951,7 +1942,12 @@ QString EditorWidget::currentHintText() const {
             toolHint = QString::fromUtf8(tool->statusHint().data(), static_cast<qsizetype>(tool->statusHint().size()));
         }
     }
-    return hintForContext(_mode, hasSelection, toolHint);
+    return hintForContext(_mode, hasSelection, toolHint, _hintKeyLookup);
+}
+
+void EditorWidget::setHintKeyLookup(HintKeyLookup lookup) {
+    _hintKeyLookup = std::move(lookup);
+    emitHintChanged(); // the hint on screen was written with the old names
 }
 
 void EditorWidget::setTilePlacementMode(bool enabled, int tileIndex, bool isRoof) {
@@ -2568,6 +2564,17 @@ void EditorWidget::clearMarkExitsLinePreview() {
     _exitGridLineVertices.clear();
     _exitGridPreviewHexes.clear();
     _exitGridPreviewFrmPids.clear();
+}
+
+void EditorWidget::pickAtLastCursor() {
+    // Key events carry no view to convert pixels with, so sample at the position InputHandler
+    // tracked on the last mouse move.
+    pickAtCursor(_inputHandler->lastCursorWorldPos());
+    // Raising a palette dock can move keyboard focus off the viewport; put it back so the next
+    // eyedropper press / Esc / placement click still arrives here.
+    if (auto* sfml = getSFMLWidget()) {
+        sfml->setFocus();
+    }
 }
 
 void EditorWidget::pickAtCursor(sf::Vector2f worldPos) {

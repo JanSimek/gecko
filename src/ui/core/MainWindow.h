@@ -40,6 +40,7 @@ namespace resource {
 }
 
 class Settings;
+class KeyBindingRegistry;
 class GameLauncher;
 class ExternalEditorLauncher;
 class ScriptSourceService;
@@ -158,7 +159,10 @@ private slots:
     void handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem = false);
     void updateHexIndexDisplay(int hexIndex);
     void updateModeDisplay(const QString& modeText, const QString& iconPath);
-    void showPreferences();
+    /// `initialTab` names the tab to open on (empty = whichever was last shown).
+    void showPreferences(const QString& initialTab = {});
+    /// Help > Keyboard Shortcuts: the Preferences page listing every binding.
+    void showKeyboardShortcuts();
     void showAbout();
     void onPlayGame();
     void showSavePatternDialog();
@@ -234,7 +238,7 @@ private:
     void hidePanelsForNoMap();
     void setDockVisibility(QDockWidget* dock, QAction* action, bool visible);
     QAction* addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef,
-        const QKeySequence& shortcut = {});
+        const char* actionId = nullptr);
     // Show/raise/hide a panel dock for its menu item or keyboard shortcut. Docks are tabbed, so a
     // dock Qt calls visible may be sitting behind another tab: raise it rather than hide it, and
     // only hide when it is already the tab on top. `action` (optional) is re-checked to match.
@@ -300,6 +304,9 @@ private:
     std::unique_ptr<GameLauncher> _gameLauncher;
     std::unique_ptr<ExternalEditorLauncher> _externalEditorLauncher;
     std::unique_ptr<ScriptSourceService> _scriptSourceService;
+    // The single source of truth for which key runs which command: shipped defaults plus the
+    // user's overrides, re-keying every menu/toolbar/canvas sink the moment one changes.
+    std::unique_ptr<KeyBindingRegistry> _keyBindings;
 
     // Current widgets
     EditorWidget* _currentEditorWidget;
