@@ -31,36 +31,55 @@ namespace geck::cli {
 namespace {
     using nlohmann::ordered_json;
 
-    // Proto display name, cached. Same lookup proto_info does: the proto's message_id read out of the
-    // type's .msg file. Kept local rather than reusing MapAnalyzer's NameResolver, which is private to
-    // that translation unit.
-    class ProtoNames {
+    // What a consumer needs to show a proto to a reader: its name, the sentence the game prints when
+    // you examine it, and the art to draw. Cached, since a proto recurs across hundreds of rows.
+    struct ProtoInfo {
+        std::string name;
+        std::string description;
+        std::int32_t fid = 0; // inventory icon for items, the critter's own art otherwise
+    };
+
+    // Same name lookup proto_info does — the proto's message_id read out of the type's .msg file —
+    // plus the description, which the engine stores at message_id + 1. Kept local rather than reusing
+    // MapAnalyzer's NameResolver, which is private to that translation unit.
+    class Protos {
     public:
-        explicit ProtoNames(resource::GameResources& resources)
+        explicit Protos(resource::GameResources& resources)
             : _resources(resources) {
         }
 
-        std::string operator()(std::uint32_t pid) {
+        const ProtoInfo& operator()(std::uint32_t pid) {
             if (const auto it = _cache.find(pid); it != _cache.end()) {
                 return it->second;
             }
-            std::string name;
+            ProtoInfo info;
             try {
                 if (const Pro* pro = _resources.loadPro(pid); pro != nullptr) {
+                    // Prefer an item's inventory icon, and fall back to its world sprite. Containers
+                    // — lockers, footlockers, bookcases, desks — are items by proto type but are never
+                    // carried, so their inventoryFID is -1 and only header.FID has art. That is 108 of
+                    // the 424 item protos, so without the fallback a quarter of them draw nothing.
+                    info.fid = pro->header.FID;
+                    if (Pro::typeOfPid(pid) == Pro::OBJECT_TYPE::ITEM
+                        && pro->commonItemData.inventoryFID >= 0) {
+                        info.fid = pro->commonItemData.inventoryFID;
+                    }
                     if (Msg* msg = ProHelper::msgFile(_resources, pro->type()); msg != nullptr) {
-                        name = msg->message(pro->header.message_id).text;
+                        info.name = msg->message(pro->header.message_id).text;
+                        info.description = msg->message(pro->header.message_id + 1).text;
                     }
                 }
             } catch (const std::exception& e) {
-                spdlog::debug("export: proto {} has no name: {}", pid, e.what());
+                spdlog::debug("export: proto {} unreadable: {}", pid, e.what());
             }
-            _cache.emplace(pid, name);
-            return name;
+            return _cache.emplace(pid, std::move(info)).first->second;
         }
+
+        const std::map<std::uint32_t, ProtoInfo>& seen() const { return _cache; }
 
     private:
         resource::GameResources& _resources;
-        std::unordered_map<std::uint32_t, std::string> _cache;
+        std::map<std::uint32_t, ProtoInfo> _cache;
     };
 
     const char* kindOf(std::uint32_t pid) {
@@ -138,12 +157,12 @@ namespace {
     // One row. `hex` is the object's own position, or — for something inside an inventory, which has no
     // position of its own — the position of whatever is holding it.
     ordered_json entityRow(const MapObject& object, const std::string& mapPath, int elevation,
-        int hex, ProtoNames& protoName, const ordered_json& holder, const ordered_json& script) {
+        int hex, Protos& protos, const ordered_json& holder, const ordered_json& script) {
         ordered_json row;
         row["kind"] = object.isExitGridMarker() ? "exitgrid" : kindOf(object.pro_pid);
         row["pid"] = object.pro_pid;
         row["proto"] = object.pro_pid & 0xFFFFFFu;
-        row["name"] = protoName(object.pro_pid);
+        row["name"] = protos(object.pro_pid).name;
         row["map"] = mapPath;
         row["elevation"] = elevation;
         row["hex"] = hex;
@@ -188,7 +207,7 @@ int exportEntities(resource::GameResources& resources, const ExportOptions& opti
         spdlog::debug("export: no map name resolver: {}", e.what());
     }
 
-    ProtoNames protoName(resources);
+    Protos protos(resources);
     // Where each already-emitted exit destination landed in `entities`, so its hexes can be counted
     // into the existing row instead of adding another.
     std::map<ExitKey, std::size_t> exitRows;
@@ -236,14 +255,14 @@ int exportEntities(resource::GameResources& resources, const ExportOptions& opti
                         if (const auto it = exitRows.find(key); it != exitRows.end()) {
                             entities[it->second]["hexes"] = entities[it->second]["hexes"].get<int>() + 1;
                         } else {
-                            ordered_json row = entityRow(*object, mapPath, elevation, hex, protoName,
+                            ordered_json row = entityRow(*object, mapPath, elevation, hex, protos,
                                 ordered_json(nullptr), script);
                             row["hexes"] = 1;
                             exitRows.emplace(key, entities.size());
                             entities.push_back(std::move(row));
                         }
                     } else {
-                        entities.push_back(entityRow(*object, mapPath, elevation, hex, protoName,
+                        entities.push_back(entityRow(*object, mapPath, elevation, hex, protos,
                             ordered_json(nullptr), script));
                     }
                 }
@@ -262,27 +281,48 @@ int exportEntities(resource::GameResources& resources, const ExportOptions& opti
                               if (!carried) {
                                   continue;
                               }
-                              entities.push_back(entityRow(*carried, mapPath, elevation, hex, protoName,
+                              entities.push_back(entityRow(*carried, mapPath, elevation, hex, protos,
                                   holderRef,
                                   scriptOf(*map, carried->map_scripts_pid, scriptsLst, resources)));
                               ordered_json nested;
                               nested["kind"] = kindOf(carried->pro_pid);
                               nested["pid"] = carried->pro_pid;
-                              nested["name"] = protoName(carried->pro_pid);
+                              nested["name"] = protos(carried->pro_pid).name;
                               emitCarried(*carried, nested);
                           }
                       };
-                ordered_json holder;
-                holder["kind"] = kindOf(object->pro_pid);
-                holder["pid"] = object->pro_pid;
-                holder["name"] = protoName(object->pro_pid);
-                emitCarried(*object, holder);
+                // Only describe the holder when there is something to hold. Building it
+                // unconditionally would pull every scenery proto on every map into the proto table,
+                // which is how it ended up ten times larger than the rows that reference it.
+                if (!object->inventory.empty()) {
+                    ordered_json holder;
+                    holder["kind"] = kindOf(object->pro_pid);
+                    holder["pid"] = object->pro_pid;
+                    holder["name"] = protos(object->pro_pid).name;
+                    emitCarried(*object, holder);
+                }
             }
         }
     }
 
+    // Every distinct proto the walk touched, so a consumer can show what a thing IS — name, the
+    // sentence the game prints on examine, and the art id to draw — without re-reading the protos
+    // itself. A few hundred entries against tens of thousands of rows, so it is cheap to carry here
+    // and expensive to look up any other way.
+    auto protoTable = ordered_json::array();
+    for (const auto& [pid, info] : protos.seen()) {
+        ordered_json entry;
+        entry["pid"] = pid;
+        entry["kind"] = kindOf(pid);
+        entry["name"] = info.name;
+        entry["description"] = info.description;
+        entry["fid"] = info.fid;
+        protoTable.push_back(std::move(entry));
+    }
+
     ordered_json root;
     root["maps"] = std::move(maps);
+    root["protos"] = std::move(protoTable);
     root["mapsUnreadable"] = std::move(unreadable);
     root["entityCount"] = static_cast<int>(entities.size());
     root["entities"] = std::move(entities);

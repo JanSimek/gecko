@@ -37,6 +37,7 @@ namespace cli {
     ///
     /// Emits one JSON object to `out`:
     ///   { maps: [{file,name,displayName,mapIndex,lookupName}],
+    ///     protos: [{pid,kind,name,description,fid}],
     ///     mapsUnreadable: [{map,reason}],
     ///     entityCount: N,
     ///     entities: [{kind,pid,proto,name,map,elevation,hex,col,row,qty?,holder?,script?,exit?,hexes?}] }
