@@ -96,11 +96,24 @@ public:
     /// Render `map` at `options.elevation` to an RGBA image. In Schematic style, `legend` (when
     /// non-null) is filled with the colour key. Throws std::runtime_error when the map has nothing
     /// to draw at that elevation, or when no off-screen GL context is available.
-    sf::Image renderToImage(Map& map, const Options& options, Legend* legend = nullptr);
+    /// How the rendered pixels relate to the map's hexes. A hex's world position (Hex::x/y, the
+    /// space sprites are placed in) becomes a pixel in the output as
+    ///     px = (worldX - originX) * scale,  py = (worldY - originY) * scale
+    /// which is what an overlay needs in order to put a marker on a hex without re-deriving the
+    /// framing. Reported rather than inferred, so a change to the framing cannot silently move
+    /// everyone's markers.
+    struct Projection {
+        float originX = 0.0f;
+        float originY = 0.0f;
+        float scale = 1.0f;
+    };
+
+    sf::Image renderToImage(Map& map, const Options& options, Legend* legend = nullptr,
+        Projection* projection = nullptr);
 
 private:
-    sf::Image renderNatural(Map& map, const Options& options);
-    sf::Image renderSchematic(Map& map, const Options& options, Legend* legend);
+    sf::Image renderNatural(Map& map, const Options& options, Projection* projection);
+    sf::Image renderSchematic(Map& map, const Options& options, Legend* legend, Projection* projection);
 
     resource::GameResources& _resources;
 };
