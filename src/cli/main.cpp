@@ -140,7 +140,7 @@ void printUsage(const char* program) {
               << "      FRM metadata as JSON: resolvedArtPath, fid, directionCount, framesPerDirection, and a\n"
               << "      per-frame array of {direction,frame,width,height,offsetX,offsetY}. Accepts an art name\n"
               << "      (ext2grd1 or art/misc/ext2grd1.frm) or a FID (0x05000021 / decimal).\n"
-              << "  " << program << " frm render <name-or-fid> --out <file.png> [--dir N] [--frame N]\n"
+              << "  " << program << " frm render <name-or-fid> --out <file.png> [--dir N] [--frame N] [--transparent]\n"
               << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      Render the sprite to a PNG (needs an off-screen GL context). Default: a grid of all\n"
               << "      6 directions x all frames on a checkerboard. --dir N renders one direction; --frame N\n"
@@ -613,6 +613,7 @@ struct FrmArgs {
     std::string outPath;
     int direction = -1;
     int frame = -1;
+    bool checkerboard = true;
     std::vector<std::string> dataPaths;
 };
 
@@ -640,6 +641,11 @@ bool applyFrmValueFlag(const std::string& flag, const std::string& value, FrmArg
 bool parseFrmArgs(const std::vector<std::string>& args, const char* program, FrmArgs& out) {
     for (std::size_t i = 2; i < args.size();) {
         const std::string& arg = args[i];
+        if (arg == "--transparent") {
+            out.checkerboard = false;
+            ++i;
+            continue;
+        }
         const bool valueFlag = arg == "--data" || arg == "--out" || arg == "--dir" || arg == "--frame";
         if (valueFlag && i + 1 >= args.size()) {
             std::cerr << "error: " << arg << " needs a value\n";
@@ -692,6 +698,7 @@ int dispatchFrm(geck::resource::GameResources& resources, const FrmArgs& fa) {
     opts.outPath = fa.outPath;
     opts.direction = fa.direction;
     opts.frame = fa.frame;
+    opts.checkerboard = fa.checkerboard;
     return geck::cli::frmRender(resources, opts, std::cout);
 }
 

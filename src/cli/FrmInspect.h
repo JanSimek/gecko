@@ -22,6 +22,10 @@ namespace cli {
         int direction = -1;
         /// Render a single frame index only; <0 means every frame of each rendered direction.
         int frame = -1;
+        /// Draw the sprite on a checkerboard so its transparent edges are visible. On by default,
+        /// which is what you want when inspecting art. Turn it off to extract the sprite as an asset:
+        /// the output then keeps real alpha instead of a baked-in grey background.
+        bool checkerboard = true;
     };
 
     /// Parse a numeric FID written as hex (0x...) or decimal. nullopt when the whole token is not a

@@ -227,14 +227,17 @@ namespace {
         return plan;
     }
 
-    // Draw one frame's sprite (a sub-rect of the stitched sheet) into its cell, on a checkerboard.
+    // Draw one frame's sprite (a sub-rect of the stitched sheet) into its cell, on a checkerboard
+    // unless the caller wants the sprite on its own.
     void drawFrameCell(sf::RenderTarget& target, const sf::Texture& sheet, const Frm& frm,
-        std::size_t dir, std::size_t frameIdx, float cellX, float cellY) {
+        std::size_t dir, std::size_t frameIdx, float cellX, float cellY, bool checkerboard) {
         const int maxW = frm.maxFrameWidth();
         const int maxH = frm.maxFrameHeight();
-        sf::VertexArray bg(sf::PrimitiveType::Triangles);
-        appendCheckerboard(bg, cellX, cellY, static_cast<float>(maxW), static_cast<float>(maxH));
-        target.draw(bg);
+        if (checkerboard) {
+            sf::VertexArray bg(sf::PrimitiveType::Triangles);
+            appendCheckerboard(bg, cellX, cellY, static_cast<float>(maxW), static_cast<float>(maxH));
+            target.draw(bg);
+        }
 
         const auto& dirFrames = frm.directions()[dir].frames();
         if (frameIdx >= dirFrames.size()) {
@@ -254,7 +257,7 @@ namespace {
     };
 
     GridImage renderGrid(resource::GameResources& resources, const std::string& artPath,
-        const Frm& frm, const GridPlan& plan) {
+        const Frm& frm, const GridPlan& plan, bool checkerboard) {
         const int maxW = frm.maxFrameWidth();
         const int maxH = frm.maxFrameHeight();
         constexpr int pad = 4;
@@ -266,7 +269,9 @@ namespace {
             throw std::runtime_error("could not create a " + std::to_string(width) + "x" + std::to_string(height)
                 + " off-screen render target — no GL context (headless without a display?)");
         }
-        target->clear(sf::Color(40, 40, 40));
+        // Clearing to transparent rather than grey is what makes the extracted sprite usable as an
+        // asset; with the checkerboard on, the grey is what you want behind it.
+        target->clear(checkerboard ? sf::Color(40, 40, 40) : sf::Color::Transparent);
 
         // The stitched sheet (every direction x frame) — slice per-frame sub-rects out of it. Keyed by
         // the full art path so the TextureManager finds the same parsed FRM and palette the editor uses.
@@ -276,7 +281,7 @@ namespace {
             for (std::size_t col = 0; col < plan.frames.size(); ++col) {
                 const float cellX = static_cast<float>(pad + static_cast<int>(col) * (maxW + pad));
                 const float cellY = static_cast<float>(pad + static_cast<int>(row) * (maxH + pad));
-                drawFrameCell(*target, sheet, frm, plan.dirs[row], plan.frames[col], cellX, cellY);
+                drawFrameCell(*target, sheet, frm, plan.dirs[row], plan.frames[col], cellX, cellY, checkerboard);
             }
         }
         target->display();
@@ -407,7 +412,7 @@ int frmRender(resource::GameResources& resources, const FrmRenderOptions& option
             out << "frm render: nothing to draw (direction/frame filter out of range)\n";
             return 1;
         }
-        const GridImage grid = renderGrid(resources, *artPath, *loaded.frm, plan);
+        const GridImage grid = renderGrid(resources, *artPath, *loaded.frm, plan, options.checkerboard);
         if (!grid.image.saveToFile(options.outPath)) {
             out << "frm render: failed to write image: " << options.outPath << "\n";
             return 1;
