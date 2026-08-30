@@ -1221,7 +1221,7 @@ void SelectionPanel::updateScriptSection() {
     const std::optional<int> programIndex = attached
         ? _map->scriptProgramIndexForSid(static_cast<uint32_t>(mapObject->map_scripts_pid))
         : std::nullopt;
-    if (programIndex) {
+    if (programIndex.has_value()) {
         _attachedScriptProgramIndex = *programIndex;
         const auto scriptId = static_cast<size_t>(*programIndex);
         auto* lst = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
