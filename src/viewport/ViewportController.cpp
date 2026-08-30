@@ -52,8 +52,8 @@ sf::FloatRect ViewportController::mapWorldBounds() {
 
     for (const TileCoordinates& corner : corners) {
         const auto topLeft = coordinatesToScreenPosition(corner);
-        const float x = static_cast<float>(topLeft.x);
-        const float y = static_cast<float>(topLeft.y);
+        const auto x = static_cast<float>(topLeft.x);
+        const auto y = static_cast<float>(topLeft.y);
         minX = std::min(minX, x);
         minY = std::min(minY, y);
         maxX = std::max(maxX, x + static_cast<float>(TILE_WIDTH));

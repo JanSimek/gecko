@@ -1216,22 +1216,23 @@ void SelectionPanel::updateScriptSection() {
 
     QString text;
     _attachedScriptProgramIndex = -1;
-    if (attached) {
-        const uint32_t sid = static_cast<uint32_t>(mapObject->map_scripts_pid);
-        // Shared with the Ctrl+Shift+E path in MainWindow, so the two resolve the same script.
-        if (const std::optional<int> programIndex = _map->scriptProgramIndexForSid(sid)) {
-            _attachedScriptProgramIndex = *programIndex;
-            const auto scriptId = static_cast<size_t>(*programIndex);
-            auto* lst = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
-            if (lst && scriptId < lst->list().size()) {
-                text = QString::fromStdString(lst->list().at(scriptId));
-                const std::string desc = resource::scriptDescription(_resources, *programIndex);
-                if (!desc.empty()) {
-                    text += " — " + QString::fromStdString(desc);
-                }
-            } else {
-                text = QString("Script #%1").arg(*programIndex);
+
+    // Shared with the Ctrl+Shift+E path in MainWindow, so the two resolve the same script.
+    const std::optional<int> programIndex = attached
+        ? _map->scriptProgramIndexForSid(static_cast<uint32_t>(mapObject->map_scripts_pid))
+        : std::nullopt;
+    if (programIndex) {
+        _attachedScriptProgramIndex = *programIndex;
+        const auto scriptId = static_cast<size_t>(*programIndex);
+        auto* lst = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
+        if (lst && scriptId < lst->list().size()) {
+            text = QString::fromStdString(lst->list().at(scriptId));
+            const std::string desc = resource::scriptDescription(_resources, *programIndex);
+            if (!desc.empty()) {
+                text += " — " + QString::fromStdString(desc);
             }
+        } else {
+            text = QString("Script #%1").arg(*programIndex);
         }
     }
 
