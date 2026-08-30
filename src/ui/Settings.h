@@ -100,6 +100,13 @@ public:
 
     // Selection highlight colours (preferences). Keys: "object", "wall", "critter", "tile".
     // Returns @p fallback when the colour has not been configured.
+    // Keyboard-shortcut overrides: action id -> QKeySequence portable text. Only entries that
+    // differ from the shipped default are stored, so changing a default in a later release still
+    // reaches everyone who never rebound that action. An action the user deliberately unbound is
+    // stored as an empty string, which is distinct from absent.
+    QMap<QString, QString> getKeyBindings() const;
+    void setKeyBindings(const QMap<QString, QString>& bindings);
+
     QColor getSelectionColor(const QString& key, const QColor& fallback) const;
     void setSelectionColor(const QString& key, const QColor& color);
 
@@ -154,6 +161,7 @@ private:
 
     // Selection highlight colour overrides (empty = use the renderer defaults).
     QMap<QString, QColor> _selectionColors;
+    QMap<QString, QString> _keyBindings;
 
     // Game location configuration
     std::filesystem::path _executableGameLocation;

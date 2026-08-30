@@ -9,6 +9,8 @@
 #include <QIcon>
 #include <QTimer>
 #include <QKeyEvent>
+#include <QKeySequence>
+#include <QShortcut>
 #include <QPointer>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -38,6 +40,7 @@ namespace resource {
 }
 
 class Settings;
+class KeyBindingRegistry;
 class GameLauncher;
 class ExternalEditorLauncher;
 class ScriptSourceService;
@@ -156,7 +159,10 @@ private slots:
     void handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem = false);
     void updateHexIndexDisplay(int hexIndex);
     void updateModeDisplay(const QString& modeText, const QString& iconPath);
-    void showPreferences();
+    /// `initialTab` names the tab to open on (empty = whichever was last shown).
+    void showPreferences(const QString& initialTab = {});
+    /// Help > Keyboard Shortcuts: the Preferences page listing every binding.
+    void showKeyboardShortcuts();
     void showAbout();
     void onPlayGame();
     void showSavePatternDialog();
@@ -231,7 +237,21 @@ private:
     void showPanelsForMap();
     void hidePanelsForNoMap();
     void setDockVisibility(QDockWidget* dock, QAction* action, bool visible);
-    QAction* addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef);
+    QAction* addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef,
+        const char* actionId = nullptr);
+    // Show/raise/hide a panel dock for its menu item or keyboard shortcut. Docks are tabbed, so a
+    // dock Qt calls visible may be sitting behind another tab: raise it rather than hide it, and
+    // only hide when it is already the tab on top. `action` (optional) is re-checked to match.
+    void revealPanel(QDockWidget* dock, QAction* action);
+    // (Re)install the shortcuts scoped to the map canvas. Called whenever an EditorWidget is
+    // installed, since the SFML widget they hang off is rebuilt with it.
+    void installCanvasShortcuts();
+    // Numpad Enter mirrors the inspect-selection key, but only while that key is Return — see
+    // installCanvasShortcuts(). Re-run whenever that binding changes.
+    void syncInspectSelectionCompanionKey();
+    // Ctrl+Shift+E: open the .ssl of the script attached to the selected object (the same
+    // ScriptSourceService flow as the Selection panel's "Edit Source..." button).
+    void editSelectedObjectScriptSource();
     std::array<QDockWidget*, 6> managedDocks() const;
     std::array<DockActionPair, 6> managedDockActionPairs() const;
     void applyDefaultDockPlacements();
@@ -287,6 +307,9 @@ private:
     std::unique_ptr<GameLauncher> _gameLauncher;
     std::unique_ptr<ExternalEditorLauncher> _externalEditorLauncher;
     std::unique_ptr<ScriptSourceService> _scriptSourceService;
+    // The single source of truth for which key runs which command: shipped defaults plus the
+    // user's overrides, re-keying every menu/toolbar/canvas sink the moment one changes.
+    std::unique_ptr<KeyBindingRegistry> _keyBindings;
 
     // Current widgets
     EditorWidget* _currentEditorWidget;
@@ -375,6 +398,19 @@ private:
     QAction* _tilePalettePanelAction;
     QAction* _objectPalettePanelAction;
     QAction* _fileBrowserPanelAction;
+    QAction* _logPanelAction = nullptr;
+    // Edit-menu "Scroll Blocker Rectangle"; its key lives on the canvas, so the action is held to
+    // be triggered from there.
+    QAction* _scrollBlockerRectAction = nullptr;
+
+    // "Inspect the selection": reveals the Selection panel from the canvas. Lives on the SFML
+    // widget (WidgetWithChildrenShortcut), so Return typed in a panel's filter box is untouched.
+    // Return and numpad Enter are separate key codes, hence the pair.
+    QPointer<QShortcut> _inspectSelectionShortcut;
+    QPointer<QShortcut> _inspectSelectionEnterShortcut;
+    // Canvas "R". Held so it can stand down while stamping or while a registered tool runs, where
+    // R belongs to the viewport (stamp variants) instead.
+    QPointer<QShortcut> _rotateShortcut;
 
     // Toolbar actions
     QAction* _selectionModeAction;
