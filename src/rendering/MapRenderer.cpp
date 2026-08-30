@@ -440,7 +440,8 @@ MapRenderer::MapRenderer(resource::GameResources& resources)
 
 sf::Image MapRenderer::renderToImage(Map& map, const Options& options, Legend* legend,
     Projection* projection) {
-    if (options.style == Style::Schematic || options.style == Style::Objects || options.style == Style::Semantic) {
+    using enum Style;
+    if (options.style == Schematic || options.style == Objects || options.style == Semantic) {
         return renderSchematic(map, options, legend, projection);
     }
     return renderNatural(map, options, projection);
