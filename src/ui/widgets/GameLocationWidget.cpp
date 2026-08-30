@@ -1,4 +1,5 @@
 #include "GameLocationWidget.h"
+#include "state/GameLauncher.h"
 #include "util/GameDataPathResolver.h"
 #include "ui/IconHelper.h"
 #include "ui/Settings.h"
@@ -6,6 +7,7 @@
 
 #include <QApplication>
 #include <QFormLayout>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QFileDialog>
 #include <QDir>
@@ -22,6 +24,26 @@ namespace {
     bool looksLikeFalloutExecutable(const QString& lowercaseFileName) {
         return lowercaseFileName.contains("fallout2") || lowercaseFileName.contains("fallout 2")
             || lowercaseFileName.endsWith(".app");
+    }
+
+    /// Whether a macOS .app actually has a binary to launch (they live in Contents/MacOS).
+    bool bundleHasLaunchableBinary(const std::filesystem::path& bundle) {
+        // Stepping the iterator by hand: the range-for form calls the throwing operator++, and this
+        // runs in a Qt slot, where a filesystem_error from an unreadable directory reaches no catch.
+        std::error_code ec;
+        const std::filesystem::path macosDir = bundle / "Contents" / "MacOS";
+        for (std::filesystem::directory_iterator it(macosDir, ec), end; !ec && it != end; it.increment(ec)) {
+            if (it->is_regular_file(ec)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// The data-directory field's own explanation, restored whenever a bundle stops driving it.
+    const char* dataDirectoryHelp() {
+        return "The game folder itself - the one that contains data/, master.dat and the executable.\n"
+               "Not the data folder inside it.";
     }
 
     bool directoryHasFalloutExecutable(const std::filesystem::path& dir) {
@@ -81,6 +103,7 @@ void GameLocationWidget::setupUI() {
     _executableLayout = new QHBoxLayout();
     _executableLayout->setSpacing(ui::theme::spacing::NORMAL);
     _executableLocationEdit = new QLineEdit();
+    _executableLocationEdit->setObjectName("executableLocationEdit");
     _executableLocationEdit->setPlaceholderText("Path to the Fallout 2 executable (e.g. fallout2.exe)...");
     _executableLayout->addWidget(_executableLocationEdit);
 
@@ -97,10 +120,9 @@ void GameLocationWidget::setupUI() {
     _dataDirectoryLayout = new QHBoxLayout();
     _dataDirectoryLayout->setSpacing(ui::theme::spacing::NORMAL);
     _dataDirectoryEdit = new QLineEdit();
+    _dataDirectoryEdit->setObjectName("dataDirectoryEdit"); // found by name in tests
     _dataDirectoryEdit->setPlaceholderText("Folder containing data/ (e.g. .../GOG.com/Fallout 2)...");
-    _dataDirectoryEdit->setToolTip(
-        "The game folder itself - the one that contains data/, master.dat and the executable.\n"
-        "Not the data folder inside it.");
+    _dataDirectoryEdit->setToolTip(dataDirectoryHelp());
     _dataDirectoryLayout->addWidget(_dataDirectoryEdit);
 
     _browseDataDirectoryButton = new QPushButton("Browse...");
@@ -168,6 +190,11 @@ std::filesystem::path GameLocationWidget::getDataDirectory() const {
 }
 
 void GameLocationWidget::setDataDirectory(const std::filesystem::path& location) {
+    // A bundle-derived directory outranks anything stored: the setting was never what the engine
+    // read, so restoring it here would just put the stale value back on screen.
+    if (_dataDirectoryEdit->isReadOnly()) {
+        return;
+    }
     _dataDirectoryEdit->setText(QString::fromStdString(location.string()));
 }
 
@@ -178,7 +205,36 @@ void GameLocationWidget::setStatusMessage(const QString& message, const QString&
 }
 
 void GameLocationWidget::onExecutableLocationChanged() {
+    applyBundleDataDirectoryLock();
     Q_EMIT configurationChanged();
+}
+
+void GameLocationWidget::applyBundleDataDirectoryLock() {
+    // A macOS .app fixes the game root itself - the engine chdir's to the bundle's base path on
+    // startup - so for one of those this field cannot influence anything. Show the directory that
+    // will actually be used instead of a value with no effect. Only when the bundle really resolves:
+    // an unreadable Info.plist gives nothing, and there the setting genuinely is used.
+    const std::optional<std::filesystem::path> bundleRoot = macOsBundleDataRoot(getExecutableLocation());
+
+    // The edits below are ours, not the user's: onExecutableLocationChanged emits one
+    // configurationChanged for the whole update, and letting the field raise its own would nest a
+    // second dialog refresh inside the first.
+    const QSignalBlocker dataDirectoryBlocker(_dataDirectoryEdit);
+
+    if (bundleRoot.has_value()) {
+        _dataDirectoryEdit->setReadOnly(true);
+        _dataDirectoryEdit->setText(QString::fromStdString(bundleRoot->string()));
+        _dataDirectoryEdit->setToolTip(tr("Set by the application bundle: Fallout 2 switches to this "
+                                          "directory on startup, so it is the one the map is written to. "
+                                          "Pick a different executable to change it."));
+        _browseDataDirectoryButton->setEnabled(false);
+    } else if (_dataDirectoryEdit->isReadOnly()) {
+        // Moved off a bundle: hand the field back, and drop the value that came from the old one.
+        _dataDirectoryEdit->setReadOnly(false);
+        _dataDirectoryEdit->clear();
+        _dataDirectoryEdit->setToolTip(dataDirectoryHelp());
+        _browseDataDirectoryButton->setEnabled(true);
+    }
 }
 
 void GameLocationWidget::onDataDirectoryChanged() {
@@ -270,7 +326,10 @@ void GameLocationWidget::onAutoDetect() {
         const auto& installation = detectedInstallations.front();
         _executableLocationEdit->setText(QString::fromStdString(installation.path.string()));
         if (const auto dataDirectory = util::resolveGameDataRoot(installation.path)) {
-            _dataDirectoryEdit->setText(QString::fromStdString(dataDirectory->string()));
+            // Through the setter, not the field: setting the executable may already have derived the
+            // directory from a bundle and locked it, and resolveGameDataRoot answers a different
+            // question (where the install lives, not where the engine chdir's to).
+            setDataDirectory(*dataDirectory);
         }
 
         setStatusMessage(QString("Auto-detected installation: %1").arg(QString::fromStdString(installation.description)), "success");
@@ -287,15 +346,25 @@ void GameLocationWidget::onAutoDetect() {
     }
 }
 
+void GameLocationWidget::validateSelection() {
+    validateGameLocation(_executableLocationEdit->text().trimmed());
+}
+
 void GameLocationWidget::validateGameLocation(const QString& gamePath) {
     const std::filesystem::path path(gamePath.toStdString());
 
-    if (std::filesystem::is_regular_file(path)) {
+    if (!std::filesystem::exists(path)) {
+        setStatusMessage("Warning: Selected path does not exist.", "error");
+        return;
+    }
+
+    // A macOS .app is a directory, but it is an executable choice rather than an installation
+    // folder: its binary sits in Contents/MacOS, so the installation check can never pass on one
+    // and every bundle was reported as "may not be a valid Fallout 2 installation".
+    if (std::filesystem::is_regular_file(path) || path.extension() == ".app") {
         validateExecutableFile(path);
     } else if (std::filesystem::is_directory(path)) {
         validateInstallDirectory(path);
-    } else {
-        setStatusMessage("Warning: Selected path does not exist.", "error");
     }
 }
 
@@ -303,6 +372,11 @@ void GameLocationWidget::validateExecutableFile(const std::filesystem::path& pat
     const QString fileName = QString::fromStdString(path.filename().string()).toLower();
     if (!looksLikeFalloutExecutable(fileName)) {
         setStatusMessage("Warning: Selected file may not be a valid Fallout 2 executable.", "warning");
+        return;
+    }
+    // Any .app satisfies the name test, so check a bundle can actually be launched.
+    if (path.extension() == ".app" && !bundleHasLaunchableBinary(path)) {
+        setStatusMessage("Warning: Selected application bundle contains no executable.", "warning");
         return;
     }
 

@@ -32,6 +32,9 @@ public:
     std::filesystem::path getDataDirectory() const;
     void setDataDirectory(const std::filesystem::path& location);
 
+    /// Re-runs validation on the current executable selection and updates the status line.
+    void validateSelection();
+
     // Status updates
     void setStatusMessage(const QString& message, const QString& styleClass = "normal");
 
@@ -49,6 +52,8 @@ private slots:
 private:
     void setupUI();
     void setupConnections();
+    /// Derives the data directory from a macOS .app and locks the field, or releases it again.
+    void applyBundleDataDirectoryLock();
     void validateGameLocation(const QString& gamePath);
     void validateExecutableFile(const std::filesystem::path& path);
     void validateInstallDirectory(const std::filesystem::path& path);
