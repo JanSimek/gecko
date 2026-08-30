@@ -145,6 +145,8 @@ void printUsage(const char* program) {
               << "      Render the sprite to a PNG (needs an off-screen GL context). Default: a grid of all\n"
               << "      6 directions x all frames on a checkerboard. --dir N renders one direction; --frame N\n"
               << "      one frame index. Reports the output path, image size, and grid layout (DxF).\n"
+              << "      --transparent drops the checkerboard and keeps real alpha, for extracting a sprite\n"
+              << "      as an asset rather than looking at it.\n"
               << "  " << program << " frm resolve <fid> --data <dir-or-.dat> [--data <...>]\n"
               << "      Decode a FID (0x.. hex or decimal) to JSON {fid, type, index, artPath}.\n"
               << "  " << program << " frm list <glob> --data <dir-or-.dat> [--data <...>]\n"

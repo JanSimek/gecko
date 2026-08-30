@@ -230,7 +230,9 @@ namespace {
     // Draw one frame's sprite (a sub-rect of the stitched sheet) into its cell, on a checkerboard
     // unless the caller wants the sprite on its own.
     void drawFrameCell(sf::RenderTarget& target, const sf::Texture& sheet, const Frm& frm,
-        std::size_t dir, std::size_t frameIdx, float cellX, float cellY, bool checkerboard) {
+        std::size_t dir, std::size_t frameIdx, sf::Vector2f cell, bool checkerboard) {
+        const float cellX = cell.x;
+        const float cellY = cell.y;
         const int maxW = frm.maxFrameWidth();
         const int maxH = frm.maxFrameHeight();
         if (checkerboard) {
@@ -281,7 +283,7 @@ namespace {
             for (std::size_t col = 0; col < plan.frames.size(); ++col) {
                 const float cellX = static_cast<float>(pad + static_cast<int>(col) * (maxW + pad));
                 const float cellY = static_cast<float>(pad + static_cast<int>(row) * (maxH + pad));
-                drawFrameCell(*target, sheet, frm, plan.dirs[row], plan.frames[col], cellX, cellY, checkerboard);
+                drawFrameCell(*target, sheet, frm, plan.dirs[row], plan.frames[col], { cellX, cellY }, checkerboard);
             }
         }
         target->display();
