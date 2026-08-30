@@ -144,10 +144,10 @@ namespace {
         return nullptr;
     }
 
-    // Identifies one exit grid by where it leads, so the hexes that make up a single doorway collapse
-    // into a single row.
+    // Identifies one exit grid by where it leads, so the hexes making up a single doorway collapse
+    // into one row. Scoped to a map — the collector clears these between maps — so the map itself is
+    // not part of the key.
     struct ExitKey {
-        std::string map;
         int elevation = 0;
         std::uint32_t destMap = 0;
         std::uint32_t destHex = 0;
@@ -200,6 +200,7 @@ namespace {
         }
 
         void walk(Map& map, const std::string& mapPath) {
+            _exitRows.clear(); // exits are grouped within a map, never across two
             for (const auto& [elevation, objects] : map.getMapFile().map_objects) {
                 for (const auto& object : objects) {
                     if (object) {
@@ -236,7 +237,7 @@ namespace {
         // all leading to the same place, so later hexes only increment the count.
         void addExit(const MapObject& object, const std::string& mapPath, int elevation, int hex,
             const ordered_json& script) {
-            const ExitKey key{ mapPath, elevation, object.exit_map, object.exit_position,
+            const ExitKey key{ elevation, object.exit_map, object.exit_position,
                 object.exit_elevation };
             if (const auto it = _exitRows.find(key); it != _exitRows.end()) {
                 _entities[it->second]["hexes"] = _entities[it->second]["hexes"].get<int>() + 1;
