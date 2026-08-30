@@ -716,7 +716,7 @@ namespace {
             "resolveOnly.",
             json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } }, { "resolveOnly", { { "type", "boolean" } } } } }, { "anyOf", json::array({ json{ { "required", json::array({ "name" }) } }, json{ { "required", json::array({ "programIndex" }) } } }) } }),
             [](resource::GameResources& r, const json& a) { return toolFindScript(r, a); }, "" });
-        t.push_back({ "export_entities",
+        t.push_back({ "export_entities", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
             "Walk the maps and emit a flat, searchable index of everything a player might look for: "
             "items, critters and exit grids, each as {kind,pid,name,map,elevation,hex,col,row} with "
             "the attached script where there is one. Unlike analyze and dump_grid it RECURSES INTO "

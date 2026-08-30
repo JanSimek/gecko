@@ -72,7 +72,7 @@ namespace {
             } catch (const std::exception& e) {
                 spdlog::debug("export: proto {} unreadable: {}", pid, e.what());
             }
-            return _cache.emplace(pid, std::move(info)).first->second;
+            return _cache.try_emplace(pid, std::move(info)).first->second;
         }
 
         const std::map<std::uint32_t, ProtoInfo>& seen() const { return _cache; }
@@ -83,18 +83,19 @@ namespace {
     };
 
     const char* kindOf(std::uint32_t pid) {
+        using enum Pro::OBJECT_TYPE;
         switch (Pro::typeOfPid(pid)) {
-            case Pro::OBJECT_TYPE::ITEM:
+            case ITEM:
                 return "item";
-            case Pro::OBJECT_TYPE::CRITTER:
+            case CRITTER:
                 return "critter";
-            case Pro::OBJECT_TYPE::SCENERY:
+            case SCENERY:
                 return "scenery";
-            case Pro::OBJECT_TYPE::WALL:
+            case WALL:
                 return "wall";
-            case Pro::OBJECT_TYPE::TILE:
+            case TILE:
                 return "tile";
-            case Pro::OBJECT_TYPE::MISC:
+            case MISC:
                 return "misc";
             default:
                 return "unknown";
@@ -105,12 +106,12 @@ namespace {
         if (object.isExitGridMarker()) {
             return true;
         }
+        using enum Pro::OBJECT_TYPE;
         const auto type = Pro::typeOfPid(object.pro_pid);
-        if (type == Pro::OBJECT_TYPE::ITEM || type == Pro::OBJECT_TYPE::CRITTER) {
+        if (type == ITEM || type == CRITTER) {
             return true;
         }
-        return includeScenery
-            && (type == Pro::OBJECT_TYPE::SCENERY || type == Pro::OBJECT_TYPE::WALL);
+        return includeScenery && (type == SCENERY || type == WALL);
     }
 
     // The script attached to an object, as {programIndex, name}, or null. programIndex is the engine's
@@ -185,10 +186,146 @@ namespace {
     }
 } // namespace
 
+namespace {
+    // Collects rows while walking the maps. Holding the walk's state here is what lets
+    // exportEntities read as an outline — set up, walk each map, assemble — instead of six levels of
+    // nesting around a nested lambda.
+    class Collector {
+    public:
+        Collector(resource::GameResources& resources, const ExportOptions& options, const Lst* scriptsLst)
+            : _resources(resources)
+            , _options(options)
+            , _scriptsLst(scriptsLst)
+            , _protos(resources) {
+        }
+
+        void walk(Map& map, const std::string& mapPath) {
+            for (const auto& [elevation, objects] : map.getMapFile().map_objects) {
+                for (const auto& object : objects) {
+                    if (object) {
+                        addObject(map, mapPath, elevation, *object);
+                    }
+                }
+            }
+        }
+
+        Protos& protos() { return _protos; }
+        ordered_json takeEntities() { return std::move(_entities); }
+
+    private:
+        void addObject(Map& map, const std::string& mapPath, int elevation, const MapObject& object) {
+            const int hex = static_cast<int>(object.position);
+            if (isSearchable(object, _options.includeScenery)) {
+                const ordered_json script = scriptOf(map, object.map_scripts_pid, _scriptsLst, _resources);
+                if (_options.groupExits && object.isExitGridMarker()) {
+                    addExit(object, mapPath, elevation, hex, script);
+                } else {
+                    _entities.push_back(
+                        entityRow(object, mapPath, elevation, hex, _protos, ordered_json(nullptr), script));
+                }
+            }
+            // Only describe the holder when there is something to hold. Building it unconditionally
+            // pulls every scenery proto on every map into the proto table, which is how that table
+            // once came out ten times larger than the rows referencing it.
+            if (!object.inventory.empty()) {
+                addCarried(map, object, describe(object), mapPath, elevation, hex);
+            }
+        }
+
+        // One row per exit destination rather than per hex: a doorway is a patch of adjacent hexes
+        // all leading to the same place, so later hexes only increment the count.
+        void addExit(const MapObject& object, const std::string& mapPath, int elevation, int hex,
+            const ordered_json& script) {
+            const ExitKey key{ mapPath, elevation, object.exit_map, object.exit_position,
+                object.exit_elevation };
+            if (const auto it = _exitRows.find(key); it != _exitRows.end()) {
+                _entities[it->second]["hexes"] = _entities[it->second]["hexes"].get<int>() + 1;
+                return;
+            }
+            ordered_json row
+                = entityRow(object, mapPath, elevation, hex, _protos, ordered_json(nullptr), script);
+            row["hexes"] = 1;
+            _exitRows.try_emplace(key, _entities.size());
+            _entities.push_back(std::move(row));
+        }
+
+        // Inventory contents are the reason this command exists: a container's items are invisible to
+        // analyze/dump_grid, and "where is X" is usually answered by one. An item in an inventory has
+        // no position of its own, so it takes its holder's.
+        //
+        // The recursion is defensive rather than load-bearing. A map stores only one level of
+        // inventory — MapReader reads a carried object's own item count but never its items, exactly
+        // as the engine does (fallout2-ce objectLoadAllInternal) — so a container inside a container
+        // has nothing under it to read. Written to recurse anyway so this stays correct if that ever
+        // changes, and so the code is the shape of the data it claims to walk.
+        void addCarried(Map& map, const MapObject& holder, const ordered_json& holderRef,
+            const std::string& mapPath, int elevation, int hex) {
+            for (const auto& carried : holder.inventory) {
+                if (!carried) {
+                    continue;
+                }
+                _entities.push_back(entityRow(*carried, mapPath, elevation, hex, _protos, holderRef,
+                    scriptOf(map, carried->map_scripts_pid, _scriptsLst, _resources)));
+                addCarried(map, *carried, describe(*carried), mapPath, elevation, hex);
+            }
+        }
+
+        ordered_json describe(const MapObject& object) {
+            ordered_json ref;
+            ref["kind"] = kindOf(object.pro_pid);
+            ref["pid"] = object.pro_pid;
+            ref["name"] = _protos(object.pro_pid).name;
+            return ref;
+        }
+
+        resource::GameResources& _resources;
+        const ExportOptions& _options;
+        const Lst* _scriptsLst;
+        Protos _protos;
+        ordered_json _entities = ordered_json::array();
+        // Where each already-emitted exit destination landed in `_entities`.
+        std::map<ExitKey, std::size_t> _exitRows;
+    };
+
+    // The map's own identity: what it is called, and the maps.txt/city.txt keys that join it to the
+    // world layer.
+    ordered_json mapEntry(const std::string& mapPath, const std::optional<resource::MapNameResolver>& names) {
+        const std::string fileName = std::filesystem::path(mapPath).filename().string();
+        const int mapIndex = names.has_value() ? names->indexOf(fileName) : -1;
+        ordered_json entry;
+        entry["file"] = mapPath;
+        entry["name"] = fileName;
+        const std::string display
+            = (names.has_value() && mapIndex >= 0) ? names->displayName(mapIndex, 0) : std::string();
+        entry["displayName"] = display.empty() ? ordered_json(nullptr) : ordered_json(display);
+        entry["mapIndex"] = mapIndex;
+        if (names.has_value() && mapIndex >= 0) {
+            const std::string lookup = names->lookupNameOf(fileName);
+            entry["lookupName"] = lookup.empty() ? ordered_json(nullptr) : ordered_json(lookup);
+        }
+        return entry;
+    }
+
+    // Every distinct proto the walk touched, so a consumer can show what a thing IS — name, the
+    // sentence the game prints on examine, the art to draw — without re-reading the protos itself.
+    ordered_json protoTable(Protos& protos) {
+        auto table = ordered_json::array();
+        for (const auto& [pid, info] : protos.seen()) {
+            ordered_json entry;
+            entry["pid"] = pid;
+            entry["kind"] = kindOf(pid);
+            entry["name"] = info.name;
+            entry["description"] = info.description;
+            entry["fid"] = info.fid;
+            table.push_back(std::move(entry));
+        }
+        return table;
+    }
+} // namespace
+
 int exportEntities(resource::GameResources& resources, const ExportOptions& options, std::ostream& out) {
-    const std::vector<std::string> mapPaths = options.maps.empty()
-        ? listMapPaths(resources.files())
-        : options.maps;
+    const std::vector<std::string> mapPaths
+        = options.maps.empty() ? listMapPaths(resources.files()) : options.maps;
     if (mapPaths.empty()) {
         out << "export: no maps found (is the Fallout 2 data mounted?)\n";
         return 1;
@@ -207,12 +344,8 @@ int exportEntities(resource::GameResources& resources, const ExportOptions& opti
         spdlog::debug("export: no map name resolver: {}", e.what());
     }
 
-    Protos protos(resources);
-    // Where each already-emitted exit destination landed in `entities`, so its hexes can be counted
-    // into the existing row instead of adding another.
-    std::map<ExitKey, std::size_t> exitRows;
+    Collector collector(resources, options, scriptsLst);
     auto maps = ordered_json::array();
-    auto entities = ordered_json::array();
     auto unreadable = ordered_json::array();
 
     for (const auto& mapPath : mapPaths) {
@@ -222,107 +355,14 @@ int exportEntities(resource::GameResources& resources, const ExportOptions& opti
             unreadable.push_back({ { "map", mapPath }, { "reason", loadError } });
             continue;
         }
-
-        const std::string fileName = std::filesystem::path(mapPath).filename().string();
-        const int mapIndex = names.has_value() ? names->indexOf(fileName) : -1;
-        std::string display;
-        if (names.has_value() && mapIndex >= 0) {
-            display = names->displayName(mapIndex, 0);
-        }
-        ordered_json mapEntry;
-        mapEntry["file"] = mapPath;
-        mapEntry["name"] = fileName;
-        mapEntry["displayName"] = display.empty() ? ordered_json(nullptr) : ordered_json(display);
-        mapEntry["mapIndex"] = mapIndex;
-        if (names.has_value() && mapIndex >= 0) {
-            const std::string lookup = names->lookupNameOf(fileName);
-            mapEntry["lookupName"] = lookup.empty() ? ordered_json(nullptr) : ordered_json(lookup);
-        }
-        maps.push_back(std::move(mapEntry));
-
-        for (const auto& [elevation, objects] : map->getMapFile().map_objects) {
-            for (const auto& object : objects) {
-                if (!object) {
-                    continue;
-                }
-                const int hex = static_cast<int>(object->position);
-                const ordered_json script = scriptOf(*map, object->map_scripts_pid, scriptsLst, resources);
-                if (isSearchable(*object, options.includeScenery)) {
-                    if (options.groupExits && object->isExitGridMarker()) {
-                        // One row per destination rather than per hex; count the hexes instead.
-                        const ExitKey key{ mapPath, elevation, object->exit_map,
-                            object->exit_position, object->exit_elevation };
-                        if (const auto it = exitRows.find(key); it != exitRows.end()) {
-                            entities[it->second]["hexes"] = entities[it->second]["hexes"].get<int>() + 1;
-                        } else {
-                            ordered_json row = entityRow(*object, mapPath, elevation, hex, protos,
-                                ordered_json(nullptr), script);
-                            row["hexes"] = 1;
-                            exitRows.emplace(key, entities.size());
-                            entities.push_back(std::move(row));
-                        }
-                    } else {
-                        entities.push_back(entityRow(*object, mapPath, elevation, hex, protos,
-                            ordered_json(nullptr), script));
-                    }
-                }
-                // Inventory contents are the reason this command exists: a container's items are
-                // invisible to analyze/dump_grid, and "where is X" is usually answered by one.
-                //
-                // The recursion is defensive rather than load-bearing. A map stores only one level of
-                // inventory — MapReader reads a carried object's own item count but never its items,
-                // exactly as the engine does (fallout2-ce objectLoadAllInternal), so a container
-                // inside a container has nothing under it to read. Written to recurse anyway so this
-                // stays correct if that ever changes, and so the shape of the code matches the shape
-                // of the data it claims to walk.
-                const std::function<void(const MapObject&, const ordered_json&)> emitCarried
-                    = [&](const MapObject& holderObject, const ordered_json& holderRef) {
-                          for (const auto& carried : holderObject.inventory) {
-                              if (!carried) {
-                                  continue;
-                              }
-                              entities.push_back(entityRow(*carried, mapPath, elevation, hex, protos,
-                                  holderRef,
-                                  scriptOf(*map, carried->map_scripts_pid, scriptsLst, resources)));
-                              ordered_json nested;
-                              nested["kind"] = kindOf(carried->pro_pid);
-                              nested["pid"] = carried->pro_pid;
-                              nested["name"] = protos(carried->pro_pid).name;
-                              emitCarried(*carried, nested);
-                          }
-                      };
-                // Only describe the holder when there is something to hold. Building it
-                // unconditionally would pull every scenery proto on every map into the proto table,
-                // which is how it ended up ten times larger than the rows that reference it.
-                if (!object->inventory.empty()) {
-                    ordered_json holder;
-                    holder["kind"] = kindOf(object->pro_pid);
-                    holder["pid"] = object->pro_pid;
-                    holder["name"] = protos(object->pro_pid).name;
-                    emitCarried(*object, holder);
-                }
-            }
-        }
+        maps.push_back(mapEntry(mapPath, names));
+        collector.walk(*map, mapPath);
     }
 
-    // Every distinct proto the walk touched, so a consumer can show what a thing IS — name, the
-    // sentence the game prints on examine, and the art id to draw — without re-reading the protos
-    // itself. A few hundred entries against tens of thousands of rows, so it is cheap to carry here
-    // and expensive to look up any other way.
-    auto protoTable = ordered_json::array();
-    for (const auto& [pid, info] : protos.seen()) {
-        ordered_json entry;
-        entry["pid"] = pid;
-        entry["kind"] = kindOf(pid);
-        entry["name"] = info.name;
-        entry["description"] = info.description;
-        entry["fid"] = info.fid;
-        protoTable.push_back(std::move(entry));
-    }
-
+    ordered_json entities = collector.takeEntities();
     ordered_json root;
     root["maps"] = std::move(maps);
-    root["protos"] = std::move(protoTable);
+    root["protos"] = protoTable(collector.protos());
     root["mapsUnreadable"] = std::move(unreadable);
     root["entityCount"] = static_cast<int>(entities.size());
     root["entities"] = std::move(entities);
