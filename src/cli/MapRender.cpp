@@ -78,13 +78,19 @@ int renderMap(resource::GameResources& resources, const RenderOptions& options, 
     try {
         MapRenderer renderer(resources);
         MapRenderer::Legend legend;
-        const sf::Image image = renderer.renderToImage(*map, renderOptions, wantLegend ? &legend : nullptr);
+        MapRenderer::Projection projection;
+        const sf::Image image
+            = renderer.renderToImage(*map, renderOptions, wantLegend ? &legend : nullptr, &projection);
         if (!image.saveToFile(options.outPath)) {
             out << "render: failed to write image: " << options.outPath << "\n";
             return 1;
         }
         const sf::Vector2u size = image.getSize();
         out << "wrote " << options.outPath << " (" << size.x << "x" << size.y << ")\n";
+        // The world->pixel mapping, so an overlay can place a marker on a hex without re-deriving
+        // the framing: px = (hex.x - originX) * scale, py = (hex.y - originY) * scale.
+        out << "projection origin=" << projection.originX << "," << projection.originY
+            << " scale=" << projection.scale << "\n";
         if (wantLegend) {
             printLegend(legend, out);
         }

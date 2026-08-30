@@ -58,6 +58,9 @@ namespace {
         unsigned int width = 1;
         unsigned int height = 1;
         sf::View view;
+        float originX = 0.0f; // world-space top-left, and the world->pixel factor: the overlay
+        float originY = 0.0f; // needs both to place a marker, and only this function knows them
+        float scale = 1.0f;
     };
     Frame computeFrame(Bounds bounds, unsigned int maxDimension, bool allowUpscale = false) {
         constexpr float pad = 8.0f;
@@ -72,7 +75,18 @@ namespace {
         frame.width = static_cast<unsigned int>(std::max(1.0f, bboxWidth * scale));
         frame.height = static_cast<unsigned int>(std::max(1.0f, bboxHeight * scale));
         frame.view = sf::View(sf::FloatRect({ bounds.minX, bounds.minY }, { bboxWidth, bboxHeight }));
+        frame.originX = bounds.minX;
+        frame.originY = bounds.minY;
+        frame.scale = scale;
         return frame;
+    }
+
+    void reportProjection(MapRenderer::Projection* out, const Frame& frame) {
+        if (out != nullptr) {
+            out->originX = frame.originX;
+            out->originY = frame.originY;
+            out->scale = frame.scale;
+        }
     }
 
     // An off-screen render target sized to `frame`, or a runtime_error when no GL context is available.
@@ -424,14 +438,16 @@ MapRenderer::MapRenderer(resource::GameResources& resources)
     : _resources(resources) {
 }
 
-sf::Image MapRenderer::renderToImage(Map& map, const Options& options, Legend* legend) {
-    if (options.style == Style::Schematic || options.style == Style::Objects || options.style == Style::Semantic) {
-        return renderSchematic(map, options, legend);
+sf::Image MapRenderer::renderToImage(Map& map, const Options& options, Legend* legend,
+    Projection* projection) {
+    using enum Style;
+    if (options.style == Schematic || options.style == Objects || options.style == Semantic) {
+        return renderSchematic(map, options, legend, projection);
     }
-    return renderNatural(map, options);
+    return renderNatural(map, options, projection);
 }
 
-sf::Image MapRenderer::renderNatural(Map& map, const Options& options) {
+sf::Image MapRenderer::renderNatural(Map& map, const Options& options, Projection* projection) {
     // Build the map's sprites headlessly — the same loader the editor uses.
     HexagonGrid hexgrid;
     MapSpriteLoader loader(_resources, hexgrid);
@@ -472,7 +488,9 @@ sf::Image MapRenderer::renderNatural(Map& map, const Options& options) {
         }
     }
 
-    const std::unique_ptr<sf::RenderTexture> target = makeTarget(computeFrame(bounds, options.maxDimension, options.hasCrop));
+    const auto frame = computeFrame(bounds, options.maxDimension, options.hasCrop);
+    reportProjection(projection, frame);
+    const std::unique_ptr<sf::RenderTexture> target = makeTarget(frame);
     target->clear(options.background);
 
     RenderingEngine engine(_resources);
@@ -519,7 +537,8 @@ sf::Image MapRenderer::renderNatural(Map& map, const Options& options) {
     return target->getTexture().copyToImage();
 }
 
-sf::Image MapRenderer::renderSchematic(Map& map, const Options& options, Legend* legend) {
+sf::Image MapRenderer::renderSchematic(Map& map, const Options& options, Legend* legend,
+    Projection* projection) {
     const auto& allTiles = map.getMapFile().tiles;
     const auto tilesIt = allTiles.find(options.elevation);
     const std::vector<Tile> noTiles;
@@ -556,7 +575,9 @@ sf::Image MapRenderer::renderSchematic(Map& map, const Options& options, Legend*
         throw std::runtime_error("map has nothing to render at elevation " + std::to_string(options.elevation));
     }
 
-    const std::unique_ptr<sf::RenderTexture> target = makeTarget(computeFrame(bounds, options.maxDimension));
+    const auto frame = computeFrame(bounds, options.maxDimension);
+    reportProjection(projection, frame);
+    const std::unique_ptr<sf::RenderTexture> target = makeTarget(frame);
     target->clear(options.background);
     target->draw(floor);
     if (semantic) {
