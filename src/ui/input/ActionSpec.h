@@ -63,9 +63,9 @@ namespace actions {
     inline constexpr const char* SHOW_EXIT_GRIDS = "view.exitGrids";
     inline constexpr const char* WORLD_MAP = "view.worldMap";
     inline constexpr const char* HEX_GRID = "view.hexGrid";
-    inline constexpr const char* ELEVATION_1 = "view.elevation1";
-    inline constexpr const char* ELEVATION_2 = "view.elevation2";
-    inline constexpr const char* ELEVATION_3 = "view.elevation3";
+    inline constexpr const char* SET_ELEVATION_1 = "view.elevation1";
+    inline constexpr const char* SET_ELEVATION_2 = "view.elevation2";
+    inline constexpr const char* SET_ELEVATION_3 = "view.elevation3";
 
     inline constexpr const char* PANEL_MAP_INFO = "panel.mapInfo";
     inline constexpr const char* PANEL_SELECTION = "panel.selection";

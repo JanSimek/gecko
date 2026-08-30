@@ -32,9 +32,9 @@ namespace {
         // View
         { actions::SHOW_EXIT_GRIDS, "Show Exit Grids", "View", "Ctrl+E", QKeySequence::UnknownKey, ActionScope::Application },
         { actions::WORLD_MAP, "World Map", "View", "Ctrl+Shift+M", QKeySequence::UnknownKey, ActionScope::Application },
-        { actions::ELEVATION_1, "Elevation 1", "View", "Ctrl+1", QKeySequence::UnknownKey, ActionScope::Application },
-        { actions::ELEVATION_2, "Elevation 2", "View", "Ctrl+2", QKeySequence::UnknownKey, ActionScope::Application },
-        { actions::ELEVATION_3, "Elevation 3", "View", "Ctrl+3", QKeySequence::UnknownKey, ActionScope::Application },
+        { actions::SET_ELEVATION_1, "Elevation 1", "View", "Ctrl+1", QKeySequence::UnknownKey, ActionScope::Application },
+        { actions::SET_ELEVATION_2, "Elevation 2", "View", "Ctrl+2", QKeySequence::UnknownKey, ActionScope::Application },
+        { actions::SET_ELEVATION_3, "Elevation 3", "View", "Ctrl+3", QKeySequence::UnknownKey, ActionScope::Application },
         { actions::HEX_GRID, "Toggle Hex Grid", "View", "G", QKeySequence::UnknownKey, ActionScope::Canvas },
 
         // Panels

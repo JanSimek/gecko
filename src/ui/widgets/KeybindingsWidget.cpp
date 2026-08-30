@@ -148,7 +148,7 @@ void KeybindingsWidget::refreshAllRows() {
     // One edit can change two rows' colours — the one typed into and whichever was conflicting
     // with it before or after — so the whole (small) tree is repainted rather than guessing which.
     for (int group = 0; group < _tree->topLevelItemCount(); ++group) {
-        QTreeWidgetItem* category = _tree->topLevelItem(group);
+        const QTreeWidgetItem* category = _tree->topLevelItem(group);
         for (int row = 0; row < category->childCount(); ++row) {
             refreshRow(category->child(row));
         }
@@ -178,8 +178,7 @@ void KeybindingsWidget::refreshRow(QTreeWidgetItem* item) {
 }
 
 QKeySequence KeybindingsWidget::pendingShortcut(const QString& id) const {
-    const auto pending = _pending.constFind(id);
-    if (pending != _pending.constEnd()) {
+    if (const auto pending = _pending.constFind(id); pending != _pending.constEnd()) {
         return pending.value();
     }
     return _registry ? _registry->shortcut(id) : QKeySequence();
@@ -212,8 +211,7 @@ void KeybindingsWidget::onEditFinished(QTreeWidgetItem* item, const QKeySequence
         return; // nothing typed, or the same chord again
     }
 
-    const QString conflict = pendingConflict(id, keys);
-    if (!conflict.isEmpty()) {
+    if (const QString conflict = pendingConflict(id, keys); !conflict.isEmpty()) {
         // Reported rather than refused: the user can still see what they typed, and clearing the
         // other action's key resolves it. Applying a conflicting pair would make Qt fire neither.
         const ActionSpec* other = KeyBindingRegistry::spec(conflict);
@@ -264,7 +262,7 @@ void KeybindingsWidget::onResetSelected() {
         return;
     }
 
-    QTreeWidgetItem* item = selected.first();
+    const QTreeWidgetItem* item = selected.first();
     const QString id = actionIdOf(item);
     if (id.isEmpty()) {
         return;

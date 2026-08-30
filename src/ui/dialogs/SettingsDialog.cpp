@@ -33,12 +33,12 @@ SettingsDialog::SettingsDialog(std::shared_ptr<Settings> settings, KeyBindingReg
     , _editorTab(nullptr)
     , _editorTabLayout(nullptr)
     , _textEditorWidget(nullptr)
+    , _keyBindingRegistry(registry)
     , _statusLabel(nullptr)
     , _progressBar(nullptr)
     , _buttonBox(nullptr)
     , _applyButton(nullptr)
     , _resetButton(nullptr)
-    , _keyBindingRegistry(registry)
     , _settings(std::move(settings))
     , _hasChanges(false) {
 

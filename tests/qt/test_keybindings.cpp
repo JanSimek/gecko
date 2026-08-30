@@ -31,8 +31,7 @@ namespace {
 void removeTestSettings() {
     const QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
     QDir().mkpath(configRoot);
-    QDir geckoDir(configRoot + "/gecko");
-    if (geckoDir.exists()) {
+    if (QDir geckoDir(configRoot + "/gecko"); geckoDir.exists()) {
         geckoDir.removeRecursively();
     }
     QDir().mkpath(configRoot + "/gecko");
@@ -44,8 +43,8 @@ void removeTestSettings() {
 // at, so its invariants are worth asserting directly: a duplicate id would make one row
 // unreachable, and two actions sharing a key would make Qt fire neither.
 TEST_CASE("The shipped keybinding table is internally consistent", "[qt][keybindings]") {
-    std::set<std::string> ids;
-    std::set<std::string> keys;
+    std::set<std::string, std::less<>> ids;
+    std::set<std::string, std::less<>> keys;
 
     for (const ActionSpec& spec : actionSpecs()) {
         REQUIRE(spec.id != nullptr);
@@ -266,7 +265,7 @@ TEST_CASE("The keybindings page lists the table and commits only on apply", "[qt
 
     int visibleRows = 0;
     for (int group = 0; group < tree->topLevelItemCount(); ++group) {
-        QTreeWidgetItem* category = tree->topLevelItem(group);
+        const QTreeWidgetItem* category = tree->topLevelItem(group);
         for (int row = 0; row < category->childCount(); ++row) {
             visibleRows += category->child(row)->isHidden() ? 0 : 1;
         }
@@ -319,7 +318,7 @@ TEST_CASE("The Preferences dialog gains a shortcuts tab only with a registry", "
 
     const auto tabTitles = [](const SettingsDialog& dialog) {
         QStringList titles;
-        for (QTabWidget* tabs : dialog.findChildren<QTabWidget*>()) {
+        for (const QTabWidget* tabs : dialog.findChildren<QTabWidget*>()) {
             for (int index = 0; index < tabs->count(); ++index) {
                 titles.append(tabs->tabText(index));
             }
@@ -350,7 +349,7 @@ TEST_CASE("The keybindings page repaints both sides of a conflict", "[qt][keybin
 
     const auto rowFor = [tree](const QString& label) -> QTreeWidgetItem* {
         for (int group = 0; group < tree->topLevelItemCount(); ++group) {
-            QTreeWidgetItem* category = tree->topLevelItem(group);
+            const QTreeWidgetItem* category = tree->topLevelItem(group);
             for (int row = 0; row < category->childCount(); ++row) {
                 if (category->child(row)->text(0) == label) {
                     return category->child(row);
@@ -403,7 +402,7 @@ TEST_CASE("The keybindings page keeps its filter across a rebuild", "[qt][keybin
     const auto visibleRows = [tree]() {
         int count = 0;
         for (int group = 0; group < tree->topLevelItemCount(); ++group) {
-            QTreeWidgetItem* category = tree->topLevelItem(group);
+            const QTreeWidgetItem* category = tree->topLevelItem(group);
             for (int row = 0; row < category->childCount(); ++row) {
                 count += category->child(row)->isHidden() ? 0 : 1;
             }

@@ -862,9 +862,9 @@ void MainWindow::setupMenuBar() {
     // elevations the open map actually has, and a shortcut on a disabled action is a no-op — so a
     // map with one elevation ignores Ctrl+2 rather than switching to a level that isn't there.
     const std::array<ElevationActionSpec, 3> elevationSpecs = { {
-        { &_elevation1Action, "Elevation &1", ELEVATION_1, true, actions::ELEVATION_1 },
-        { &_elevation2Action, "Elevation &2", ELEVATION_2, false, actions::ELEVATION_2 },
-        { &_elevation3Action, "Elevation &3", ELEVATION_3, false, actions::ELEVATION_3 },
+        { &_elevation1Action, "Elevation &1", ELEVATION_1, true, actions::SET_ELEVATION_1 },
+        { &_elevation2Action, "Elevation &2", ELEVATION_2, false, actions::SET_ELEVATION_2 },
+        { &_elevation3Action, "Elevation &3", ELEVATION_3, false, actions::SET_ELEVATION_3 },
     } };
 
     for (const ElevationActionSpec& spec : elevationSpecs) {
