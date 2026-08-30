@@ -148,10 +148,10 @@ namespace {
     // into a single row.
     struct ExitKey {
         std::string map;
-        int elevation;
-        std::uint32_t destMap;
-        std::uint32_t destHex;
-        std::uint32_t destElevation;
+        int elevation = 0;
+        std::uint32_t destMap = 0;
+        std::uint32_t destHex = 0;
+        std::uint32_t destElevation = 0;
         auto operator<=>(const ExitKey&) const = default;
     };
 
@@ -308,7 +308,7 @@ namespace {
 
     // Every distinct proto the walk touched, so a consumer can show what a thing IS — name, the
     // sentence the game prints on examine, the art to draw — without re-reading the protos itself.
-    ordered_json protoTable(Protos& protos) {
+    ordered_json protoTable(const Protos& protos) {
         auto table = ordered_json::array();
         for (const auto& [pid, info] : protos.seen()) {
             ordered_json entry;
