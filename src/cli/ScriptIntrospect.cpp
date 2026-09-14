@@ -25,6 +25,7 @@
 #include <optional>
 #include <ostream>
 #include <regex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -98,7 +99,7 @@ namespace {
         }
         try {
             root["disassembly"] = intProgramToJson(disassembleInt(*bytes, globalVarNames.empty() ? nullptr : &globalVarNames));
-        } catch (const std::exception& e) {
+        } catch (const std::runtime_error& e) {
             root["disassembly"] = nullptr;
             root["disassemblyError"] = std::string("could not disassemble ") + path + ": " + e.what();
         }

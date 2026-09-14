@@ -20,9 +20,9 @@ namespace {
         const char* name;
     };
 
-    constexpr OpcodeName kOpcodeNames[] = {
+    constexpr auto kOpcodeNames = std::to_array<OpcodeName>({
 #include "cli/IntOpcodes.inc"
-    };
+    });
 
     // Layout constants from fallout2-ce interpreter.cc programCreateByPath / interpreter.h.
     constexpr std::size_t PROCEDURE_TABLE_OFFSET = 42; // program->procedures = data + 42

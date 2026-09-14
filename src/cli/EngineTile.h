@@ -30,10 +30,10 @@ inline constexpr int ROTATION_COUNT = 6;
 inline constexpr int MAX_DISTANCE = 9999; // the engine's "unreachable" distance
 
 // _dir_tile, as tileInit fills it: the tile-number step for each rotation, by column parity.
-inline constexpr int DIR_TILE[2][ROTATION_COUNT] = {
+inline constexpr std::array<std::array<int, ROTATION_COUNT>, 2> DIR_TILE{ {
     { -1, GRID_WIDTH - 1, GRID_WIDTH, GRID_WIDTH + 1, 1, -GRID_WIDTH },
     { -GRID_WIDTH - 1, -1, GRID_WIDTH, 1, 1 - GRID_WIDTH, -GRID_WIDTH },
-};
+} };
 
 inline bool isValid(int tile) {
     return tile >= 0 && tile < GRID_SIZE;
@@ -195,8 +195,7 @@ inline int tileFromScreenXY(int screenX, int screenY, const Camera& camera) {
             break;
     }
 
-    const int xPos = GRID_WIDTH - 1 - xTile;
-    if (xPos >= 0 && xPos < GRID_WIDTH && yTile >= 0 && yTile < GRID_HEIGHT) {
+    if (const int xPos = GRID_WIDTH - 1 - xTile; xPos >= 0 && xPos < GRID_WIDTH && yTile >= 0 && yTile < GRID_HEIGHT) {
         return GRID_WIDTH * yTile + xPos;
     }
     return -1;
@@ -211,8 +210,7 @@ inline int rotationTo(int tile1, int tile2, const Camera& camera) {
     const int x2 = p2 ? (*p2)[0] : 0;
     const int y2 = p2 ? (*p2)[1] : 0;
     const int dy = y2 - y1;
-    const int dx = x2 - x1;
-    if (dx != 0) {
+    if (const int dx = x2 - x1; dx != 0) {
         const auto raw = static_cast<int>(std::trunc(std::atan2(static_cast<double>(-dy), static_cast<double>(dx)) * 180.0
             / std::numbers::pi));
         int angle = 360 - (raw + 180) - 90;
@@ -236,11 +234,12 @@ inline int distance(int tile1, int tile2, const Camera& camera) {
     }
     int steps = 0;
     int current = tile1;
-    for (; current != tile2 && steps < MAX_DISTANCE; steps++) {
+    while (current != tile2 && steps < MAX_DISTANCE) {
         current += DIR_TILE[(current % GRID_WIDTH) & 1][rotationTo(current, tile2, camera)];
         if (!isValid(current)) {
             return MAX_DISTANCE;
         }
+        ++steps;
     }
     return steps;
 }

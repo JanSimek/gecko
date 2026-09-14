@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""
-Regenerate src/cli/IntOpcodes.inc from a fallout2-ce checkout.
+"""Regenerate src/cli/IntOpcodes.inc from a fallout2-ce checkout."""
+#
+# The compiled Fallout 2 script (.int) opcode names are not shipped game data; the engine is the only
+# source of truth. This walks the same registrations the interpreter performs at startup:
+#
+#   * interpreter.h            - core VM opcodes (OPCODE_* enum, 0x8000..0x804B)
+#   * interpreter_extra.cc     - game opcodes, named by the original op_* comment on each registration
+#   * interpreter_lib.cc       - window/sound/movie opcodes
+#   * sfall_opcodes.cc         - sfall extensions
+#
+# A registration without an op_* comment keeps the engine's handler identifier. The dispatcher indexes
+# its table with (opcode & 0x3FF), so the table is keyed the same way; two registrations landing on one
+# index with different names are a hard error rather than a silent pick.
+#
+# Run it from the root of the fallout2-ce checkout; it takes no arguments:
+#   cd /path/to/fallout2-ce && python3 /path/to/gecko/tools/gen_int_opcodes.py > /path/to/gecko/src/cli/IntOpcodes.inc
 
-The compiled Fallout 2 script (.int) opcode names are not shipped game data; the engine is the only
-source of truth. This walks the same registrations the interpreter performs at startup:
-
-  * interpreter.h            - core VM opcodes (OPCODE_* enum, 0x8000..0x804B)
-  * interpreter_extra.cc     - game opcodes, named by the original op_* comment on each registration
-  * interpreter_lib.cc       - window/sound/movie opcodes
-  * sfall_opcodes.cc         - sfall extensions
-
-A registration without an op_* comment keeps the engine's handler identifier. The dispatcher indexes
-its table with (opcode & 0x3FF), so the table is keyed the same way; two registrations landing on one
-index with different names are a hard error rather than a silent pick.
-
-Usage: tools/gen_int_opcodes.py /path/to/fallout2-ce > src/cli/IntOpcodes.inc
-"""
 import re
 import sys
 from pathlib import Path
@@ -25,30 +25,24 @@ REGISTRATION_SOURCES = ('interpreter_extra.cc', 'interpreter_lib.cc', 'sfall_opc
 CORE_OPCODES_SOURCE = 'interpreter.h'
 
 
-def checkout_root(argument):
-    """
-    Resolve the fallout2-ce checkout named on the command line, refusing anything that is not one.
-    """
-    root = Path(argument).resolve(strict=True)
+def checkout_root():
+    """Return the current directory, which must be the root of a fallout2-ce checkout."""
+    root = Path.cwd()
     if not (root / 'src' / CORE_OPCODES_SOURCE).is_file():
-        sys.exit(f'{root} is not a fallout2-ce checkout (no src/{CORE_OPCODES_SOURCE})')
+        sys.exit(f'run this from the root of a fallout2-ce checkout ({root} has no src/{CORE_OPCODES_SOURCE})')
     return root
 
 
 def read_source(root, name):
-    """
-    Read one of the known engine sources, which must resolve inside the checkout.
-    """
+    """Read one of the known engine sources, which must resolve inside the checkout."""
     path = (root / 'src' / name).resolve(strict=True)
-    if not path.is_relative_to(root):
+    if not path.is_relative_to(root.resolve()):
         sys.exit(f'src/{name} resolves outside {root}')
-    return path.read_text(encoding='utf-8')  # NOSONAR - developer tool reading a fixed file inside the checkout validated above
+    return path.read_text(encoding='utf-8')
 
 
 def head_commit(root):
-    """
-    Return the checkout's abbreviated HEAD commit, read from .git rather than by running git.
-    """
+    """Return the checkout's abbreviated HEAD commit, read from .git rather than by running git."""
     git_dir = root / '.git'
     if not git_dir.is_dir():
         return 'unknown'
@@ -69,10 +63,10 @@ def head_commit(root):
 
 
 def main():
-    """
-    Print the opcode table for the checkout given as the first argument (default: the current directory).
-    """
-    root = checkout_root(sys.argv[1] if len(sys.argv) > 1 else '.')
+    """Print the opcode table for the fallout2-ce checkout in the current directory."""
+    if len(sys.argv) > 1:
+        sys.exit('usage: run from the root of a fallout2-ce checkout, with no arguments')
+    root = checkout_root()
     entries = {}
 
     def add(index, name, source):
