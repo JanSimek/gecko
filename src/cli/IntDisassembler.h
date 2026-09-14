@@ -28,6 +28,9 @@ struct IntProcedure {
     int32_t bodyOffset = 0;
     int32_t argCount = 0;
     std::vector<IntInstruction> code;
+    /// A conditional procedure's condition (PROCEDURE_FLAG_CONDITIONAL), evaluated by the interpreter
+    /// before the body runs; empty when conditionOffset is 0.
+    std::vector<IntInstruction> condition;
 };
 
 struct IntProgram {
@@ -36,10 +39,10 @@ struct IntProgram {
 };
 
 /// Disassemble a compiled .int script using the layout fallout2-ce's programCreateByPath and
-/// interpreter loop read. Each procedure's code runs from its body offset to the next procedure's
-/// body or condition offset. Pass `globalVarNames` (vault13.gam order) to annotate global-variable
-/// reads and writes whose index is a literal push. Throws std::runtime_error on a table or offset
-/// that points outside the file.
+/// interpreter loop read. A procedure's body, and its condition when it has one, each run from their
+/// offset to the next body or condition offset in the file. Pass `globalVarNames` (vault13.gam order) to
+/// annotate global-variable reads and writes whose index is a literal push. Throws ParseException (a
+/// std::runtime_error) on a table or offset that points outside the file.
 IntProgram disassembleInt(const std::vector<uint8_t>& bytes, const std::vector<std::string>* globalVarNames = nullptr);
 
 /// The program as JSON: procedures in table order, each with its code as one compact line per

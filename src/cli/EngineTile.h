@@ -4,9 +4,9 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
-#include <functional>
 #include <numbers>
 #include <optional>
+#include <utility>
 #include <vector>
 
 // The Fallout 2 engine's own hex-tile math, ported from fallout2-ce tile.cc and animation.cc so that
@@ -102,51 +102,53 @@ inline std::optional<std::array<int, 2>> tileToScreenXY(int tile, const Camera& 
     return std::array<int, 2>{ screenX, screenY };
 }
 
-// _tile_mask, built with tileInit's loops: which neighbouring tile a pixel of the 32x16 cell belongs to.
-inline const std::array<unsigned char, 512>& tileMask() {
-    static const std::array<unsigned char, 512> mask = [] {
-        std::array<unsigned char, 512> m{};
-        int index = 0;
-        int row = 0;
-        do {
-            int column = 64;
-            do {
-                m[index++] = column > row ? 1 : 0;
-                column -= 4;
-            } while (column);
-            do {
-                m[index++] = column > row ? 2 : 0;
-                column += 4;
-            } while (column != 64);
-            row += 16;
-        } while (row != 64);
+namespace detail {
 
-        row = 0;
-        do {
-            int column = 0;
-            do {
-                m[index++] = 0;
-                column++;
-            } while (column < 32);
-            row++;
-        } while (row < 8);
+    using TileMask = std::array<unsigned char, 512>;
 
-        row = 0;
-        do {
-            int column = 0;
-            do {
-                m[index++] = column > row ? 0 : 3;
-                column += 4;
-            } while (column != 64);
-            column = 64;
-            do {
-                m[index++] = column > row ? 0 : 4;
-                column -= 4;
-            } while (column);
-            row += 16;
-        } while (row != 64);
-        return m;
-    }();
+    // tileInit fills _tile_mask in three bands of the 32x16 cell; these are its loops, one band each.
+    inline void fillMaskUpperBand(TileMask& mask, std::size_t& index) {
+        for (int row = 0; row != 64; row += 16) {
+            for (int column = 64; column != 0; column -= 4) {
+                mask[index++] = column > row ? 1 : 0;
+            }
+            for (int column = 0; column != 64; column += 4) {
+                mask[index++] = column > row ? 2 : 0;
+            }
+        }
+    }
+
+    inline void fillMaskMiddleBand(TileMask& mask, std::size_t& index) {
+        for (int pixel = 0; pixel < 8 * 32; ++pixel) {
+            mask[index++] = 0;
+        }
+    }
+
+    inline void fillMaskLowerBand(TileMask& mask, std::size_t& index) {
+        for (int row = 0; row != 64; row += 16) {
+            for (int column = 0; column != 64; column += 4) {
+                mask[index++] = column > row ? 0 : 3;
+            }
+            for (int column = 64; column != 0; column -= 4) {
+                mask[index++] = column > row ? 0 : 4;
+            }
+        }
+    }
+
+    inline TileMask buildTileMask() {
+        TileMask mask{};
+        std::size_t index = 0;
+        fillMaskUpperBand(mask, index);
+        fillMaskMiddleBand(mask, index);
+        fillMaskLowerBand(mask, index);
+        return mask;
+    }
+
+} // namespace detail
+
+// _tile_mask: which neighbouring tile a pixel of the 32x16 cell belongs to.
+inline const detail::TileMask& tileMask() {
+    static const detail::TileMask mask = detail::buildTileMask();
     return mask;
 }
 
@@ -211,7 +213,7 @@ inline int rotationTo(int tile1, int tile2, const Camera& camera) {
     const int dy = y2 - y1;
     const int dx = x2 - x1;
     if (dx != 0) {
-        const int raw = static_cast<int>(std::trunc(std::atan2(static_cast<double>(-dy), static_cast<double>(dx)) * 180.0
+        const auto raw = static_cast<int>(std::trunc(std::atan2(static_cast<double>(-dy), static_cast<double>(dx)) * 180.0
             / std::numbers::pi));
         int angle = 360 - (raw + 180) - 90;
         if (angle < 0) {
@@ -271,15 +273,56 @@ struct StraightPathResult {
     int obstacleId = -1;           ///< caller-defined id of the blocker returned by the callback
 };
 
+namespace detail {
+
+    inline int sign(int value) {
+        if (value > 0) {
+            return 1;
+        }
+        if (value < 0) {
+            return -1;
+        }
+        return 0;
+    }
+
+    // make_straight_path has two Bresenham loops, one stepping every pixel in y and one in x. They are
+    // the same loop with the axes swapped, so this is that loop written once: `major` and `minor` alias
+    // whichever of tileX / tileY advances every pixel and every few. It stops when the major axis reaches
+    // its end (before looking at that pixel's tile, as the engine does) or when `visit` reports a blocker.
+    template <class Visit>
+    void walkPixels(int& tileX, int& tileY, int& major, int& minor, const std::array<int, 5>& line, const Camera& camera,
+        Visit& visit) {
+        const auto [majorEnd, majorStep, minorStep, dMajor, dMinor] = line;
+        int middle = dMinor - dMajor / 2;
+        while (true) {
+            const int tile = tileFromScreenXY(tileX, tileY, camera);
+            if (major == majorEnd) {
+                return;
+            }
+            if (middle >= 0) {
+                minor += minorStep;
+                middle -= dMajor;
+            }
+            major += majorStep;
+            middle += dMinor;
+            if (visit(tile)) {
+                return;
+            }
+        }
+    }
+
+} // namespace detail
+
 /// _make_straight_path_func with an obstacle pointer: walk a Bresenham line over screen pixels from
 /// the centre of `from` to the centre of `to`, asking `blockerAt(tile)` for a blocker at the start
 /// tile and at every tile the walk enters. `blockerAt` returns a caller-defined object id or -1.
 /// `shootThrough` mirrors a6 == 32 (the sfall ObjCanSeeObj_ShootThru_Fix mode): blockers for which
 /// `isShootThrough(id)` holds are then skipped. obj_can_see_obj passes 16, i.e. shootThrough = false.
-inline StraightPathResult straightPath(int from, int to, const Camera& camera, const std::function<int(int)>& blockerAt,
-    bool shootThrough = false, const std::function<bool(int)>& isShootThrough = {}) {
+template <class BlockerAt, class IsShootThrough>
+StraightPathResult straightPath(int from, int to, const Camera& camera, BlockerAt&& blockerAt, bool shootThrough,
+    IsShootThrough&& isShootThrough) {
     StraightPathResult result;
-    auto blocks = [&](int id) { return id >= 0 && (!shootThrough || !isShootThrough || !isShootThrough(id)); };
+    auto blocks = [shootThrough, &isShootThrough](int id) { return id >= 0 && (!shootThrough || !isShootThrough(id)); };
 
     result.tilesEntered.push_back(from);
     if (const int id = blockerAt(from); blocks(id)) {
@@ -297,68 +340,41 @@ inline StraightPathResult straightPath(int from, int to, const Camera& camera, c
     const int fromY = (*fromXY)[1] + 8;
     const int toX = (*toXY)[0] + 16;
     const int toY = (*toXY)[1] + 8;
-
-    const int deltaX = toX - fromX;
-    const int deltaY = toY - fromY;
-    const int stepX = deltaX > 0 ? 1 : (deltaX < 0 ? -1 : 0);
-    const int stepY = deltaY > 0 ? 1 : (deltaY < 0 ? -1 : 0);
-    const int ddx = 2 * std::abs(deltaX);
-    const int ddy = 2 * std::abs(deltaY);
+    const int ddx = 2 * std::abs(toX - fromX);
+    const int ddy = 2 * std::abs(toY - fromY);
 
     int tileX = fromX;
     int tileY = fromY;
     int prevTile = from;
-
-    auto visit = [&](int tile) {
+    auto visit = [&result, &prevTile, &blockerAt, &blocks](int tile) {
         if (tile == prevTile) {
             return false;
         }
         result.tilesEntered.push_back(tile);
         prevTile = tile;
-        if (const int id = blockerAt(tile); blocks(id)) {
-            result.obstacleTile = tile;
-            result.obstacleId = id;
-            return true;
+        const int id = blockerAt(tile);
+        if (!blocks(id)) {
+            return false;
         }
-        return false;
+        result.obstacleTile = tile;
+        result.obstacleId = id;
+        return true;
     };
 
     if (ddx <= ddy) {
-        int middle = ddx - ddy / 2;
-        while (true) {
-            const int tile = tileFromScreenXY(tileX, tileY, camera);
-            if (tileY == toY) {
-                break;
-            }
-            if (middle >= 0) {
-                tileX += stepX;
-                middle -= ddy;
-            }
-            tileY += stepY;
-            middle += ddx;
-            if (visit(tile)) {
-                break;
-            }
-        }
+        detail::walkPixels(tileX, tileY, tileY, tileX, { toY, detail::sign(toY - fromY), detail::sign(toX - fromX), ddy, ddx },
+            camera, visit);
     } else {
-        int middle = ddy - ddx / 2;
-        while (true) {
-            const int tile = tileFromScreenXY(tileX, tileY, camera);
-            if (tileX == toX) {
-                break;
-            }
-            if (middle >= 0) {
-                tileY += stepY;
-                middle -= ddx;
-            }
-            tileX += stepX;
-            middle += ddy;
-            if (visit(tile)) {
-                break;
-            }
-        }
+        detail::walkPixels(tileX, tileY, tileX, tileY, { toX, detail::sign(toX - fromX), detail::sign(toY - fromY), ddx, ddy },
+            camera, visit);
     }
     return result;
+}
+
+/// The obj_can_see_obj form (a6 == 16): no blocker is skipped for being shoot-through.
+template <class BlockerAt>
+StraightPathResult straightPath(int from, int to, const Camera& camera, BlockerAt&& blockerAt) {
+    return straightPath(from, to, camera, std::forward<BlockerAt>(blockerAt), false, [](int) { return false; });
 }
 
 } // namespace geck::enginetile

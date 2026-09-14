@@ -1,5 +1,7 @@
 #include "cli/IntDisassembler.h"
 
+#include "reader/ReaderExceptions.h"
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -51,7 +53,7 @@ namespace {
 
         void require(std::size_t offset, std::size_t length, const char* what) const {
             if (offset > _data.size() || length > _data.size() - offset) {
-                throw std::runtime_error(std::format("{} at offset {} runs past the end of the {}-byte file", what,
+                throw ParseException(std::format("{} at offset {} runs past the end of the {}-byte file", what,
                     offset, _data.size()));
             }
         }
@@ -82,7 +84,7 @@ namespace {
 
     std::size_t checkedOffset(int32_t value, const char* what) {
         if (value < 0) {
-            throw std::runtime_error(std::format("{} is negative ({})", what, value));
+            throw ParseException(std::format("{} is negative ({})", what, value));
         }
         return static_cast<std::size_t>(value);
     }
@@ -182,7 +184,7 @@ IntProgram disassembleInt(const std::vector<uint8_t>& data, const std::vector<st
 
     const int32_t count = bytes.be32(PROCEDURE_TABLE_OFFSET, "procedure count");
     if (count < 0) {
-        throw std::runtime_error(std::format("procedure count is negative ({})", count));
+        throw ParseException(std::format("procedure count is negative ({})", count));
     }
     const std::size_t table = PROCEDURE_TABLE_OFFSET + 4;
     bytes.require(table, static_cast<std::size_t>(count) * PROCEDURE_RECORD_SIZE, "procedure table");
@@ -197,7 +199,7 @@ IntProgram disassembleInt(const std::vector<uint8_t>& data, const std::vector<st
     program.codeStart = staticStrings + 4 + (staticStringsLength > 0 ? static_cast<std::size_t>(staticStringsLength) : 0);
     bytes.require(program.codeStart, 0, "code section");
 
-    std::set<std::size_t> boundaries{ bytes.size() };
+    std::set boundaries{ bytes.size() };
     for (int32_t i = 0; i < count; ++i) {
         const std::size_t record = table + static_cast<std::size_t>(i) * PROCEDURE_RECORD_SIZE;
         IntProcedure procedure;
@@ -215,20 +217,27 @@ IntProgram disassembleInt(const std::vector<uint8_t>& data, const std::vector<st
         program.procedures.push_back(std::move(procedure));
     }
 
-    for (auto& procedure : program.procedures) {
-        const auto begin = static_cast<std::size_t>(procedure.bodyOffset);
+    const auto disassembleFrom = [&bytes, &boundaries, staticStrings, globalVarNames](int32_t offset, const char* what,
+                                     std::vector<IntInstruction>& code) {
+        const auto begin = static_cast<std::size_t>(offset);
         const std::size_t end = *boundaries.upper_bound(begin);
-        bytes.require(begin, end - begin, "procedure body");
-        disassembleRange(bytes, begin, end, staticStrings, globalVarNames, procedure.code);
+        bytes.require(begin, end - begin, what);
+        disassembleRange(bytes, begin, end, staticStrings, globalVarNames, code);
+    };
+    for (auto& procedure : program.procedures) {
+        disassembleFrom(procedure.bodyOffset, "procedure body", procedure.code);
+        if (procedure.conditionOffset > 0) {
+            disassembleFrom(procedure.conditionOffset, "procedure condition", procedure.condition);
+        }
     }
     return program;
 }
 
-nlohmann::ordered_json intProgramToJson(const IntProgram& program) {
-    auto procedures = nlohmann::ordered_json::array();
-    for (const auto& procedure : program.procedures) {
+namespace {
+
+    nlohmann::ordered_json codeLines(const std::vector<IntInstruction>& code) {
         auto lines = nlohmann::ordered_json::array();
-        for (const auto& instruction : procedure.code) {
+        for (const auto& instruction : code) {
             std::string line = std::format("{:>6} {}", instruction.offset, instruction.name);
             if (!instruction.operand.empty()) {
                 line += " " + instruction.operand;
@@ -238,10 +247,19 @@ nlohmann::ordered_json intProgramToJson(const IntProgram& program) {
             }
             lines.push_back(std::move(line));
         }
+        return lines;
+    }
+
+} // namespace
+
+nlohmann::ordered_json intProgramToJson(const IntProgram& program) {
+    auto procedures = nlohmann::ordered_json::array();
+    for (const auto& procedure : program.procedures) {
+        const bool conditional = procedure.conditionOffset > 0;
         procedures.push_back({ { "name", procedure.name }, { "argCount", procedure.argCount }, { "flags", procedure.flags },
             { "bodyOffset", procedure.bodyOffset },
-            { "conditionOffset", procedure.conditionOffset > 0 ? nlohmann::ordered_json(procedure.conditionOffset) : nullptr },
-            { "code", std::move(lines) } });
+            { "conditionOffset", conditional ? nlohmann::ordered_json(procedure.conditionOffset) : nullptr },
+            { "condition", conditional ? codeLines(procedure.condition) : nullptr }, { "code", codeLines(procedure.code) } });
     }
     return { { "codeStart", program.codeStart }, { "procedures", std::move(procedures) } };
 }

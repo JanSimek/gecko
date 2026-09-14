@@ -618,8 +618,6 @@ namespace {
             { "areaAttackMode", packet->areaAttackMode }, { "secondaryFreq", packet->secondaryFreq } };
     }
 
-    // Per-map critter array. `team` is the instance group_id; `aiPacket` falls back to the proto
-    // default when 0 and resolves through ai.txt into the behaviour sub-object.
     // A saved map's live combat state for one critter (header flag MAP_HEADER_SAVED, fallout2-ce
     // map_defs.h). Shipped maps store zeros in these slots, so it is only reported for saves.
     // whoHitMeCid names another critter by its combat id; it is resolved when that critter is on the
@@ -640,21 +638,42 @@ namespace {
             { "whoHitMeCid", whoHitMeCid }, { "whoHitMe", std::move(whoHitMe) } };
     }
 
+    // Critters by combat id, for resolving a saved map's whoHitMeCid.
+    std::map<int32_t, const MapObject*> crittersByCombatId(Map& map) {
+        std::map<int32_t, const MapObject*> byCid;
+        for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
+            for (const auto& object : mapObjects) {
+                if (object && object->objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)
+                    && object->critter_index >= 0) {
+                    byCid.emplace(object->critter_index, object.get());
+                }
+            }
+        }
+        return byCid;
+    }
+
+    // The attached script as {programIndex, name, localVars} (feed programIndex to describe_script) or
+    // null. localVars is the script's slice of the map's LVAR pool.
+    ordered_json critterScriptJson(Map& map, const MapObject& object, const Lst* scriptsLst) {
+        const auto ref = resolveObjectScript(map, object.map_scripts_pid, scriptsLst);
+        if (!ref.has_value()) {
+            return nullptr;
+        }
+        ordered_json localVars = ordered_json::array();
+        if (const MapScript* script = findObjectScript(map, object.map_scripts_pid); script != nullptr) {
+            localVars = localVarsToJson(*script, map.getMapFile().map_local_vars);
+        }
+        return { { "programIndex", ref->first }, { "name", ref->second }, { "localVars", std::move(localVars) } };
+    }
+
+    // Per-map critter array. `team` is the instance group_id; `aiPacket` falls back to the proto
+    // default when 0 and resolves through ai.txt into the behaviour sub-object. A saved map also gives
+    // each critter its live combat state.
     ordered_json crittersToJson(Map& map, NameResolver& names, const AiTxt& ai, const Lst* scriptsLst) {
         auto array = ordered_json::array();
         constexpr uint32_t MAP_HEADER_SAVED = 0x01; // fallout2-ce map_defs.h
         const bool savedMap = (map.getMapFile().header.flags & MAP_HEADER_SAVED) != 0;
-        std::map<int32_t, const MapObject*> byCid;
-        if (savedMap) {
-            for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
-                for (const auto& object : mapObjects) {
-                    if (object && object->objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)
-                        && object->critter_index >= 0) {
-                        byCid.emplace(object->critter_index, object.get());
-                    }
-                }
-            }
-        }
+        const auto byCid = savedMap ? crittersByCombatId(map) : std::map<int32_t, const MapObject*>{};
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
                 if (!object || object->objectType() != static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)) {
@@ -662,21 +681,11 @@ namespace {
                 }
                 const uint32_t pid = object->pro_pid;
                 const uint32_t packet = object->ai_packet != 0 ? object->ai_packet : names.critterAiPacket(pid);
-                // The attached script as {programIndex, name, localVars} (feed programIndex to
-                // describe_script) or null. localVars is the script's slice of the map's LVAR pool.
-                ordered_json scriptJson = nullptr;
-                if (const auto ref = resolveObjectScript(map, object->map_scripts_pid, scriptsLst); ref.has_value()) {
-                    ordered_json localVars = ordered_json::array();
-                    if (const MapScript* script = findObjectScript(map, object->map_scripts_pid); script != nullptr) {
-                        localVars = localVarsToJson(*script, map.getMapFile().map_local_vars);
-                    }
-                    scriptJson = ordered_json{ { "programIndex", ref->first }, { "name", ref->second },
-                        { "localVars", std::move(localVars) } };
-                }
                 ordered_json entry = { { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
                     { "name", names.protoName(pid) }, { "hex", object->position }, { "elevation", elevation },
                     { "team", object->group_id }, { "aiPacket", packet },
-                    { "ai", critterAiToJson(ai.byPacketNum(static_cast<int>(packet))) }, { "script", scriptJson } };
+                    { "ai", critterAiToJson(ai.byPacketNum(static_cast<int>(packet))) },
+                    { "script", critterScriptJson(map, *object, scriptsLst) } };
                 if (savedMap) {
                     entry["combat"] = critterCombatToJson(*object, byCid, names);
                 }

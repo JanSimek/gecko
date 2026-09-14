@@ -9,25 +9,33 @@
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
 #include "reader/IniParser.h"
+#include "reader/ReaderExceptions.h"
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
 #include "util/ProHelper.h"
 
+#include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <cstddef>
-#include <nlohmann/json.hpp>
-
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace geck::cli {
@@ -35,10 +43,11 @@ namespace geck::cli {
 namespace {
 
     using ordered_json = nlohmann::ordered_json;
+    using GlobalDefaults = std::vector<std::pair<std::string, int>>;
 
     // Engine layout constants (fallout2-ce). They are code, not data, so they are cited rather than loaded.
-    constexpr const char* LOAD_SAVE_SIGNATURE = "FALLOUT SAVE FILE"; // loadsave.cc, compared on 18 bytes
-    constexpr std::size_t SIGNATURE_COMPARE_LENGTH = 18;
+    // loadsave.cc compares strncmp(signature, LOAD_SAVE_SIGNATURE, 18): the 17 characters and the NUL after them.
+    constexpr const char* LOAD_SAVE_SIGNATURE = "FALLOUT SAVE FILE";
     constexpr std::size_t LS_PREVIEW_SIZE = 224 * 133;  // loadsave.cc LS_PREVIEW_WIDTH * HEIGHT
     constexpr std::size_t SAVEABLE_STAT_COUNT = 35;     // stat_defs.h
     constexpr std::size_t SKILL_COUNT = 18;             // skill_defs.h
@@ -51,6 +60,10 @@ namespace {
     constexpr uint32_t COMBAT_STATE_PLAYER_TURN = 0x02;
     constexpr uint32_t COMBAT_STATE_EXIT_REQUESTED = 0x08;
     constexpr uint32_t COMBAT_STATE_KNOWN = COMBAT_STATE_IN_COMBAT | COMBAT_STATE_PLAYER_TURN | COMBAT_STATE_EXIT_REQUESTED;
+    // Plausibility bounds for lengths read from the file: the slot's map list, and a combat list, which holds
+    // the critters of one elevation and so cannot exceed its hex count (map_defs.h HEX_GRID_SIZE).
+    constexpr int32_t MAX_MAP_LIST = 100000;
+    constexpr int32_t MAX_COMBAT_LIST = 200 * 200;
 
     class SaveReader {
     public:
@@ -58,14 +71,14 @@ namespace {
             : _data(data) {
         }
 
-        void require(std::size_t length, const std::string& what) const {
+        void require(std::size_t length, std::string_view what) const {
             if (_pos > _data.size() || length > _data.size() - _pos) {
-                throw std::runtime_error(std::format("SAVE.DAT ends inside {} (offset {}, need {} bytes, file is {})",
-                    what, _pos, length, _data.size()));
+                throw ParseException(std::format("SAVE.DAT ends inside {} (offset {}, need {} bytes, file is {})", what, _pos,
+                    length, _data.size()));
             }
         }
 
-        int32_t i32(const std::string& what) {
+        int32_t i32(std::string_view what) {
             require(4, what);
             const auto v = static_cast<int32_t>((uint32_t{ _data[_pos] } << 24) | (uint32_t{ _data[_pos + 1] } << 16)
                 | (uint32_t{ _data[_pos + 2] } << 8) | uint32_t{ _data[_pos + 3] });
@@ -73,19 +86,19 @@ namespace {
             return v;
         }
 
-        int16_t i16(const std::string& what) {
+        int16_t i16(std::string_view what) {
             require(2, what);
             const auto v = static_cast<int16_t>((_data[_pos] << 8) | _data[_pos + 1]);
             _pos += 2;
             return v;
         }
 
-        uint8_t u8(const std::string& what) {
+        uint8_t u8(std::string_view what) {
             require(1, what);
             return _data[_pos++];
         }
 
-        std::string fixedString(std::size_t length, const std::string& what) {
+        std::string fixedString(std::size_t length, std::string_view what) {
             require(length, what);
             const auto begin = _data.begin() + static_cast<std::ptrdiff_t>(_pos);
             const auto end = std::find(begin, begin + static_cast<std::ptrdiff_t>(length), uint8_t{ 0 });
@@ -93,19 +106,19 @@ namespace {
             return { begin, end };
         }
 
-        std::string cString(const std::string& what) {
+        std::string cString(std::string_view what) {
             require(1, what);
             const auto begin = _data.begin() + static_cast<std::ptrdiff_t>(_pos);
             const auto end = std::find(begin, _data.end(), uint8_t{ 0 });
             if (end == _data.end()) {
-                throw std::runtime_error(std::format("SAVE.DAT ends inside {} (unterminated string at offset {})", what, _pos));
+                throw ParseException(std::format("SAVE.DAT ends inside {} (unterminated string at offset {})", what, _pos));
             }
             std::string text(begin, end);
             _pos += text.size() + 1;
             return text;
         }
 
-        std::vector<int32_t> i32List(std::size_t count, const std::string& what) {
+        std::vector<int32_t> i32List(std::size_t count, std::string_view what) {
             require(count * 4, what);
             std::vector<int32_t> values;
             values.reserve(count);
@@ -115,7 +128,7 @@ namespace {
             return values;
         }
 
-        void skip(std::size_t length, const std::string& what) {
+        void skip(std::size_t length, std::string_view what) {
             require(length, what);
             _pos += length;
         }
@@ -130,8 +143,7 @@ namespace {
     };
 
     std::optional<std::vector<uint8_t>> readFile(const std::filesystem::path& path) {
-        std::error_code ec;
-        if (!std::filesystem::is_regular_file(path, ec)) {
+        if (std::error_code ec; !std::filesystem::is_regular_file(path, ec)) {
             return std::nullopt;
         }
         std::ifstream in(path, std::ios::binary);
@@ -145,15 +157,15 @@ namespace {
     // party_member_pid, stopping at the first gap.
     std::optional<std::size_t> partyMemberCount(resource::GameResources& resources) {
         const auto bytes = resources.files().readRawBytes("data/party.txt");
-        if (!bytes) {
+        if (!bytes.has_value()) {
             return std::nullopt;
         }
         std::istringstream in(std::string(bytes->begin(), bytes->end()));
-        std::set<std::string> sectionsWithPid;
+        std::set<std::string, std::less<>> sectionsWithPid;
         std::string section;
         ini::parse(
-            in, [&](const std::string& name) { section = name; },
-            [&](const std::string& key, const std::string&) {
+            in, [&section](std::string_view name) { section = name; },
+            [&section, &sectionsWithPid](std::string_view key, std::string_view) {
                 if (key == "party_member_pid") {
                     sectionsWithPid.insert(section);
                 }
@@ -172,8 +184,9 @@ namespace {
                     return msg->message(pro->header.message_id).text;
                 }
             }
-        } catch (const std::exception&) {
+        } catch (const std::exception& e) {
             // Leave the name empty, as proto_info does, rather than invent one.
+            spdlog::debug("describe_save: no display name for pid {}: {}", pid, e.what());
         }
         return {};
     }
@@ -187,118 +200,105 @@ namespace {
             { "damageLastTurn", static_cast<int32_t>(critter.damage_last_turn) },
             { "maneuverFlags", flagNames(critter.maneuver, kCritterManeuverFlags) },
             { "resultFlags", flagNames(critter.combat_results, kDamFlags) },
-            { "whoHitMeCid", static_cast<int32_t>(critter.who_hit_me) },
-            { "scriptProgramIndex", critter.script_id } };
+            { "whoHitMeCid", static_cast<int32_t>(critter.who_hit_me) }, { "scriptProgramIndex", critter.script_id } };
     }
 
-} // namespace
+    struct SaveHeader {
+        ordered_json json;
+        std::string mapFile;
+    };
 
-int describeSave(resource::GameResources& resources, const DescribeSaveOptions& options, std::ostream& out) {
-    std::filesystem::path slot = options.slotPath;
-    std::filesystem::path saveDat = slot;
-    std::error_code ec;
-    if (std::filesystem::is_directory(slot, ec)) {
-        saveDat = slot / "SAVE.DAT";
-    } else {
-        slot = slot.parent_path();
-    }
-    const auto bytes = readFile(saveDat);
-    if (!bytes) {
-        out << "describe_save: cannot read " << saveDat.string() << "\n";
-        return 1;
-    }
-
-    Gam* gam = loadGameGam(resources);
-    if (gam == nullptr) {
-        out << "describe_save: data/vault13.gam is not mounted; the save's global-variable blocks have its length\n";
-        return 1;
-    }
-    const auto globalDefaults = gam->gameGlobalVars();
-    const auto partyCount = partyMemberCount(resources);
-    if (!partyCount) {
-        out << "describe_save: data/party.txt is not mounted; the save's perk block has one row per party member\n";
-        return 1;
-    }
-
-    ordered_json root;
-    try {
-        SaveReader r(*bytes);
-
-        // lsgSaveHeaderInSlot
-        const std::string signature = r.fixedString(24, "signature");
-        if (signature.compare(0, SIGNATURE_COMPARE_LENGTH, std::string(LOAD_SAVE_SIGNATURE).substr(0, SIGNATURE_COMPARE_LENGTH)) != 0) {
-            out << "describe_save: " << saveDat.string() << " is not a Fallout save (signature '" << signature << "')\n";
-            return 1;
+    // lsgSaveHeaderInSlot
+    SaveHeader readHeader(SaveReader& r) {
+        if (const std::string signature = r.fixedString(24, "signature"); signature != LOAD_SAVE_SIGNATURE) {
+            throw ParseException(std::format("not a Fallout save (signature '{}')", signature));
         }
-        ordered_json header;
-        header["version"] = { r.i16("version"), r.i16("version") };
-        header["release"] = r.u8("release");
-        header["characterName"] = r.fixedString(32, "character name");
-        header["description"] = r.fixedString(30, "description");
+        SaveHeader header;
+        ordered_json& json = header.json;
+        const int16_t versionFirst = r.i16("version");
+        const int16_t versionSecond = r.i16("version");
+        json["version"] = { versionFirst, versionSecond };
+        json["release"] = r.u8("release");
+        json["characterName"] = r.fixedString(32, "character name");
+        json["description"] = r.fixedString(30, "description");
         const int16_t fileDay = r.i16("file date");
         const int16_t fileMonth = r.i16("file date");
         const int16_t fileYear = r.i16("file date");
-        header["savedOn"] = std::format("{:04}-{:02}-{:02}", fileYear, fileMonth, fileDay);
+        json["savedOn"] = std::format("{:04}-{:02}-{:02}", fileYear, fileMonth, fileDay);
         r.i32("file time");
         const int16_t gameMonth = r.i16("game date");
         const int16_t gameDay = r.i16("game date");
         const int16_t gameYear = r.i16("game date");
-        header["gameDate"] = std::format("{:04}-{:02}-{:02}", gameYear, gameMonth, gameDay);
-        header["gameTime"] = static_cast<uint32_t>(r.i32("game time"));
-        header["elevation"] = r.i16("elevation");
-        header["mapIndex"] = r.i16("map index");
-        const std::string mapFile = r.fixedString(16, "map file name");
-        header["mapFile"] = mapFile;
+        json["gameDate"] = std::format("{:04}-{:02}-{:02}", gameYear, gameMonth, gameDay);
+        json["gameTime"] = static_cast<uint32_t>(r.i32("game time"));
+        json["elevation"] = r.i16("elevation");
+        json["mapIndex"] = r.i16("map index");
+        header.mapFile = r.fixedString(16, "map file name");
+        json["mapFile"] = header.mapFile;
         r.skip(LS_PREVIEW_SIZE, "preview image");
         r.skip(128, "header padding");
-        root["slot"] = slot.string();
-        root["header"] = std::move(header);
+        return header;
+    }
 
-        // _SaveObjDudeCid, then scriptsSaveGameGlobalVars
-        const int32_t dudeCid = r.i32("player combat id");
-        const auto globals = r.i32List(globalDefaults.size(), "global variables");
+    struct GlobalsAndMaps {
+        std::vector<int32_t> globals;
+        ordered_json maps;
+    };
 
-        // _GameMap2Slot: the slot's map list, then the AUTOMAP.DB size
+    // scriptsSaveGameGlobalVars, _GameMap2Slot (the slot's map list, then the AUTOMAP.DB size), then the
+    // second copy of the globals the engine writes, which is also the alignment check.
+    GlobalsAndMaps readGlobalsAndMaps(SaveReader& r, std::size_t globalCount) {
+        GlobalsAndMaps result;
+        result.globals = r.i32List(globalCount, "global variables");
         const int32_t mapCount = r.i32("map list length");
-        if (mapCount < 0 || mapCount > 100000) {
-            throw std::runtime_error(std::format("implausible map list length {} after {} global variables: data/vault13.gam "
-                                                 "does not match the one this save was written with",
-                mapCount, globalDefaults.size()));
+        if (mapCount < 0 || mapCount > MAX_MAP_LIST) {
+            throw ParseException(std::format("implausible map list length {} after {} global variables: data/vault13.gam "
+                                             "does not match the one this save was written with",
+                mapCount, globalCount));
         }
         auto maps = ordered_json::array();
         for (int32_t i = 0; i < mapCount; ++i) {
             maps.push_back(r.cString("map list"));
         }
         const int32_t automapSize = r.i32("automap size");
-
-        // The engine writes the global variables a second time; it is also our alignment check.
-        if (r.i32List(globalDefaults.size(), "second global variable copy") != globals) {
-            throw std::runtime_error(std::format("the two global-variable copies differ: data/vault13.gam ({} variables) "
-                                                 "does not match the one this save was written with",
-                globalDefaults.size()));
+        if (r.i32List(globalCount, "second global variable copy") != result.globals) {
+            throw ParseException(std::format("the two global-variable copies differ: data/vault13.gam ({} variables) "
+                                             "does not match the one this save was written with",
+                globalCount));
         }
+        result.maps = { { "inSlot", std::move(maps) }, { "automapDbSize", automapSize } };
+        return result;
+    }
+
+    ordered_json changedGlobals(const std::vector<int32_t>& globals, const GlobalDefaults& defaults) {
         auto changed = ordered_json::array();
         for (std::size_t i = 0; i < globals.size(); ++i) {
-            if (globals[i] != globalDefaults[i].second) {
-                changed.push_back({ { "index", i }, { "name", globalDefaults[i].first }, { "value", globals[i] },
-                    { "default", globalDefaults[i].second } });
+            if (globals[i] != defaults[i].second) {
+                changed.push_back({ { "index", i }, { "name", defaults[i].first }, { "value", globals[i] },
+                    { "default", defaults[i].second } });
             }
         }
-        root["globals"] = { { "count", globals.size() }, { "changed", std::move(changed) } };
-        root["maps"] = { { "inSlot", std::move(maps) }, { "automapDbSize", automapSize } };
+        return changed;
+    }
 
-        // _obj_save_dude: the player object, then gCenterTile
+    struct PlayerRecord {
+        std::unique_ptr<MapObject> object;
+        ordered_json json;
+    };
+
+    // _obj_save_dude (the player object, then gCenterTile) and critterSave (_sneak_working, then the player's
+    // CritterProtoData).
+    PlayerRecord readPlayer(SaveReader& r, resource::GameResources& resources, int32_t cid) {
+        PlayerRecord player;
         MapReader objectReader(makeProtoLoader(resources));
-        std::size_t afterDude = 0;
-        const auto dude = objectReader.readObjectAt(r.data(), r.position(), afterDude);
-        if (dude->pro_pid != DUDE_PID) {
-            throw std::runtime_error(std::format("expected the player object (pid 0x{:08X}) at offset {}, found pid 0x{:08X}",
-                DUDE_PID, r.position(), dude->pro_pid));
+        std::size_t afterObject = 0;
+        player.object = objectReader.readObjectAt(r.data(), r.position(), afterObject);
+        if (player.object->pro_pid != DUDE_PID) {
+            throw ParseException(std::format("expected the player object (pid 0x{:08X}) at offset {}, found pid 0x{:08X}",
+                DUDE_PID, r.position(), player.object->pro_pid));
         }
-        r.setPosition(afterDude);
+        r.setPosition(afterObject);
         const int32_t centerTile = r.i32("view centre tile");
-
-        // critterSave: _sneak_working, then the player's CritterProtoData
         const int32_t sneakWorking = r.i32("sneak state");
         const auto protoFlags = static_cast<uint32_t>(r.i32("player proto flags"));
         const auto baseStats = r.i32List(SAVEABLE_STAT_COUNT, "base stats");
@@ -309,132 +309,219 @@ int describeSave(resource::GameResources& resources, const DescribeSaveOptions& 
         r.i32("kill type");
         r.i32("damage type");
 
-        ordered_json dudeJson = critterJson(resources, *dude, true);
-        dudeJson["cid"] = dudeCid;
-        dudeJson["inventoryItems"] = dude->objects_in_inventory;
-        dudeJson["viewCentreTile"] = centerTile;
-        dudeJson["sneaking"] = (protoFlags & CRITTER_DUDE_SNEAKING) != 0;
-        dudeJson["sneakWorking"] = sneakWorking != 0;
-        dudeJson["experience"] = experience;
-        dudeJson["bodyType"] = bodyType;
-        dudeJson["baseStats"] = baseStats;   // index = engine STAT_*
-        dudeJson["bonusStats"] = bonusStats; // index = engine STAT_*
-        dudeJson["skills"] = skills;         // index = engine SKILL_*
-        root["dude"] = std::move(dudeJson);
+        player.json = critterJson(resources, *player.object, true);
+        player.json["cid"] = cid;
+        player.json["inventoryItems"] = player.object->objects_in_inventory;
+        player.json["viewCentreTile"] = centerTile;
+        player.json["sneaking"] = (protoFlags & CRITTER_DUDE_SNEAKING) != 0;
+        player.json["sneakWorking"] = sneakWorking != 0;
+        player.json["experience"] = experience;
+        player.json["bodyType"] = bodyType;
+        // Stats and skills are indexed by the engine's STAT_* and SKILL_* numbers.
+        player.json["baseStats"] = baseStats;
+        player.json["bonusStats"] = bonusStats;
+        player.json["skills"] = skills;
+        return player;
+    }
 
-        // killsSave, skillsSave (tagged), randomSave (writes nothing), perksSave
-        root["killsByType"] = r.i32List(KILL_TYPE_DEFAULT_COUNT, "kill counts"); // index = engine KillType
+    // killsSave, skillsSave (tagged skills), randomSave (writes nothing) and perksSave. Kill counts are indexed by
+    // the engine's KillType and perks by its Perk number; only the player's perk row is reported.
+    void readKillsSkillsPerks(SaveReader& r, std::size_t partyCount, ordered_json& root) {
+        root["killsByType"] = r.i32List(KILL_TYPE_DEFAULT_COUNT, "kill counts");
         root["taggedSkills"] = r.i32List(NUM_TAGGED_SKILLS, "tagged skills");
-        const auto perkRanks = r.i32List(*partyCount * PERK_COUNT, "perk ranks");
-        auto dudePerks = ordered_json::array();
+        const auto perkRanks = r.i32List(partyCount * PERK_COUNT, "perk ranks");
+        auto playerPerks = ordered_json::array();
         for (std::size_t perk = 0; perk < PERK_COUNT; ++perk) {
             if (perkRanks[perk] != 0) {
-                dudePerks.push_back({ { "perk", perk }, { "rank", perkRanks[perk] } });
+                playerPerks.push_back({ { "perk", perk }, { "rank", perkRanks[perk] } });
             }
         }
-        root["perks"] = std::move(dudePerks); // perk = engine Perk index
+        root["perks"] = std::move(playerPerks);
+    }
 
-        // combatSave
-        const auto combatState = static_cast<uint32_t>(r.i32("combat state"));
-        if ((combatState & ~COMBAT_STATE_KNOWN) != 0) {
-            throw std::runtime_error(std::format("combat state 0x{:X} is not a combat state: data/party.txt ({} party members) "
-                                                 "does not match the data this save was written with",
-                combatState, *partyCount));
+    // The slot's copy of the current map, indexed by combat id and object id for joining the combat block.
+    class SlotMapIndex {
+    public:
+        SlotMapIndex(Map* map, const MapObject& player) {
+            _objectById.try_emplace(player.unknown0, &player);
+            if (map == nullptr) {
+                return;
+            }
+            for (const auto& entry : map->getMapFile().map_objects) {
+                for (const auto& object : entry.second) {
+                    if (object) {
+                        add(*object);
+                    }
+                }
+            }
         }
-        ordered_json combat = { { "state", combatState }, { "inCombat", (combatState & COMBAT_STATE_IN_COMBAT) != 0 },
-            { "playerTurn", (combatState & COMBAT_STATE_PLAYER_TURN) != 0 },
-            { "exitRequested", (combatState & COMBAT_STATE_EXIT_REQUESTED) != 0 } };
 
-        // The slot's copy of the current map carries every critter's combat id and live combat state.
-        const std::filesystem::path currentMapPath = slot / mapFile;
+        const MapObject* critter(int32_t cid) const {
+            const auto it = _critterByCid.find(cid);
+            return it != _critterByCid.end() ? it->second : nullptr;
+        }
+
+        ordered_json objectRef(int32_t id) const {
+            if (id < 0) {
+                return nullptr;
+            }
+            ordered_json ref = { { "objectId", id } };
+            if (const auto it = _objectById.find(static_cast<uint32_t>(id)); it != _objectById.end()) {
+                ref["pid"] = std::format("0x{:08X}", it->second->pro_pid);
+                ref["cid"] = it->second->critter_index;
+                ref["hex"] = it->second->position;
+            }
+            return ref;
+        }
+
+    private:
+        void add(MapObject& object) {
+            _objectById.try_emplace(object.unknown0, &object);
+            if (object.objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER) && object.critter_index >= 0) {
+                _critterByCid.try_emplace(object.critter_index, &object);
+            }
+        }
+
+        std::map<int32_t, const MapObject*> _critterByCid;
+        std::map<uint32_t, const MapObject*> _objectById;
+    };
+
+    struct CombatContext {
+        SaveReader& reader;
+        resource::GameResources& resources;
+        const MapObject& player;
+        const SlotMapIndex& index;
+    };
+
+    // One combat-list entry: the critter by its combat id, then its CombatAiInfo from the per-entry block.
+    ordered_json combatEntry(const CombatContext& ctx, int32_t position, int32_t cid, int32_t combatants, int32_t playerCid) {
+        const int32_t friendlyDeadId = ctx.reader.i32("combat AI info");
+        const int32_t lastTargetId = ctx.reader.i32("combat AI info");
+        const int32_t lastItemId = ctx.reader.i32("combat AI info");
+        const int32_t lastMove = ctx.reader.i32("combat AI info");
+
+        ordered_json entry = { { "position", position }, { "cid", cid },
+            { "partition", position < combatants ? "combatant" : "noncombatant" } };
+        if (cid == playerCid) {
+            entry["critter"] = critterJson(ctx.resources, ctx.player, true);
+        } else if (const MapObject* critter = ctx.index.critter(cid); critter != nullptr) {
+            entry["critter"] = critterJson(ctx.resources, *critter, false);
+        } else {
+            entry["critter"] = nullptr;
+        }
+        entry["aiInfo"] = { { "friendlyDead", ctx.index.objectRef(friendlyDeadId) },
+            { "lastTarget", ctx.index.objectRef(lastTargetId) }, { "lastItemId", lastItemId }, { "lastMove", lastMove } };
+        return entry;
+    }
+
+    // combatSave: the state, then in combat the counters, the combat list in turn order and each entry's AI info.
+    ordered_json readCombat(const CombatContext& ctx, std::size_t partyCount) {
+        SaveReader& r = ctx.reader;
+        const auto state = static_cast<uint32_t>(r.i32("combat state"));
+        if ((state & ~COMBAT_STATE_KNOWN) != 0) {
+            throw ParseException(std::format("combat state 0x{:X} is not a combat state: data/party.txt ({} party members) "
+                                             "does not match the data this save was written with",
+                state, partyCount));
+        }
+        ordered_json combat = { { "state", state }, { "inCombat", (state & COMBAT_STATE_IN_COMBAT) != 0 },
+            { "playerTurn", (state & COMBAT_STATE_PLAYER_TURN) != 0 },
+            { "exitRequested", (state & COMBAT_STATE_EXIT_REQUESTED) != 0 } };
+        if ((state & COMBAT_STATE_IN_COMBAT) == 0) {
+            return combat;
+        }
+
+        const int32_t turnRunning = r.i32("combat turn running");
+        const int32_t freeMove = r.i32("combat free move");
+        const int32_t experience = r.i32("combat experience");
+        const int32_t combatants = r.i32("combatant count");
+        const int32_t noncombatants = r.i32("non-combatant count");
+        const int32_t total = r.i32("combat list length");
+        const int32_t playerCid = r.i32("player combat id");
+        if (combatants < 0 || noncombatants < 0 || total < 0 || total > MAX_COMBAT_LIST || combatants + noncombatants != total) {
+            throw ParseException(std::format("inconsistent combat list sizes: {} combatants + {} non-combatants, list of {}",
+                combatants, noncombatants, total));
+        }
+        const auto cids = r.i32List(static_cast<std::size_t>(total), "combat list");
+        auto list = ordered_json::array();
+        for (int32_t i = 0; i < total; ++i) {
+            list.push_back(combatEntry(ctx, i, cids[static_cast<std::size_t>(i)], combatants, playerCid));
+        }
+        combat["turnRunning"] = turnRunning != 0;
+        combat["freeMove"] = freeMove;
+        combat["experience"] = experience;
+        combat["combatants"] = combatants;
+        combat["noncombatants"] = noncombatants;
+        combat["playerCid"] = playerCid;
+        combat["list"] = std::move(list);
+        return combat;
+    }
+
+    ordered_json decodeSave(resource::GameResources& resources, const std::vector<uint8_t>& bytes,
+        const std::filesystem::path& slot, const GlobalDefaults& globalDefaults, std::size_t partyCount) {
+        SaveReader r(bytes);
+        const SaveHeader header = readHeader(r);
+        ordered_json root = { { "slot", slot.string() }, { "header", header.json } };
+
+        const int32_t playerCid = r.i32("player combat id");
+        const GlobalsAndMaps globalsAndMaps = readGlobalsAndMaps(r, globalDefaults.size());
+        root["globals"] = { { "count", globalsAndMaps.globals.size() },
+            { "changed", changedGlobals(globalsAndMaps.globals, globalDefaults) } };
+        root["maps"] = globalsAndMaps.maps;
+
+        const PlayerRecord player = readPlayer(r, resources, playerCid);
+        root["dude"] = player.json;
+        readKillsSkillsPerks(r, partyCount, root);
+
+        const std::filesystem::path currentMapPath = slot / header.mapFile;
         std::string mapError;
         const auto currentMap = loadMap(resources, currentMapPath.string(), &mapError);
         root["currentMap"] = { { "path", currentMapPath.string() }, { "loaded", currentMap != nullptr } };
         if (!currentMap) {
             root["currentMap"]["error"] = mapError;
         }
-        std::map<int32_t, const MapObject*> critterByCid;
-        std::map<uint32_t, const MapObject*> objectById;
-        if (currentMap) {
-            for (const auto& [elevation, objects] : currentMap->getMapFile().map_objects) {
-                for (const auto& object : objects) {
-                    if (!object) {
-                        continue;
-                    }
-                    objectById.emplace(object->unknown0, object.get());
-                    if (object->objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER) && object->critter_index >= 0) {
-                        critterByCid.emplace(object->critter_index, object.get());
-                    }
-                }
-            }
-        }
-        objectById.emplace(dude->unknown0, dude.get());
-
-        if ((combatState & COMBAT_STATE_IN_COMBAT) != 0) {
-            const int32_t turnRunning = r.i32("combat turn running");
-            const int32_t freeMove = r.i32("combat free move");
-            const int32_t experienceSoFar = r.i32("combat experience");
-            const int32_t listCom = r.i32("combatant count");
-            const int32_t listNoncom = r.i32("non-combatant count");
-            const int32_t listTotal = r.i32("combat list length");
-            const int32_t combatDudeCid = r.i32("player combat id");
-            if (listCom < 0 || listNoncom < 0 || listTotal < 0 || listCom + listNoncom != listTotal) {
-                throw std::runtime_error(std::format("inconsistent combat list sizes: {} combatants + {} non-combatants != {}",
-                    listCom, listNoncom, listTotal));
-            }
-            const auto cids = r.i32List(static_cast<std::size_t>(listTotal), "combat list");
-
-            auto list = ordered_json::array();
-            for (int32_t i = 0; i < listTotal; ++i) {
-                const int32_t friendlyDeadId = r.i32("combat AI info");
-                const int32_t lastTargetId = r.i32("combat AI info");
-                const int32_t lastItemId = r.i32("combat AI info");
-                const int32_t lastMove = r.i32("combat AI info");
-
-                const int32_t cid = cids[static_cast<std::size_t>(i)];
-                ordered_json entry = { { "position", i }, { "cid", cid },
-                    { "partition", i < listCom ? "combatant" : "noncombatant" } };
-                if (cid == combatDudeCid) {
-                    entry["critter"] = critterJson(resources, *dude, true);
-                } else if (const auto it = critterByCid.find(cid); it != critterByCid.end()) {
-                    entry["critter"] = critterJson(resources, *it->second, false);
-                } else {
-                    entry["critter"] = nullptr;
-                }
-                auto idRef = [&](int32_t id) -> ordered_json {
-                    if (id < 0) {
-                        return nullptr;
-                    }
-                    ordered_json ref = { { "objectId", id } };
-                    if (const auto it = objectById.find(static_cast<uint32_t>(id)); it != objectById.end()) {
-                        ref["pid"] = std::format("0x{:08X}", it->second->pro_pid);
-                        ref["cid"] = it->second->critter_index;
-                        ref["hex"] = it->second->position;
-                    }
-                    return ref;
-                };
-                entry["aiInfo"] = { { "friendlyDead", idRef(friendlyDeadId) }, { "lastTarget", idRef(lastTargetId) },
-                    { "lastItemId", lastItemId }, { "lastMove", lastMove } };
-                list.push_back(std::move(entry));
-            }
-            combat["turnRunning"] = turnRunning != 0;
-            combat["freeMove"] = freeMove;
-            combat["experience"] = experienceSoFar;
-            combat["combatants"] = listCom;
-            combat["noncombatants"] = listNoncom;
-            combat["playerCid"] = combatDudeCid;
-            combat["list"] = std::move(list);
-        }
-        root["combat"] = std::move(combat);
+        const SlotMapIndex index(currentMap.get(), *player.object);
+        root["combat"] = readCombat(CombatContext{ r, resources, *player.object, index }, partyCount);
         root["parsedBytes"] = r.position();
-        root["totalBytes"] = bytes->size();
-    } catch (const std::exception& e) {
-        out << "describe_save: " << e.what() << "\n";
+        root["totalBytes"] = bytes.size();
+        return root;
+    }
+
+} // namespace
+
+int describeSave(resource::GameResources& resources, const DescribeSaveOptions& options, std::ostream& out) {
+    std::filesystem::path slot = options.slotPath;
+    std::filesystem::path saveDat = slot;
+    if (std::error_code ec; std::filesystem::is_directory(slot, ec)) {
+        saveDat = slot / "SAVE.DAT";
+    } else {
+        slot = slot.parent_path();
+    }
+    const auto bytes = readFile(saveDat);
+    if (!bytes.has_value()) {
+        out << "describe_save: cannot read " << saveDat.string() << "\n";
+        return 1;
+    }
+    const Gam* gam = loadGameGam(resources);
+    if (gam == nullptr) {
+        out << "describe_save: data/vault13.gam is not mounted; the save's global-variable blocks have its length\n";
+        return 1;
+    }
+    const auto partyCount = partyMemberCount(resources);
+    if (!partyCount.has_value() || *partyCount == 0) {
+        out << "describe_save: data/party.txt is not mounted or has no [Party Member 0] with a party_member_pid; the "
+               "save's perk block has one row per party member\n";
         return 1;
     }
 
-    out << root.dump(2) << "\n";
-    return 0;
+    try {
+        const ordered_json root = decodeSave(resources, *bytes, slot, gam->gameGlobalVars(), *partyCount);
+        // Names in a save are CP-1252 game text, so emit invalid UTF-8 as replacement characters rather than throwing.
+        out << root.dump(2, ' ', false, ordered_json::error_handler_t::replace) << "\n";
+        return 0;
+    } catch (const std::runtime_error& e) {
+        out << "describe_save: " << saveDat.string() << ": " << e.what() << "\n";
+        return 1;
+    }
 }
 
 } // namespace geck::cli

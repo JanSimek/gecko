@@ -2,6 +2,7 @@
 
 #include "format/map/Map.h"
 #include "format/pro/Pro.h"
+#include "reader/ReaderExceptions.h"
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
 
@@ -11,11 +12,13 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iterator>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace geck::cli {
@@ -53,12 +56,13 @@ namespace {
     // loads them back through _gzdecompress_file (fallout2-ce loadsave.cc _GameMap2Slot /
     // _SlotMap2Game), while the live copies under data/maps are plain. windowBits 15 + 16 accepts
     // exactly the gzip container, so a truncated or foreign stream fails instead of half-inflating.
-    std::vector<uint8_t> gunzip(const std::vector<uint8_t>& compressed) {
+    // Takes the input by value: zlib's next_in is not const.
+    std::vector<uint8_t> gunzip(std::vector<uint8_t> compressed) {
         z_stream zs{};
         if (inflateInit2(&zs, 15 + 16) != Z_OK) {
-            throw std::runtime_error("zlib inflateInit2 failed");
+            throw ParseException("zlib inflateInit2 failed");
         }
-        zs.next_in = const_cast<Bytef*>(compressed.data());
+        zs.next_in = compressed.data();
         zs.avail_in = static_cast<uInt>(compressed.size());
 
         std::vector<uint8_t> out;
@@ -68,15 +72,14 @@ namespace {
             zs.next_out = chunk.data();
             zs.avail_out = static_cast<uInt>(chunk.size());
             rc = inflate(&zs, Z_NO_FLUSH);
-            if (rc != Z_OK && rc != Z_STREAM_END) {
+            const bool failed = rc != Z_OK && rc != Z_STREAM_END;
+            const bool truncated = rc == Z_OK && zs.avail_in == 0 && zs.avail_out != 0;
+            if (failed || truncated) {
                 inflateEnd(&zs);
-                throw std::runtime_error("gzip inflate failed (zlib result " + std::to_string(rc) + ")");
+                throw ParseException(truncated ? std::string("gzip stream is truncated")
+                                               : std::format("gzip inflate failed (zlib result {})", rc));
             }
             out.insert(out.end(), chunk.data(), chunk.data() + (chunk.size() - zs.avail_out));
-            if (rc != Z_STREAM_END && zs.avail_in == 0 && zs.avail_out != 0) {
-                inflateEnd(&zs);
-                throw std::runtime_error("gzip stream is truncated");
-            }
         }
         inflateEnd(&zs);
         return out;
@@ -105,7 +108,7 @@ std::unique_ptr<Map> loadMap(resource::GameResources& resources, const std::stri
     }
     try {
         if (isGzip(*bytes)) {
-            bytes = gunzip(*bytes);
+            bytes = gunzip(std::move(*bytes));
         }
         MapReader reader(makeProtoLoader(resources));
         return reader.openFile(mapPath, *bytes);

@@ -15,11 +15,12 @@
 namespace geck::test {
 
 /// gzip-compress `raw` the way the engine stores maps in a save slot (fileCopyCompressed).
-inline std::vector<uint8_t> gzipBytes(const std::vector<uint8_t>& raw) {
+// zlib's next_in is not const, so the input is taken by value.
+inline std::vector<uint8_t> gzipBytes(std::vector<uint8_t> raw) {
     z_stream zs{};
     REQUIRE(deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) == Z_OK);
     std::vector<uint8_t> out(deflateBound(&zs, static_cast<uLong>(raw.size())) + 32);
-    zs.next_in = const_cast<Bytef*>(raw.data());
+    zs.next_in = raw.data();
     zs.avail_in = static_cast<uInt>(raw.size());
     zs.next_out = out.data();
     zs.avail_out = static_cast<uInt>(out.size());

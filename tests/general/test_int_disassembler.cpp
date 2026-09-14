@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "cli/IntDisassembler.h"
@@ -30,7 +31,7 @@ void push16(std::vector<uint8_t>& bytes, uint16_t value) {
     bytes.push_back(static_cast<uint8_t>(value));
 }
 
-void pushCString(std::vector<uint8_t>& bytes, const std::string& text) {
+void pushCString(std::vector<uint8_t>& bytes, std::string_view text) {
     bytes.insert(bytes.end(), text.begin(), text.end());
     bytes.push_back(0);
 }
@@ -138,6 +139,37 @@ TEST_CASE("disassembleInt accepts a script without static strings", "[int_disass
     const auto program = cli::disassembleInt(bytes);
     REQUIRE(program.procedures.at(0).code.size() == 1);
     CHECK(program.procedures[0].code[0].name == "OPCODE_EXIT_PROGRAM");
+}
+
+TEST_CASE("disassembleInt disassembles a conditional procedure's condition", "[int_disassembler]") {
+    // The body (OPCODE_EXIT_PROGRAM) is followed by the condition (push 1, OPCODE_POP_RETURN). The
+    // condition offset only bounds the body; the condition itself must still come back.
+    std::vector<uint8_t> bytes(42, 0);
+    push32(bytes, 1);
+    const std::size_t record = bytes.size();
+    bytes.resize(bytes.size() + 24, 0);
+    push32(bytes, 6);
+    pushCString(bytes, "start");
+    push32(bytes, -1);
+    const std::size_t body = bytes.size();
+    push16(bytes, 0x8010); // OPCODE_EXIT_PROGRAM
+    const std::size_t condition = bytes.size();
+    push16(bytes, 0xC001);
+    push32(bytes, 1);
+    push16(bytes, 0x801C); // OPCODE_POP_RETURN
+    put32(bytes, record, 4);
+    put32(bytes, record + 4, 0x02); // PROCEDURE_FLAG_CONDITIONAL
+    put32(bytes, record + 12, static_cast<int32_t>(condition));
+    put32(bytes, record + 16, static_cast<int32_t>(body));
+
+    const auto program = cli::disassembleInt(bytes);
+    const auto& procedure = program.procedures.at(0);
+    REQUIRE(procedure.code.size() == 1);
+    CHECK(procedure.code[0].name == "OPCODE_EXIT_PROGRAM");
+    REQUIRE(procedure.condition.size() == 2);
+    CHECK(procedure.condition[0].name == "OPCODE_PUSH");
+    CHECK(procedure.condition[0].operand == "1");
+    CHECK(procedure.condition[1].name == "OPCODE_POP_RETURN");
 }
 
 TEST_CASE("disassembleInt rejects tables that point outside the file", "[int_disassembler]") {
