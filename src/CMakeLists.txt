@@ -707,7 +707,15 @@ if(GECK_BUILD_CLI)
         cli/Endings.h
         cli/Endings.cpp
         cli/GvarRefs.h
-        cli/GvarRefs.cpp)
+        cli/GvarRefs.cpp
+        cli/CritterCombatFlags.h
+        cli/EngineTile.h
+        cli/IntDisassembler.h
+        cli/IntDisassembler.cpp
+        cli/HexSightline.h
+        cli/HexSightline.cpp
+        cli/SaveInspect.h
+        cli/SaveInspect.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing nlohmann_json::nlohmann_json)
 
     add_executable(gecko-cli cli/main.cpp)

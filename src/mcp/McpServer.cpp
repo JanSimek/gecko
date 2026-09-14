@@ -11,6 +11,7 @@
 #include "cli/Quests.h"
 #include "cli/Endings.h"
 #include "cli/GvarRefs.h"
+#include "cli/HexSightline.h"
 #include "cli/FrmInspect.h"
 #include "cli/MapExport.h"
 #include "cli/MapGenerator.h"
@@ -18,6 +19,7 @@
 #include "cli/MapRender.h"
 #include "cli/PatternExtract.h"
 #include "cli/ResourceInspect.h"
+#include "cli/SaveInspect.h"
 #include "cli/ScriptIntrospect.h"
 #include "format/msg/Msg.h"
 #include "scripting/ScriptApiReference.h"
@@ -270,6 +272,7 @@ namespace {
         if (const std::string locale = optString(args, "locale"); !locale.empty()) {
             opts.locale = locale;
         }
+        opts.disassemble = optBool(args, "disassemble", false);
         std::ostringstream oss;
         const int rc = cli::describeScript(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
@@ -292,6 +295,28 @@ namespace {
         opts.groupExits = optBool(args, "groupExits", true);
         std::ostringstream oss;
         const int rc = cli::exportEntities(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolDescribeSave(resource::GameResources& resources, const json& args) {
+        cli::DescribeSaveOptions opts;
+        opts.slotPath = requireString(args, "slot");
+        std::ostringstream oss;
+        const int rc = cli::describeSave(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolHexSightline(resource::GameResources& resources, const json& args) {
+        cli::HexSightlineOptions opts;
+        opts.fromHex = static_cast<int>(requireInt(args, "fromHex", 0, 39999));
+        opts.toHex = static_cast<int>(requireInt(args, "toHex", 0, 39999));
+        opts.mapPath = optString(args, "map");
+        opts.elevation = static_cast<int>(optInt(args, "elevation", 0, 0, 2));
+        opts.facing = static_cast<int>(optInt(args, "facing", -1, -1, 5));
+        opts.cameraHex = static_cast<int>(optInt(args, "cameraHex", -1, -1, 39999));
+        opts.shootThrough = optBool(args, "shootThrough", false);
+        std::ostringstream oss;
+        const int rc = cli::analyzeHexSightline(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -673,7 +698,9 @@ namespace {
             "programIndex to describe_script for the script's source and dialog. Each map also lists "
             "'scripts': every section's scripts (mirroring the editor's Scripts panel) as "
             "{section,programIndex,name,filename,ownerObject,localVars}, with spatialRadius on Spatial "
-            "scripts and timerMs on Timer scripts.",
+            "scripts and timerMs on Timer scripts. A saved map (a save slot's .SAV, gzip-compressed there) "
+            "also gives each critter its live 'combat' state: cid, hp, ap, damageLastTurn, maneuver and "
+            "results with engine flag names, and whoHitMeCid.",
             json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
             [](resource::GameResources& r, const json& a) { return toolAnalyze(r, a); }, "" });
         t.push_back({ "palette",
@@ -700,8 +727,11 @@ namespace {
             "so SCRIPT_EPAC17 (1413) is programIndex 1412 — passing such a constant unadjusted names "
             "the NEXT script rather than failing. Every result echoes 'sslConstant' (= programIndex + "
             "1) so the two can be cross-checked. Optional 'locale' picks the dialog language subdir "
-            "(default english). Args: name or programIndex, optional locale.",
-            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "anyOf", json::array({ json{ { "required", json::array({ "name" }) } }, json{ { "required", json::array({ "programIndex" }) } } }) } }),
+            "(default english). Pass disassemble=true to also get the compiled scripts/<name>.int "
+            "disassembled (procedures, one line per instruction, literal global-variable indices named by "
+            "GVAR_*): what the engine actually runs, for when no source tree is mounted. Args: name or "
+            "programIndex, optional locale, disassemble.",
+            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } }, { "disassemble", { { "type", "boolean" } } } } }, { "anyOf", json::array({ json{ { "required", json::array({ "name" }) } }, json{ { "required", json::array({ "programIndex" }) } } }) } }),
             [](resource::GameResources& r, const json& a) { return toolDescribeScript(r, a); }, "" });
         t.push_back({ "find_script",
             "Find WHERE a script lives: resolve it by 'name' (or 0-based 'programIndex', same index "
@@ -764,9 +794,40 @@ namespace {
             "(per-elevation walkable/reachable hexes + entry-orphaned objects). Gathers the engine's "
             "own semantic evidence in one call — join keys (pid, script_id, ai_packet) are preserved — "
             "so you can infer the map's purpose and follow up with describe_script on any roster entry. "
-            "Args: map.",
+            "On a saved map (including a save slot's gzip .SAV) each roster entry also carries its live "
+            "'combat' state. Args: map.",
             json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
             [](resource::GameResources& r, const json& a) { return toolDescribeMap(r, a); }, "" });
+        t.push_back({ "describe_save", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
+            "Decode a Fallout 2 CE save slot (SAVE.DAT) the way the engine loads it: the header (character, "
+            "game date, current map), global variables that differ from their vault13.gam defaults (by GVAR_* "
+            "name), the maps stored in the slot, the player (hex, hp, ap, maneuver/result flags, sneak state, "
+            "experience, and stat/skill arrays indexed by engine STAT_*/SKILL_*), kills by type, tagged "
+            "skills, perks, and the combat block. A save made in combat lists every critter in the engine's "
+            "combat list in turn order, split into combatants and non-combatants, joined to the slot's current "
+            "map for each one's live state (team, hp, ap, maneuver, whoHitMeCid, script programIndex) and AI "
+            "info (last target, friendly dead). The mounted vault13.gam and party.txt must be the ones the save "
+            "was written with, because their lengths frame two blocks; a mismatch is reported, not misread. "
+            "Args: slot (a save slot directory such as .../SAVEGAME/SLOT10, or its SAVE.DAT).",
+            json({ { "type", "object" }, { "properties", { { "slot", { { "type", "string" } } } } }, { "required", json::array({ "slot" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolDescribeSave(r, a); }, "" });
+        t.push_back({ "hex_sightline", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
+            "Engine-exact geometry between two hexes, ported from fallout2-ce's tile math rather than the "
+            "editor's cube coordinates: 'distance' (tile_dist), 'rotationFromTo'/'rotationToFrom' (tile_dir, "
+            "as ROTATION_* names), the _can_see frontal-arc test when 'facing' is given, and 'sightline': the "
+            "make_straight_path pixel walk ('tilesEntered') with its 'firstBlocker' under _obj_blocking_at "
+            "rules when a map is given (hidden and NoBlock objects skipped; critters, scenery and walls block; "
+            "multihex objects also block their neighbouring hexes; the critter on fromHex is the watcher and "
+            "is skipped). obj_can_see_obj sees its target only when that first blocker stands on the target "
+            "('standsOnTarget') and the target is within perception range, which this tool does not compute. "
+            "Screen-space results depend on the view centre, as in the engine; 'cameraHex' sets it (default "
+            "fromHex). 'map' may be a VFS path or a file on disk, including a save slot's gzip .SAV; the "
+            "player is not stored in any map (its record is in SAVE.DAT, see describe_save), so nothing stands "
+            "on the player's hex in a saved map. Args: "
+            "fromHex, toHex, optional map, elevation, facing (0-5), cameraHex, shootThrough (the sfall "
+            "ObjCanSeeObj_ShootThru_Fix behaviour).",
+            json({ { "type", "object" }, { "properties", { { "fromHex", { { "type", "integer" } } }, { "toHex", { { "type", "integer" } } }, { "map", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "facing", { { "type", "integer" } } }, { "cameraHex", { { "type", "integer" } } }, { "shootThrough", { { "type", "boolean" } } } } }, { "required", json::array({ "fromHex", "toHex" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolHexSightline(r, a); }, "" });
         t.push_back({ "dump_grid", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
             "The RAW spatial layout of one map, the per-cell data behind analyze's digested "
             "adjacency/clusters. Per elevation: the floor (and, with roof=true, roof) tile-id grid as a "

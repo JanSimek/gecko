@@ -1,5 +1,9 @@
 #include "cli/ScriptIntrospect.h"
 
+#include "cli/GlobalVars.h"
+#include "cli/IntDisassembler.h"
+#include "format/gam/Gam.h"
+
 #include "cli/MapAnalyzer.h" // listMapPaths
 #include "cli/MapLoad.h"     // loadMap
 #include "format/lst/Lst.h"
@@ -70,6 +74,34 @@ namespace {
         }
         root["hasSource"] = false;
         root["sourceHint"] = "mount a script-source patch (e.g. FRP scripts_src) as a --data path to read the .ssl";
+    }
+
+    // Attach a disassembly of the compiled scripts/<filename> (the .int the engine runs), or null with
+    // the reason. Global-variable reads/writes are annotated with GVAR_* names when vault13.gam is mounted.
+    void attachDisassembly(resource::GameResources& resources, ordered_json& root) {
+        const std::string filename = root["filename"].get<std::string>();
+        const std::string path = "scripts/" + filename;
+        auto bytes = resources.files().readRawBytes(path);
+        if (!bytes) {
+            bytes = resources.files().readRawBytes("scripts/" + toLower(filename));
+        }
+        if (!bytes) {
+            root["disassembly"] = nullptr;
+            root["disassemblyError"] = path + " not found in the mounted data";
+            return;
+        }
+        std::vector<std::string> globalVarNames;
+        if (const Gam* gam = loadGameGam(resources); gam != nullptr) {
+            for (const auto& [name, value] : gam->gameGlobalVars()) {
+                globalVarNames.push_back(name);
+            }
+        }
+        try {
+            root["disassembly"] = intProgramToJson(disassembleInt(*bytes, globalVarNames.empty() ? nullptr : &globalVarNames));
+        } catch (const std::exception& e) {
+            root["disassembly"] = nullptr;
+            root["disassemblyError"] = std::string("could not disassemble ") + path + ": " + e.what();
+        }
     }
 
     // The dialog .msg lines for `basename` as [{id,text}], or an empty array if none.
@@ -421,6 +453,9 @@ int describeScript(resource::GameResources& resources, const DescribeScriptOptio
     }
     const std::string basename = root["name"].get<std::string>();
     attachSource(resources, basename, root);
+    if (options.disassemble) {
+        attachDisassembly(resources, root);
+    }
     root["dialog"] = loadDialog(resources, basename, options.locale);
     emit(out, root);
     return 0;

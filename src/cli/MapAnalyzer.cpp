@@ -1,5 +1,7 @@
 #include "cli/MapAnalyzer.h"
 
+#include "cli/CritterCombatFlags.h"
+
 #include "cli/MapLoad.h"
 #include "editor/FloorSynth.h"
 #include "editor/HexGeometry.h"
@@ -618,8 +620,41 @@ namespace {
 
     // Per-map critter array. `team` is the instance group_id; `aiPacket` falls back to the proto
     // default when 0 and resolves through ai.txt into the behaviour sub-object.
+    // A saved map's live combat state for one critter (header flag MAP_HEADER_SAVED, fallout2-ce
+    // map_defs.h). Shipped maps store zeros in these slots, so it is only reported for saves.
+    // whoHitMeCid names another critter by its combat id; it is resolved when that critter is on the
+    // map (the player is not: the dude record lives in SAVE.DAT).
+    ordered_json critterCombatToJson(const MapObject& object, const std::map<int32_t, const MapObject*>& byCid,
+        NameResolver& names) {
+        const auto whoHitMeCid = static_cast<int32_t>(object.who_hit_me);
+        ordered_json whoHitMe = nullptr;
+        if (const auto it = byCid.find(whoHitMeCid); whoHitMeCid >= 0 && it != byCid.end()) {
+            whoHitMe = { { "pid", pidHex(it->second->pro_pid) }, { "name", names.protoName(it->second->pro_pid) },
+                { "hex", it->second->position } };
+        }
+        return { { "cid", object.critter_index }, { "hp", static_cast<int32_t>(object.current_hp) },
+            { "ap", static_cast<int32_t>(object.current_ap) },
+            { "damageLastTurn", static_cast<int32_t>(object.damage_last_turn) },
+            { "maneuver", object.maneuver }, { "maneuverFlags", flagNames(object.maneuver, kCritterManeuverFlags) },
+            { "results", object.combat_results }, { "resultFlags", flagNames(object.combat_results, kDamFlags) },
+            { "whoHitMeCid", whoHitMeCid }, { "whoHitMe", std::move(whoHitMe) } };
+    }
+
     ordered_json crittersToJson(Map& map, NameResolver& names, const AiTxt& ai, const Lst* scriptsLst) {
         auto array = ordered_json::array();
+        constexpr uint32_t MAP_HEADER_SAVED = 0x01; // fallout2-ce map_defs.h
+        const bool savedMap = (map.getMapFile().header.flags & MAP_HEADER_SAVED) != 0;
+        std::map<int32_t, const MapObject*> byCid;
+        if (savedMap) {
+            for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
+                for (const auto& object : mapObjects) {
+                    if (object && object->objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)
+                        && object->critter_index >= 0) {
+                        byCid.emplace(object->critter_index, object.get());
+                    }
+                }
+            }
+        }
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
                 if (!object || object->objectType() != static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)) {
@@ -638,10 +673,14 @@ namespace {
                     scriptJson = ordered_json{ { "programIndex", ref->first }, { "name", ref->second },
                         { "localVars", std::move(localVars) } };
                 }
-                array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
+                ordered_json entry = { { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
                     { "name", names.protoName(pid) }, { "hex", object->position }, { "elevation", elevation },
                     { "team", object->group_id }, { "aiPacket", packet },
-                    { "ai", critterAiToJson(ai.byPacketNum(static_cast<int>(packet))) }, { "script", scriptJson } });
+                    { "ai", critterAiToJson(ai.byPacketNum(static_cast<int>(packet))) }, { "script", scriptJson } };
+                if (savedMap) {
+                    entry["combat"] = critterCombatToJson(*object, byCid, names);
+                }
+                array.push_back(std::move(entry));
             }
         }
         return array;
