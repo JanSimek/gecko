@@ -618,17 +618,37 @@ namespace {
             { "areaAttackMode", packet->areaAttackMode }, { "secondaryFreq", packet->secondaryFreq } };
     }
 
+    bool isHiddenObject(const MapObject& object) {
+        return (object.flags & static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_HIDDEN)) != 0;
+    }
+
+    // Critters by elevation, then combat id.
+    using CombatIdIndex = std::map<uint32_t, std::map<int32_t, const MapObject*>>;
+
+    // whoHitMeCid names another critter by its combat id. combatLoad relinks it only among the critters it lists
+    // again: the non-hidden ones on the player's elevation, first match in object order. A map does not record the
+    // player's elevation, so an id resolves within the critter's own elevation, a hidden critter's never resolves,
+    // and the player (whose record is in SAVE.DAT) is not on the map to be found.
+    const MapObject* combatIdTarget(const CombatIdIndex& byCid, const MapObject& critter, int32_t cid) {
+        if (cid < 0 || isHiddenObject(critter)) {
+            return nullptr;
+        }
+        const auto elevation = byCid.find(critter.elevation);
+        if (elevation == byCid.end()) {
+            return nullptr;
+        }
+        const auto it = elevation->second.find(cid);
+        return it != elevation->second.end() ? it->second : nullptr;
+    }
+
     // A saved map's live combat state for one critter (header flag MAP_HEADER_SAVED, fallout2-ce
     // map_defs.h). Shipped maps store zeros in these slots, so it is only reported for saves.
-    // whoHitMeCid names another critter by its combat id; it is resolved when that critter is on the
-    // map (the player is not: the dude record lives in SAVE.DAT).
-    ordered_json critterCombatToJson(const MapObject& object, const std::map<int32_t, const MapObject*>& byCid,
-        NameResolver& names) {
+    ordered_json critterCombatToJson(const MapObject& object, const CombatIdIndex& byCid, NameResolver& names) {
         const auto whoHitMeCid = static_cast<int32_t>(object.who_hit_me);
         ordered_json whoHitMe = nullptr;
-        if (const auto it = byCid.find(whoHitMeCid); whoHitMeCid >= 0 && it != byCid.end()) {
-            whoHitMe = { { "pid", pidHex(it->second->pro_pid) }, { "name", names.protoName(it->second->pro_pid) },
-                { "hex", it->second->position } };
+        if (const MapObject* hitter = combatIdTarget(byCid, object, whoHitMeCid); hitter != nullptr) {
+            whoHitMe = { { "pid", pidHex(hitter->pro_pid) }, { "name", names.protoName(hitter->pro_pid) },
+                { "hex", hitter->position } };
         }
         return { { "cid", object.critter_index }, { "hp", static_cast<int32_t>(object.current_hp) },
             { "ap", static_cast<int32_t>(object.current_ap) },
@@ -638,14 +658,15 @@ namespace {
             { "whoHitMeCid", whoHitMeCid }, { "whoHitMe", std::move(whoHitMe) } };
     }
 
-    // Critters by combat id, for resolving a saved map's whoHitMeCid.
-    std::map<int32_t, const MapObject*> crittersByCombatId(Map& map) {
-        std::map<int32_t, const MapObject*> byCid;
+    // The non-hidden critters by elevation and combat id, the first in object order winning, for resolving a saved
+    // map's whoHitMeCid.
+    CombatIdIndex crittersByCombatId(Map& map) {
+        CombatIdIndex byCid;
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
                 if (object && object->objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)
-                    && object->critter_index >= 0) {
-                    byCid.emplace(object->critter_index, object.get());
+                    && object->critter_index >= 0 && !isHiddenObject(*object)) {
+                    byCid[object->elevation].emplace(object->critter_index, object.get());
                 }
             }
         }
@@ -673,7 +694,7 @@ namespace {
         auto array = ordered_json::array();
         constexpr uint32_t MAP_HEADER_SAVED = 0x01; // fallout2-ce map_defs.h
         const bool savedMap = (map.getMapFile().header.flags & MAP_HEADER_SAVED) != 0;
-        const auto byCid = savedMap ? crittersByCombatId(map) : std::map<int32_t, const MapObject*>{};
+        const auto byCid = savedMap ? crittersByCombatId(map) : CombatIdIndex{};
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
                 if (!object || object->objectType() != static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)) {
@@ -683,7 +704,7 @@ namespace {
                 const uint32_t packet = object->ai_packet != 0 ? object->ai_packet : names.critterAiPacket(pid);
                 ordered_json entry = { { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
                     { "name", names.protoName(pid) }, { "hex", object->position }, { "elevation", elevation },
-                    { "team", object->group_id }, { "aiPacket", packet },
+                    { "hidden", isHiddenObject(*object) }, { "team", object->group_id }, { "aiPacket", packet },
                     { "ai", critterAiToJson(ai.byPacketNum(static_cast<int>(packet))) },
                     { "script", critterScriptJson(map, *object, scriptsLst) } };
                 if (savedMap) {

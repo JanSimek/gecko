@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -30,15 +31,15 @@ namespace {
 
 constexpr uint32_t MAP_HEADER_SAVED = 0x01;
 
-std::shared_ptr<MapObject> addCritter(Map::MapFile& mapFile, int32_t seed, int32_t cid, int32_t hex) {
+std::shared_ptr<MapObject> addCritter(Map::MapFile& mapFile, int32_t seed, int32_t cid, int32_t hex, int elevation = 0) {
     auto critter = std::make_shared<MapObject>();
     fillBase(*critter, seed);
     critter->pro_pid = pidOf(Pro::OBJECT_TYPE::CRITTER, static_cast<uint32_t>(10 + seed));
-    critter->elevation = 0;
+    critter->elevation = static_cast<uint32_t>(elevation);
     critter->critter_index = cid;
     critter->position = hex;
     critter->who_hit_me = static_cast<uint32_t>(-1);
-    mapFile.map_objects[0].push_back(critter);
+    mapFile.map_objects[elevation].push_back(critter);
     return critter;
 }
 
@@ -103,6 +104,38 @@ TEST_CASE("a save slot's gzip map loads and reports live critter combat state", 
     CHECK(combat.at("whoHitMe").at("hex") == 18084);
     CHECK(critters.at(1).at("combat").at("hp") == -6);
     CHECK(critters.at(1).at("combat").at("resultFlags") == json::array({ "DAM_DEAD" }));
+}
+
+// combatLoad relinks whoHitMe only among the critters it lists again, so a hidden critter neither resolves its own
+// id nor shadows a listed critter holding the same stale one, and ids do not cross elevations.
+TEST_CASE("a saved map resolves whoHitMe among the non-hidden critters of one elevation", "[cli][map][saved]") {
+    StubProvider provider;
+    auto mapFile = Map::createEmptyMapFile();
+    mapFile.header.flags |= MAP_HEADER_SAVED;
+
+    auto hidden = addCritter(mapFile, 1, 4, 18080);
+    hidden->flags = 0x01; // OBJECT_HIDDEN
+    hidden->who_hit_me = 5;
+    auto attacker = addCritter(mapFile, 2, 5, 18082);
+    attacker->who_hit_me = 4;
+    addCritter(mapFile, 3, 4, 18084);
+    auto upstairs = addCritter(mapFile, 4, 6, 18086, 1);
+    upstairs->who_hit_me = 5;
+
+    TempFile path{ "geck_saved_map_hidden", ".map" };
+    writeMap(mapFile, path.path(), provider);
+    const json root = analyze(path.path());
+    const auto& critters = root.at("maps").at(0).at("critters");
+    REQUIRE(critters.size() == 4);
+    std::map<int, json> byHex;
+    for (const auto& critter : critters) {
+        byHex[critter.at("hex").get<int>()] = critter;
+    }
+    CHECK(byHex.at(18080).at("hidden") == true);
+    CHECK(byHex.at(18080).at("combat").at("whoHitMe").is_null());
+    CHECK(byHex.at(18082).at("hidden") == false);
+    CHECK(byHex.at(18082).at("combat").at("whoHitMe").at("hex") == 18084);
+    CHECK(byHex.at(18086).at("combat").at("whoHitMe").is_null());
 }
 
 TEST_CASE("an unsaved map reports no combat state", "[cli][map][saved]") {

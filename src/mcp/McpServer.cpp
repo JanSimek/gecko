@@ -789,13 +789,15 @@ namespace {
         t.push_back({ "describe_map",
             "One structured digest for a single map, composed from analyze + reachability: the header "
             "(elevations, darkness, player start, map script, map variables), floor usage (biome), "
-            "object 'clusters' (structures), the 'critters' roster with ai.txt-resolved AI and each "
-            "one's attached {programIndex,name} script, the 'exits' graph, and a 'reachability' field "
+            "object 'clusters' (structures), the 'critters' roster with ai.txt-resolved AI, a 'hidden' flag "
+            "(OBJECT_HIDDEN) and each one's attached {programIndex,name} script, the 'exits' graph, and a "
+            "'reachability' field "
             "(per-elevation walkable/reachable hexes + entry-orphaned objects). Gathers the engine's "
             "own semantic evidence in one call — join keys (pid, script_id, ai_packet) are preserved — "
             "so you can infer the map's purpose and follow up with describe_script on any roster entry. "
             "On a saved map (including a save slot's gzip .SAV) each roster entry also carries its live "
-            "'combat' state. Args: map.",
+            "'combat' state; its whoHitMe resolves the way combatLoad relinks it, among the non-hidden "
+            "critters of the same elevation. Args: map.",
             json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
             [](resource::GameResources& r, const json& a) { return toolDescribeMap(r, a); }, "" });
         t.push_back({ "describe_save", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
@@ -806,7 +808,11 @@ namespace {
             "skills, perks, and the combat block. A save made in combat lists every critter in the engine's "
             "combat list in turn order, split into combatants and non-combatants, joined to the slot's current "
             "map for each one's live state (team, hp, ap, maneuver, whoHitMeCid, script programIndex) and AI "
-            "info (last target, friendly dead). The mounted vault13.gam and party.txt must be the ones the save "
+            "info (last target, friendly dead). The join follows combatLoad, which looks a combat id up only among "
+            "the non-hidden critters on the save's elevation: 'reloadedListLength'/'listLengthMatches' say whether "
+            "the load accepts the list, and 'outsideCombatList' names the critters it leaves out (hidden, or on "
+            "another elevation). Their whoHitMe is not relinked on load; 'whoHitMeReadOnCombatSave' marks the ones "
+            "the next in-combat save reads it for. The mounted vault13.gam and party.txt must be the ones the save "
             "was written with, because their lengths frame two blocks; a mismatch is reported, not misread. "
             "Args: slot (a save slot directory such as .../SAVEGAME/SLOT10, or its SAVE.DAT).",
             json({ { "type", "object" }, { "properties", { { "slot", { { "type", "string" } } } } }, { "required", json::array({ "slot" }) } }),

@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -105,7 +106,22 @@ std::vector<uint8_t> buildSaveDat(const std::vector<int32_t>& globals) {
     return w.data();
 }
 
-void writeSlotMap(const fs::path& slot) {
+// A critter combatLoad leaves out of the combat list, still holding a combat id.
+std::shared_ptr<MapObject> unlistedCritter(int32_t seed, int32_t cid, int elevation, uint32_t flags) {
+    auto critter = std::make_shared<MapObject>();
+    fillBase(*critter, seed);
+    critter->pro_pid = pidOf(Pro::OBJECT_TYPE::CRITTER, 20);
+    critter->elevation = static_cast<uint32_t>(elevation);
+    critter->flags = flags;
+    critter->critter_index = cid;
+    critter->position = 16000 + seed;
+    critter->group_id = 0;
+    critter->maneuver = 0x01;
+    critter->who_hit_me = static_cast<uint32_t>(-1);
+    return critter;
+}
+
+void writeSlotMap(const fs::path& slot, const std::function<void(Map::MapFile&)>& customize = {}) {
     StubProvider provider;
     auto mapFile = Map::createEmptyMapFile();
     mapFile.header.flags |= 0x01;
@@ -121,6 +137,9 @@ void writeSlotMap(const fs::path& slot) {
         critter->maneuver = 0x01;
         critter->who_hit_me = static_cast<uint32_t>(-1);
         mapFile.map_objects[0].push_back(critter);
+    }
+    if (customize) {
+        customize(mapFile);
     }
     TempFile plain{ "geck_save_slot_map", ".map" };
     {
@@ -184,7 +203,53 @@ TEST_CASE("describeSave decodes a slot and joins the combat list to the slot map
     CHECK(list[1].at("aiInfo").at("lastTarget").at("hex") == 18084);
     CHECK(list[2].at("partition") == "noncombatant");
     CHECK(list[2].at("critter").at("hex") == 17002);
+    CHECK(combat.at("reloadedListLength") == 3);
+    CHECK(combat.at("listLengthMatches") == true);
+    CHECK(combat.at("outsideCombatList").empty());
     CHECK(save.at("parsedBytes") == save.at("totalBytes"));
+}
+
+// combatLoad lists only the non-hidden critters of the player's elevation and looks each saved combat id up among
+// them; a hidden critter, or one on another floor, keeps a stale id that can duplicate a listed critter's.
+TEST_CASE("describeSave joins combat ids among the critters combatLoad lists", "[cli][save]") {
+    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "save_inspect_unlisted";
+    fs::remove_all(root);
+    const fs::path data = root / "gamedata";
+    writeText(data / "data" / "vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_A :=0;\nGVAR_B :=5;\n");
+    writeText(data / "data" / "party.txt", "[Party Member 0]\nparty_member_pid=16777216\n");
+    const fs::path slot = root / "SLOT01";
+    writeAllBytes(slot / "SAVE.DAT", buildSaveDat({ 0, 7 }));
+    writeSlotMap(slot, [](Map::MapFile& mapFile) {
+        // Ahead of the listed critters in object order, so a first-match join over every critter would pick it.
+        auto& ground = mapFile.map_objects[0];
+        ground.insert(ground.begin(), unlistedCritter(7, 1, 0, 0x01)); // OBJECT_HIDDEN
+        mapFile.map_objects[1].push_back(unlistedCritter(8, 2, 1, 0));
+    });
+
+    int rc = 0;
+    std::string text;
+    const json save = describe(data, slot, rc, text);
+    INFO(text);
+    REQUIRE(rc == 0);
+
+    const auto& combat = save.at("combat");
+    const auto& list = combat.at("list");
+    REQUIRE(list.size() == 3);
+    CHECK(list[1].at("critter").at("hex") == 17001);
+    CHECK(list[2].at("critter").at("hex") == 17002);
+    CHECK(combat.at("reloadedListLength") == 3);
+    CHECK(combat.at("listLengthMatches") == true);
+
+    const auto& outside = combat.at("outsideCombatList");
+    REQUIRE(outside.size() == 2);
+    CHECK(outside[0].at("hex") == 16007);
+    CHECK(outside[0].at("cid") == 1);
+    CHECK(outside[0].at("hidden") == true);
+    CHECK(outside[0].at("whoHitMeCid") == -1);
+    CHECK(outside[0].at("whoHitMeReadOnCombatSave") == true);
+    CHECK(outside[1].at("hex") == 16008);
+    CHECK(outside[1].at("elevation") == 1);
+    CHECK(outside[1].at("hidden") == false);
 }
 
 TEST_CASE("describeSave reports a vault13.gam that does not match the save", "[cli][save]") {

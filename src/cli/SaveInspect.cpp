@@ -64,6 +64,7 @@ namespace {
     // the critters of one elevation and so cannot exceed its hex count (map_defs.h HEX_GRID_SIZE).
     constexpr int32_t MAX_MAP_LIST = 100000;
     constexpr int32_t MAX_COMBAT_LIST = 200 * 200;
+    constexpr int ELEVATION_COUNT = 3; // map_defs.h
 
     class SaveReader {
     public:
@@ -206,6 +207,7 @@ namespace {
     struct SaveHeader {
         ordered_json json;
         std::string mapFile;
+        uint32_t elevation = 0;
     };
 
     // lsgSaveHeaderInSlot
@@ -231,7 +233,8 @@ namespace {
         const int16_t gameYear = r.i16("game date");
         json["gameDate"] = std::format("{:04}-{:02}-{:02}", gameYear, gameMonth, gameDay);
         json["gameTime"] = static_cast<uint32_t>(r.i32("game time"));
-        json["elevation"] = r.i16("elevation");
+        header.elevation = static_cast<uint32_t>(r.i16("elevation"));
+        json["elevation"] = header.elevation;
         json["mapIndex"] = r.i16("map index");
         header.mapFile = r.fixedString(16, "map file name");
         json["mapFile"] = header.mapFile;
@@ -339,26 +342,54 @@ namespace {
         root["perks"] = std::move(playerPerks);
     }
 
-    // The slot's copy of the current map, indexed by combat id and object id for joining the combat block.
+    bool isHidden(const MapObject& object) {
+        return (object.flags & static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_HIDDEN)) != 0;
+    }
+
+    // The slot's copy of the current map, indexed for joining the combat block the way combatLoad does. It rebuilds
+    // the combat list with objectListCreate(-1, gElevation, OBJ_TYPE_CRITTER), which leaves out OBJECT_HIDDEN
+    // critters and other elevations, and finds each saved cid with _find_cid: the first match in tile order, the
+    // order objectSaveAll wrote the map in. A critter left out keeps whatever cid it last had, which can duplicate a
+    // listed one, so those are never searched and are reported apart.
     class SlotMapIndex {
     public:
-        SlotMapIndex(Map* map, const MapObject& player) {
+        SlotMapIndex(Map* map, const MapObject& player, uint32_t elevation)
+            : _mapLoaded(map != nullptr) {
             _objectById.try_emplace(player.unknown0, &player);
             if (map == nullptr) {
                 return;
             }
-            for (const auto& entry : map->getMapFile().map_objects) {
-                for (const auto& object : entry.second) {
+            // map_objects is unordered; walk the elevations in file order.
+            const auto& objectsByElevation = map->getMapFile().map_objects;
+            for (int mapElevation = 0; mapElevation < ELEVATION_COUNT; ++mapElevation) {
+                const auto it = objectsByElevation.find(mapElevation);
+                if (it == objectsByElevation.end()) {
+                    continue;
+                }
+                for (const auto& object : it->second) {
                     if (object) {
-                        add(*object);
+                        add(*object, elevation);
                     }
                 }
             }
         }
 
+        bool mapLoaded() const {
+            return _mapLoaded;
+        }
+
         const MapObject* critter(int32_t cid) const {
-            const auto it = _critterByCid.find(cid);
-            return it != _critterByCid.end() ? it->second : nullptr;
+            const auto it = std::ranges::find_if(_listed, [cid](const MapObject* listed) { return listed->critter_index == cid; });
+            return it != _listed.end() ? *it : nullptr;
+        }
+
+        // The map critters combatLoad lists again; the player is not among them (its record is in SAVE.DAT).
+        std::size_t listedCount() const {
+            return _listed.size();
+        }
+
+        const std::vector<const MapObject*>& unlisted() const {
+            return _unlisted;
         }
 
         ordered_json objectRef(int32_t id) const {
@@ -375,14 +406,21 @@ namespace {
         }
 
     private:
-        void add(MapObject& object) {
+        void add(const MapObject& object, uint32_t elevation) {
             _objectById.try_emplace(object.unknown0, &object);
-            if (object.objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER) && object.critter_index >= 0) {
-                _critterByCid.try_emplace(object.critter_index, &object);
+            if (object.objectType() != static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)) {
+                return;
+            }
+            if (isHidden(object) || object.elevation != elevation) {
+                _unlisted.push_back(&object);
+            } else {
+                _listed.push_back(&object);
             }
         }
 
-        std::map<int32_t, const MapObject*> _critterByCid;
+        bool _mapLoaded;
+        std::vector<const MapObject*> _listed;
+        std::vector<const MapObject*> _unlisted;
         std::map<uint32_t, const MapObject*> _objectById;
     };
 
@@ -412,6 +450,22 @@ namespace {
         entry["aiInfo"] = { { "friendlyDead", ctx.index.objectRef(friendlyDeadId) },
             { "lastTarget", ctx.index.objectRef(lastTargetId) }, { "lastItemId", lastItemId }, { "lastMove", lastMove } };
         return entry;
+    }
+
+    // The critters combatLoad leaves out of the list. It relinks whoHitMe from whoHitMeCid only for listed critters,
+    // so these keep the raw id in the pointer, and objectPrepareWhoHitMeForSave follows it on the next in-combat
+    // save unless the critter's maneuver is CRITTER_MANEUVER_NONE.
+    ordered_json unlistedCritters(const CombatContext& ctx) {
+        auto array = ordered_json::array();
+        for (const MapObject* critter : ctx.index.unlisted()) {
+            ordered_json entry = critterJson(ctx.resources, *critter, false);
+            entry["cid"] = critter->critter_index;
+            entry["elevation"] = critter->elevation;
+            entry["hidden"] = isHidden(*critter);
+            entry["whoHitMeReadOnCombatSave"] = critter->maneuver != 0;
+            array.push_back(std::move(entry));
+        }
+        return array;
     }
 
     // combatSave: the state, then in combat the counters, the combat list in turn order and each entry's AI info.
@@ -453,6 +507,14 @@ namespace {
         combat["noncombatants"] = noncombatants;
         combat["playerCid"] = playerCid;
         combat["list"] = std::move(list);
+        if (ctx.index.mapLoaded()) {
+            // combatLoad refuses the save unless the list it rebuilds (the listed critters and the player) has the
+            // saved length.
+            const std::size_t reloaded = ctx.index.listedCount() + 1;
+            combat["reloadedListLength"] = reloaded;
+            combat["listLengthMatches"] = std::cmp_equal(reloaded, total);
+            combat["outsideCombatList"] = unlistedCritters(ctx);
+        }
         return combat;
     }
 
@@ -479,7 +541,7 @@ namespace {
         if (!currentMap) {
             root["currentMap"]["error"] = mapError;
         }
-        const SlotMapIndex index(currentMap.get(), *player.object);
+        const SlotMapIndex index(currentMap.get(), *player.object, header.elevation);
         root["combat"] = readCombat(CombatContext{ r, resources, *player.object, index }, partyCount);
         root["parsedBytes"] = r.position();
         root["totalBytes"] = bytes.size();
