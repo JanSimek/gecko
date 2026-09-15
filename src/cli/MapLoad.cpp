@@ -2,17 +2,23 @@
 
 #include "format/map/Map.h"
 #include "format/pro/Pro.h"
+#include "reader/ReaderExceptions.h"
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
 
 #include <spdlog/spdlog.h>
+#include <zlib.h>
 
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iterator>
 #include <optional>
+#include <stdexcept>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace geck::cli {
@@ -41,6 +47,43 @@ namespace {
         }
         return std::vector<uint8_t>(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
     }
+
+    bool isGzip(const std::vector<uint8_t>& bytes) {
+        return bytes.size() >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B;
+    }
+
+    // Save slots hold every map gzip-compressed: the engine writes them with fileCopyCompressed and
+    // loads them back through _gzdecompress_file (fallout2-ce loadsave.cc _GameMap2Slot /
+    // _SlotMap2Game), while the live copies under data/maps are plain. windowBits 15 + 16 accepts
+    // exactly the gzip container, so a truncated or foreign stream fails instead of half-inflating.
+    // Takes the input by value: zlib's next_in is not const.
+    std::vector<uint8_t> gunzip(std::vector<uint8_t> compressed) {
+        z_stream zs{};
+        if (inflateInit2(&zs, 15 + 16) != Z_OK) {
+            throw ParseException("zlib inflateInit2 failed");
+        }
+        zs.next_in = compressed.data();
+        zs.avail_in = static_cast<uInt>(compressed.size());
+
+        std::vector<uint8_t> out;
+        std::vector<uint8_t> chunk(1 << 16);
+        int rc = Z_OK;
+        while (rc != Z_STREAM_END) {
+            zs.next_out = chunk.data();
+            zs.avail_out = static_cast<uInt>(chunk.size());
+            rc = inflate(&zs, Z_NO_FLUSH);
+            const bool failed = rc != Z_OK && rc != Z_STREAM_END;
+            const bool truncated = rc == Z_OK && zs.avail_in == 0 && zs.avail_out != 0;
+            if (failed || truncated) {
+                inflateEnd(&zs);
+                throw ParseException(truncated ? std::string("gzip stream is truncated")
+                                               : std::format("gzip inflate failed (zlib result {})", rc));
+            }
+            out.insert(out.end(), chunk.data(), chunk.data() + (chunk.size() - zs.avail_out));
+        }
+        inflateEnd(&zs);
+        return out;
+    }
 } // namespace
 
 std::unique_ptr<Map> loadMap(resource::GameResources& resources, const std::string& mapPath,
@@ -64,6 +107,9 @@ std::unique_ptr<Map> loadMap(resource::GameResources& resources, const std::stri
         return nullptr;
     }
     try {
+        if (isGzip(*bytes)) {
+            bytes = gunzip(std::move(*bytes));
+        }
         MapReader reader(makeProtoLoader(resources));
         return reader.openFile(mapPath, *bytes);
     } catch (const std::exception& e) {

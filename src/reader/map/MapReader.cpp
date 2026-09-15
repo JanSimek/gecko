@@ -79,16 +79,16 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
             }
         } break;
         case Pro::OBJECT_TYPE::CRITTER: {
-            object->player_reaction = read_be_u32(); // reaction to player - saves only
-            object->current_mp = read_be_u32();      // current mp - saves only
-            object->combat_results = read_be_u32();  // combat results - saves only
-            object->dmg_last_turn = read_be_u32();   // damage last turn - saves only
-            object->ai_packet = read_be_u32();       // AI packet - is it different from .pro? well, it can be
-            object->group_id = read_be_u32();        // team - always 1? saves only?
-            object->who_hit_me = read_be_u32();      // who hit me - saves only
-            object->current_hp = read_be_u32();      // hit points - saves only, otherwise = value from .pro
-            object->current_rad = read_be_u32();     // rad - always 0 - saves only
-            object->current_poison = read_be_u32();  // poison - always 0 - saves only
+            object->damage_last_turn = read_be_u32(); // engine CritterCombatData.damageLastTurn - saves only
+            object->maneuver = read_be_u32();         // engine CritterCombatData.maneuver (CRITTER_MANEUVER_* bits) - saves only
+            object->current_ap = read_be_u32();       // engine CritterCombatData.ap - saves only
+            object->combat_results = read_be_u32();   // engine CritterCombatData.results (DAM_* bits) - saves only
+            object->ai_packet = read_be_u32();        // AI packet - is it different from .pro? well, it can be
+            object->group_id = read_be_u32();         // team - always 1? saves only?
+            object->who_hit_me = read_be_u32();       // who hit me - saves only
+            object->current_hp = read_be_u32();       // hit points - saves only, otherwise = value from .pro
+            object->current_rad = read_be_u32();      // rad - always 0 - saves only
+            object->current_poison = read_be_u32();   // poison - always 0 - saves only
         } break;
 
         case Pro::OBJECT_TYPE::SCENERY: {
@@ -147,6 +147,30 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
             break;
     }
 
+    // The inventory follows its holder, and every entry is a quantity plus a full object record that
+    // may carry an inventory of its own (a bag in a critter's pack). The engine's _obj_load_obj
+    // (fallout2-ce object.cc) recurses, so the reader must too: reading one level desynchronises the
+    // stream at the first nested container.
+    if (object->objects_in_inventory > 0) {
+        object->inventory.reserve(object->objects_in_inventory);
+        for (size_t i = 0; i < object->objects_in_inventory; ++i) {
+            uint32_t amount = read_be_u32();
+            std::unique_ptr<MapObject> subobject = readMapObject();
+            subobject->amount = amount;
+            object->inventory.push_back(std::move(subobject));
+        }
+    }
+
+    return object;
+}
+
+std::unique_ptr<MapObject> MapReader::readObjectAt(const std::vector<uint8_t>& data, std::size_t offset, std::size_t& endOffset) {
+    _stream = StreamBuffer(data);
+    _path = "<object record>";
+    _binaryUtils = std::make_unique<BinaryUtils>(_stream, _path);
+    _stream.setPosition(offset);
+    auto object = readMapObject();
+    endOffset = _stream.position();
     return object;
 }
 
@@ -323,20 +347,7 @@ std::unique_ptr<Map> MapReader::read() {
         spdlog::debug("... loading {} map objects on elevation {}", objectsOnElevation, elev);
         for (size_t j = 0; j != objectsOnElevation; ++j) {
 
-            std::unique_ptr<MapObject> object = readMapObject();
-
-            if (object->objects_in_inventory > 0) {
-
-                object->inventory.reserve(object->objects_in_inventory);
-
-                for (size_t i = 0; i < object->objects_in_inventory; ++i) {
-                    uint32_t amount = read_be_u32();
-                    std::unique_ptr<MapObject> subobject = readMapObject();
-                    subobject->amount = amount;
-
-                    object->inventory.push_back(std::move(subobject));
-                }
-            }
+            std::unique_ptr<MapObject> object = readMapObject(); // with its inventory, recursively
             map_file->map_objects[elev].push_back(std::move(object));
         }
 
