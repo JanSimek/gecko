@@ -197,7 +197,7 @@ TEST_CASE("exportProtos decodes a weapon the way the engine reads it", "[proto][
     CHECK(w["caliber"] == json({ { "id", 8 }, { "name", "10mm" } }));
     CHECK(w["ammoPid"] == 3);
     CHECK(w["ammoCapacity"] == 30);
-    CHECK(w["soundId"] == 'A');
+    CHECK(w["soundId"] == 65);    // 'A'
     CHECK(w["weaponFlags"] == 0); // a 122-byte engine record has no trailing word
 }
 

@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <initializer_list>
 #include <ostream>
 #include <string>
 #include <string_view>
