@@ -13,6 +13,7 @@
 #include "cli/GvarRefs.h"
 #include "cli/FrmInspect.h"
 #include "cli/MapExport.h"
+#include "cli/ProtoExport.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapReachability.h"
 #include "cli/MapRender.h"
@@ -292,6 +293,26 @@ namespace {
         opts.groupExits = optBool(args, "groupExits", true);
         std::ostringstream oss;
         const int rc = cli::exportEntities(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    // An optional string filter: absent is "", but a present non-string is an error rather than a
+    // silently dropped filter that would export everything.
+    std::string optFilterString(const json& args, const char* key) {
+        const auto it = args.find(key);
+        if (it != args.end() && !it->is_string()) {
+            throw ToolError{ std::string("argument '") + key + "' must be a string" };
+        }
+        return optString(args, key);
+    }
+
+    json toolExportProtos(resource::GameResources& resources, const json& args) {
+        cli::ProtoExportOptions opts;
+        if (const auto error = cli::parseProtoFilter(optFilterString(args, "kind"), optFilterString(args, "itemType"), opts)) {
+            throw ToolError{ *error };
+        }
+        std::ostringstream oss;
+        const int rc = cli::exportProtos(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -730,6 +751,28 @@ namespace {
             "Args: optional maps (array; default every mounted map), includeScenery, groupExits.",
             json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } }, { "includeScenery", { { "type", "boolean" } } }, { "groupExits", { { "type", "boolean" } } } } } }),
             [](resource::GameResources& r, const json& a) { return toolExportEntities(r, a); }, "" });
+        t.push_back({ "export_protos", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
+            "Emit EVERY item and critter proto the game can load — each entry of proto/items/items.lst "
+            "and proto/critters/critters.lst — with the full stats its .pro stores, decoded the way "
+            "fallout2-ce reads them. Unlike export_entities this is not limited to what a map places, so "
+            "a weapon that only appears in a script-stocked shop is included. Every proto has "
+            "{pid,kind,file,name,description,fid,flags,extendedFlags,sid,script}. Items add itemType, "
+            "attackModes {primary,secondary} (the extended-flags nibbles, each {index,type,animation}), "
+            "material, size, weight, cost, inventoryFid, soundId, and one object named after the item "
+            "type: weapon {animationCode,damage{min,max},damageType,range{primary,secondary},"
+            "projectilePid,minStrength,apCost{primary,secondary},criticalFail,perk,burstRounds,caliber,"
+            "ammoPid,ammoCapacity,soundId,weaponFlags}; ammo {caliber,quantity,acModifier,drModifier,"
+            "damageMultiplier,damageDivisor}; armor {ac,dr,dt (keyed normal/laser/fire/plasma/"
+            "electrical/emp/explosion),perk,maleFid,femaleFid}; drug; container; misc; key. Critters "
+            "add headFid, aiPacket, team, critterFlags, base and bonus stat blocks (special, derived "
+            "stats, dt, dr, radiation/poison resistance, age, gender), skills (raw points), bodyType, xp, "
+            "killType, damageType. Values are raw — no engine formulas. Ids the game names (damage type, "
+            "caliber, material, body type, perk, stat) come as {id,name} from proto.msg / perk.msg / "
+            "stat.msg; a perk of -1 is null. 'unreadable' lists .lst entries that failed to load. "
+            "Args: optional kind (item | critter), optional itemType (armor | container | drug | "
+            "weapon | ammo | misc | key; implies kind item).",
+            json({ { "type", "object" }, { "properties", { { "kind", { { "type", "string" }, { "enum", json::array({ "item", "critter" }) } } }, { "itemType", { { "type", "string" }, { "enum", json::array({ "armor", "container", "drug", "weapon", "ammo", "misc", "key" }) } } } } } }),
+            [](resource::GameResources& r, const json& a) { return toolExportProtos(r, a); }, "" });
         t.push_back({ "find_text",
             "Search the mounted game text for a pattern and get every hit back with the script it "
             "belongs to — answers which script mentions X in one call, instead of grepping a checkout. "
