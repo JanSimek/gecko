@@ -122,12 +122,13 @@ std::unique_ptr<Pro> ProReader::read() {
                         pro->weaponData.ammoCapacity = utils.readBE32();
                         pro->weaponData.soundId = utils.readU8();
 
-                        // Extended weapon flags (optional field, may not exist in older PRO files)
+                        // gecko's own trailing word, past the end of the engine's weapon record (see
+                        // Pro::WeaponData::weaponFlags); shipped weapon protos never carry it.
                         if (utils.bytesRemaining() >= Pro::FIELD_SIZE_BYTES) {
                             pro->weaponData.weaponFlags = utils.readBE32();
                         } else {
                             pro->weaponData.weaponFlags = 0; // Default value for compatibility
-                            spdlog::debug("Weapon PRO missing weapon flags field (older format)");
+                            spdlog::debug("Weapon PRO has no trailing weaponFlags word (engine layout)");
                         }
                         break;
                     }
@@ -141,6 +142,7 @@ std::unique_ptr<Pro> ProReader::read() {
                         break;
                     }
                     case Pro::ITEM_TYPE::MISC: {
+                        pro->miscData.powerTypePid = utils.readBE32Signed();
                         pro->miscData.powerType = utils.readBE32();
                         pro->miscData.charges = utils.readBE32();
                         break;
