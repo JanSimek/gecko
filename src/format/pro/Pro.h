@@ -52,17 +52,15 @@ public:
     static constexpr int BONUS_DAMAGE_ARRAYS = 8;  // Extended arrays for critter bonuses
     static constexpr int FIELD_SIZE_BYTES = 4;     // Standard 32-bit field size
 
-    // Weapon flag constants
+    // Bits of the trailing WeaponData::weaponFlags word gecko reads and writes. The engine has no such
+    // word (see WeaponData). sfall's "Energy Weapon" flag is extended-flags bit 0x0400 instead (sfall
+    // Skills.cpp, define_extra.h WEAPON_ENERGY).
     enum class WEAPON_FLAGS : uint32_t {
-        ENERGY_WEAPON = 0x00000001 // Forces weapon to use Energy Weapons skill (sfall 4.2/3.8.20)
+        ENERGY_WEAPON = 0x00000001
     };
 
     // Object Flags - from Fallout 2 CE obj_types.h
     enum class ObjectFlags : uint32_t {
-        // Animation control flags (low 8 bits)
-        ANIMATION_PRIMARY_MASK = 0x0000000F,   // Primary attack animation index (bits 0-3)
-        ANIMATION_SECONDARY_MASK = 0x000000F0, // Secondary attack animation index (bits 4-7)
-
         OBJECT_HIDDEN = 0x01,               // Object is hidden from view
         OBJECT_NO_SAVE = 0x04,              // Specifies that the object should not be saved to the savegame file
         OBJECT_FLAT = 0x08,                 // Flat object (no height)
@@ -109,6 +107,12 @@ public:
 
     // Extended Item Flags
     enum class ExtendedItemFlags : uint32_t {
+        // A weapon's attack modes, packed in the low byte of the extended flags (not header.flags):
+        // fallout2-ce item.cc weaponGetAttackTypeForHitMode reads the primary mode as
+        // extendedFlags & 0x0F and the secondary as (extendedFlags & 0xF0) >> 4, each an index into
+        // the engine's _attack_subtype / _attack_anim / _attack_skill tables.
+        ANIMATION_PRIMARY_MASK = 0x0000000F,
+        ANIMATION_SECONDARY_MASK = 0x000000F0,
 
         // Weapon behavior flags
         BIG_GUN = 0x00000100,    // Forces weapon to use Big Guns skill instead of Small Guns
@@ -132,21 +136,21 @@ public:
         JAMMED = 0x04000000,
     };
 
-    // Extended flags helper functions
+    // Attack-mode accessors; `flags` is commonItemData.flagsExt.
     static constexpr uint32_t getAnimationPrimary(uint32_t flags) {
-        return flags & static_cast<uint32_t>(ObjectFlags::ANIMATION_PRIMARY_MASK);
+        return flags & static_cast<uint32_t>(ExtendedItemFlags::ANIMATION_PRIMARY_MASK);
     }
 
     static constexpr uint32_t getAnimationSecondary(uint32_t flags) {
-        return (flags & static_cast<uint32_t>(ObjectFlags::ANIMATION_SECONDARY_MASK)) >> 4;
+        return (flags & static_cast<uint32_t>(ExtendedItemFlags::ANIMATION_SECONDARY_MASK)) >> 4;
     }
 
     static constexpr uint32_t setAnimationPrimary(uint32_t flags, uint32_t animation) {
-        return (flags & ~static_cast<uint32_t>(ObjectFlags::ANIMATION_PRIMARY_MASK)) | (animation & 0xF);
+        return (flags & ~static_cast<uint32_t>(ExtendedItemFlags::ANIMATION_PRIMARY_MASK)) | (animation & 0xF);
     }
 
     static constexpr uint32_t setAnimationSecondary(uint32_t flags, uint32_t animation) {
-        return (flags & ~static_cast<uint32_t>(ObjectFlags::ANIMATION_SECONDARY_MASK)) | ((animation & 0xF) << 4);
+        return (flags & ~static_cast<uint32_t>(ExtendedItemFlags::ANIMATION_SECONDARY_MASK)) | ((animation & 0xF) << 4);
     }
 
     template <typename FlagEnum>
@@ -237,20 +241,27 @@ public:
         int32_t ammoPID;
         uint32_t ammoCapacity;
         uint8_t soundId;
-        uint32_t weaponFlags; // Extended weapon flags (energy weapon flag, etc.)
+        // Not in the engine's record: fallout2-ce protoItemDataRead stops at the sound byte, so a weapon
+        // proto is 122 bytes, and every shipped one is exactly that. ProReader fills this only from
+        // bytes past that end (so 0 for shipped data); ProWriter always appends it.
+        uint32_t weaponFlags;
     } weaponData;
 
+    // The engine reads these four modifiers as armour-class adjust, DR adjust, damage multiplier and
+    // damage divisor (fallout2-ce ProtoItemAmmoData ac_adjust / dr_adjust / dam_mult / dam_div).
     struct AmmoData {
         uint32_t caliber;
         uint32_t quantity;
-        int32_t damageModifier;
-        int32_t damageResistModifier;
-        int32_t damageMultiplier;
-        int32_t damageTypeModifier;
+        int32_t damageModifier;       // AC modifier
+        int32_t damageResistModifier; // DR modifier
+        int32_t damageMultiplier;     // damage multiplier
+        int32_t damageTypeModifier;   // damage divisor
     } ammoData;
 
+    // fallout2-ce ProtoItemMiscData: three int32s, so a misc item proto is 69 bytes.
     struct MiscData {
-        uint32_t powerType;
+        int32_t powerTypePid; // the ammo proto that recharges it, or -1
+        uint32_t powerType;   // the charge's caliber
         uint32_t charges;
     } miscData;
 
@@ -268,7 +279,7 @@ public:
         uint32_t maxHitPoints;
         uint32_t actionPoints;
         uint32_t armorClass;
-        uint32_t unused;
+        uint32_t unused; // STAT_UNARMED_DAMAGE in fallout2-ce
         uint32_t meleeDamage;
         uint32_t carryWeightMax;
         uint32_t sequence;
@@ -293,9 +304,10 @@ public:
         uint32_t bonusHealingRate;
         uint32_t bonusCriticalChance;
         uint32_t bonusBetterCriticals;
-        // Bonus damage threshold (8 values)
+        // The bonus block's 16 resistance words, split 8 + 8 here. The engine indexes them by stat id
+        // like the base block: 7 DT, 7 DR, then radiation and poison resistance (fallout2-ce
+        // stat_defs.h), so bonusDamageThreshold[7] is really the normal-damage DR bonus.
         uint32_t bonusDamageThreshold[BONUS_DAMAGE_ARRAYS];
-        // Bonus damage resistance (8 values)
         uint32_t bonusDamageResistance[BONUS_DAMAGE_ARRAYS];
         uint32_t bonusAge;
         uint32_t bonusGender;

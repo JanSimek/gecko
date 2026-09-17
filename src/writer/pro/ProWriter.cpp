@@ -213,7 +213,7 @@ void ProWriter::writeWeaponData(const Pro& pro) {
     utils.writeBE32(pro.weaponData.ammoCapacity);
     utils.writeU8(pro.weaponData.soundId);
 
-    // Write extended weapon flags (always write for new format compatibility)
+    // gecko's trailing weaponFlags word. The engine reads a fixed record and ignores it.
     utils.writeBE32(pro.weaponData.weaponFlags);
 
     spdlog::trace("ProWriter: Wrote weapon data (damage: {}-{}, flags: 0x{:X})",
@@ -237,6 +237,8 @@ void ProWriter::writeAmmoData(const Pro& pro) {
 void ProWriter::writeMiscItemData(const Pro& pro) {
     auto& utils = getBinaryUtils();
 
+    // All three fields: the engine rejects a misc item proto that stops short of `charges`.
+    utils.writeBE32Signed(pro.miscData.powerTypePid);
     utils.writeBE32(pro.miscData.powerType);
     utils.writeBE32(pro.miscData.charges);
 

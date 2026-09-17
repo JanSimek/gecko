@@ -439,15 +439,20 @@ TEST_CASE("PRO misc-item round-trip preserves powerType and charges", "[pro][rou
     miscItem.commonItemData.SID = 0xF5u;
     miscItem.commonItemData.soundId = 0x0C;
     miscItem.setObjectSubtypeId(static_cast<unsigned int>(geck::Pro::ITEM_TYPE::MISC));
-    miscItem.miscData.powerType = 0x00000029; // ammo PID the item consumes
+    miscItem.miscData.powerTypePid = 38; // the ammo proto that recharges it
+    miscItem.miscData.powerType = 3;     // its caliber
     miscItem.miscData.charges = 42;
 
     const geck::Pro got = proRoundTrip(miscItem, tempPath);
 
+    // fallout2-ce protoItemDataRead reads three words for a misc item and rejects a shorter proto, so
+    // the file is the 57-byte item header plus 12.
+    REQUIRE(std::filesystem::file_size(tempPath) == 69);
     REQUIRE(got.itemType() == geck::Pro::ITEM_TYPE::MISC);
     REQUIRE(got.commonItemData.flagsExt == 0xE1E2E3E4u);
     REQUIRE(got.commonItemData.SID == 0xF5u);
-    REQUIRE(got.miscData.powerType == 0x00000029);
+    REQUIRE(got.miscData.powerTypePid == 38);
+    REQUIRE(got.miscData.powerType == 3);
     REQUIRE(got.miscData.charges == 42);
 }
 

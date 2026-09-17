@@ -13,6 +13,7 @@
 #include "cli/MapRender.h"
 #include "cli/MapReachability.h"
 #include "cli/PatternExtract.h"
+#include "cli/ProtoExport.h"
 #include "cli/ResourceInspect.h"
 #include "cli/ScriptIntrospect.h"
 #include "resource/GameResources.h"
@@ -160,6 +161,12 @@ void printUsage(const char* program) {
               << "  " << program << " resource missing <map> --data <dir-or-.dat> [--data <...>]\n"
               << "      Art a map references but that does NOT resolve in the mounted data: missing tiles\n"
               << "      (by tiles.lst id) and object art (by FID). Diagnoses 'why won't this map load fully'.\n"
+              << "  " << program << " proto export [--kind item|critter] [--item-type <type>]\n"
+              << "      --data <dir-or-.dat> [--data <...>]\n"
+              << "      Every item and critter proto listed in proto/items/items.lst and\n"
+              << "      proto/critters/critters.lst, with the full stats its .pro stores, as JSON (the MCP\n"
+              << "      export_protos tool). --kind limits it to items or critters; --item-type to one item\n"
+              << "      type: armor, container, drug, weapon, ammo, misc or key.\n"
               << "  --data may be a Fallout 2 data directory or a .dat archive; repeat to mount several.\n";
 }
 
@@ -811,6 +818,64 @@ int runResourceCommand(const std::vector<std::string>& args, const char* program
     return dispatchResource(resources, ra);
 }
 
+// --- proto subcommand -------------------------------------------------------------------------
+// `proto export` dumps every proto in the item and critter .lst files. Self-contained like
+// `resource`: two optional filters plus its own --data list.
+struct ProtoArgs {
+    std::string kind;
+    std::string itemType;
+    std::vector<std::string> dataPaths;
+};
+
+// Parse the tokens after `proto export` into `out`. Returns false (after printing why) on a bad flag.
+bool parseProtoArgs(const std::vector<std::string>& args, const char* program, ProtoArgs& out) {
+    for (std::size_t i = 2; i < args.size(); i += 2) {
+        const std::string& arg = args[i];
+        if (arg != "--data" && arg != "--kind" && arg != "--item-type") {
+            std::cerr << "error: unexpected argument: " << arg << "\n";
+            printUsage(program);
+            return false;
+        }
+        if (i + 1 >= args.size()) {
+            std::cerr << "error: " << arg << " needs a value\n";
+            printUsage(program);
+            return false;
+        }
+        if (arg == "--data") {
+            out.dataPaths.push_back(args[i + 1]);
+        } else if (arg == "--kind") {
+            out.kind = args[i + 1];
+        } else {
+            out.itemType = args[i + 1];
+        }
+    }
+    return true;
+}
+
+// Run a `proto export` command end to end (parse, validate, mount, export). Returns the exit code.
+int runProtoCommand(const std::vector<std::string>& args, const char* program) {
+    ProtoArgs pa;
+    if (!parseProtoArgs(args, program, pa)) {
+        return 2;
+    }
+    geck::cli::ProtoExportOptions opts;
+    if (const auto error = geck::cli::parseProtoFilter(pa.kind, pa.itemType, opts)) {
+        std::cerr << "error: " << *error << "\n";
+        printUsage(program);
+        return 2;
+    }
+    if (pa.dataPaths.empty()) {
+        std::cerr << "error: at least one --data <path> is required\n";
+        printUsage(program);
+        return 2;
+    }
+
+    spdlog::set_level(spdlog::level::off);
+    geck::resource::GameResources resources;
+    mountData(resources, pa.dataPaths, program);
+    return geck::cli::exportProtos(resources, opts, std::cout);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -825,6 +890,10 @@ int main(int argc, char** argv) {
     // The `resource` family (data-inspection) is likewise parsed and run on its own path.
     if (args.size() >= 2 && args[0] == "resource" && isResourceAction(args[1])) {
         return runResourceCommand(args, argv[0]);
+    }
+
+    if (args.size() >= 2 && args[0] == "proto" && args[1] == "export") {
+        return runProtoCommand(args, argv[0]);
     }
 
     CliArgs cli;

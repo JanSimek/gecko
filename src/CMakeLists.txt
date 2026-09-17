@@ -680,6 +680,8 @@ if(GECK_BUILD_CLI)
         cli/MapRender.cpp
         cli/MapExport.h
         cli/MapExport.cpp
+        cli/ProtoExport.h
+        cli/ProtoExport.cpp
         cli/FrmInspect.h
         cli/FrmInspect.cpp
         cli/ResourceInspect.h
