@@ -5,6 +5,7 @@
 #include <QKeySequenceEdit>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSet>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -69,8 +70,12 @@ void KeybindingsWidget::setupUI() {
     _resetButton = new QPushButton(tr("Reset"), this);
     _resetButton->setToolTip(tr("Put the selected shortcut back to its default"));
     _resetButton->setEnabled(false);
+    _clearButton = new QPushButton(tr("Clear"), this);
+    _clearButton->setToolTip(tr("Unbind the selected shortcut"));
+    _clearButton->setEnabled(false);
     _resetAllButton = new QPushButton(tr("Reset All"), this);
     _resetAllButton->setToolTip(tr("Put every shortcut back to its default"));
+    buttons->addWidget(_clearButton);
     buttons->addWidget(_resetButton);
     buttons->addWidget(_resetAllButton);
     buttons->addStretch();
@@ -78,6 +83,7 @@ void KeybindingsWidget::setupUI() {
 
     connect(_filterEdit, &QLineEdit::textChanged, this, &KeybindingsWidget::onFilterChanged);
     connect(_tree, &QTreeWidget::itemSelectionChanged, this, &KeybindingsWidget::onSelectionChanged);
+    connect(_clearButton, &QPushButton::clicked, this, &KeybindingsWidget::onClearSelected);
     connect(_resetButton, &QPushButton::clicked, this, &KeybindingsWidget::onResetSelected);
     connect(_resetAllButton, &QPushButton::clicked, this, &KeybindingsWidget::onResetAll);
 
@@ -211,11 +217,25 @@ void KeybindingsWidget::onEditFinished(QTreeWidgetItem* item, const QKeySequence
         return; // nothing typed, or the same chord again
     }
 
+    // Refused outright rather than reported like a conflict: there is no other row to change.
+    if (isReservedKey(keys)) {
+        Q_EMIT statusChanged(tr("%1 is used by the map view's own tools and cannot be assigned")
+                                 .arg(displayKeys(keys)),
+            QStringLiteral("error"));
+        return;
+    }
+    if (!KeyBindingRegistry::isAllowed(id, keys)) {
+        Q_EMIT statusChanged(tr("%1 needs a modifier (Ctrl, Alt…) — without one it would fire while typing in a panel")
+                                 .arg(displayKeys(keys)),
+            QStringLiteral("error"));
+        return;
+    }
+
     if (const QString conflict = pendingConflict(id, keys); !conflict.isEmpty()) {
         // Reported rather than refused: the user can still see what they typed, and clearing the
         // other action's key resolves it. Applying a conflicting pair would make Qt fire neither.
         const ActionSpec* other = KeyBindingRegistry::spec(conflict);
-        Q_EMIT statusChanged(tr("%1 is already assigned to %2 — clear that one first")
+        Q_EMIT statusChanged(tr("%1 is already assigned to %2 — change or clear that one first")
                                  .arg(displayKeys(keys), other ? QString::fromLatin1(other->label) : conflict),
             QStringLiteral("error"));
     } else {
@@ -254,6 +274,25 @@ void KeybindingsWidget::onSelectionChanged() {
     const QString id = selected.isEmpty() ? QString() : actionIdOf(selected.first());
     _resetButton->setEnabled(!id.isEmpty() && _registry
         && pendingShortcut(id) != _registry->defaultShortcut(id));
+    _clearButton->setEnabled(!id.isEmpty() && _registry && !pendingShortcut(id).isEmpty());
+}
+
+void KeybindingsWidget::onClearSelected() {
+    const QList<QTreeWidgetItem*> selected = _tree->selectedItems();
+    if (selected.isEmpty()) {
+        return;
+    }
+    const QString id = actionIdOf(selected.first());
+    if (id.isEmpty() || !_registry) {
+        return;
+    }
+
+    _pending.insert(id, QKeySequence());
+    // Unbinding can resolve a conflict, which recolours the row on the other side of it too.
+    refreshAllRows();
+    onSelectionChanged();
+    Q_EMIT statusChanged(QString(), QStringLiteral("normal"));
+    Q_EMIT changed();
 }
 
 void KeybindingsWidget::onResetSelected() {
@@ -310,11 +349,40 @@ void KeybindingsWidget::applyChanges() {
     }
 
     // A conflicting pair would leave Qt firing neither shortcut, so those edits are dropped here
-    // rather than written through; the status line already said so when they were typed.
-    for (auto it = _pending.constBegin(); it != _pending.constEnd(); ++it) {
-        if (pendingConflict(it.key(), it.value()).isEmpty()) {
-            _registry->setShortcut(it.key(), it.value());
+    // rather than written through; the status line already said so when they were typed. Dropping
+    // one puts that action back on its committed key, which can collide with an edit that looked
+    // free only while the dropped one was pending — so repeat until nothing more drops.
+    QSet<QString> accepted(_pending.keyBegin(), _pending.keyEnd());
+    const auto effectiveShortcut = [this, &accepted](const QString& id) {
+        return accepted.contains(id) ? _pending.value(id) : _registry->shortcut(id);
+    };
+    const auto conflicts = [&effectiveShortcut](const QString& id, const QKeySequence& keys) {
+        if (keys.isEmpty()) {
+            return false;
         }
+        for (const ActionSpec& candidate : actionSpecs()) {
+            const QString candidateId = QString::fromLatin1(candidate.id);
+            if (candidateId != id && effectiveShortcut(candidateId) == keys) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    bool dropped = true;
+    while (dropped) {
+        dropped = false;
+        for (const QString& id : std::as_const(accepted)) {
+            if (conflicts(id, _pending.value(id))) {
+                accepted.remove(id);
+                dropped = true;
+                break;
+            }
+        }
+    }
+
+    for (const QString& id : std::as_const(accepted)) {
+        _registry->setShortcut(id, _pending.value(id));
     }
 
     _registry->save();

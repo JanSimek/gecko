@@ -1,6 +1,7 @@
 #include "ActionSpec.h"
 
 #include <array>
+#include <optional>
 
 namespace geck {
 
@@ -62,6 +63,52 @@ namespace {
 
 std::span<const ActionSpec> actionSpecs() {
     return SPECS;
+}
+
+namespace {
+
+    // The one key of a single-chord sequence, if its only modifiers are in `allowed`. The keypad
+    // modifier is always ignored: numpad Enter and the main Enter are one key to the user.
+    std::optional<Qt::Key> bareKey(const QKeySequence& keys, Qt::KeyboardModifiers allowed) {
+        if (keys.count() != 1) {
+            return std::nullopt;
+        }
+        const QKeyCombination combination = keys[0];
+        const Qt::KeyboardModifiers modifiers = combination.keyboardModifiers() & ~Qt::KeypadModifier;
+        if ((modifiers & ~allowed) != Qt::NoModifier) {
+            return std::nullopt;
+        }
+        return combination.key();
+    }
+
+} // namespace
+
+bool isReservedKey(const QKeySequence& keys) {
+    const std::optional<Qt::Key> key = bareKey(keys, Qt::NoModifier);
+    if (!key) {
+        return false;
+    }
+    switch (*key) {
+        case Qt::Key_Escape:
+        case Qt::Key_Delete:
+        case Qt::Key_Backspace:
+        case Qt::Key_Space:
+        case Qt::Key_Enter:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool isCanvasOnlyKey(const QKeySequence& keys) {
+    // Shift is allowed through: Shift+R still types into a filter box.
+    const std::optional<Qt::Key> key = bareKey(keys, Qt::ShiftModifier);
+    if (!key) {
+        return false;
+    }
+    return *key == Qt::Key_Return
+        || (*key >= Qt::Key_A && *key <= Qt::Key_Z)
+        || (*key >= Qt::Key_0 && *key <= Qt::Key_9);
 }
 
 } // namespace geck

@@ -1593,6 +1593,28 @@ TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge
     registry->resetToDefault(geck::actions::PANEL_SELECTION_REVEAL);
     CHECK(inspectReturn->key() == QKeySequence(Qt::Key_Return));
     CHECK(inspectEnter->key() == QKeySequence(Qt::Key_Enter));
+
+    // Standing down goes by key, not by action: move Rotate off R and put Fit Map on it, and it is
+    // Fit Map that must step aside while stamping, or the stamp never sees R. A rebind made while
+    // already in the mode takes effect at once.
+    registry->setShortcut(geck::actions::TOOL_ROTATE, QKeySequence(Qt::Key_T));
+    registry->setShortcut(geck::actions::FIT_MAP, QKeySequence(Qt::Key_R));
+    editorWidget->setMode(geck::EditorMode::StampPattern);
+    QApplication::processEvents();
+    CHECK(rotate->isEnabled());
+    CHECK_FALSE(fitMap->isEnabled());
+
+    registry->setShortcut(geck::actions::FIT_MAP, QKeySequence(Qt::Key_F));
+    CHECK(fitMap->isEnabled());
+    registry->setShortcut(geck::actions::FIT_MAP, QKeySequence(Qt::Key_Return));
+    CHECK(fitMap->isEnabled()); // Return is only claimed while drawing an edge
+
+    editorWidget->setMarkExitsMode(true);
+    QApplication::processEvents();
+    CHECK_FALSE(fitMap->isEnabled());
+
+    editorWidget->setMode(geck::EditorMode::Select);
+    registry->resetAllToDefaults();
 }
 
 TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map's .gam", "[qt][mapinfo]") {

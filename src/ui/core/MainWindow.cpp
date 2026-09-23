@@ -138,6 +138,10 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
         if (id == QLatin1StringView(actions::PANEL_SELECTION_REVEAL)) {
             syncInspectSelectionCompanionKey();
         }
+        // A key just moved, possibly onto one the current tool mode claims.
+        if (_currentEditorWidget) {
+            syncCanvasShortcutsForMode(_currentEditorWidget->currentMode());
+        }
     });
 
     setupUI();
@@ -352,23 +356,35 @@ void MainWindow::revealPanel(QDockWidget* dock, QAction* action) {
 
     if (onTop) {
         dock->hide();
+        if (action) {
+            const QSignalBlocker blocker(*action);
+            action->setChecked(false);
+        }
     } else {
-        dock->show();
-        if (!dock->isFloating() && dockWidgetArea(dock) != Qt::NoDockWidgetArea) {
-            dock->raise();
-        }
-        // Put the caret in the panel so it can be used straight away. A panel whose widget takes
-        // no focus simply keeps it where it was.
-        if (QWidget* panel = dock->widget()) {
-            panel->setFocus(Qt::ShortcutFocusReason);
-        }
+        showPanel(dock, action);
+    }
+}
+
+void MainWindow::showPanel(QDockWidget* dock, QAction* action) {
+    if (!dock) {
+        return;
     }
 
-    // show()/hide() fire visibilityChanged, which re-syncs the menu check state; a raise fires
+    dock->show();
+    if (!dock->isFloating() && dockWidgetArea(dock) != Qt::NoDockWidgetArea) {
+        dock->raise();
+    }
+    // Put the caret in the panel so it can be used straight away. A panel whose widget takes
+    // no focus simply keeps it where it was.
+    if (QWidget* panel = dock->widget()) {
+        panel->setFocus(Qt::ShortcutFocusReason);
+    }
+
+    // show() fires visibilityChanged, which re-syncs the menu check state; a raise fires
     // nothing, so re-assert it here for the tabbed-behind case.
     if (action) {
         const QSignalBlocker blocker(*action);
-        action->setChecked(!dock->isHidden());
+        action->setChecked(true);
     }
 }
 
@@ -389,7 +405,8 @@ void MainWindow::installCanvasShortcuts() {
         if (!selectionManager || !selectionManager->hasSelection()) {
             return;
         }
-        revealPanel(_selectionDock, _selectionPanelAction);
+        // Show, never toggle: inspecting again must not hide the panel it is inspecting into.
+        showPanel(_selectionDock, _selectionPanelAction);
     };
 
     // The registry supplies each key and re-keys the shortcut if the user rebinds it. The shortcut
@@ -399,10 +416,13 @@ void MainWindow::installCanvasShortcuts() {
         shortcut->setContext(Qt::WidgetWithChildrenShortcut);
         connect(shortcut, &QShortcut::activated, this, std::move(handler));
         _keyBindings->bind(QString::fromLatin1(actionId), shortcut);
+        _canvasShortcuts.append(shortcut);
         return shortcut;
     };
 
-    _inspectSelectionShortcut = addCanvasShortcut(actions::PANEL_SELECTION_REVEAL, inspectSelection);
+    // The previous map view's shortcuts died with it.
+    _canvasShortcuts.clear();
+    addCanvasShortcut(actions::PANEL_SELECTION_REVEAL, inspectSelection);
 
     // Numpad Enter is a distinct key code that no QKeySequence on Return catches, and it is the
     // same command rather than a second binding — so it is a companion of the reveal key, not a
@@ -411,6 +431,7 @@ void MainWindow::installCanvasShortcuts() {
     _inspectSelectionEnterShortcut = new QShortcut(canvas);
     _inspectSelectionEnterShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(_inspectSelectionEnterShortcut, &QShortcut::activated, this, inspectSelection);
+    _canvasShortcuts.append(_inspectSelectionEnterShortcut);
     syncInspectSelectionCompanionKey();
 
     // Navigation and tool keys. Single letters belong on the canvas: window-scoped they would fire
@@ -431,7 +452,7 @@ void MainWindow::installCanvasShortcuts() {
             _scrollBlockerRectAction->trigger();
         }
     });
-    _rotateShortcut = addCanvasShortcut(actions::TOOL_ROTATE, [this]() {
+    addCanvasShortcut(actions::TOOL_ROTATE, [this]() {
         if (_rotateAction) {
             _rotateAction->trigger();
         }
@@ -1194,20 +1215,36 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
         }
     }
 
-    // Enter finalizes the in-progress "Draw edge" polyline (InputHandler), so the inspect-selection
-    // shortcut must stand down in that mode rather than eat the key.
-    for (QShortcut* shortcut : { _inspectSelectionShortcut.data(), _inspectSelectionEnterShortcut.data() }) {
-        if (shortcut) {
-            shortcut->setEnabled(mode != EditorMode::MarkExits);
-        }
-    }
+    syncCanvasShortcutsForMode(mode);
+}
 
-    // Free up "R" for the viewport while stamping or while a registered tool runs (object
-    // placement); otherwise the shortcut would swallow the key before it reaches the editor, where
-    // R cycles a stamp's orientation variants. The toolbar button stays enabled either way — only
-    // the key stands down.
-    if (_rotateShortcut) {
-        _rotateShortcut->setEnabled(mode != EditorMode::StampPattern && mode != EditorMode::PluginTool);
+void MainWindow::syncCanvasShortcutsForMode(EditorMode mode) {
+    // A canvas shortcut consumes its key before InputHandler sees it, so whichever shortcut sits on
+    // a key the mode claims stands down — judged by key, not by action, because the user may have
+    // rebound any action onto Return or R. Return and Enter finish a Draw-edge line; R cycles a
+    // stamp's variants and is left to a registered tool. The toolbar buttons stay enabled either
+    // way — only the key steps aside.
+    // By key code alone: InputHandler ignores modifiers on these, so Shift+R reaches it as R too.
+    const auto claimedByMode = [mode](const QKeySequence& keys) {
+        if (keys.count() != 1) {
+            return false;
+        }
+        const Qt::Key key = keys[0].key();
+        switch (mode) {
+            case EditorMode::MarkExits:
+                return key == Qt::Key_Return || key == Qt::Key_Enter;
+            case EditorMode::StampPattern:
+            case EditorMode::PluginTool:
+                return key == Qt::Key_R;
+            default:
+                return false;
+        }
+    };
+
+    for (QShortcut* shortcut : std::as_const(_canvasShortcuts)) {
+        if (shortcut) {
+            shortcut->setEnabled(!claimedByMode(shortcut->key()));
+        }
     }
 }
 

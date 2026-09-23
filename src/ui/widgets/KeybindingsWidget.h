@@ -21,8 +21,8 @@ class KeyBindingRegistry;
  *
  * Edits an in-memory copy of the bindings and commits it on Apply/OK, like the other Preferences
  * sections, so Cancel really does cancel. Conflicts are reported live while typing a chord: the
- * row turns red and the status line names the action already holding that key, with a Reassign
- * button that unbinds the other one.
+ * row turns red and the status line names the action already holding that key; Clear unbinds the
+ * selected row, and any edit still conflicting on Apply is dropped.
  */
 class KeybindingsWidget : public QGroupBox {
     Q_OBJECT
@@ -44,6 +44,7 @@ signals:
 private slots:
     void onFilterChanged(const QString& text);
     void onSelectionChanged();
+    void onClearSelected();
     void onResetSelected();
     void onResetAll();
     void onEditFinished(QTreeWidgetItem* item, const QKeySequence& keys);
@@ -64,6 +65,7 @@ private:
     KeyBindingRegistry* _registry = nullptr;
     QLineEdit* _filterEdit = nullptr;
     QTreeWidget* _tree = nullptr;
+    QPushButton* _clearButton = nullptr;
     QPushButton* _resetButton = nullptr;
     QPushButton* _resetAllButton = nullptr;
     /// Edits not yet applied: action id -> key (an empty sequence is a deliberate unbind).

@@ -8,14 +8,15 @@ namespace geck {
 
 namespace {
 
-    // The key an action is currently on, named the way the status bar should show it. Falls back
-    // to the shipped name when no lookup was supplied or the action has been unbound.
-    QString keyName(const HintKeyLookup& keyFor, const char* actionId, const QString& fallback) {
-        if (!keyFor) {
-            return fallback;
+    // "<key>: <what>" for an action's current key, or nothing when the action has been unbound —
+    // advertising a key that no longer does anything is the stale hint this lookup exists to
+    // prevent. The shipped name is used only when no lookup was supplied.
+    void addKeyHint(QStringList& parts, const HintKeyLookup& keyFor, const char* actionId,
+        const QString& shippedKey, const QString& what) {
+        const QString key = keyFor ? keyFor(QString::fromLatin1(actionId)) : shippedKey;
+        if (!key.isEmpty()) {
+            parts.append(key + QStringLiteral(": ") + what);
         }
-        const QString bound = keyFor(QString::fromLatin1(actionId));
-        return bound.isEmpty() ? fallback : bound;
     }
 
     QString joinHints(const QStringList& parts) {
@@ -39,9 +40,11 @@ QString hintForContext(EditorMode mode, bool hasSelection, const QString& active
             // Delete/Backspace. With nothing selected none of them does anything, so the hint
             // is empty.
             if (hasSelection) {
-                return joinHints({ keyName(keyFor, actions::PANEL_SELECTION_REVEAL, QStringLiteral("Enter")) + QStringLiteral(": inspect"),
-                    keyName(keyFor, actions::TOOL_ROTATE, QStringLiteral("R")) + QStringLiteral(": rotate"),
-                    QStringLiteral("Delete: remove") });
+                QStringList parts;
+                addKeyHint(parts, keyFor, actions::PANEL_SELECTION_REVEAL, QStringLiteral("Enter"), QStringLiteral("inspect"));
+                addKeyHint(parts, keyFor, actions::TOOL_ROTATE, QStringLiteral("R"), QStringLiteral("rotate"));
+                parts.append(QStringLiteral("Delete: remove"));
+                return joinHints(parts);
             }
             return QString();
 

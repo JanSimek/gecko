@@ -3,6 +3,7 @@
 #include <QString>
 
 #include "ui/core/EditorHints.h"
+#include "ui/input/ActionSpec.h"
 #include "ui/core/EditorMode.h"
 
 using geck::EditorMode;
@@ -38,6 +39,19 @@ TEST_CASE("Select mode with a selection advertises R and Delete", "[hints]") {
     REQUIRE(hint.contains("R"));
     REQUIRE(hint.contains("rotate"));
     REQUIRE(hint.contains("Delete"));
+}
+
+TEST_CASE("Select mode names rebound keys and leaves unbound actions out", "[hints]") {
+    const auto lookup = [](const QString& actionId) {
+        if (actionId == QLatin1StringView(geck::actions::TOOL_ROTATE)) {
+            return QString(); // unbound
+        }
+        return QStringLiteral("Ctrl+I");
+    };
+    const QString hint = hintForContext(EditorMode::Select, /*hasSelection=*/true, {}, lookup);
+    CHECK(hint.contains("Ctrl+I: inspect"));
+    CHECK_FALSE(hint.contains("rotate"));
+    CHECK(hint.contains("Delete: remove"));
 }
 
 TEST_CASE("Select mode with nothing selected is empty", "[hints]") {

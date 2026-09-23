@@ -206,6 +206,8 @@ private:
     // current tile (reverting the toggle when none is selected), off = back to Select.
     void applyFillBrushTool(bool checked);
     void syncToolModeActions(EditorMode mode);
+    /// Stand down every canvas shortcut whose key the mode handles itself (see InputHandler).
+    void syncCanvasShortcutsForMode(EditorMode mode);
     void setupDockWidgets();
 #ifdef GECK_SCRIPTING_ENABLED
     // Connects the script console's Run signal to the editor and adds its View-menu toggle.
@@ -243,6 +245,8 @@ private:
     // dock Qt calls visible may be sitting behind another tab: raise it rather than hide it, and
     // only hide when it is already the tab on top. `action` (optional) is re-checked to match.
     void revealPanel(QDockWidget* dock, QAction* action);
+    /// Show and raise a dock without ever hiding it (revealPanel toggles one already on top).
+    void showPanel(QDockWidget* dock, QAction* action);
     // (Re)install the shortcuts scoped to the map canvas. Called whenever an EditorWidget is
     // installed, since the SFML widget they hang off is rebuilt with it.
     void installCanvasShortcuts();
@@ -405,12 +409,12 @@ private:
 
     // "Inspect the selection": reveals the Selection panel from the canvas. Lives on the SFML
     // widget (WidgetWithChildrenShortcut), so Return typed in a panel's filter box is untouched.
-    // Return and numpad Enter are separate key codes, hence the pair.
-    QPointer<QShortcut> _inspectSelectionShortcut;
+    // Numpad Enter is a separate key code from Return, so it gets a companion shortcut that
+    // mirrors the reveal key while that key is Return.
     QPointer<QShortcut> _inspectSelectionEnterShortcut;
-    // Canvas "R". Held so it can stand down while stamping or while a registered tool runs, where
-    // R belongs to the viewport (stamp variants) instead.
-    QPointer<QShortcut> _rotateShortcut;
+    // Every shortcut hung off the current map view, so the ones on a key a tool mode claims can
+    // stand down in that mode (syncCanvasShortcutsForMode).
+    QList<QPointer<QShortcut>> _canvasShortcuts;
 
     // Toolbar actions
     QAction* _selectionModeAction;

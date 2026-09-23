@@ -24,7 +24,13 @@ KeyBindingRegistry::KeyBindingRegistry(std::shared_ptr<Settings> settings, QObje
             spdlog::debug("KeyBindingRegistry: dropping override for unknown action '{}'", it.key().toStdString());
             continue;
         }
-        _overrides.insert(it.key(), QKeySequence::fromString(it.value(), QKeySequence::PortableText));
+        const QKeySequence keys = QKeySequence::fromString(it.value(), QKeySequence::PortableText);
+        if (!isAllowed(it.key(), keys)) {
+            // A hand-edited settings.json could otherwise take Delete or Esc away from the editor.
+            spdlog::warn("KeyBindingRegistry: dropping disallowed key '{}' for '{}'", it.value().toStdString(), it.key().toStdString());
+            continue;
+        }
+        _overrides.insert(it.key(), keys);
     }
 }
 
@@ -39,6 +45,14 @@ const ActionSpec* KeyBindingRegistry::spec(const QString& id) {
         }
     }
     return nullptr;
+}
+
+bool KeyBindingRegistry::isAllowed(const QString& id, const QKeySequence& seq) {
+    const ActionSpec* found = spec(id);
+    if (!found || isReservedKey(seq)) {
+        return false;
+    }
+    return found->scope == ActionScope::Canvas || !isCanvasOnlyKey(seq);
 }
 
 QKeySequence KeyBindingRegistry::defaultShortcut(const QString& id) const {
@@ -82,6 +96,10 @@ QString KeyBindingRegistry::conflictingActionId(const QString& id, const QKeySeq
 void KeyBindingRegistry::setShortcut(const QString& id, const QKeySequence& seq) {
     if (spec(id) == nullptr) {
         spdlog::warn("KeyBindingRegistry: ignoring rebind of unknown action '{}'", id.toStdString());
+        return;
+    }
+    if (!isAllowed(id, seq)) {
+        spdlog::warn("KeyBindingRegistry: refusing '{}' for '{}'", seq.toString().toStdString(), id.toStdString());
         return;
     }
     const bool isDefault = (seq == defaultShortcut(id));

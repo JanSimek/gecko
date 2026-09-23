@@ -41,6 +41,17 @@ struct ActionSpec {
 /// enum would silently repoint every user's overrides at the wrong action.
 std::span<const ActionSpec> actionSpecs();
 
+/// True for a key the tool state machine (InputHandler) handles itself in every mode — Esc,
+/// Delete, Backspace, Space — and numpad Enter, which mirrors the inspect key. No action may take
+/// one: a shortcut consumes its key before the canvas sees it, so Delete would stop deleting.
+bool isReservedKey(const QKeySequence& keys);
+
+/// True for a bare key a tool mode claims for itself: Return finishes a Draw-edge line, R cycles a
+/// stamp's variants. A canvas shortcut on one stands down in that mode; an Application action
+/// cannot, so it may not take one — nor any other bare letter or digit, which it would steal from
+/// every text field and palette grid.
+bool isCanvasOnlyKey(const QKeySequence& keys);
+
 /// Action ids. Compile-time names for the rows above, so a typo is a build error rather than a
 /// binding that silently never fires.
 namespace actions {

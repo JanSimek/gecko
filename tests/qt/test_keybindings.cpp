@@ -418,3 +418,118 @@ TEST_CASE("The keybindings page keeps its filter across a rebuild", "[qt][keybin
     CHECK(filter->text() == "Selection Panel");
     CHECK(visibleRows() == 1);
 }
+
+// Esc, Delete, Backspace and Space belong to the map view's tool state machine, and a shortcut on
+// one would consume it before the canvas sees it; a bare letter on an Application action would
+// fire while typing in any panel.
+TEST_CASE("Reserved and canvas-only keys cannot be bound", "[qt][keybindings]") {
+    removeTestSettings();
+
+    auto settings = std::make_shared<Settings>();
+    settings->setKeyBindings({ { actions::FIT_MAP, "Del" }, { actions::PANEL_LOG, "Q" } });
+    KeyBindingRegistry registry(settings);
+
+    // Nothing shipped breaks the rule, or Reset would be refused.
+    for (const ActionSpec& spec : actionSpecs()) {
+        const QString id = QString::fromLatin1(spec.id);
+        CHECK(KeyBindingRegistry::isAllowed(id, registry.defaultShortcut(id)));
+    }
+
+    // Stored overrides that break the rule are dropped on load.
+    CHECK(registry.shortcut(actions::FIT_MAP) == registry.defaultShortcut(actions::FIT_MAP));
+    CHECK(registry.shortcut(actions::PANEL_LOG) == registry.defaultShortcut(actions::PANEL_LOG));
+
+    for (const QKeySequence& reserved : { QKeySequence(Qt::Key_Escape), QKeySequence(Qt::Key_Delete),
+             QKeySequence(Qt::Key_Backspace), QKeySequence(Qt::Key_Space), QKeySequence(Qt::Key_Enter) }) {
+        registry.setShortcut(actions::FIT_MAP, reserved);
+        CHECK(registry.shortcut(actions::FIT_MAP) == QKeySequence(Qt::Key_F));
+    }
+
+    registry.setShortcut(actions::PANEL_LOG, QKeySequence(Qt::Key_R));
+    CHECK(registry.shortcut(actions::PANEL_LOG) == registry.defaultShortcut(actions::PANEL_LOG));
+    registry.setShortcut(actions::PANEL_LOG, QKeySequence(Qt::Key_Return));
+    CHECK(registry.shortcut(actions::PANEL_LOG) == registry.defaultShortcut(actions::PANEL_LOG));
+
+    // With a modifier, or on a canvas action, they are fine.
+    registry.setShortcut(actions::PANEL_LOG, QKeySequence("Ctrl+Alt+R"));
+    CHECK(registry.shortcut(actions::PANEL_LOG) == QKeySequence("Ctrl+Alt+R"));
+    registry.setShortcut(actions::FIT_MAP, QKeySequence(Qt::Key_Z));
+    CHECK(registry.shortcut(actions::FIT_MAP) == QKeySequence(Qt::Key_Z));
+
+    // The page refuses them too, without leaving a pending edit behind.
+    registry.resetAllToDefaults();
+    KeybindingsWidget widget(&registry);
+    auto* tree = widget.findChild<QTreeWidget*>();
+    REQUIRE(tree != nullptr);
+    QTreeWidgetItem* fitMap = tree->findItems("Fit Map in View", Qt::MatchExactly | Qt::MatchRecursive).value(0);
+    REQUIRE(fitMap != nullptr);
+    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, fitMap),
+        Q_ARG(QKeySequence, QKeySequence(Qt::Key_Delete)));
+    CHECK_FALSE(widget.hasPendingChanges());
+}
+
+// Dropping one conflicting edit puts that action back on its committed key, which can collide with
+// an edit that only looked free while the dropped one was pending.
+TEST_CASE("Applying drops edits that conflict once another edit is dropped", "[qt][keybindings]") {
+    removeTestSettings();
+
+    auto settings = std::make_shared<Settings>();
+    KeyBindingRegistry registry(settings);
+    KeybindingsWidget widget(&registry);
+    auto* tree = widget.findChild<QTreeWidget*>();
+    REQUIRE(tree != nullptr);
+
+    const auto rowFor = [tree](const QString& label) {
+        return tree->findItems(label, Qt::MatchExactly | Qt::MatchRecursive).value(0);
+    };
+    QTreeWidgetItem* scripts = rowFor("Scripts Panel");
+    QTreeWidgetItem* mapInfo = rowFor("Map Information Panel");
+    REQUIRE(scripts != nullptr);
+    REQUIRE(mapInfo != nullptr);
+
+    // Scripts onto the Tile Palette's key (a conflict, so it will be dropped), then Map Info onto
+    // the key Scripts appears to be leaving.
+    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, scripts),
+        Q_ARG(QKeySequence, QKeySequence("Alt+4")));
+    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
+        Q_ARG(QKeySequence, QKeySequence("Alt+3")));
+    widget.applyChanges();
+
+    CHECK(registry.shortcut(actions::PANEL_SCRIPTS) == QKeySequence("Alt+3"));
+    CHECK(registry.shortcut(actions::PANEL_MAP_INFO) == QKeySequence("Alt+1"));
+    CHECK(registry.shortcut(actions::PANEL_TILE_PALETTE) == QKeySequence("Alt+4"));
+}
+
+TEST_CASE("Clear unbinds the selected row and resolves its conflict", "[qt][keybindings]") {
+    removeTestSettings();
+
+    auto settings = std::make_shared<Settings>();
+    KeyBindingRegistry registry(settings);
+    KeybindingsWidget widget(&registry);
+    auto* tree = widget.findChild<QTreeWidget*>();
+    REQUIRE(tree != nullptr);
+
+    QTreeWidgetItem* mapInfo = tree->findItems("Map Information Panel", Qt::MatchExactly | Qt::MatchRecursive).value(0);
+    QTreeWidgetItem* selection = tree->findItems("Selection Panel", Qt::MatchExactly | Qt::MatchRecursive).value(0);
+    REQUIRE(mapInfo != nullptr);
+    REQUIRE(selection != nullptr);
+
+    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
+        Q_ARG(QKeySequence, QKeySequence("Alt+2")));
+
+    QPushButton* clear = nullptr;
+    for (QPushButton* button : widget.findChildren<QPushButton*>()) {
+        if (button->text() == "Clear") {
+            clear = button;
+        }
+    }
+    REQUIRE(clear != nullptr);
+
+    tree->setCurrentItem(selection);
+    REQUIRE(clear->isEnabled());
+    clear->click();
+    widget.applyChanges();
+
+    CHECK(registry.shortcut(actions::PANEL_SELECTION).isEmpty());
+    CHECK(registry.shortcut(actions::PANEL_MAP_INFO) == QKeySequence("Alt+2"));
+}

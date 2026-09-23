@@ -272,8 +272,11 @@ _keyBindings->bind(actions::TOOL_ROTATE, shortcut);
 - **Tool state-machine keys stay out of the table**: `Esc`, `Space`, `Delete`/`Backspace`, the
   Draw-edge `Enter` and the stamp `R` live in `InputHandler`, are dispatched as SFML key codes, and
   are meaningful only inside their mode. A canvas `QShortcut` *consumes* the key before
-  `InputHandler` sees it, so any shortcut sharing one of those keys must be disabled for that mode
-  (see `syncToolModeActions`).
+  `InputHandler` sees it, so Esc/Delete/Backspace/Space/numpad Enter can never be bound
+  (`isReservedKey`), and Return/R stand down by *key* in the modes that claim them
+  (`syncCanvasShortcutsForMode`) — a new InputHandler mode key must be added there too.
+- **Application actions need a modifier** for letters, digits and Return (`isCanvasOnlyKey`); the
+  registry refuses such a rebind and drops it from `settings.json` on load.
 
 ### MIME Types for Drag and Drop
 

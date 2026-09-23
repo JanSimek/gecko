@@ -62,6 +62,9 @@ public:
 
     /// The spec row for an id, or nullptr when the id is unknown.
     static const ActionSpec* spec(const QString& id);
+    /// False when `seq` may not be bound to this action at all: a reserved tool key, or a bare
+    /// letter/digit/Return on an Application action (see isReservedKey / isCanvasOnlyKey).
+    static bool isAllowed(const QString& id, const QKeySequence& seq);
 
 signals:
     void bindingChanged(const QString& id, const QKeySequence& seq);
