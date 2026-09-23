@@ -21,6 +21,21 @@ const Map::MapFile& Map::getMapFile() const {
     return *mapFile;
 }
 
+std::optional<int> Map::scriptProgramIndexForSid(uint32_t sid) const {
+    const int section = MapScript::sidSection(sid);
+    if (!mapFile || section < 0 || section >= SCRIPT_SECTIONS) {
+        return std::nullopt;
+    }
+
+    for (const MapScript& script : mapFile->map_scripts[section]) {
+        if (script.pid == sid) {
+            return static_cast<int>(script.script_id);
+        }
+    }
+
+    return std::nullopt;
+}
+
 void Map::setMapFile(std::unique_ptr<MapFile> newMapFile) {
     mapFile = std::move(newMapFile);
 }

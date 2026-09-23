@@ -1,9 +1,12 @@
 #include "ViewportController.h"
 #include "editor/Hex.h"
 #include "util/Constants.h"
+#include "util/TileUtils.h"
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <limits>
 
 using namespace geck;
 
@@ -31,6 +34,57 @@ void ViewportController::centerViewOnMap() {
 
     _view.setCenter(sf::Vector2f(centerX, centerY));
     spdlog::debug("ViewportController: Centered view on ({:.1f}, {:.1f})", centerX, centerY);
+}
+
+sf::FloatRect ViewportController::mapWorldBounds() {
+    // The projection is affine, so the grid's four corner tiles bound every tile between them.
+    const std::array<TileCoordinates, 4> corners = { {
+        TileCoordinates(0u, 0u),
+        TileCoordinates(0u, static_cast<unsigned int>(MAP_WIDTH - 1)),
+        TileCoordinates(static_cast<unsigned int>(MAP_HEIGHT - 1), 0u),
+        TileCoordinates(static_cast<unsigned int>(MAP_HEIGHT - 1), static_cast<unsigned int>(MAP_WIDTH - 1)),
+    } };
+
+    float minX = std::numeric_limits<float>::max();
+    float minY = std::numeric_limits<float>::max();
+    float maxX = std::numeric_limits<float>::lowest();
+    float maxY = std::numeric_limits<float>::lowest();
+
+    for (const TileCoordinates& corner : corners) {
+        const auto topLeft = coordinatesToScreenPosition(corner);
+        const auto x = static_cast<float>(topLeft.x);
+        const auto y = static_cast<float>(topLeft.y);
+        minX = std::min(minX, x);
+        minY = std::min(minY, y);
+        maxX = std::max(maxX, x + static_cast<float>(TILE_WIDTH));
+        maxY = std::max(maxY, y + static_cast<float>(TILE_HEIGHT));
+    }
+
+    return sf::FloatRect({ minX, minY }, { maxX - minX, maxY - minY });
+}
+
+void ViewportController::fitMapInView() {
+    if (_windowSize.x == 0 || _windowSize.y == 0) {
+        spdlog::warn("ViewportController: Cannot fit the map into a {}x{} window", _windowSize.x, _windowSize.y);
+        return;
+    }
+
+    const sf::FloatRect bounds = mapWorldBounds();
+    if (bounds.size.x <= 0.f || bounds.size.y <= 0.f) {
+        return;
+    }
+
+    // The tighter of the two axes decides, so the whole grid fits rather than just one dimension.
+    const float fitZoom = std::min(
+        static_cast<float>(_windowSize.x) / bounds.size.x,
+        static_cast<float>(_windowSize.y) / bounds.size.y);
+
+    setZoomLevel(fitZoom); // clamps, and resizes the view to match
+    // After the zoom: setZoomLevel keeps the old centre, and the map centre is what we want.
+    _view.setCenter(bounds.position + bounds.size / 2.0f);
+
+    spdlog::debug("ViewportController: Fit map ({:.0f}x{:.0f}) into {}x{} at zoom {:.2f}",
+        bounds.size.x, bounds.size.y, _windowSize.x, _windowSize.y, _zoomLevel);
 }
 
 void ViewportController::panBy(sf::Vector2f worldDelta) {

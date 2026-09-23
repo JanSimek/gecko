@@ -141,6 +141,8 @@ set(GECK_APP_SOURCES
     ui/widgets/LoadingWidget.cpp
     ui/widgets/DataPathsWidget.h
     ui/widgets/DataPathsWidget.cpp
+    ui/widgets/KeybindingsWidget.h
+    ui/widgets/KeybindingsWidget.cpp
     ui/widgets/IntCellDelegate.h
     ui/widgets/IntCellDelegate.cpp
     ui/widgets/GameLocationWidget.h
@@ -200,6 +202,10 @@ set(GECK_APP_SOURCES
 
     ui/input/InputHandler.h
     ui/input/InputHandler.cpp
+    ui/input/ActionSpec.h
+    ui/input/ActionSpec.cpp
+    ui/input/KeyBindingRegistry.h
+    ui/input/KeyBindingRegistry.cpp
     ui/dragdrop/DragDropContext.h
     ui/dragdrop/DragDropManager.h
     ui/dragdrop/DragDropManager.cpp
