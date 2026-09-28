@@ -32,10 +32,10 @@ std::unique_ptr<MapObject> MapObject::cloneDeep() const {
     c->amount = amount;
     c->unknown10 = unknown10;
     c->unknown11 = unknown11;
-    c->player_reaction = player_reaction;
-    c->current_mp = current_mp;
+    c->damage_last_turn = damage_last_turn;
+    c->maneuver = maneuver;
+    c->current_ap = current_ap;
     c->combat_results = combat_results;
-    c->dmg_last_turn = dmg_last_turn;
     c->ai_packet = ai_packet;
     c->group_id = group_id;
     c->who_hit_me = who_hit_me;

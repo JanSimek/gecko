@@ -39,18 +39,19 @@ struct MapObject {
     uint32_t amount = 1;
 
     uint32_t unknown10 = 0; // unknown12 ?
-    uint32_t unknown11 = 0; // unknown13 ?
+    uint32_t unknown11 = 0; // engine obj->data.flags; for critters this slot is data.critter.reaction (fallout2-ce proto.cc objectDataRead)
 
-    // Extra fields for critters
-    uint32_t player_reaction = 0; // reaction to player - saves only
-    uint32_t current_mp = 0;      // current mp - saves only
-    uint32_t combat_results = 0;  // combat results - saves only
-    uint32_t dmg_last_turn = 0;   // damage last turn - saves only
-    uint32_t ai_packet = 0;       // AI packet - is it different from .pro? well, it can be
-    uint32_t group_id = 0;        // team - always 1? saves only?
-    uint32_t who_hit_me = 0;      // who hit me - saves only
-    uint32_t current_hp = 0;      // hit points - saves only, otherwise = value from .pro
-    uint32_t current_rad = 0;     // rad - always 0 - saves only
+    // Extra fields for critters, in the engine's on-disk order (fallout2-ce proto.cc
+    // objectCritterCombatDataRead: damageLastTurn, maneuver, ap, results, aiPacket, team, whoHitMe).
+    uint32_t damage_last_turn = 0; // engine CritterCombatData.damageLastTurn - saves only
+    uint32_t maneuver = 0;         // engine CritterCombatData.maneuver (CRITTER_MANEUVER_* bits) - saves only
+    uint32_t current_ap = 0;       // engine CritterCombatData.ap - saves only
+    uint32_t combat_results = 0;   // engine CritterCombatData.results (DAM_* bits) - saves only
+    uint32_t ai_packet = 0;        // AI packet - is it different from .pro? well, it can be
+    uint32_t group_id = 0;         // team - always 1? saves only?
+    uint32_t who_hit_me = 0;       // who hit me - saves only
+    uint32_t current_hp = 0;       // hit points - saves only, otherwise = value from .pro
+    uint32_t current_rad = 0;      // rad - always 0 - saves only
     uint32_t current_poison = 0;
 
     // Extra fields for ammo

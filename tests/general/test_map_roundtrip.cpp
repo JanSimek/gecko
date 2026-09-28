@@ -54,10 +54,10 @@ TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roun
     auto wall = add(pidOf(Pro::OBJECT_TYPE::WALL, 100), 1);
 
     auto critter = add(pidOf(Pro::OBJECT_TYPE::CRITTER, 50), 2);
-    critter->player_reaction = 301;
-    critter->current_mp = 302;
-    critter->combat_results = 303;
-    critter->dmg_last_turn = 304;
+    critter->damage_last_turn = 301;
+    critter->maneuver = 302;
+    critter->current_ap = 303;
+    critter->combat_results = 304;
     critter->ai_packet = 305;
     critter->group_id = 306;
     critter->who_hit_me = 307;
@@ -133,10 +133,10 @@ TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roun
 
     // Type-specific fields survive.
     const auto& gotCritter = *got[1];
-    CHECK(gotCritter.player_reaction == critter->player_reaction);
-    CHECK(gotCritter.current_mp == critter->current_mp);
+    CHECK(gotCritter.damage_last_turn == critter->damage_last_turn);
+    CHECK(gotCritter.maneuver == critter->maneuver);
+    CHECK(gotCritter.current_ap == critter->current_ap);
     CHECK(gotCritter.combat_results == critter->combat_results);
-    CHECK(gotCritter.dmg_last_turn == critter->dmg_last_turn);
     CHECK(gotCritter.ai_packet == critter->ai_packet);
     CHECK(gotCritter.group_id == critter->group_id);
     CHECK(gotCritter.who_hit_me == critter->who_hit_me);

@@ -258,16 +258,16 @@ void MapWriter::writeObject(const MapObject& object) {
             }
         } break;
         case Pro::OBJECT_TYPE::CRITTER:
-            utils.writeBE32(object.player_reaction); // reaction to player - saves only
-            utils.writeBE32(object.current_mp);      // current mp - saves only
-            utils.writeBE32(object.combat_results);  // combat results - saves only
-            utils.writeBE32(object.dmg_last_turn);   // damage last turn - saves only
-            utils.writeBE32(object.ai_packet);       // AI packet
-            utils.writeBE32(object.group_id);        // team/group ID
-            utils.writeBE32(object.who_hit_me);      // who hit me - saves only
-            utils.writeBE32(object.current_hp);      // current hit points
-            utils.writeBE32(object.current_rad);     // current radiation
-            utils.writeBE32(object.current_poison);  // current poison level
+            utils.writeBE32(object.damage_last_turn); // engine CritterCombatData.damageLastTurn
+            utils.writeBE32(object.maneuver);         // engine CritterCombatData.maneuver
+            utils.writeBE32(object.current_ap);       // engine CritterCombatData.ap
+            utils.writeBE32(object.combat_results);   // engine CritterCombatData.results
+            utils.writeBE32(object.ai_packet);        // AI packet
+            utils.writeBE32(object.group_id);         // team/group ID
+            utils.writeBE32(object.who_hit_me);       // who hit me - saves only
+            utils.writeBE32(object.current_hp);       // current hit points
+            utils.writeBE32(object.current_rad);      // current radiation
+            utils.writeBE32(object.current_poison);   // current poison level
             break;
 
         case Pro::OBJECT_TYPE::SCENERY: {

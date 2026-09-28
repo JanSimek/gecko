@@ -166,10 +166,10 @@ std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int he
     exitGrid->exit_elevation = properties.exitElevation;
     exitGrid->exit_orientation = properties.exitOrientation;
 
-    exitGrid->player_reaction = 0;
-    exitGrid->current_mp = 0;
+    exitGrid->damage_last_turn = 0;
+    exitGrid->maneuver = 0;
+    exitGrid->current_ap = 0;
     exitGrid->combat_results = 0;
-    exitGrid->dmg_last_turn = 0;
     exitGrid->ai_packet = 0;
     exitGrid->group_id = 0;
     exitGrid->who_hit_me = 0;
