@@ -532,11 +532,29 @@ namespace {
                     // Effective figures: a proto stat is base plus bonus, and base alone is
                     // badly misleading -- a Turret reads 30 hit points there against the 75 the
                     // engine gives it.
+                    // The proto's 18 skill words, in Skill enum order. Indexed positionally on
+                    // purpose: skill_defs.h opens with SKILL_INVALID = -1, so the enum's values
+                    // sit one below their position and using them here would shift every skill.
+                    static const char* kSkills[] = { "small_guns", "big_guns", "energy_weapons",
+                        "unarmed", "melee_weapons", "throwing", "first_aid", "doctor", "sneak",
+                        "lockpick", "steal", "traps", "science", "repair", "speech", "barter",
+                        "gambling", "outdoorsman" };
+                    json skills = json::object();
+                    for (int i = 0; i < Pro::SKILLS_COUNT; ++i) {
+                        skills[kSkills[i]] = c.skills[i];
+                    }
+
                     info["critter"] = json{
                         { "hitPoints", c.maxHitPoints + c.bonusHealthPoints },
                         { "armorClass", c.armorClass + c.bonusArmorClass },
                         { "actionPoints", c.actionPoints + c.bonusActionPoints },
-                        { "sequence", c.sequence },
+                        { "sequence", c.sequence + c.bonusSequence },
+                        { "healingRate", c.healingRate + c.bonusHealingRate },
+                        { "criticalChance", c.criticalChance + c.bonusCriticalChance },
+                        { "betterCriticals", c.betterCriticals + c.bonusBetterCriticals },
+                        { "meleeDamage", c.meleeDamage + c.bonusMeleeDamage },
+                        { "carryWeight", c.carryWeightMax + c.bonusCarryWeight },
+                        { "skills", skills },
                         { "special", special },
                         { "damageThreshold", dt },
                         { "damageResistance", dr },
