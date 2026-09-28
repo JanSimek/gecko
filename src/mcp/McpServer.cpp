@@ -464,6 +464,22 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
+    /// Weapon perk ids as the engine numbers them: perk_defs.h opens with PERK_INVALID = -1, so
+    /// every entry sits one below its line position. -1 means the weapon carries no perk.
+    static const char* weaponPerkName(uint32_t perk) {
+        switch (static_cast<int32_t>(perk)) {
+        case 58: return "long_range";
+        case 59: return "accurate";
+        case 60: return "penetrate";
+        case 61: return "knockback";
+        case 64: return "scope_range";
+        case 65: return "fast_reload";
+        case 66: return "night_sight";
+        case 67: return "flameboy";
+        default: return "none";
+        }
+    }
+
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
         const auto pid = static_cast<uint32_t>(requireInt(args, "pid", 0, UINT32_MAX));
         try {
@@ -475,8 +491,74 @@ namespace {
                     name = msg->message(pro->header.message_id).text;
                 }
             }
-            const json info{ { "pid", pid }, { "type", Pro::typeToString(Pro::typeOfPid(pid)) },
+            json info{ { "pid", pid }, { "type", Pro::typeToString(Pro::typeOfPid(pid)) },
                 { "name", name }, { "flat", flat } };
+
+            // The numbers, not just the label. Without these a caller wanting a critter's
+            // resistances or a weapon's perk has to parse the .pro itself, and a hand-rolled
+            // parser has to re-derive the pid-to-file mapping that loadPro() already does --
+            // which is not the identity: 00000010.pro holds pid 11 and 00000011.pro holds pid 10,
+            // and 14 item protos are transposed that way.
+            if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
+                static const char* kDamage[] = { "normal", "laser", "fire", "plasma",
+                    "electrical", "emp", "explosion", "radiation", "poison" };
+                static const char* kSpecial[] = { "strength", "perception", "endurance",
+                    "charisma", "intelligence", "agility", "luck" };
+
+                if (Pro::typeOfPid(pid) == Pro::OBJECT_TYPE::CRITTER) {
+                    const auto& c = pro->critterData;
+                    json special = json::object();
+                    for (int i = 0; i < Pro::SPECIAL_STATS_COUNT; ++i) {
+                        special[kSpecial[i]] = c.specialStats[i] + c.bonusSpecialStats[i];
+                    }
+                    // Base plus bonus again, and here the base is usually the empty half: a
+                    // critter's resistances live entirely in the bonus arrays, so reading the
+                    // base alone reports every creature in the game as resisting nothing.
+                    json dt = json::object();
+                    for (int i = 0; i < Pro::DAMAGE_TYPES_ARMOR; ++i) {
+                        dt[kDamage[i]] = c.damageThreshold[i] + c.bonusDamageThreshold[i];
+                    }
+                    // The bonus block stores its 16 resistance words split 8 + 8 (see Pro.h),
+                    // so the 7 DR bonuses straddle the two arrays: the normal-damage one is the
+                    // last word of bonusDamageThreshold, the rest are bonusDamageResistance[0..5].
+                    auto bonusDR = [&c](int i) {
+                        return i == 0 ? c.bonusDamageThreshold[Pro::BONUS_DAMAGE_ARRAYS - 1]
+                                      : c.bonusDamageResistance[i - 1];
+                    };
+                    json dr = json::object();
+                    for (int i = 0; i < Pro::DAMAGE_TYPES_ARMOR; ++i) {
+                        dr[kDamage[i]] = c.damageResist[i] + bonusDR(i);
+                    }
+                    // Effective figures: a proto stat is base plus bonus, and base alone is
+                    // badly misleading -- a Turret reads 30 hit points there against the 75 the
+                    // engine gives it.
+                    info["critter"] = json{
+                        { "hitPoints", c.maxHitPoints + c.bonusHealthPoints },
+                        { "armorClass", c.armorClass + c.bonusArmorClass },
+                        { "actionPoints", c.actionPoints + c.bonusActionPoints },
+                        { "sequence", c.sequence },
+                        { "special", special },
+                        { "damageThreshold", dt },
+                        { "damageResistance", dr },
+                        { "aiPacket", c.aiPacket },
+                        { "teamNumber", c.teamNumber },
+                    };
+                } else if (pro->itemType() == Pro::ITEM_TYPE::WEAPON) {
+                    const auto& w = pro->weaponData;
+                    info["weapon"] = json{
+                        { "perk", weaponPerkName(w.perk) },
+                        { "damageMin", w.damageMin },
+                        { "damageMax", w.damageMax },
+                        { "rangePrimary", w.rangePrimary },
+                        { "rangeSecondary", w.rangeSecondary },
+                        { "actionCostPrimary", w.actionCostPrimary },
+                        { "actionCostSecondary", w.actionCostSecondary },
+                        { "minimumStrength", w.minimumStrength },
+                        { "burstRounds", w.burstRounds },
+                        { "ammoCapacity", w.ammoCapacity },
+                    };
+                }
+            }
             return toolText(info.dump());
         } catch (const std::exception& e) {
             return toolText(std::string("proto_info failed for pid ") + std::to_string(pid) + ": " + e.what(), true);
