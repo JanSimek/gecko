@@ -16,7 +16,8 @@ void printUsage(const char* program) {
     std::cerr << "Usage: " << program << " --data <dir-or-.dat> [--data <...>]\n"
               << "  A Model Context Protocol (MCP) server over stdio for inspecting and generating\n"
               << "  Fallout 2 maps. Mount the game data with --data, then speak newline-delimited\n"
-              << "  JSON-RPC on stdin. Tools: list_maps, analyze, proto_info, generate, render_map.\n";
+              << "  JSON-RPC on stdin. Tools: list_maps, analyze, proto_info, export_protos, generate,\n"
+              << "  render_map, and more (tools/list has them all).\n";
 }
 
 void mountPath(geck::resource::GameResources& resources, const std::filesystem::path& path) {
