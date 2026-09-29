@@ -41,6 +41,7 @@
 #include <optional>
 #include <cstdio>
 #include <memory>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -736,39 +737,25 @@ namespace {
     }
 
     // --- Resource / data-set inspection tools -----------------------------------
-    // Which git revision a directory mount is at, when it is a work tree. This is the difference
-    // between RPU's released 2.4.x and the development fork, which are separate lines: the fork
-    // reports something like "v2.3.34-137-g65554e20". Silent otherwise -- most mounts are not repos.
-    std::string gitDescribe(const std::filesystem::path& dir) {
-        std::error_code ec;
-        if (!std::filesystem::is_directory(dir, ec)) {
+    // Which RPU the mounted data actually is, read from the data rather than from a checkout.
+    // RPU substitutes the version into patchinf.msg when it packages a release, so a built .dat
+    // carries "v2.4.34" while an unpackaged source tree still carries the literal "v2.x.x" -- which
+    // is itself the answer worth having, because a source tree is a development line and not any
+    // release. Reading it through the VFS means it reports the copy that actually wins.
+    std::string mountedRpuVersion(resource::GameResources& resources) {
+        const auto bytes = resources.files().readRawBytes("text/english/dialog/patchinf.msg");
+        if (!bytes) {
             return {};
         }
-        // Double quotes, not single: cmd.exe does not treat '...' as quoting. A path carrying a
-        // quote of its own would break the command either way, so refuse rather than build it.
-        const std::string dirStr = dir.string();
-        if (dirStr.find('"') != std::string::npos) {
-            return {};
+        const std::string text(bytes->begin(), bytes->end());
+        // Not [0-9.x]*: RPU's own line reads "RPU v2.4.34. based on ...", so a greedy class takes
+        // the sentence's full stop with it.
+        const std::regex re(R"(running RPU (v[0-9x]+(?:\.[0-9x]+)*))");
+        std::smatch match;
+        if (std::regex_search(text, match, re)) {
+            return match[1].str();
         }
-#if defined(_WIN32)
-        const std::string cmd = "git -C \"" + dirStr + "\" describe --tags --always --dirty 2>NUL";
-        std::unique_ptr<FILE, int (*)(FILE*)> pipe(_popen(cmd.c_str(), "r"), _pclose);
-#else
-        const std::string cmd = "git -C \"" + dirStr + "\" describe --tags --always --dirty 2>/dev/null";
-        std::unique_ptr<FILE, int (*)(FILE*)> pipe(popen(cmd.c_str(), "r"), pclose);
-#endif
-        if (!pipe) {
-            return {};
-        }
-        char buf[256];
-        std::string out;
-        while (std::fgets(buf, sizeof(buf), pipe.get()) != nullptr) {
-            out += buf;
-        }
-        while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) {
-            out.pop_back();
-        }
-        return out;
+        return {};
     }
 
     json toolMounts(resource::GameResources& resources, const json& args) {
@@ -790,8 +777,6 @@ namespace {
             if (m.kind == resource::MountedSourceInfo::Kind::Dat) {
                 const auto size = std::filesystem::file_size(m.sourcePath, ec);
                 entry["bytes"] = ec ? 0 : static_cast<std::uint64_t>(size);
-            } else if (const std::string rev = gitDescribe(m.sourcePath); !rev.empty()) {
-                entry["gitDescribe"] = rev;
             }
             mounts.push_back(std::move(entry));
         }
@@ -804,6 +789,20 @@ namespace {
                              "with the higher 'order'. resource_find <path> names the winner." },
             { "mounts", std::move(mounts) },
         };
+
+        // The headline answer: which RPU these mounts add up to.
+        if (const std::string version = mountedRpuVersion(resources); !version.empty()) {
+            result["rpuVersion"] = version;
+            if (version.find('x') != std::string::npos) {
+                result["rpuVersionNote"]
+                    = "a source tree, not a packaged release: RPU fills the version in when it "
+                      "builds a .dat, so this is a development line and not any released version. "
+                      "If a release .dat was meant to be mounted, it is not winning.";
+            }
+            if (const auto src = resources.files().sourceInfo("text/english/dialog/patchinf.msg")) {
+                result["rpuVersionFrom"] = src->sourcePath.string();
+            }
+        }
 
         // Only present when something is wrong. A skipped mount is silent otherwise, and every
         // answer afterwards is drawn from whatever did mount while reading as confident as a
