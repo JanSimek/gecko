@@ -56,3 +56,7 @@ cmake-build-debug/
 .DS_Store
 
 .cache/
+
+# Python bytecode from the tools/ scripts
+__pycache__/
+*.py[cod]
