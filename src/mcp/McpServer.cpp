@@ -39,6 +39,9 @@
 #include <fstream>
 #include <functional>
 #include <optional>
+#include <cstdio>
+#include <memory>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -734,6 +737,86 @@ namespace {
     }
 
     // --- Resource / data-set inspection tools -----------------------------------
+    // Which RPU the mounted data actually is, read from the data rather than from a checkout.
+    // RPU substitutes the version into patchinf.msg when it packages a release, so a built .dat
+    // carries "v2.4.34" while an unpackaged source tree still carries the literal "v2.x.x" -- which
+    // is itself the answer worth having, because a source tree is a development line and not any
+    // release. Reading it through the VFS means it reports the copy that actually wins.
+    std::string mountedRpuVersion(resource::GameResources& resources) {
+        const auto bytes = resources.files().readRawBytes("text/english/dialog/patchinf.msg");
+        if (!bytes) {
+            return {};
+        }
+        const std::string text(bytes->begin(), bytes->end());
+        // Not [0-9.x]*: RPU's own line reads "RPU v2.4.34. based on ...", so a greedy class takes
+        // the sentence's full stop with it.
+        const std::regex re(R"(running RPU (v[0-9x]+(?:\.[0-9x]+)*))");
+        std::smatch match;
+        if (std::regex_search(text, match, re)) {
+            return match[1].str();
+        }
+        return {};
+    }
+
+    json toolMounts(resource::GameResources& resources, const json& args) {
+        (void)args;
+        json mounts = json::array();
+        // mounts() is in the order the paths were added; lookups probe the reverse, so the LAST
+        // entry that provides a path wins. Reported with that spelled out, because the whole point
+        // of this tool is telling which copy of a file an answer came from.
+        const auto list = resources.files().mounts();
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            const auto& m = list[i];
+            std::error_code ec;
+            json entry{
+                { "order", static_cast<int>(i) },
+                { "kind", m.kind == resource::MountedSourceInfo::Kind::Dat ? "dat" : "directory" },
+                { "path", m.sourcePath.string() },
+                { "label", m.displayLabel },
+            };
+            if (m.kind == resource::MountedSourceInfo::Kind::Dat) {
+                const auto size = std::filesystem::file_size(m.sourcePath, ec);
+                entry["bytes"] = ec ? 0 : static_cast<std::uint64_t>(size);
+            }
+            mounts.push_back(std::move(entry));
+        }
+
+        // Stated once rather than per entry: a per-mount "shadowed" flag reads as though that
+        // mount's data were overridden, which is only true for paths another mount also provides.
+        // resource_find answers that question for a specific file.
+        json result{
+            { "lookupOrder", "later mounts win: a file provided by two mounts is read from the one "
+                             "with the higher 'order'. resource_find <path> names the winner." },
+            { "mounts", std::move(mounts) },
+        };
+
+        // The headline answer: which RPU these mounts add up to.
+        if (const std::string version = mountedRpuVersion(resources); !version.empty()) {
+            result["rpuVersion"] = version;
+            if (version.find('x') != std::string::npos) {
+                result["rpuVersionNote"]
+                    = "a source tree, not a packaged release: RPU fills the version in when it "
+                      "builds a .dat, so this is a development line and not any released version. "
+                      "If a release .dat was meant to be mounted, it is not winning.";
+            }
+            if (const auto src = resources.files().sourceInfo("text/english/dialog/patchinf.msg")) {
+                result["rpuVersionFrom"] = src->sourcePath.string();
+            }
+        }
+
+        // Only present when something is wrong. A skipped mount is silent otherwise, and every
+        // answer afterwards is drawn from whatever did mount while reading as confident as a
+        // correct one.
+        json warnings = json::array();
+        for (const auto& f : resources.files().failedMounts()) {
+            warnings.push_back(json{ { "path", f.sourcePath.string() }, { "reason", f.reason } });
+        }
+        if (!warnings.empty()) {
+            result["failedMounts"] = std::move(warnings);
+        }
+        return toolText(result.dump(2, ' ', false, json::error_handler_t::replace), false);
+    }
+
     json toolResourceFind(resource::GameResources& resources, const json& args) {
         const std::string path = requireString(args, "path");
         std::ostringstream oss;
@@ -1091,6 +1174,16 @@ namespace {
             "(e.g. all exit-grid pieces) and feed an artPath/fid to frm_info or render_frm. Args: glob.",
             json({ { "type", "object" }, { "properties", { { "glob", { { "type", "string" } } } } }, { "required", json::array({ "glob" }) } }),
             [](resource::GameResources& r, const json& a) { return toolListFrms(r, a); }, "frms" });
+        t.push_back({ "mounts",
+            "Which data sources are actually mounted, in order, and which of them wins when two "
+            "provide the same file. Answers 'what am I reading?' -- the failure this exists for is a "
+            "mount that was asked for and did not happen: nothing else reports it, and every answer "
+            "afterwards comes from whatever did mount while looking exactly like a correct one. A "
+            "directory that is a git work tree also reports gitDescribe, which is what separates "
+            "RPU's released 2.4.x from the development fork. A 'failedMounts' key appears only when "
+            "something did not mount. No args.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolMounts(r, a); }, "" });
         t.push_back({ "resource_find",
             "Locate a VFS path in the mounted data and report WHICH source provides it: JSON {path, "
             "found, source:{kind (dat|directory), path, label}|null}. kind/label identify master.dat vs a "

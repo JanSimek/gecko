@@ -21,6 +21,7 @@ DataFileSystem::DataFileSystem()
 void DataFileSystem::clear() {
     const std::scoped_lock lock(_mutex);
     _vfs = std::make_shared<vfspp::VirtualFileSystem>();
+    _failedMounts.clear();
 }
 
 namespace {
@@ -57,6 +58,15 @@ void DataFileSystem::addDataPath(const std::filesystem::path& path) {
     const std::scoped_lock lock(_mutex);
     const auto mountRoot = resolveMountRoot(path);
     if (!mountRoot) {
+        _failedMounts.push_back({ path, "not a recognized data location" });
+        return;
+    }
+    // A data path that cannot be opened is the failure worth shouting about: everything read
+    // afterwards comes from whatever else mounted, and looks exactly like a correct answer.
+    std::error_code existsEc;
+    if (!std::filesystem::exists(*mountRoot, existsEc)) {
+        spdlog::error("Data path does not exist: {}", mountRoot->string());
+        _failedMounts.push_back({ path, "does not exist" });
         return;
     }
     if (*mountRoot != path) {
@@ -73,12 +83,14 @@ void DataFileSystem::addDataPath(const std::filesystem::path& path) {
         fileSystem = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem("/", mountRoot->string()));
     } else {
         spdlog::error("Unsupported data location: {}", mountRoot->string());
+        _failedMounts.push_back({ path, "unsupported data location (expected a directory or a .dat)" });
         return;
     }
 
     const auto mountStart = std::chrono::steady_clock::now();
     if (!fileSystem->Initialize() || !fileSystem->IsInitialized()) {
         spdlog::error("Failed to initialize data path: {}", mountRoot->string());
+        _failedMounts.push_back({ path, "failed to initialize" });
         return;
     }
     // Mount duration is the dominant cold-start cost (DAT index parse / directory walk);
@@ -243,6 +255,11 @@ std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesyste
     }
 
     return std::nullopt;
+}
+
+std::vector<FailedMount> DataFileSystem::failedMounts() const {
+    const std::scoped_lock lock(_mutex);
+    return _failedMounts;
 }
 
 std::vector<MountedSourceInfo> DataFileSystem::mounts() const {
