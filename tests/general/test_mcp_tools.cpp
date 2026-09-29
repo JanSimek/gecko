@@ -16,6 +16,7 @@
 #include "support/ProStubProvider.h"
 #include "support/TempFile.h"
 #include "support/ByteWriter.h"
+#include "support/Fixtures.h"
 
 using nlohmann::json;
 using namespace geck;
@@ -86,6 +87,20 @@ TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]")
         CHECK(out.contains("rpuVersionNote"));
 
         fs::remove_all(root);
+    }
+
+    SECTION("a .dat mount is reported as one, with its size") {
+        // gitDescribe used to answer this and could say nothing about a .dat, which is the mount
+        // whose version actually matters. Reading the data covers both kinds.
+        resource::GameResources resources;
+        resources.files().addDataPath(test::dataPath("f2_res.dat").string());
+        mcp::McpServer server(resources);
+
+        const json out = callTool(server, "mounts", json::object());
+        REQUIRE(out["mounts"].size() == 1);
+        CHECK(out["mounts"][0]["kind"] == "dat");
+        CHECK(out["mounts"][0]["bytes"] > 0);
+        CHECK_FALSE(out.contains("failedMounts"));
     }
 
     SECTION("a data path that does not exist is reported, not skipped") {
@@ -235,4 +250,68 @@ TEST_CASE("dump_grid filters objects by name", "[cli][dump_grid]") {
         CHECK_FALSE(some.empty());
         CHECK(some.size() <= all.size());
     }
+}
+
+namespace {
+
+// The item header fallout2-ce protoRead reads: pid, messageId, fid, lightDistance, lightIntensity,
+// flags, extendedFlags, sid, type, material, size, weight, cost, inventoryFid, then a byte of
+// soundId. By hand, so the test pins the engine's layout rather than gecko agreeing with itself.
+test::ByteWriter itemHeader(std::int32_t pid, std::int32_t messageId, std::int32_t type) {
+    test::ByteWriter w;
+    for (const std::int32_t v : { pid, messageId, 0x07000010, 0, 0, 0x00000008, 0x00000376, -1, type, 1, 3, 7, 250,
+             0x07000020 }) {
+        w.be32(static_cast<std::uint32_t>(v));
+    }
+    w.u8('0');
+    return w;
+}
+
+} // namespace
+
+// The weapon block is what turned "which weapons carry Long Range?" from opening .pro files by hand
+// into one call — and getting the perk wrong is quiet, because a wrong perk name reads perfectly.
+TEST_CASE("proto_info reports a weapon's perk and numbers", "[mcp][proto_info]") {
+    const fs::path root = fs::temp_directory_path() / "gecko_proto_weapon";
+    fs::remove_all(root);
+    writeText(root / "proto/items/items.lst", "weapon.pro\n");
+    writeText(root / "text/english/game/pro_item.msg", "{100}{}{Test Rifle}\n{101}{}{A rifle.}\n");
+    writeText(root / "text/english/game/proto.msg", "{101}{}{Metal}\n{251}{}{laser}\n{308}{}{10mm}\n");
+    writeText(root / "text/english/game/perk.msg", "{159}{}{Long Range}\n");
+
+    // animationCode, damageMin 10, damageMax 20, damageType laser, rangePrimary 25,
+    // rangeSecondary 20, projectile, minStrength 4, actionCostPrimary 5, actionCostSecondary 6,
+    // critFail, perk 58 (Weapon Long Range), burstRounds 10, ammoType, ammoPid, ammoCapacity 30.
+    test::ByteWriter weapon = itemHeader(1, 100, 3);
+    for (const std::int32_t v : { 6, 10, 20, 1, 25, 20, -1, 4, 5, 6, 2, 58, 10, 8, 3, 30 }) {
+        weapon.be32(static_cast<std::uint32_t>(v));
+    }
+    weapon.u8('A');
+    REQUIRE(weapon.size() == 122);
+    writeBytes(root / "proto/items/weapon.pro", weapon);
+
+    resource::GameResources resources;
+    resources.files().addDataPath(root.string());
+    mcp::McpServer server(resources);
+
+    const json out = callTool(server, "proto_info", { { "pid", 1 } });
+    const json entry = out.is_array() ? out[0] : out;
+    REQUIRE(entry.contains("weapon"));
+    const json& w = entry["weapon"];
+
+    // perk_defs.h opens with PERK_INVALID = -1, so every perk's value sits one below its line
+    // position. Numbering from the first line instead put shotguns under Long Range once, and the
+    // result looked entirely plausible.
+    CHECK(w["perk"] == "long_range");
+    CHECK(w["damageMin"] == 10);
+    CHECK(w["damageMax"] == 20);
+    CHECK(w["rangePrimary"] == 25);
+    CHECK(w["rangeSecondary"] == 20);
+    CHECK(w["actionCostPrimary"] == 5);
+    CHECK(w["actionCostSecondary"] == 6);
+    CHECK(w["minimumStrength"] == 4);
+    CHECK(w["burstRounds"] == 10);
+    CHECK(w["ammoCapacity"] == 30);
+
+    fs::remove_all(root);
 }
