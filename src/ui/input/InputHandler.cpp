@@ -337,17 +337,11 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
             _callbacks.onDeleteObjects();
         }
     } else if (event.code == sf::Keyboard::Key::R) {
-        // The Rotate toolbar shortcut is disabled by the editor while stamping (and while a
-        // registered tool runs), so R reaches us here: in stamp mode it cycles the pattern's
-        // orientation variants. A registered tool sees R first via onToolKeyPressed above.
+        // The canvas "R" shortcut stands down while stamping (and while a registered tool runs),
+        // so R reaches us here: in stamp mode it cycles the pattern's orientation variants.
+        // A registered tool sees R first via onToolKeyPressed above.
         if (_mode == EditorMode::StampPattern && _callbacks.onStampCycleVariant) {
             _callbacks.onStampCycleVariant();
-        }
-    } else if (event.code == sf::Keyboard::Key::P) {
-        // Eyedropper: sample whatever is under the cursor. Key events carry no view/target to convert
-        // pixels, so reuse the last cursor position tracked on mouse move (like the flip key).
-        if (_callbacks.onPick) {
-            _callbacks.onPick(_mouseLastWorldPos);
         }
     } else if (event.code == sf::Keyboard::Key::Space) {
         // In "Draw edge" mode, Space flips which side the edge's bars sit on, then re-fires the preview

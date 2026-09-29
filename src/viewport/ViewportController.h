@@ -45,6 +45,23 @@ public:
     void centerViewOnMap();
 
     /**
+     * @brief World-space bounds of the whole tile grid.
+     *
+     * Derived from the authoritative forward projection (coordinatesToScreenPosition) at the
+     * grid's four corners, which bound it because the projection is affine — so this cannot
+     * drift from where the tiles are actually drawn.
+     */
+    static sf::FloatRect mapWorldBounds();
+
+    /**
+     * @brief Zoom out far enough to show the whole tile grid, then centre it.
+     *
+     * The zoom is clamped like any other (MIN_ZOOM..MAX_ZOOM); at the clamp the map is centred
+     * but still overflows the view.
+     */
+    void fitMapInView();
+
+    /**
      * @brief Pan the view by a delta expressed in world units.
      *
      * The single place that moves the camera; both the drag-pan and the

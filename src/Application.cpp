@@ -221,7 +221,9 @@ void Application::checkDataConfiguration() {
 }
 
 bool Application::showStartupSettingsDialog() {
-    SettingsDialog dialog(_settings, _mainWindow.get());
+    // The first-run dialog has no registry to offer (the window's is built with it, and rebinding
+    // before any data path is configured is not the point of this dialog), so no shortcuts tab.
+    SettingsDialog dialog(_settings, nullptr, _mainWindow.get());
 
     bool dataPathsChanged = false;
     QObject::connect(&dialog, &SettingsDialog::settingsSaved, [&dataPathsChanged](bool changed) {

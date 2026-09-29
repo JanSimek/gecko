@@ -22,6 +22,7 @@
 #include "format/pro/Pro.h"
 #include "selection/SelectionManager.h"
 #include "selection/SelectionDataProvider.h"
+#include "ui/core/EditorHints.h"
 #include "util/Constants.h"
 #include "util/UndoStack.h"
 #include "rendering/RenderingEngine.h"
@@ -176,9 +177,12 @@ public:
     // Object placement functionality
     void placeObjectAtPosition(sf::Vector2f worldPos) override;
 
-    // Eyedropper (P): sample the topmost object/tile under the cursor and load it into its palette.
+    // Eyedropper: sample the topmost object/tile under the cursor and load it into its palette.
     // A tile arms tile painting; an object arms click-to-place via beginObjectPlacement().
     void pickAtCursor(sf::Vector2f worldPos);
+    // Eyedropper, driven by its canvas shortcut: sample whatever sits under the last known cursor
+    // position into the matching palette, then hand focus back to the viewport.
+    void pickAtLastCursor();
     // Activate the registered object-placement tool for the given proto: reveal it in the palette
     // and show a cursor ghost whose left-click drops a copy (runs as EditorMode::PluginTool).
     void beginObjectPlacement(uint32_t pid, sf::Vector2f worldPos);
@@ -186,6 +190,10 @@ public:
     // The status-bar hint for the current mode/selection, including the active registered
     // tool's own hint while one runs. The same text hintChanged carries.
     [[nodiscard]] QString currentHintText() const;
+    // How the hint names a rebindable key. MainWindow feeds this from the KeyBindingRegistry, so
+    // the hint advertises the key that actually works rather than the shipped one; unset, the
+    // shipped names are used.
+    void setHintKeyLookup(HintKeyLookup lookup);
 
     // Load the freehand fill brush with the palette's tile and activate it. False when the brush is
     // unavailable or no tile is selected.
@@ -549,6 +557,7 @@ private:
 
     // Input + drag/drop + tile/exit-grid placement systems (the Qt-coupled managers).
     std::unique_ptr<InputHandler> _inputHandler;
+    HintKeyLookup _hintKeyLookup;
     // RenderingEngine, MapSpriteLoader, ObjectCommandController and ViewportController now live
     // in _controller (the Qt-free editor core).
     std::unique_ptr<DragDropManager> _dragDropManager;

@@ -68,9 +68,6 @@ public:
         std::function<void()> onStampPatternCancel;
         std::function<void()> onStampCycleVariant;
 
-        // Eyedropper (P): sample whatever is under the cursor and load it into the matching palette.
-        std::function<void(sf::Vector2f worldPos)> onPick;
-
         // Dynamic registered tool dispatch. The host owns the active tool registry; InputHandler only
         // does pixel->world conversion and forwards the event while EditorMode::PluginTool is active.
         std::function<bool(sf::Vector2f worldPos, sf::Mouse::Button button)> onToolMousePressed;
@@ -135,6 +132,9 @@ public:
     // The "Draw edge" flip toggle: false = auto/outward side, true = opposite. Toggled by the flip key;
     // exposed for tests.
     bool isMarkExitsFlipped() const { return _markExitsFlip; }
+    // Last cursor position in world coordinates. Key events carry no view to convert pixels with,
+    // so a key-driven command that acts "under the cursor" (the eyedropper) reads it from here.
+    sf::Vector2f lastCursorWorldPos() const { return _mouseLastWorldPos; }
 
     /**
      * @brief Mode setters
@@ -197,7 +197,7 @@ private:
     sf::Vector2i _mouseStartPos{ 0, 0 };
     sf::Vector2i _mouseLastPos{ 0, 0 };
     // Last cursor position in WORLD coordinates. Key events carry no view/target to convert pixels, so
-    // the flip key reuses this to re-fire the live edge preview at the current cursor.
+    // the flip key and the eyedropper reuse this to act at the current cursor.
     sf::Vector2f _mouseLastWorldPos;
     sf::Vector2f _dragStartWorldPos;
     bool _isDragging = false;

@@ -153,6 +153,14 @@ QJsonObject Settings::toJson() const {
     }
     json["selectionColors"] = selectionColors;
 
+    // Overrides only — an action left at its default is simply absent, so a later release can
+    // change that default and have it take effect.
+    QJsonObject keyBindings;
+    for (auto it = _keyBindings.constBegin(); it != _keyBindings.constEnd(); ++it) {
+        keyBindings[it.key()] = it.value();
+    }
+    json["keyBindings"] = keyBindings;
+
     return json;
 }
 
@@ -259,6 +267,18 @@ void Settings::fromJson(const QJsonObject& json) {
             QColor color(it.value().toString());
             if (color.isValid()) {
                 _selectionColors[it.key()] = color;
+            }
+        }
+    }
+
+    // An absent "keyBindings" means "no overrides" — which is also every settings file written
+    // before this existed, so no version bump is needed to read one.
+    _keyBindings.clear();
+    if (json.contains("keyBindings") && json["keyBindings"].isObject()) {
+        const QJsonObject keyBindings = json["keyBindings"].toObject();
+        for (auto it = keyBindings.constBegin(); it != keyBindings.constEnd(); ++it) {
+            if (it.value().isString()) {
+                _keyBindings[it.key()] = it.value().toString();
             }
         }
     }
@@ -440,6 +460,14 @@ QColor Settings::getSelectionColor(const QString& key, const QColor& fallback) c
 
 void Settings::setSelectionColor(const QString& key, const QColor& color) {
     _selectionColors[key] = color;
+}
+
+QMap<QString, QString> Settings::getKeyBindings() const {
+    return _keyBindings;
+}
+
+void Settings::setKeyBindings(const QMap<QString, QString>& bindings) {
+    _keyBindings = bindings;
 }
 
 bool Settings::validateDataPath(const std::filesystem::path& path) const {
