@@ -90,7 +90,7 @@ endif()
 # MCP server dispatch test: only when the MCP server is built (gecko_mcp brings gecko_cli +
 # nlohmann/json). The dispatch is pure, so this needs no scripting and no game data.
 if(TARGET gecko_mcp)
-    target_sources(general_tests PRIVATE general/test_mcp_server.cpp)
+    target_sources(general_tests PRIVATE general/test_mcp_server.cpp general/test_mcp_tools.cpp)
     target_link_libraries(general_tests PRIVATE gecko_mcp)
 endif()
 
