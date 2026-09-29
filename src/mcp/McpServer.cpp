@@ -39,6 +39,8 @@
 #include <fstream>
 #include <functional>
 #include <optional>
+#include <cstdio>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -734,6 +736,77 @@ namespace {
     }
 
     // --- Resource / data-set inspection tools -----------------------------------
+    // Which git revision a directory mount is at, when it is a work tree. This is the difference
+    // between RPU's released 2.4.x and the development fork, which are separate lines: the fork
+    // reports something like "v2.3.34-137-g65554e20". Silent otherwise -- most mounts are not repos.
+    std::string gitDescribe(const std::filesystem::path& dir) {
+        std::error_code ec;
+        if (!std::filesystem::is_directory(dir, ec)) {
+            return {};
+        }
+        std::string cmd = "git -C '" + dir.string() + "' describe --tags --always --dirty 2>/dev/null";
+        std::unique_ptr<FILE, int (*)(FILE*)> pipe(popen(cmd.c_str(), "r"), pclose);
+        if (!pipe) {
+            return {};
+        }
+        char buf[256];
+        std::string out;
+        while (std::fgets(buf, sizeof(buf), pipe.get()) != nullptr) {
+            out += buf;
+        }
+        while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) {
+            out.pop_back();
+        }
+        return out;
+    }
+
+    json toolMounts(resource::GameResources& resources, const json& args) {
+        (void)args;
+        json mounts = json::array();
+        // mounts() is in the order the paths were added; lookups probe the reverse, so the LAST
+        // entry that provides a path wins. Reported with that spelled out, because the whole point
+        // of this tool is telling which copy of a file an answer came from.
+        const auto list = resources.files().mounts();
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            const auto& m = list[i];
+            std::error_code ec;
+            json entry{
+                { "order", static_cast<int>(i) },
+                { "kind", m.kind == resource::MountedSourceInfo::Kind::Dat ? "dat" : "directory" },
+                { "path", m.sourcePath.string() },
+                { "label", m.displayLabel },
+            };
+            if (m.kind == resource::MountedSourceInfo::Kind::Dat) {
+                const auto size = std::filesystem::file_size(m.sourcePath, ec);
+                entry["bytes"] = ec ? 0 : static_cast<std::uint64_t>(size);
+            } else if (const std::string rev = gitDescribe(m.sourcePath); !rev.empty()) {
+                entry["gitDescribe"] = rev;
+            }
+            mounts.push_back(std::move(entry));
+        }
+
+        // Stated once rather than per entry: a per-mount "shadowed" flag reads as though that
+        // mount's data were overridden, which is only true for paths another mount also provides.
+        // resource_find answers that question for a specific file.
+        json result{
+            { "lookupOrder", "later mounts win: a file provided by two mounts is read from the one "
+                             "with the higher 'order'. resource_find <path> names the winner." },
+            { "mounts", std::move(mounts) },
+        };
+
+        // Only present when something is wrong. A skipped mount is silent otherwise, and every
+        // answer afterwards is drawn from whatever did mount while reading as confident as a
+        // correct one.
+        json warnings = json::array();
+        for (const auto& f : resources.files().failedMounts()) {
+            warnings.push_back(json{ { "path", f.sourcePath.string() }, { "reason", f.reason } });
+        }
+        if (!warnings.empty()) {
+            result["failedMounts"] = std::move(warnings);
+        }
+        return toolText(result.dump(2, ' ', false, json::error_handler_t::replace), false);
+    }
+
     json toolResourceFind(resource::GameResources& resources, const json& args) {
         const std::string path = requireString(args, "path");
         std::ostringstream oss;
@@ -1091,6 +1164,16 @@ namespace {
             "(e.g. all exit-grid pieces) and feed an artPath/fid to frm_info or render_frm. Args: glob.",
             json({ { "type", "object" }, { "properties", { { "glob", { { "type", "string" } } } } }, { "required", json::array({ "glob" }) } }),
             [](resource::GameResources& r, const json& a) { return toolListFrms(r, a); }, "frms" });
+        t.push_back({ "mounts",
+            "Which data sources are actually mounted, in order, and which of them wins when two "
+            "provide the same file. Answers 'what am I reading?' -- the failure this exists for is a "
+            "mount that was asked for and did not happen: nothing else reports it, and every answer "
+            "afterwards comes from whatever did mount while looking exactly like a correct one. A "
+            "directory that is a git work tree also reports gitDescribe, which is what separates "
+            "RPU's released 2.4.x from the development fork. A 'failedMounts' key appears only when "
+            "something did not mount. No args.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolMounts(r, a); }, "" });
         t.push_back({ "resource_find",
             "Locate a VFS path in the mounted data and report WHICH source provides it: JSON {path, "
             "found, source:{kind (dat|directory), path, label}|null}. kind/label identify master.dat vs a "
