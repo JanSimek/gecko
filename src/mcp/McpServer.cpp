@@ -402,6 +402,7 @@ namespace {
         if (args.contains("objects") && args.at("objects").is_boolean()) {
             opts.objects = args.at("objects").get<bool>();
         }
+        opts.nameFilter = optString(args, "name");
         std::ostringstream oss;
         int rc = 0;
         try {
@@ -1068,8 +1069,8 @@ namespace {
             "for every object (filter flat=true / type to separate scenery from structural exit grids "
             "and blockers). Use it to learn exact tile placement, transition masks and real scatter "
             "density/positions from shipped maps before generating terrain. Args: map (required), "
-            "optional elevation (-1/all), roof, floor, objects (booleans).",
-            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "roof", { { "type", "boolean" } } }, { "floor", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } } } }, { "required", json::array({ "map" }) } }),
+            "optional elevation (-1/all), roof, floor, objects (booleans), and name — a case-insensitive REGEX keeping only objects whose name matches. A whole map is ~2700 objects and mostly scroll blockers, so this is the difference between three records and all of them; note a plain \"locker\" also matches \"Scroll Blocker\", so anchor it (\"^Locker\") when that matters. Pair with floor=false to ask purely where something is.",
+            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "roof", { { "type", "boolean" } } }, { "floor", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "name", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
             [](resource::GameResources& r, const json& a) { return toolDumpGrid(r, a); }, "" });
         t.push_back({ "map_graph",
             "The EXIT-GRID connectivity graph — how maps link via exit grids: within a location "
