@@ -23,6 +23,9 @@
 #include "util/ProHelper.h"
 
 #include <nlohmann/json.hpp>
+
+#include <optional>
+#include <regex>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -34,7 +37,6 @@
 #include <map>
 #include <memory>
 #include <numeric>
-#include <optional>
 #include <ostream>
 #include <string>
 #include <tuple>
@@ -922,17 +924,31 @@ namespace {
     }
 
     // One elevation's objects as an array (pid/number/type/name/fid/hex/col/row/dir/flat per object).
-    ordered_json objectGridArray(const Map::MapFile& mapFile, int elevation, NameResolver& names) {
+    ordered_json objectGridArray(
+        const Map::MapFile& mapFile, int elevation, NameResolver& names, const std::string& nameFilter) {
         auto objects = ordered_json::array();
         const auto it = mapFile.map_objects.find(elevation);
         if (it == mapFile.map_objects.end()) {
             return objects;
+        }
+        // A regex, not a substring: "locker" as a substring also matches "Scroll Blocker", which is
+        // most of a map. ^Locker or \bLocker\b says what was meant.
+        std::optional<std::regex> pattern;
+        if (!nameFilter.empty()) {
+            try {
+                pattern.emplace(nameFilter, std::regex::icase);
+            } catch (const std::regex_error&) {
+                pattern.reset();
+            }
         }
         for (const auto& object : it->second) {
             if (!object) {
                 continue;
             }
             const uint32_t pid = object->pro_pid;
+            if (pattern && !std::regex_search(names.protoName(pid), *pattern)) {
+                continue;
+            }
             objects.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
                 { "type", typeLabel(pid) }, { "name", names.protoName(pid) },
                 { "fid", pidHex(object->frm_pid) }, // the art FID — feed to resolve_fid to SEE what it is
@@ -1012,7 +1028,7 @@ int dumpMapGrid(resource::GameResources& resources, const DumpGridOptions& optio
             entry["roof"] = tileGridArray(tiles, /*roof=*/true);
         }
         if (options.objects) {
-            entry["objects"] = objectGridArray(mapFile, elevation, names);
+            entry["objects"] = objectGridArray(mapFile, elevation, names, options.nameFilter);
         }
         elevations.push_back(std::move(entry));
     }
