@@ -744,8 +744,19 @@ namespace {
         if (!std::filesystem::is_directory(dir, ec)) {
             return {};
         }
-        std::string cmd = "git -C '" + dir.string() + "' describe --tags --always --dirty 2>/dev/null";
+        // Double quotes, not single: cmd.exe does not treat '...' as quoting. A path carrying a
+        // quote of its own would break the command either way, so refuse rather than build it.
+        const std::string dirStr = dir.string();
+        if (dirStr.find('"') != std::string::npos) {
+            return {};
+        }
+#if defined(_WIN32)
+        const std::string cmd = "git -C \"" + dirStr + "\" describe --tags --always --dirty 2>NUL";
+        std::unique_ptr<FILE, int (*)(FILE*)> pipe(_popen(cmd.c_str(), "r"), _pclose);
+#else
+        const std::string cmd = "git -C \"" + dirStr + "\" describe --tags --always --dirty 2>/dev/null";
         std::unique_ptr<FILE, int (*)(FILE*)> pipe(popen(cmd.c_str(), "r"), pclose);
+#endif
         if (!pipe) {
             return {};
         }
