@@ -51,7 +51,7 @@ void writeText(const fs::path& path, const std::string& contents) {
 // answer afterwards came from whatever else mounted while reading as confidently as a correct one.
 TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]") {
     SECTION("a healthy server reports its mounts and no failures") {
-        const fs::path root = fs::temp_directory_path() / "gecko_mounts_ok";
+        const fs::path root = fs::path(GECK_TEST_TMP_DIR) / "gecko_mounts_ok";
         fs::remove_all(root);
         writeText(root / "text/english/dialog/patchinf.msg",
             "{100}{}{You are running RPU v2.4.34. based on killap's F2 Restoration Project.}\n");
@@ -71,7 +71,7 @@ TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]")
     }
 
     SECTION("a source tree reports the placeholder version, which is the answer") {
-        const fs::path root = fs::temp_directory_path() / "gecko_mounts_src";
+        const fs::path root = fs::path(GECK_TEST_TMP_DIR) / "gecko_mounts_src";
         fs::remove_all(root);
         writeText(root / "text/english/dialog/patchinf.msg",
             "{100}{}{You are running RPU v2.x.x, based on killap's F2 Restoration Project.}\n");
@@ -148,7 +148,7 @@ test::ByteWriter critterProto() {
 // against the 75 the engine gives it, and every critter in the game as resisting nothing, because a
 // critter's resistances live entirely in the bonus arrays.
 TEST_CASE("proto_info reports a critter's effective stats and skills", "[mcp][proto_info]") {
-    const fs::path root = fs::temp_directory_path() / "gecko_proto_info";
+    const fs::path root = fs::path(GECK_TEST_TMP_DIR) / "gecko_proto_info";
     fs::remove_all(root);
     writeText(root / "proto/critters/critters.lst", "critter.pro\n");
     writeText(root / "text/english/game/pro_crit.msg", "{200}{}{Test Critter}\n");
@@ -272,7 +272,7 @@ test::ByteWriter itemHeader(std::int32_t pid, std::int32_t messageId, std::int32
 // The weapon block is what turned "which weapons carry Long Range?" from opening .pro files by hand
 // into one call — and getting the perk wrong is quiet, because a wrong perk name reads perfectly.
 TEST_CASE("proto_info reports a weapon's perk and numbers", "[mcp][proto_info]") {
-    const fs::path root = fs::temp_directory_path() / "gecko_proto_weapon";
+    const fs::path root = fs::path(GECK_TEST_TMP_DIR) / "gecko_proto_weapon";
     fs::remove_all(root);
     writeText(root / "proto/items/items.lst", "weapon.pro\n");
     writeText(root / "text/english/game/pro_item.msg", "{100}{}{Test Rifle}\n{101}{}{A rifle.}\n");
