@@ -49,6 +49,39 @@ private:
     std::filesystem::path _path;
 };
 
+/// RAII scratch *directory* under the same build-tree temp root, for tests that mount a data path
+/// rather than read one file. Removes any stale tree of the same name on construction and on
+/// destruction, so a failed run cannot leak state into the next one.
+///
+/// The join with GECK_TEST_TMP_DIR lives here rather than in each test because cpp:S5443 flags
+/// every use as a publicly-writable-directory hotspot: it cannot see through the macro to know
+/// this is inside the build tree, so the construct is worth keeping in one reviewed place.
+class TempDir {
+public:
+    explicit TempDir(const std::string& name) {
+        _path = std::filesystem::path{ GECK_TEST_TMP_DIR } / name;
+        remove();
+        std::error_code ec;
+        std::filesystem::create_directories(_path, ec);
+    }
+
+    ~TempDir() { remove(); }
+
+    TempDir(const TempDir&) = delete;
+    TempDir& operator=(const TempDir&) = delete;
+
+    const std::filesystem::path& path() const { return _path; }
+    std::string string() const { return _path.string(); }
+
+private:
+    void remove() const {
+        std::error_code ec;
+        std::filesystem::remove_all(_path, ec);
+    }
+
+    std::filesystem::path _path;
+};
+
 /// Reads an entire file into a byte vector for byte-for-byte comparisons.
 inline std::vector<uint8_t> readAllBytes(const std::filesystem::path& path) {
     std::ifstream stream{ path, std::ios::binary };
