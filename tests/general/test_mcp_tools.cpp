@@ -51,8 +51,8 @@ void writeText(const fs::path& path, const std::string& contents) {
 // answer afterwards came from whatever else mounted while reading as confidently as a correct one.
 TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]") {
     SECTION("a healthy server reports its mounts and no failures") {
-        const fs::path root = fs::path(GECK_TEST_TMP_DIR) / "gecko_mounts_ok";
-        fs::remove_all(root);
+        const test::TempDir tmp{ "gecko_mounts_ok" };
+        const fs::path& root = tmp.path();
         writeText(root / "text/english/dialog/patchinf.msg",
             "{100}{}{You are running RPU v2.4.34. based on killap's F2 Restoration Project.}\n");
 
@@ -66,13 +66,11 @@ TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]")
         CHECK_FALSE(out.contains("failedMounts"));
         // Read from the data rather than from a checkout, so it works for a .dat too.
         CHECK(out["rpuVersion"] == "v2.4.34");
-
-        fs::remove_all(root);
     }
 
     SECTION("a source tree reports the placeholder version, which is the answer") {
-        const fs::path root = fs::path(GECK_TEST_TMP_DIR) / "gecko_mounts_src";
-        fs::remove_all(root);
+        const test::TempDir tmp{ "gecko_mounts_src" };
+        const fs::path& root = tmp.path();
         writeText(root / "text/english/dialog/patchinf.msg",
             "{100}{}{You are running RPU v2.x.x, based on killap's F2 Restoration Project.}\n");
 
@@ -85,8 +83,6 @@ TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]")
         // Unpackaged source is a development line and not any release; say so rather than leave it
         // to be mistaken for one.
         CHECK(out.contains("rpuVersionNote"));
-
-        fs::remove_all(root);
     }
 
     SECTION("a .dat mount is reported as one, with its size") {
@@ -148,8 +144,8 @@ test::ByteWriter critterProto() {
 // against the 75 the engine gives it, and every critter in the game as resisting nothing, because a
 // critter's resistances live entirely in the bonus arrays.
 TEST_CASE("proto_info reports a critter's effective stats and skills", "[mcp][proto_info]") {
-    const fs::path root = fs::path(GECK_TEST_TMP_DIR) / "gecko_proto_info";
-    fs::remove_all(root);
+    const test::TempDir tmp{ "gecko_proto_info" };
+    const fs::path& root = tmp.path();
     writeText(root / "proto/critters/critters.lst", "critter.pro\n");
     writeText(root / "text/english/game/pro_crit.msg", "{200}{}{Test Critter}\n");
     writeBytes(root / "proto/critters/critter.pro", critterProto());
@@ -190,8 +186,6 @@ TEST_CASE("proto_info reports a critter's effective stats and skills", "[mcp][pr
         // resistance one slot and give 1025 here, which looks just as plausible.
         CHECK(critter["damageResistance"]["normal"] != 124 + 1025);
     }
-
-    fs::remove_all(root);
 }
 
 // dump_grid's name filter exists because asking where one object sits meant reading the whole map:
@@ -272,8 +266,8 @@ test::ByteWriter itemHeader(std::int32_t pid, std::int32_t messageId, std::int32
 // The weapon block is what turned "which weapons carry Long Range?" from opening .pro files by hand
 // into one call — and getting the perk wrong is quiet, because a wrong perk name reads perfectly.
 TEST_CASE("proto_info reports a weapon's perk and numbers", "[mcp][proto_info]") {
-    const fs::path root = fs::path(GECK_TEST_TMP_DIR) / "gecko_proto_weapon";
-    fs::remove_all(root);
+    const test::TempDir tmp{ "gecko_proto_weapon" };
+    const fs::path& root = tmp.path();
     writeText(root / "proto/items/items.lst", "weapon.pro\n");
     writeText(root / "text/english/game/pro_item.msg", "{100}{}{Test Rifle}\n{101}{}{A rifle.}\n");
     writeText(root / "text/english/game/proto.msg", "{101}{}{Metal}\n{251}{}{laser}\n{308}{}{10mm}\n");
@@ -312,6 +306,4 @@ TEST_CASE("proto_info reports a weapon's perk and numbers", "[mcp][proto_info]")
     CHECK(w["minimumStrength"] == 4);
     CHECK(w["burstRounds"] == 10);
     CHECK(w["ammoCapacity"] == 30);
-
-    fs::remove_all(root);
 }
