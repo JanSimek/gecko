@@ -949,12 +949,31 @@ namespace {
             if (pattern && !std::regex_search(names.protoName(pid), *pattern)) {
                 continue;
             }
-            objects.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
+            ordered_json record{ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
                 { "type", typeLabel(pid) }, { "name", names.protoName(pid) },
                 { "fid", pidHex(object->frm_pid) }, // the art FID — feed to resolve_fid to SEE what it is
                 { "hex", object->position }, { "col", hexgrid::columnOf(object->position) },
                 { "row", hexgrid::rowOf(object->position) }, { "dir", object->direction },
-                { "flat", names.isFlat(pid) } });
+                { "flat", names.isFlat(pid) } };
+
+            // What a container actually holds. Parsed all along and never reported, so "the locker
+            // with the combat shotgun" could only be checked by opening it in game. Present only
+            // when there is something inside, so an empty crate costs nothing to read.
+            if (!object->inventory.empty()) {
+                auto contents = ordered_json::array();
+                for (const auto& item : object->inventory) {
+                    if (!item) {
+                        continue;
+                    }
+                    contents.push_back({ { "pid", pidHex(item->pro_pid) },
+                        { "number", item->pro_pid & 0xFFFFFFu }, { "name", names.protoName(item->pro_pid) },
+                        { "count", item->objects_in_inventory > 0 ? item->objects_in_inventory : 1u } });
+                }
+                if (!contents.empty()) {
+                    record["contents"] = std::move(contents);
+                }
+            }
+            objects.push_back(std::move(record));
         }
         return objects;
     }
