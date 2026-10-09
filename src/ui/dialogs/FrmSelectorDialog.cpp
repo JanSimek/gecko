@@ -443,16 +443,11 @@ std::optional<uint32_t> FrmSelectorDialog::deriveFrmPidFromPath(const std::strin
         return std::nullopt;
     }
 
-    // Handle well-known special cases first (use normalized path).
-    // These are legitimate (sometimes low-valued) FIDs, not failure sentinels.
+    // The scroll blocker is the one editor art with a real FID: FrmResolver::resolve draws the shipped
+    // proto's block.frm as scrblk.frm. gecko's other overlay art (wallblock.frm, light.frm) is in no
+    // LST, so no FID names it.
     if (normalizedPath == "art/misc/scrblk.frm") {
-        return WallBlockers::SCROLL_BLOCKER_FID.fid(); // block.frm, which FrmResolver::resolve draws as scrblk.frm
-    }
-    if (normalizedPath == "art/misc/wallblock.frm") {
-        return FrmId(ObjectType::Wall, 620).fid(); // Wall blocker - matches FrmResolver::resolve
-    }
-    if (normalizedPath == "art/misc/light.frm") {
-        return FrmId(ObjectType::Scenery, 0x15).fid(); // Light source
+        return WallBlockers::SCROLL_BLOCKER_FID.fid();
     }
 
     // Canonical LST-based derivation lives in the resource layer (engine-correct

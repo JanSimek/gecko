@@ -154,3 +154,30 @@ TEST_CASE("hasFrmExtension recognizes .frm and directional .fr0-.fr5", "[resourc
     CHECK_FALSE(hasFrmExtension("art/x.lst"));
     CHECK_FALSE(hasFrmExtension("frm")); // too short, no dot
 }
+
+// Wall art 620 is an ordinary wall: shipped walls.lst[620] is rl11000.frm, the "Steel Railing"
+// (wall proto 171) placed in ncr1, sftanker and a dozen other maps. resolve() used to swap it for the
+// editor's wallblock.frm, mistaking the index of wall proto 620 (itself just a wall, nec128.frm) for
+// art of a "wall blocker".
+TEST_CASE("resolve draws wall art 620 from walls.lst like any other wall", "[resource][frm]") {
+    const fs::path root = fs::temp_directory_path() / "geck_frmresolver_wall620_test";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+
+    std::string walls;
+    for (int i = 0; i < 622; ++i) {
+        walls += (i == 620 ? std::string("rl11000.frm") : "wall" + std::to_string(i) + ".frm") + "\n";
+    }
+    writeFile(root / "art/walls/walls.lst", walls);
+
+    {
+        GameResources resources;
+        resources.files().addDataPath(root.string());
+        auto& resolver = resources.frmResolver();
+
+        CHECK(resolver.resolve(0x0300026Cu) == "art/walls/rl11000.frm");
+        CHECK(resolver.resolveFid("art/walls/rl11000.frm") == 0x0300026Cu);
+    }
+
+    fs::remove_all(root, ec);
+}
