@@ -86,10 +86,6 @@ std::string FrmResolver::resolve(uint32_t fid) {
         return std::string(ResourcePaths::Frm::SCROLL_BLOCKER);
     }
 
-    if (type == ObjectType::Wall && baseId == 620) {
-        return std::string(ResourcePaths::Frm::WALL_BLOCK);
-    }
-
     if (type == ObjectType::Invalid || type > ObjectType::Inventory) {
         throw std::runtime_error("Invalid FID object type");
     }
