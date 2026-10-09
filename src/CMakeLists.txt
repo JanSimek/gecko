@@ -285,6 +285,7 @@ add_library(vault STATIC
     #
 
     format/IFile.h
+    format/ObjTypes.h
 
     # DAT
     format/dat/Dat.h
@@ -294,6 +295,7 @@ add_library(vault STATIC
 
     # FRM
     format/frm/Frm.h
+    format/frm/FrmId.h
     format/frm/Frm.cpp
     format/frm/Direction.h
     format/frm/Direction.cpp
@@ -343,6 +345,7 @@ add_library(vault STATIC
 
     # PRO
     format/pro/Pro.h
+    format/pro/ProtoTypes.h
     format/pro/Pro.cpp
 
     # GAM

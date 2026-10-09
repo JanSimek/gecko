@@ -48,15 +48,15 @@ namespace {
     // Engine layout constants (fallout2-ce). They are code, not data, so they are cited rather than loaded.
     // loadsave.cc compares strncmp(signature, LOAD_SAVE_SIGNATURE, 18): the 17 characters and the NUL after them.
     constexpr const char* LOAD_SAVE_SIGNATURE = "FALLOUT SAVE FILE";
-    constexpr std::size_t LS_PREVIEW_SIZE = 224 * 133;  // loadsave.cc LS_PREVIEW_WIDTH * HEIGHT
-    constexpr std::size_t SAVEABLE_STAT_COUNT = 35;     // stat_defs.h
-    constexpr std::size_t SKILL_COUNT = 18;             // skill_defs.h
-    constexpr std::size_t KILL_TYPE_DEFAULT_COUNT = 19; // proto_types.h
-    constexpr std::size_t NUM_TAGGED_SKILLS = 4;        // skill_defs.h
-    constexpr std::size_t PERK_COUNT = 119;             // perk_defs.h
-    constexpr uint32_t DUDE_PID = 0x01000000;           // critter.cc gDudeProto
-    constexpr uint32_t CRITTER_DUDE_SNEAKING = 0x01;    // obj_types.h CritterFlags
-    constexpr uint32_t COMBAT_STATE_IN_COMBAT = 0x01;   // combat_defs.h
+    constexpr std::size_t LS_PREVIEW_SIZE = 224 * 133;      // loadsave.cc LS_PREVIEW_WIDTH * HEIGHT
+    constexpr std::size_t SAVEABLE_STAT_COUNT = 35;         // stat_defs.h
+    constexpr std::size_t SKILL_COUNT = 18;                 // skill_defs.h
+    constexpr std::size_t KILL_TYPE_DEFAULT_COUNT = 19;     // proto_types.h
+    constexpr std::size_t NUM_TAGGED_SKILLS = 4;            // skill_defs.h
+    constexpr std::size_t PERK_COUNT = 119;                 // perk_defs.h
+    constexpr ProtoId DUDE_PID{ CritterProtoTypeId::Dude }; // critter.cc gDudeProto
+    constexpr uint32_t CRITTER_DUDE_SNEAKING = 0x01;        // obj_types.h CritterFlags
+    constexpr uint32_t COMBAT_STATE_IN_COMBAT = 0x01;       // combat_defs.h
     constexpr uint32_t COMBAT_STATE_PLAYER_TURN = 0x02;
     constexpr uint32_t COMBAT_STATE_EXIT_REQUESTED = 0x08;
     constexpr uint32_t COMBAT_STATE_KNOWN = COMBAT_STATE_IN_COMBAT | COMBAT_STATE_PLAYER_TURN | COMBAT_STATE_EXIT_REQUESTED;
@@ -296,9 +296,9 @@ namespace {
         MapReader objectReader(makeProtoLoader(resources));
         std::size_t afterObject = 0;
         player.object = objectReader.readObjectAt(r.data(), r.position(), afterObject);
-        if (player.object->pro_pid != DUDE_PID) {
+        if (player.object->pid() != DUDE_PID) {
             throw ParseException(std::format("expected the player object (pid 0x{:08X}) at offset {}, found pid 0x{:08X}",
-                DUDE_PID, r.position(), player.object->pro_pid));
+                DUDE_PID.pid(), r.position(), player.object->pro_pid));
         }
         r.setPosition(afterObject);
         const int32_t centerTile = r.i32("view centre tile");
@@ -408,7 +408,7 @@ namespace {
     private:
         void add(const MapObject& object, uint32_t elevation) {
             _objectById.try_emplace(object.unknown0, &object);
-            if (object.objectType() != static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)) {
+            if (object.objectType() != ObjectType::Critter) {
                 return;
             }
             if (isHidden(object) || object.elevation != elevation) {

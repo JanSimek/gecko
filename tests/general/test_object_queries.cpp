@@ -18,10 +18,8 @@ using geck::resource::GameResources;
 
 namespace {
 
-constexpr uint32_t WALL_TYPE = static_cast<uint32_t>(Pro::OBJECT_TYPE::WALL);
-
 uint32_t wallPid(uint32_t index) {
-    return (WALL_TYPE << 24) | index;
+    return ProtoId(ObjectType::Wall, index).pid();
 }
 
 void writeLine(const fs::path& path, const std::string& contents) {

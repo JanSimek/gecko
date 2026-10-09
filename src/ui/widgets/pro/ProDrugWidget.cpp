@@ -208,7 +208,7 @@ void ProDrugWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 }
 
 bool ProDrugWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
-    return pro && pro->type() == Pro::OBJECT_TYPE::ITEM && pro->itemType() == Pro::ITEM_TYPE::DRUG;
+    return pro && pro->type() == ObjectType::Item && pro->itemType() == ItemType::Drug;
 }
 
 QString ProDrugWidget::getTabLabel() const {

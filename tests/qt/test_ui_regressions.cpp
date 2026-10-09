@@ -34,6 +34,7 @@
 #include "ui/core/MainWindow.h"
 #include "ui/dialogs/CritterPropertiesDialog.h"
 #include "ui/dialogs/ExitGridPropertiesDialog.h"
+#include "ui/dialogs/FrmSelectorDialog.h"
 #include "ui/dialogs/InventoryViewerDialog.h"
 #include "ui/dialogs/ItemSelectorDialog.h"
 #include "ui/dialogs/ScriptSelectorDialog.h"
@@ -140,7 +141,7 @@ QString buildProtoMsg() {
         contents += messageLine(geck::fallout::protoMessageId(material), QString::fromLatin1(materials[index]));
     }
 
-    const std::array<const char*, geck::fallout::enumCount<geck::fallout::SceneryType>()> sceneryTypes = {
+    const std::array<const char*, geck::fallout::enumCount<geck::SceneryType>()> sceneryTypes = {
         "Door",
         "Stairs",
         "Elevator",
@@ -150,7 +151,7 @@ QString buildProtoMsg() {
     };
 
     for (size_t index = 0; index < sceneryTypes.size(); ++index) {
-        const auto sceneryType = static_cast<geck::fallout::SceneryType>(index);
+        const auto sceneryType = static_cast<geck::SceneryType>(index);
         contents += messageLine(geck::fallout::protoMessageId(sceneryType), QString::fromLatin1(sceneryTypes[index]));
     }
 
@@ -343,23 +344,23 @@ void removeTestSettings() {
     QDir().mkpath(configRoot + "/gecko");
 }
 
-std::shared_ptr<geck::Pro> makeItemPro(geck::Pro::ITEM_TYPE itemType) {
+std::shared_ptr<geck::Pro> makeItemPro(geck::ItemType itemType) {
     auto pro = std::make_shared<geck::Pro>(std::filesystem::path("test.pro"));
     pro->header.PID = 0;
     pro->setObjectSubtypeId(static_cast<unsigned>(itemType));
     return pro;
 }
 
-std::shared_ptr<geck::Pro> makeSceneryPro(geck::Pro::SCENERY_TYPE sceneryType) {
+std::shared_ptr<geck::Pro> makeSceneryPro(geck::SceneryType sceneryType) {
     auto pro = std::make_shared<geck::Pro>(std::filesystem::path("test.pro"));
-    pro->header.PID = static_cast<int32_t>(geck::Pro::OBJECT_TYPE::SCENERY) << 24;
+    pro->header.PID = static_cast<int32_t>(geck::ProtoId(geck::ObjectType::Scenery, 0).pid());
     pro->setObjectSubtypeId(static_cast<unsigned>(sceneryType));
     return pro;
 }
 
 std::shared_ptr<geck::Pro> makeCritterPro() {
     auto pro = std::make_shared<geck::Pro>(std::filesystem::path("test.pro"));
-    pro->header.PID = static_cast<int32_t>(geck::Pro::OBJECT_TYPE::CRITTER) << 24;
+    pro->header.PID = static_cast<int32_t>(geck::ProtoId(geck::ObjectType::Critter, 0).pid());
     return pro;
 }
 
@@ -389,7 +390,7 @@ TEST_CASE("Ammo widget uses caliber labels loaded from proto.msg", "[qt][pro]") 
     resources.mount();
 
     geck::ProAmmoWidget widget(resources.resources());
-    auto pro = makeItemPro(geck::Pro::ITEM_TYPE::AMMO);
+    auto pro = makeItemPro(geck::ItemType::Ammo);
     pro->ammoData.caliber = geck::fallout::enumValue(geck::fallout::CaliberType::Mm10);
 
     widget.loadFromPro(pro);
@@ -416,7 +417,7 @@ TEST_CASE("Weapon widget preserves raw perk ids while using message-backed label
     resources.mount();
 
     geck::ProWeaponWidget widget(resources.resources());
-    auto pro = makeItemPro(geck::Pro::ITEM_TYPE::WEAPON);
+    auto pro = makeItemPro(geck::ItemType::Weapon);
     pro->weaponData.damageType = geck::fallout::enumValue(geck::fallout::DamageType::Normal);
     pro->weaponData.ammoType = geck::fallout::enumValue(geck::fallout::CaliberType::Mm10);
     pro->weaponData.perk = geck::fallout::enumValue(geck::fallout::PerkId::WeaponNightSight);
@@ -475,7 +476,7 @@ TEST_CASE("Drug widget round-trips stat ids through value mapping, including Non
 
     geck::ProDrugWidget widget(resources.resources());
 
-    auto pro = makeItemPro(geck::Pro::ITEM_TYPE::DRUG);
+    auto pro = makeItemPro(geck::ItemType::Drug);
     // stat0 = Perception, stat1 = "no stat" (0xFFFFFFFF sentinel), stat2 = Strength.
     pro->drugData.stat0 = static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Perception));
     pro->drugData.stat1 = 0xFFFFFFFFu;
@@ -491,7 +492,7 @@ TEST_CASE("Drug widget round-trips stat ids through value mapping, including Non
     REQUIRE(stat0Combo->currentData().toInt() == geck::fallout::enumValue(geck::fallout::StatId::Perception));
     REQUIRE(stat1Combo->currentText() == "None");
 
-    auto out = makeItemPro(geck::Pro::ITEM_TYPE::DRUG);
+    auto out = makeItemPro(geck::ItemType::Drug);
     widget.saveToPro(out);
 
     REQUIRE(out->drugData.stat0 == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Perception)));
@@ -505,7 +506,7 @@ TEST_CASE("Scenery widget switches subtype editors and preserves subtype values"
     resources.mount();
 
     geck::ProSceneryWidget widget(resources.resources());
-    auto pro = makeSceneryPro(geck::Pro::SCENERY_TYPE::ELEVATOR);
+    auto pro = makeSceneryPro(geck::SceneryType::Elevator);
     pro->sceneryData.materialId = geck::fallout::enumValue(geck::fallout::MaterialType::Metal);
     pro->sceneryData.soundId = 42;
     pro->sceneryData.elevatorData.elevatorType = 7;
@@ -523,7 +524,7 @@ TEST_CASE("Scenery widget switches subtype editors and preserves subtype values"
     REQUIRE_FALSE(elevatorGroup->isHidden());
     REQUIRE(doorGroup->isHidden());
 
-    typeCombo->setCurrentIndex(static_cast<int>(geck::Pro::SCENERY_TYPE::DOOR));
+    typeCombo->setCurrentIndex(static_cast<int>(geck::SceneryType::Door));
     QApplication::processEvents();
 
     REQUIRE_FALSE(doorGroup->isHidden());
@@ -535,7 +536,7 @@ TEST_CASE("Scenery widget switches subtype editors and preserves subtype values"
 
     widget.saveToPro(pro);
 
-    REQUIRE(pro->objectSubtypeId() == static_cast<unsigned>(geck::Pro::SCENERY_TYPE::DOOR));
+    REQUIRE(pro->objectSubtypeId() == static_cast<unsigned>(geck::SceneryType::Door));
     REQUIRE(pro->sceneryData.doorData.walkThroughFlag == 1U);
 }
 
@@ -600,7 +601,7 @@ TEST_CASE("Info panel derives display state from PRO data", "[qt][pro]") {
     resources.mount();
 
     geck::ProInfoPanelWidget widget;
-    auto pro = makeItemPro(geck::Pro::ITEM_TYPE::AMMO);
+    auto pro = makeItemPro(geck::ItemType::Ammo);
     pro->header.PID = 0x00000001;
     pro->header.message_id = 200;
 
@@ -707,15 +708,15 @@ TEST_CASE("ItemSelectorDialog lists items.lst entries by their item PID", "[qt][
     REQUIRE(tree->topLevelItemCount() == 3);
 
     // No .pro files are mounted, so describeItem cannot resolve a name; the dialog falls back to the
-    // .pro filename and shows the item PID = makePid(ITEM, 1-based items.lst line) in the PID column.
+    // .pro filename and shows the item PID = ProtoId(ObjectType::Item, 1-based items.lst line) in the PID column.
     struct Expect {
         const char* name;
         uint32_t pid;
     };
     const Expect expected[] = {
-        { "aaa.pro", geck::Pro::makePid(geck::Pro::OBJECT_TYPE::ITEM, 1) },
-        { "bbb.pro", geck::Pro::makePid(geck::Pro::OBJECT_TYPE::ITEM, 2) },
-        { "ccc.pro", geck::Pro::makePid(geck::Pro::OBJECT_TYPE::ITEM, 3) },
+        { "aaa.pro", geck::ProtoId(geck::ObjectType::Item, 1).pid() },
+        { "bbb.pro", geck::ProtoId(geck::ObjectType::Item, 2).pid() },
+        { "ccc.pro", geck::ProtoId(geck::ObjectType::Item, 3).pid() },
     };
     for (int i = 0; i < 3; ++i) {
         QTreeWidgetItem* row = tree->topLevelItem(i); // sorted by name -> aaa, bbb, ccc
@@ -735,7 +736,7 @@ TEST_CASE("ItemSelectorDialog lists items.lst entries by their item PID", "[qt][
 }
 
 TEST_CASE("Preview panel uses dual item previews and a single object preview", "[qt][pro]") {
-    auto itemPro = makeItemPro(geck::Pro::ITEM_TYPE::AMMO);
+    auto itemPro = makeItemPro(geck::ItemType::Ammo);
     itemPro->header.FID = 123;
     itemPro->commonItemData.inventoryFID = 456;
 
@@ -1887,4 +1888,12 @@ TEST_CASE("Welcome screen buttons request New Map, Browse Maps and Preferences",
     CHECK(preferencesSpy.count() == 1);
     CHECK(newSpy.count() == 1);
     CHECK(browseSpy.count() == 1);
+}
+
+TEST_CASE("FRM selector filters a rotated critter FID by its type nibble", "[ui][frm]") {
+    // A critter FID carries rotation bits above the type nibble; reading the whole high byte made
+    // 0x11000001 look like type 0x11 and dropped the critter filter.
+    CHECK(geck::FrmSelectorDialog::filterForFid(0x11000001u) == geck::ObjectType::Critter);
+    CHECK(geck::FrmSelectorDialog::filterForFid(0x02000015u) == geck::ObjectType::Scenery);
+    CHECK_FALSE(geck::FrmSelectorDialog::filterForFid(0x06000003u).has_value()); // interface art
 }

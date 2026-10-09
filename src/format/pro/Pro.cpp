@@ -32,36 +32,33 @@ void Pro::setObjectSubtypeId(unsigned int objectSubtypeId) {
     _objectSubtypeId = objectSubtypeId;
 }
 
-Pro::OBJECT_TYPE Pro::type() const {
-    int32_t type = (header.PID & 0x0F000000) >> 24;
-    return static_cast<Pro::OBJECT_TYPE>(type);
-}
-
-Pro::ITEM_TYPE Pro::itemType() const {
-    if (type() == OBJECT_TYPE::ITEM) {
-        return static_cast<Pro::ITEM_TYPE>(_objectSubtypeId);
+ItemType Pro::itemType() const {
+    if (type() == ObjectType::Item) {
+        return static_cast<ItemType>(_objectSubtypeId);
     }
-    return Pro::ITEM_TYPE::MISC;
+    return ItemType::Misc;
 }
 
 const std::string Pro::typeToString() const {
     return typeToString(type());
 }
 
-std::string Pro::typeToString(OBJECT_TYPE type) {
+std::string Pro::typeToString(ObjectType type) {
     switch (type) {
-        case OBJECT_TYPE::ITEM:
+        case ObjectType::Item:
             return "Item";
-        case OBJECT_TYPE::CRITTER:
+        case ObjectType::Critter:
             return "Critter";
-        case OBJECT_TYPE::SCENERY:
+        case ObjectType::Scenery:
             return "Scenery";
-        case OBJECT_TYPE::WALL:
+        case ObjectType::Wall:
             return "Wall";
-        case OBJECT_TYPE::TILE:
+        case ObjectType::Tile:
             return "Tile";
-        case OBJECT_TYPE::MISC:
+        case ObjectType::Misc:
             return "Misc";
+        default:
+            break;
     }
     return "Unknown proto";
 }

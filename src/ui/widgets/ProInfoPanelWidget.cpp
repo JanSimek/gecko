@@ -24,20 +24,22 @@ namespace {
 
     QString itemTypeLabel(const Pro& pro) {
         switch (pro.itemType()) {
-            case Pro::ITEM_TYPE::ARMOR:
+            case ItemType::Armor:
                 return "Armor";
-            case Pro::ITEM_TYPE::CONTAINER:
+            case ItemType::Container:
                 return "Container";
-            case Pro::ITEM_TYPE::DRUG:
+            case ItemType::Drug:
                 return "Drug";
-            case Pro::ITEM_TYPE::WEAPON:
+            case ItemType::Weapon:
                 return "Weapon";
-            case Pro::ITEM_TYPE::AMMO:
+            case ItemType::Ammo:
                 return "Ammo";
-            case Pro::ITEM_TYPE::MISC:
+            case ItemType::Misc:
                 return "Misc Item";
-            case Pro::ITEM_TYPE::KEY:
+            case ItemType::Key:
                 return "Key";
+            default:
+                break;
         }
 
         return "Item";
@@ -45,18 +47,20 @@ namespace {
 
     QString objectTypeLabel(const Pro& pro) {
         switch (pro.type()) {
-            case Pro::OBJECT_TYPE::ITEM:
+            case ObjectType::Item:
                 return itemTypeLabel(pro);
-            case Pro::OBJECT_TYPE::CRITTER:
+            case ObjectType::Critter:
                 return "Critter";
-            case Pro::OBJECT_TYPE::SCENERY:
+            case ObjectType::Scenery:
                 return "Scenery";
-            case Pro::OBJECT_TYPE::WALL:
+            case ObjectType::Wall:
                 return "Wall";
-            case Pro::OBJECT_TYPE::TILE:
+            case ObjectType::Tile:
                 return "Tile";
-            case Pro::OBJECT_TYPE::MISC:
+            case ObjectType::Misc:
                 return "Misc";
+            default:
+                break;
         }
 
         return "Object";

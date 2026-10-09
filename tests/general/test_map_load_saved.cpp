@@ -34,7 +34,7 @@ constexpr uint32_t MAP_HEADER_SAVED = 0x01;
 std::shared_ptr<MapObject> addCritter(Map::MapFile& mapFile, int32_t seed, int32_t cid, int32_t hex, int elevation = 0) {
     auto critter = std::make_shared<MapObject>();
     fillBase(*critter, seed);
-    critter->pro_pid = pidOf(Pro::OBJECT_TYPE::CRITTER, static_cast<uint32_t>(10 + seed));
+    critter->pro_pid = pidOf(ObjectType::Critter, static_cast<uint32_t>(10 + seed));
     critter->elevation = static_cast<uint32_t>(elevation);
     critter->critter_index = cid;
     critter->position = hex;
@@ -170,10 +170,10 @@ TEST_CASE("a truncated gzip map fails with the reason", "[cli][map][saved]") {
 // inventory. A container in a critter's pack must not desynchronise the objects after it.
 TEST_CASE("MAP reader follows nested inventories", "[map][roundtrip]") {
     StubProvider provider;
-    const uint32_t containerPid = pidOf(Pro::OBJECT_TYPE::ITEM, 200);
-    const uint32_t armorPid = pidOf(Pro::OBJECT_TYPE::ITEM, 201);
-    provider.addItem(containerPid, Pro::ITEM_TYPE::CONTAINER);
-    provider.addItem(armorPid, Pro::ITEM_TYPE::ARMOR);
+    const uint32_t containerPid = pidOf(ObjectType::Item, 200);
+    const uint32_t armorPid = pidOf(ObjectType::Item, 201);
+    provider.addItem(containerPid, ItemType::Container);
+    provider.addItem(armorPid, ItemType::Armor);
 
     auto mapFile = Map::createEmptyMapFile();
     auto critter = addCritter(mapFile, 1, 0, 18082);

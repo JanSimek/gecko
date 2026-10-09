@@ -61,7 +61,7 @@ namespace {
 
     // Category label for a PID's type byte, via the canonical Pro mapping (no local table).
     std::string typeLabel(uint32_t pid) {
-        return Pro::typeToString(Pro::typeOfPid(pid));
+        return Pro::typeToString(ProtoId(pid).objectType());
     }
 
     // Histogram entries sorted by count (descending), then by key for a stable order.
@@ -144,7 +144,7 @@ namespace {
             uint32_t packet = 0;
             try {
                 const Pro* pro = _resources.loadPro(pid);
-                if (pro != nullptr && pro->type() == Pro::OBJECT_TYPE::CRITTER) {
+                if (pro != nullptr && pro->type() == ObjectType::Critter) {
                     packet = pro->critterData.aiPacket;
                 }
             } catch (const std::exception& e) {
@@ -555,7 +555,7 @@ namespace {
             for (const auto& [pid, count] : usage.objects) {
                 // Curated palette = scatter-eligible scenery the agent can actually place: scenery
                 // type, the proto resolves (no guessing — keep unplaceable protos out), not flat.
-                if (Pro::typeOfPid(pid) == Pro::OBJECT_TYPE::SCENERY && names.resolved(pid) && !names.isFlat(pid)) {
+                if (ProtoId(pid).objectType() == ObjectType::Scenery && names.resolved(pid) && !names.isFlat(pid)) {
                     scenery[pid] += count;
                 }
             }
@@ -666,7 +666,7 @@ namespace {
         CombatIdIndex byCid;
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
-                if (object && object->objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)
+                if (object && object->objectType() == ObjectType::Critter
                     && object->critter_index >= 0 && !isHiddenObject(*object)) {
                     byCid[object->elevation].emplace(object->critter_index, object.get());
                 }
@@ -699,7 +699,7 @@ namespace {
         const auto byCid = savedMap ? crittersByCombatId(map) : CombatIdIndex{};
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
-                if (!object || object->objectType() != static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)) {
+                if (!object || object->objectType() != ObjectType::Critter) {
                     continue;
                 }
                 const uint32_t pid = object->pro_pid;

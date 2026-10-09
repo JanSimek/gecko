@@ -122,7 +122,7 @@ void ProEditorDialog::setupTypeSpecificTabs() {
     if (!_pro)
         return;
 
-    if (_pro->type() == Pro::OBJECT_TYPE::MISC) {
+    if (_pro->type() == ObjectType::Misc) {
         setupMiscTab();
         return;
     }
@@ -135,7 +135,7 @@ void ProEditorDialog::setupTypeSpecificTabs() {
 }
 
 void ProEditorDialog::setupMiscTab() {
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::MISC)
+    if (!_pro || _pro->type() != ObjectType::Misc)
         return;
 
     _miscTab = new QWidget();
@@ -153,34 +153,34 @@ ProTabWidget* ProEditorDialog::createTypeSpecificWidget() {
     }
 
     switch (_pro->type()) {
-        case Pro::OBJECT_TYPE::ITEM:
+        case ObjectType::Item:
             switch (_pro->itemType()) {
-                case Pro::ITEM_TYPE::ARMOR:
+                case ItemType::Armor:
                     return new ProArmorWidget(_resources);
-                case Pro::ITEM_TYPE::CONTAINER:
-                case Pro::ITEM_TYPE::KEY:
+                case ItemType::Container:
+                case ItemType::Key:
                     return new ProContainerKeyWidget(_resources);
-                case Pro::ITEM_TYPE::DRUG:
+                case ItemType::Drug:
                     return new ProDrugWidget(_resources);
-                case Pro::ITEM_TYPE::WEAPON:
+                case ItemType::Weapon:
                     return new ProWeaponWidget(_resources);
-                case Pro::ITEM_TYPE::AMMO:
+                case ItemType::Ammo:
                     return new ProAmmoWidget(_resources);
-                case Pro::ITEM_TYPE::MISC:
+                case ItemType::Misc:
                     return new ProMiscItemWidget(_resources);
                 default:
                     break;
             }
             break;
-        case Pro::OBJECT_TYPE::CRITTER:
+        case ObjectType::Critter:
             return new ProCritterWidget(_resources);
-        case Pro::OBJECT_TYPE::SCENERY:
+        case ObjectType::Scenery:
             return new ProSceneryWidget(_resources);
-        case Pro::OBJECT_TYPE::WALL:
+        case ObjectType::Wall:
             return new ProWallWidget(_resources);
-        case Pro::OBJECT_TYPE::TILE:
+        case ObjectType::Tile:
             return new ProTileWidget(_resources);
-        case Pro::OBJECT_TYPE::MISC:
+        case ObjectType::Misc:
             break;
         default:
             break;
@@ -196,7 +196,7 @@ void ProEditorDialog::registerTypeSpecificWidget(ProTabWidget* widget) {
 
     connect(widget, &ProTabWidget::fieldChanged, this, &ProEditorDialog::onFieldChanged);
     connect(widget, &ProTabWidget::fidLabelSelectorRequested, this,
-        [this](QLabel* targetLabel, int32_t* fidStorage, Frm::FRM_TYPE objectType) {
+        [this](QLabel* targetLabel, int32_t* fidStorage, ObjectType objectType) {
             openFrmSelectorForLabel(targetLabel, fidStorage, objectType);
         });
 }
@@ -209,7 +209,7 @@ void ProEditorDialog::loadProData() {
 
         if (_commonFieldsWidget) {
             _commonFieldsWidget->loadFromPro(_pro);
-            bool isItem = (_pro->type() == Pro::OBJECT_TYPE::ITEM);
+            bool isItem = (_pro->type() == ObjectType::Item);
             _commonFieldsWidget->setItemFieldsVisible(isItem);
         }
 
@@ -327,7 +327,7 @@ void ProEditorDialog::onEditMessageClicked() {
     }
 }
 
-void ProEditorDialog::openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidStorage, Frm::FRM_TYPE objectType) {
+void ProEditorDialog::openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidStorage, ObjectType objectType) {
     if (!targetLabel || !fidStorage)
         return;
 

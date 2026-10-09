@@ -4,11 +4,17 @@
 
 TEST_CASE("Proto enums mirror Fallout 2 engine values", "[engine][enum]") {
     using namespace geck::fallout;
+    using geck::ItemType;
+    using geck::SceneryType;
 
     REQUIRE(enumValue(ItemType::Armor) == 0);
     REQUIRE(enumValue(ItemType::Ammo) == 4);
     REQUIRE(protoMessageId(ItemType::Armor) == 150);
     REQUIRE(protoMessageId(ItemType::Ammo) == 154);
+
+    // proto_types.h SCENERY_TYPE_LADDER_UP / _DOWN: gecko used to call these LADDER_BOTTOM / _TOP.
+    REQUIRE(enumValue(SceneryType::LadderUp) == 3);
+    REQUIRE(enumValue(SceneryType::LadderDown) == 4);
 
     REQUIRE(enumValue(MaterialType::Glass) == 0);
     REQUIRE(enumValue(MaterialType::Leather) == 7);

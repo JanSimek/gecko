@@ -4,7 +4,7 @@
 namespace geck {
 
 bool MapObject::isWallObject() const {
-    return objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::WALL);
+    return objectType() == ObjectType::Wall;
 }
 
 std::unique_ptr<MapObject> MapObject::cloneDeep() const {

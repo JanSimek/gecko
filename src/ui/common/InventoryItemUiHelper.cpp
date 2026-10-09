@@ -34,17 +34,17 @@ namespace {
     }
 
     bool isAmmoItem(const Pro& pro) {
-        return pro.type() == Pro::OBJECT_TYPE::ITEM && pro.itemType() == Pro::ITEM_TYPE::AMMO;
+        return pro.type() == ObjectType::Item && pro.itemType() == ItemType::Ammo;
     }
 
     QString typeNameForPro(resource::GameResources& resources, const Pro& pro) {
-        if (pro.type() == Pro::OBJECT_TYPE::ITEM) {
+        if (pro.type() == ObjectType::Item) {
             Msg* protoMsg = ProHelper::protoMsgFile(resources);
             if (!protoMsg) {
                 throw std::runtime_error("proto.msg is not loaded");
             }
 
-            auto itemType = static_cast<fallout::ItemType>(static_cast<int>(pro.itemType()));
+            const ItemType itemType = pro.itemType();
             const std::string text = protoMsg->message(fallout::protoMessageId(itemType)).text;
             return QString::fromStdString(text);
         }
@@ -68,7 +68,7 @@ namespace {
 
     std::string resolveFrmPath(resource::GameResources& resources, uint32_t pid, const Pro& pro) {
 
-        if (pro.type() == Pro::OBJECT_TYPE::ITEM && pro.commonItemData.inventoryFID > 0) {
+        if (pro.type() == ObjectType::Item && pro.commonItemData.inventoryFID > 0) {
             try {
                 return resources.frmResolver().resolve(pro.commonItemData.inventoryFID);
             } catch (const std::exception& e) {

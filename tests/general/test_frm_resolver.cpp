@@ -59,7 +59,7 @@ uint32_t baseId(uint32_t fid) {
 
 } // namespace
 
-// The regression guard: the FID type byte must be the FRM_TYPE / engine OBJ_TYPE
+// The regression guard: the FID type byte must be the ObjectType / engine OBJ_TYPE
 // ordinal. WALL is 3, not 4 (the old frmTypeMap encoded 4/5/6/7/8, which the
 // engine reads as the next type up).
 TEST_CASE("resolveFid encodes the engine FRM type byte", "[resource][frm]") {
@@ -68,20 +68,20 @@ TEST_CASE("resolveFid encodes the engine FRM type byte", "[resource][frm]") {
 
     const auto wall = resolver.resolveFid("art/walls/wall2.frm");
     REQUIRE(wall.has_value());
-    CHECK(typeByte(*wall) == static_cast<uint32_t>(Frm::FRM_TYPE::WALL)); // 3, not 4
-    CHECK(baseId(*wall) == 1);                                            // wall2 is index 1
+    CHECK(typeByte(*wall) == static_cast<uint32_t>(geck::ObjectType::Wall)); // 3, not 4
+    CHECK(baseId(*wall) == 1);                                               // wall2 is index 1
 
     const auto tile = resolver.resolveFid("art/tiles/grass.frm");
     REQUIRE(tile.has_value());
-    CHECK(typeByte(*tile) == static_cast<uint32_t>(Frm::FRM_TYPE::TILE)); // 4, not 5
+    CHECK(typeByte(*tile) == static_cast<uint32_t>(geck::ObjectType::Tile)); // 4, not 5
 
     const auto misc = resolver.resolveFid("art/misc/thing.frm");
     REQUIRE(misc.has_value());
-    CHECK(typeByte(*misc) == static_cast<uint32_t>(Frm::FRM_TYPE::MISC)); // 5, not 6
+    CHECK(typeByte(*misc) == static_cast<uint32_t>(geck::ObjectType::Misc)); // 5, not 6
 
     const auto item = resolver.resolveFid("art/items/rock.frm");
     REQUIRE(item.has_value());
-    CHECK(typeByte(*item) == static_cast<uint32_t>(Frm::FRM_TYPE::ITEM)); // 0 (unaffected)
+    CHECK(typeByte(*item) == static_cast<uint32_t>(geck::ObjectType::Item)); // 0 (unaffected)
     CHECK(baseId(*item) == 1);
 }
 
@@ -133,7 +133,7 @@ TEST_CASE("resolveFid resolves critters by base name", "[resource][frm]") {
 
     const auto fid = resolver.resolveFid("art/critters/hmwarraa.frm");
     REQUIRE(fid.has_value());
-    CHECK(typeByte(*fid) == static_cast<uint32_t>(Frm::FRM_TYPE::CRITTER)); // 1
+    CHECK(typeByte(*fid) == static_cast<uint32_t>(geck::ObjectType::Critter)); // 1
 }
 
 TEST_CASE("hasFrmExtension recognizes .frm and directional .fr0-.fr5", "[resource][frm]") {

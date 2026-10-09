@@ -20,9 +20,9 @@ void writeFile(const fs::path& path, const std::string& contents) {
     std::ofstream(path) << contents;
 }
 
-// OBJECT_TYPE::ITEM == 0, so an item PID is just its (1-based) LST index.
+// ObjectType::Item == 0, so an item PID is just its (1-based) LST index.
 uint32_t itemPid(uint32_t index) {
-    return (static_cast<uint32_t>(geck::Pro::OBJECT_TYPE::ITEM) << 24) | index;
+    return geck::ProtoId(geck::ObjectType::Item, index).pid();
 }
 
 } // namespace

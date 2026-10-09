@@ -294,8 +294,8 @@ TEST_CASE("parseProtoFilter rejects what it cannot honour", "[proto][export]") {
     CHECK(cli::parseProtoFilter("critter", "weapon", options).has_value());
 
     REQUIRE_FALSE(cli::parseProtoFilter("item", "key", options).has_value());
-    CHECK(options.kind == Pro::OBJECT_TYPE::ITEM);
-    CHECK(options.itemType == Pro::ITEM_TYPE::KEY);
+    CHECK(options.kind == ObjectType::Item);
+    CHECK(options.itemType == ItemType::Key);
 }
 
 TEST_CASE("exportProtos without mounted data is an error", "[proto][export]") {

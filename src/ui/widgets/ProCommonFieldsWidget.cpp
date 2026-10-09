@@ -204,7 +204,7 @@ void ProCommonFieldsWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
 
     loadObjectFlags(pro->header.flags);
 
-    if (pro->type() == Pro::OBJECT_TYPE::ITEM) {
+    if (pro->type() == ObjectType::Item) {
         _sidEdit->setValue(pro->commonItemData.SID);
         _materialCombo->setCurrentIndex(pro->commonItemData.materialId);
         _containerSizeEdit->setValue(pro->commonItemData.containerSize);
@@ -226,7 +226,7 @@ void ProCommonFieldsWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 
     pro->header.flags = saveObjectFlags();
 
-    if (pro->type() == Pro::OBJECT_TYPE::ITEM) {
+    if (pro->type() == ObjectType::Item) {
         pro->commonItemData.SID = _sidEdit->value();
         pro->commonItemData.materialId = _materialCombo->currentIndex();
         pro->commonItemData.containerSize = _containerSizeEdit->value();

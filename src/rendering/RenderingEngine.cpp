@@ -92,7 +92,7 @@ sf::Color RenderingEngine::objectOutlineColor(const Object& object) const {
         if (mapObject->isWallObject()) {
             return _selectionColors.wall;
         }
-        if (mapObject->objectType() == 1u) { // Pro::OBJECT_TYPE::CRITTER
+        if (mapObject->objectType() == ObjectType::Critter) {
             return _selectionColors.critter;
         }
     }
@@ -803,7 +803,7 @@ std::shared_ptr<Object> RenderingEngine::buildExitGridPreviewObject(const Render
         // frame's FRM offset, which it reads from the current frame.
         auto previewObject = std::make_shared<Object>(frm);
         previewObject->setSprite(sf::Sprite{ _resources.textures().get(frmName) });
-        previewObject->setDirection(ObjectDirection(0));
+        previewObject->setDirection(Rotation::NE);
         previewObject->setHexPosition(hexOptional.value().get());
         return previewObject;
     } catch (const std::exception& e) {

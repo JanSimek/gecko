@@ -34,18 +34,8 @@ namespace {
         "ROTATION_NE", "ROTATION_E", "ROTATION_SE", "ROTATION_SW", "ROTATION_W", "ROTATION_NW"
     };
 
-    // fallout2-ce obj_types.h ObjectFlags / ObjectType.
-    constexpr uint32_t OBJECT_HIDDEN = 0x01;
-    constexpr uint32_t OBJECT_NO_BLOCK = 0x10;
-    constexpr uint32_t OBJECT_MULTIHEX = 0x800;
-    constexpr uint32_t OBJECT_SHOOT_THRU = 0x80000000;
-    constexpr uint32_t OBJ_TYPE_CRITTER = 1;
-    constexpr uint32_t OBJ_TYPE_SCENERY = 2;
-    constexpr uint32_t OBJ_TYPE_WALL = 3;
-
-    // objectTypeFromFid: the blocking check classifies by art, not by proto.
-    uint32_t typeFromFid(uint32_t fid) {
-        return (fid >> 24) & 0x0F;
+    bool hasFlag(const MapObject& object, Pro::ObjectFlags flag) {
+        return Pro::hasFlag(object.flags, flag);
     }
 
     std::string protoName(resource::GameResources& resources, uint32_t pid) {
@@ -72,7 +62,7 @@ namespace {
 
     ordered_json objectJson(resource::GameResources& resources, const MapObject& object) {
         return { { "pid", std::format("0x{:08X}", object.pro_pid) }, { "name", protoName(resources, object.pro_pid) },
-            { "type", Pro::typeToString(Pro::typeOfPid(object.pro_pid)) }, { "hex", object.position },
+            { "type", Pro::typeToString(ProtoId(object.pro_pid).objectType()) }, { "hex", object.position },
             { "flags", std::format("0x{:08X}", object.flags) } };
     }
 
@@ -117,7 +107,7 @@ namespace {
             return -1;
         }
 
-        bool isShootThrough(int id) const { return (object(id).flags & OBJECT_SHOOT_THRU) != 0; }
+        bool isShootThrough(int id) const { return hasFlag(object(id), Pro::ObjectFlags::OBJECT_SHOOT_THRU); }
         const MapObject& object(int id) const { return *_objects[static_cast<std::size_t>(id)]; }
         const MapObject* watcher() const { return _watcher; }
 
@@ -126,7 +116,7 @@ namespace {
             const auto hex = static_cast<int>(object.position);
             _byHex[hex].push_back(static_cast<int>(_objects.size()));
             _objects.push_back(&object);
-            if (_watcher == nullptr && hex == watcherHex && typeFromFid(object.frm_pid) == OBJ_TYPE_CRITTER) {
+            if (_watcher == nullptr && hex == watcherHex && object.fid().objectType() == ObjectType::Critter) {
                 _watcher = &object;
             }
         }
@@ -138,7 +128,7 @@ namespace {
             }
             for (const int id : it->second) {
                 const MapObject& candidate = object(id);
-                if ((!multihexOnly || (candidate.flags & OBJECT_MULTIHEX) != 0) && blocks(candidate)) {
+                if ((!multihexOnly || hasFlag(candidate, Pro::ObjectFlags::OBJECT_MULTIHEX)) && blocks(candidate)) {
                     return id;
                 }
             }
@@ -146,9 +136,11 @@ namespace {
         }
 
         bool blocks(const MapObject& candidate) const {
-            const uint32_t type = typeFromFid(candidate.frm_pid);
-            return &candidate != _watcher && (candidate.flags & OBJECT_HIDDEN) == 0 && (candidate.flags & OBJECT_NO_BLOCK) == 0
-                && (type == OBJ_TYPE_CRITTER || type == OBJ_TYPE_SCENERY || type == OBJ_TYPE_WALL);
+            // The engine's _obj_blocking_at classifies by art (objectTypeFromFid), not by proto.
+            const ObjectType type = candidate.fid().objectType();
+            return &candidate != _watcher && !hasFlag(candidate, Pro::ObjectFlags::OBJECT_HIDDEN)
+                && !hasFlag(candidate, Pro::ObjectFlags::OBJECT_NO_BLOCK)
+                && (type == ObjectType::Critter || type == ObjectType::Scenery || type == ObjectType::Wall);
         }
 
         std::vector<const MapObject*> _objects;

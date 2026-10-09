@@ -608,7 +608,7 @@ TEST_CASE("MapScriptApi reads a reference map's full floor and typed objects", "
     const std::set<int> hexes{ misc[1], misc[4] };
     CHECK(hexes == std::set<int>{ 20100, 20102 });
     for (const std::size_t at : { std::size_t{ 0 }, std::size_t{ 3 } }) {
-        CHECK(Pro::typeOfPid(static_cast<uint32_t>(misc[at])) == Pro::OBJECT_TYPE::MISC);
+        CHECK(ProtoId(static_cast<uint32_t>(misc[at])).objectType() == ObjectType::Misc);
         CHECK(misc[at + 2] == 0);
     }
     CHECK(api.mapObjectsAt("maps/ref.map", 0, "wall").empty()); // no walls on this map

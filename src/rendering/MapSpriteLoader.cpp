@@ -135,7 +135,7 @@ void MapSpriteLoader::loadObjectSprites(
             // frame rect) runs before setHexPosition because centering uses the current frame's
             // width()/height()/shift to seat the sprite on the hex.
             sceneObject->setMapObject(object);
-            sceneObject->setDirection(static_cast<ObjectDirection>(object->direction));
+            sceneObject->setDirection(static_cast<Rotation>(object->direction));
             if (auto hex = _hexgrid.getHexByPosition(object->position); hex.has_value()) {
                 sceneObject->setHexPosition(hex->get());
             }

@@ -9,20 +9,9 @@
 #include <SFML/Graphics.hpp>
 
 #include "editor/Hex.h"
+#include "format/ObjTypes.h"
 
 namespace geck {
-
-/**
- * @brief Object facing directions in the Fallout 2 hex grid system
- */
-enum class ObjectDirection : int {
-    NORTH_EAST = 0, ///< Facing North-East (default)
-    EAST = 1,       ///< Facing East
-    SOUTH_EAST = 2, ///< Facing South-East
-    SOUTH_WEST = 3, ///< Facing South-West
-    WEST = 4,       ///< Facing West
-    NORTH_WEST = 5  ///< Facing North-West
-};
 
 struct MapObject;
 class Frm;
@@ -53,7 +42,7 @@ public:
     [[nodiscard]] const Frm* getFrm() const noexcept { return _frm; }
 
     void setHexPosition(const Hex& hex);
-    void setDirection(ObjectDirection direction);
+    void setDirection(Rotation direction);
     [[nodiscard]] int getDirection() const noexcept { return _direction; }
     void rotate();
 

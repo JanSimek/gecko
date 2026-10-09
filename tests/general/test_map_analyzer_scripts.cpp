@@ -39,7 +39,7 @@ const json* findScript(const json& scripts, const std::string& section) {
 // don't resolve, so this asserts the structural fields, not the friendly names.
 TEST_CASE("analyze surfaces per-section scripts with their local variables", "[cli][analyze][scripts]") {
     StubProvider provider;
-    const uint32_t critterPid = pidOf(Pro::OBJECT_TYPE::CRITTER, 50);
+    const uint32_t critterPid = pidOf(ObjectType::Critter, 50);
 
     auto mapFile = Map::createEmptyMapFile();
 

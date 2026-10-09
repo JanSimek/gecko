@@ -196,7 +196,7 @@ TEST_CASE("dump_grid filters objects by name", "[cli][dump_grid]") {
     for (int i = 0; i < 5; ++i) {
         // Critters, not scenery: scenery dereferences its Pro in both directions, so reading the
         // map back without mounted protos fails. Critters carry their pid and nothing else.
-        const uint32_t pid = pidOf(Pro::OBJECT_TYPE::CRITTER, static_cast<uint32_t>(40 + i));
+        const uint32_t pid = pidOf(ObjectType::Critter, static_cast<uint32_t>(40 + i));
         auto object = std::make_shared<MapObject>();
         object->pro_pid = pid;
         object->elevation = 0;

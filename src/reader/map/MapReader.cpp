@@ -37,7 +37,7 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
         field = static_cast<std::remove_reference_t<decltype(field)>>(read_be_u32());
     });
 
-    uint32_t objectTypeId = object->objectType();
+    const ObjectType objectType = object->objectType();
 
     auto pro = _proLoadCallback(object->pro_pid);
 
@@ -46,31 +46,31 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
     // corrupt every object after it. Fail explicitly and name the PID (per the engine-data rule —
     // no substitute values), so the answer is "this proto is not mounted", not a silent bad parse.
     if (pro == nullptr
-        && (static_cast<Pro::OBJECT_TYPE>(objectTypeId) == Pro::OBJECT_TYPE::ITEM
-            || static_cast<Pro::OBJECT_TYPE>(objectTypeId) == Pro::OBJECT_TYPE::SCENERY)) {
-        throw ParseException("proto " + std::to_string(object->pro_pid) + " (type " + std::to_string(objectTypeId)
-                + ", index " + std::to_string(object->protoId()) + ") could not be loaded, so its object tail length is unknown",
+        && (objectType == ObjectType::Item
+            || objectType == ObjectType::Scenery)) {
+        throw ParseException("proto " + std::to_string(object->pro_pid) + " (type " + std::to_string(static_cast<int>(objectType))
+                + ", index " + std::to_string(object->pid().protoId()) + ") could not be loaded, so its object tail length is unknown",
             _path, _stream.position());
     }
 
-    switch (static_cast<Pro::OBJECT_TYPE>(objectTypeId)) {
-        case Pro::OBJECT_TYPE::ITEM: {
+    switch (objectType) {
+        case ObjectType::Item: {
             uint32_t subtype_id = pro->objectSubtypeId();
-            switch (static_cast<Pro::ITEM_TYPE>(subtype_id)) {
-                case Pro::ITEM_TYPE::AMMO:        // ammo
-                case Pro::ITEM_TYPE::MISC:        // charges - have strangely high values, or negative.
+            switch (static_cast<ItemType>(subtype_id)) {
+                case ItemType::Ammo:              // ammo
+                case ItemType::Misc:              // charges - have strangely high values, or negative.
                     object->ammo = read_be_u32(); // bullets
                     break;
-                case Pro::ITEM_TYPE::KEY:
+                case ItemType::Key:
                     object->keycode = read_be_u32(); // Observed as -1 in shipped maps.
                     break;
-                case Pro::ITEM_TYPE::WEAPON:
+                case ItemType::Weapon:
                     object->ammo = read_be_u32();     // ammo
                     object->ammo_pid = read_be_u32(); // ammo pid
                     break;
-                case Pro::ITEM_TYPE::ARMOR:
-                case Pro::ITEM_TYPE::CONTAINER:
-                case Pro::ITEM_TYPE::DRUG:
+                case ItemType::Armor:
+                case ItemType::Container:
+                case ItemType::Drug:
                     break;
                 default:
                     throw ParseException("Unknown item type " + std::to_string(subtype_id) + " for proto "
@@ -78,7 +78,7 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
                         _path, _stream.position());
             }
         } break;
-        case Pro::OBJECT_TYPE::CRITTER: {
+        case ObjectType::Critter: {
             object->damage_last_turn = read_be_u32(); // engine CritterCombatData.damageLastTurn - saves only
             object->maneuver = read_be_u32();         // engine CritterCombatData.maneuver (CRITTER_MANEUVER_* bits) - saves only
             object->current_ap = read_be_u32();       // engine CritterCombatData.ap - saves only
@@ -91,32 +91,32 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
             object->current_poison = read_be_u32();   // poison - always 0 - saves only
         } break;
 
-        case Pro::OBJECT_TYPE::SCENERY: {
+        case ObjectType::Scenery: {
 
             uint32_t subtype_id = pro->objectSubtypeId();
-            switch (static_cast<Pro::SCENERY_TYPE>(subtype_id)) {
-                case Pro::SCENERY_TYPE::LADDER_TOP:
-                case Pro::SCENERY_TYPE::LADDER_BOTTOM:
+            switch (static_cast<SceneryType>(subtype_id)) {
+                case SceneryType::LadderDown:
+                case SceneryType::LadderUp:
                     object->map = read_be_u32();
                     object->elevhex = read_be_u32();
                     // hex = elevhex & 0xFFFF;
                     // elev = ((elevhex >> 28) & 0xf) >> 1;
                     break;
-                case Pro::SCENERY_TYPE::STAIRS:
+                case SceneryType::Stairs:
                     // looks like for ladders and stairs map and elev+hex fields in the different order
                     object->elevhex = read_be_u32();
                     object->map = read_be_u32();
                     // hex = elevhex & 0xFFFF;
                     // elev = ((elevhex >> 28) & 0xf) >> 1;
                     break;
-                case Pro::SCENERY_TYPE::ELEVATOR:
+                case SceneryType::Elevator:
                     object->elevtype = read_be_u32();  // elevator type - sometimes -1
                     object->elevlevel = read_be_u32(); // current level - sometimes -1
                     break;
-                case Pro::SCENERY_TYPE::DOOR:
+                case SceneryType::Door:
                     object->walkthrough = read_be_u32(); // != 0 -> is opened;
                     break;
-                case Pro::SCENERY_TYPE::GENERIC:
+                case SceneryType::Generic:
                     break;
                 default:
                     throw ParseException("Unknown scenery type " + std::to_string(subtype_id) + " for proto "
@@ -124,10 +124,10 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
                         _path, _stream.position());
             }
         } break;
-        case Pro::OBJECT_TYPE::WALL:
-        case Pro::OBJECT_TYPE::TILE:
+        case ObjectType::Wall:
+        case ObjectType::Tile:
             break;
-        case Pro::OBJECT_TYPE::MISC:
+        case ObjectType::Misc:
             if (object->isExitGridMarker()) {
                 object->exit_map = read_be_i32();
                 object->exit_position = read_be_i32();
@@ -142,8 +142,8 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
             // the same on the way out. RPU's epamain1/epamain2 each carry 17 records with pid -1, and
             // rejecting them made both maps unreadable. Keep the object, so a load/save round-trip
             // reproduces it byte for byte.
-            spdlog::debug("Object with unrecognised type {} (pid {}) carries no type-specific data, as in the engine",
-                objectTypeId, static_cast<int32_t>(object->pro_pid));
+            spdlog::debug("Object with unrecognised type (pid {}) carries no type-specific data, as in the engine",
+                static_cast<int32_t>(object->pro_pid));
             break;
     }
 
@@ -207,17 +207,12 @@ std::unique_ptr<Map> MapReader::read() {
     uint32_t flags = read_be_u32();
     map_file->header.flags = flags;
 
-    bool elevation_low = (flags & 0x2) == 0;
-    bool elevation_medium = (flags & 0x4) == 0;
-    bool elevation_high = (flags & 0x8) == 0;
-
     int elevations = 0;
-    if (elevation_low)
-        elevations++;
-    if (elevation_medium)
-        elevations++;
-    if (elevation_high)
-        elevations++;
+    for (int elevation = 0; elevation < Map::ELEVATION_COUNT; ++elevation) {
+        if (Map::elevationIsPresent(flags, elevation)) {
+            elevations++;
+        }
+    }
     spdlog::debug("Map has {} elevation(s)", elevations);
 
     map_file->header.darkness = read_be_u32();
@@ -298,10 +293,10 @@ std::unique_ptr<Map> MapReader::read() {
                         // unknown type is worth a warning.
                         if (j < script_section_count) {
                             spdlog::warn("Unknown script PID type {} for a real script in section {}",
-                                (pid & 0xFF000000) >> 24, script_section);
+                                MapScript::sidSection(pid), script_section);
                         } else {
                             spdlog::debug("Skipping padding script slot (garbage PID type {}) in section {}",
-                                (pid & 0xFF000000) >> 24, script_section);
+                                MapScript::sidSection(pid), script_section);
                         }
                         break;
                 }

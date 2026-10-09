@@ -19,12 +19,11 @@ constexpr int kCenter = 100 * hexgrid::WIDTH + 100; // a comfortably interior he
 } // namespace
 
 TEST_CASE("blocksMovementByInstance mirrors the engine's instance-flag rule", "[reachability]") {
-    using OT = geck::Pro::OBJECT_TYPE;
-    constexpr uint32_t kWall = static_cast<uint32_t>(OT::WALL);
-    constexpr uint32_t kScenery = static_cast<uint32_t>(OT::SCENERY);
-    constexpr uint32_t kCritter = static_cast<uint32_t>(OT::CRITTER);
-    constexpr uint32_t kItem = static_cast<uint32_t>(OT::ITEM);
-    constexpr uint32_t kMisc = static_cast<uint32_t>(OT::MISC);
+    constexpr ObjectType kWall = ObjectType::Wall;
+    constexpr ObjectType kScenery = ObjectType::Scenery;
+    constexpr ObjectType kCritter = ObjectType::Critter;
+    constexpr ObjectType kItem = ObjectType::Item;
+    constexpr ObjectType kMisc = ObjectType::Misc;
     constexpr uint32_t kHidden = static_cast<uint32_t>(geck::Pro::ObjectFlags::OBJECT_HIDDEN);
     constexpr uint32_t kNoBlock = static_cast<uint32_t>(geck::Pro::ObjectFlags::OBJECT_NO_BLOCK);
 
@@ -108,8 +107,7 @@ TEST_CASE("entryHexes: player start counts only on its own elevation; every exit
     // arrive there when entering from the adjacent map).
     auto exitGrid = std::make_shared<MapObject>();
     exitGrid->position = 777;
-    exitGrid->pro_pid = (static_cast<uint32_t>(Pro::OBJECT_TYPE::MISC) << FileFormat::TYPE_MASK_SHIFT)
-        | MapObject::EXIT_GRID_PID_INDEX_FIRST;
+    exitGrid->pro_pid = ProtoId(MiscProtoTypeId::FirstExitGrid).pid();
     REQUIRE(exitGrid->isExitGridMarker());
     const std::vector<std::shared_ptr<MapObject>> objects{ exitGrid };
 

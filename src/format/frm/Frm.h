@@ -6,6 +6,7 @@
 
 #include "format/IFile.h"
 #include "Direction.h"
+#include "format/ObjTypes.h"
 
 namespace geck {
 
@@ -28,19 +29,7 @@ public:
 
     static constexpr char STANDING_ANIMATION_SUFFIX[] = "aa.frm";
 
-    enum class FRM_TYPE : char {
-        ITEM = 0,
-        CRITTER,
-        SCENERY,
-        WALL,
-        TILE,
-        MISC,
-        INTERFACE,
-        INVENTORY
-    };
-
-    // TODO: enum for the 6 directions in order: north_east, east, south_east, south_west, west, north_west
-    constexpr static int DIRECTIONS = 6;
+    constexpr static int DIRECTIONS = static_cast<int>(Rotation::Count);
 
     const std::vector<Direction>& directions() const;
     void setDirections(std::vector<Direction> directions);

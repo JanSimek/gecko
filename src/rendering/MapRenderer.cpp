@@ -141,17 +141,17 @@ namespace {
     }
 
     // A fixed colour per object category, so the same kind of object always reads the same.
-    sf::Color categoryColor(Pro::OBJECT_TYPE type) {
+    sf::Color categoryColor(ObjectType type) {
         switch (type) {
-            case Pro::OBJECT_TYPE::ITEM:
+            case ObjectType::Item:
                 return sf::Color(235, 180, 60);
-            case Pro::OBJECT_TYPE::CRITTER:
+            case ObjectType::Critter:
                 return sf::Color(224, 80, 80);
-            case Pro::OBJECT_TYPE::SCENERY:
+            case ObjectType::Scenery:
                 return sf::Color(96, 200, 120);
-            case Pro::OBJECT_TYPE::WALL:
+            case ObjectType::Wall:
                 return sf::Color(96, 150, 235);
-            case Pro::OBJECT_TYPE::MISC:
+            case ObjectType::Misc:
                 return sf::Color(200, 120, 220);
             default:
                 return sf::Color(200, 200, 200);
@@ -285,7 +285,7 @@ namespace {
     void drawObjectMarkers(sf::RenderTexture& target, const std::vector<std::shared_ptr<Object>>& objects,
         resource::GameResources& resources, bool showBlockers, MapRenderer::Legend* legend) {
         std::unordered_map<uint32_t, bool> flatCache;
-        std::map<uint32_t, int> typeCounts; // engine type value -> count
+        std::map<ObjectType, int> typeCounts;
         for (const auto& object : objects) {
             if (!object || !object->hasMapObject()) {
                 continue;
@@ -294,8 +294,8 @@ namespace {
             if (!showBlockers && isFlatProto(resources, pid, flatCache)) {
                 continue;
             }
-            const Pro::OBJECT_TYPE type = Pro::typeOfPid(pid);
-            typeCounts[static_cast<uint32_t>(type)]++;
+            const ObjectType type = ProtoId(pid).objectType();
+            typeCounts[type]++;
             const sf::FloatRect b = object->getSprite().getGlobalBounds();
             constexpr float radius = 5.0f;
             sf::CircleShape marker(radius);
@@ -307,8 +307,7 @@ namespace {
             target.draw(marker);
         }
         if (legend != nullptr) {
-            for (const auto& [typeValue, count] : typeCounts) {
-                const auto type = static_cast<Pro::OBJECT_TYPE>(typeValue);
+            for (const auto& [type, count] : typeCounts) {
                 legend->objects.push_back({ Pro::typeToString(type), categoryColor(type), count });
             }
             std::ranges::sort(legend->objects, [](const auto& a, const auto& b) { return a.count > b.count; });
@@ -323,11 +322,11 @@ namespace {
         float radius;
     };
 
-    SemanticRole semanticRoleFor(const MapObject& mo, Pro::OBJECT_TYPE type) {
+    SemanticRole semanticRoleFor(const MapObject& mo, ObjectType type) {
         if (mo.isExitGridMarker()) {
             return { sf::Color(64, 210, 235), "exit grid", 6.0f };
         }
-        if (type == Pro::OBJECT_TYPE::CRITTER) {
+        if (type == ObjectType::Critter) {
             return { distinctColor(static_cast<int>(mo.group_id)), "critter team " + std::to_string(mo.group_id), 5.0f };
         }
         return { categoryColor(type), Pro::typeToString(type), 5.0f };
@@ -375,7 +374,7 @@ namespace {
                     center = { static_cast<float>(h->get().x()), static_cast<float>(h->get().y()) };
                 }
             }
-            const SemanticRole role = semanticRoleFor(*mo, Pro::typeOfPid(mo->pro_pid));
+            const SemanticRole role = semanticRoleFor(*mo, ProtoId(mo->pro_pid).objectType());
 
             sf::CircleShape marker(role.radius);
             marker.setOrigin({ role.radius, role.radius });

@@ -22,7 +22,7 @@ using namespace geck;
 TEST_CASE("MapReader parses the real sfshutl2 map", "[map]") {
     geck::test::StubProvider provider;
     for (uint32_t pid = 33555970u; pid <= 33555979u; ++pid) {
-        provider.addScenery(pid, Pro::SCENERY_TYPE::GENERIC);
+        provider.addScenery(pid, SceneryType::Generic);
     }
 
     MapReader reader{ [&provider](uint32_t pid) { return provider.load(pid); } };

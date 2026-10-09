@@ -520,7 +520,7 @@ namespace {
                     name = msg->message(pro->header.message_id).text;
                 }
             }
-            json info{ { "pid", pid }, { "type", Pro::typeToString(Pro::typeOfPid(pid)) },
+            json info{ { "pid", pid }, { "type", Pro::typeToString(ProtoId(pid).objectType()) },
                 { "name", name }, { "flat", flat } };
 
             // The numbers, not just the label. Without these a caller wanting a critter's
@@ -534,7 +534,7 @@ namespace {
                 static const char* kSpecial[] = { "strength", "perception", "endurance",
                     "charisma", "intelligence", "agility", "luck" };
 
-                if (Pro::typeOfPid(pid) == Pro::OBJECT_TYPE::CRITTER) {
+                if (ProtoId(pid).objectType() == ObjectType::Critter) {
                     const auto& c = pro->critterData;
                     json special = json::object();
                     for (int i = 0; i < Pro::SPECIAL_STATS_COUNT; ++i) {
@@ -590,7 +590,7 @@ namespace {
                         { "aiPacket", c.aiPacket },
                         { "teamNumber", c.teamNumber },
                     };
-                } else if (pro->itemType() == Pro::ITEM_TYPE::WEAPON) {
+                } else if (pro->itemType() == ItemType::Weapon) {
                     const auto& w = pro->weaponData;
                     info["weapon"] = json{
                         { "perk", weaponPerkName(w.perk) },

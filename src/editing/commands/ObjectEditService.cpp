@@ -201,7 +201,7 @@ void ObjectEditService::applyObjectDirections(const std::vector<std::shared_ptr<
             spdlog::warn("applyObjectDirections: Invalid direction {}", directions[i]);
             continue;
         }
-        objects[i]->setDirection(static_cast<ObjectDirection>(directions[i]));
+        objects[i]->setDirection(static_cast<Rotation>(directions[i]));
     }
 }
 
@@ -264,7 +264,7 @@ void ObjectEditService::applyFrmToObject(const std::shared_ptr<Object>& object, 
         object->setSprite(std::move(sprite));
         if (object->hasMapObject()) {
             object->getMapObject().frm_pid = frmPid;
-            object->setDirection(static_cast<ObjectDirection>(object->getMapObject().direction));
+            object->setDirection(static_cast<Rotation>(object->getMapObject().direction));
         }
     } catch (const std::exception& e) {
         spdlog::error("ObjectEditService::applyFrmToObject - failed to apply FRM {}: {}", frmPath, e.what());

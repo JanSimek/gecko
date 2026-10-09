@@ -3,6 +3,7 @@
 #include "ResourceRepository.h"
 
 #include "format/frm/Frm.h"
+#include "format/frm/FrmId.h"
 #include "format/lst/Lst.h"
 #include "util/Constants.h"
 #include "resource/CritterFrmResolver.h"
@@ -62,11 +63,11 @@ bool hasFrmExtension(std::string_view filename) {
         || ext == ".fr3" || ext == ".fr4" || ext == ".fr5";
 }
 
-std::optional<Frm::FRM_TYPE> frmTypeForArtPath(std::string_view path) {
-    // frmTypeDescriptions is indexed in FRM_TYPE enum order, so the index is the type.
+std::optional<ObjectType> frmTypeForArtPath(std::string_view path) {
+    // frmTypeDescriptions is indexed in ObjectType order, so the index is the type.
     for (size_t i = 0; i < frmTypeDescriptions.size(); ++i) {
         if (path.find(frmTypeDescriptions[i].prefixPath) != std::string_view::npos) {
-            return static_cast<Frm::FRM_TYPE>(i);
+            return static_cast<ObjectType>(i);
         }
     }
     return std::nullopt;
@@ -77,26 +78,20 @@ FrmResolver::FrmResolver(ResourceRepository& repository)
 }
 
 std::string FrmResolver::resolve(uint32_t fid) {
-    auto baseId = fid & FileFormat::BASE_ID_MASK;
-    // Mask to the 4 type bits (engine FID_TYPE == (fid & 0x0F000000) >> 24); a bare
-    // shift would fold in the rotation bits (28-30) and misclassify rotated FIDs.
-    auto type = static_cast<Frm::FRM_TYPE>((fid & FileFormat::TYPE_MASK) >> FileFormat::TYPE_MASK_SHIFT);
+    const FrmId frmId{ fid };
+    const ObjectType type = frmId.objectType();
+    const uint32_t baseId = frmId.frameId();
 
-    if (type == Frm::FRM_TYPE::CRITTER) {
-        baseId = fid & FileFormat::CRITTER_ID_MASK;
-        type = static_cast<Frm::FRM_TYPE>((fid & FileFormat::TYPE_MASK) >> FileFormat::TYPE_MASK_SHIFT);
-    }
-
-    if (type == Frm::FRM_TYPE::MISC && baseId == WallBlockers::SCROLL_BLOCKER_BASE_ID) {
+    if (type == ObjectType::Misc && baseId == WallBlockers::SCROLL_BLOCKER_FID.frameId()) {
         return std::string(ResourcePaths::Frm::SCROLL_BLOCKER);
     }
 
-    if (type == Frm::FRM_TYPE::WALL && baseId == 620) {
+    if (type == ObjectType::Wall && baseId == 620) {
         return std::string(ResourcePaths::Frm::WALL_BLOCK);
     }
 
-    if (type > Frm::FRM_TYPE::INVENTORY) {
-        throw std::runtime_error("Invalid FRM_TYPE");
+    if (type == ObjectType::Invalid || type > ObjectType::Inventory) {
+        throw std::runtime_error("Invalid FID object type");
     }
 
     const auto& typeDescription = frmTypeDescriptions[static_cast<size_t>(type)];
@@ -112,7 +107,7 @@ std::string FrmResolver::resolve(uint32_t fid) {
     }
 
     std::string frmName = lst->list().at(baseId);
-    if (type == Frm::FRM_TYPE::CRITTER) {
+    if (type == ObjectType::Critter) {
         return std::string(typeDescription.prefixPath) + frmName.substr(0, 6) + Frm::STANDING_ANIMATION_SUFFIX;
     }
 
@@ -148,10 +143,10 @@ std::optional<uint32_t> FrmResolver::resolveFid(const std::string& artPath) {
             return std::nullopt;
         }
 
-        const auto type = static_cast<Frm::FRM_TYPE>(typeIndex);
+        const auto type = static_cast<ObjectType>(typeIndex);
         const auto& entries = lst->list();
         for (size_t i = 0; i < entries.size(); ++i) {
-            if (type == Frm::FRM_TYPE::CRITTER) {
+            if (type == ObjectType::Critter) {
                 const auto commaPos = entries[i].find(',');
                 const std::string baseName = trimmed(
                     commaPos != std::string::npos ? std::string_view(entries[i]).substr(0, commaPos) : std::string_view(entries[i]));
@@ -166,7 +161,11 @@ std::optional<uint32_t> FrmResolver::resolveFid(const std::string& artPath) {
 
             const std::string entry = trimmed(entries[i]);
             if (!entry.empty() && equalsIgnoreCase(entry, filename)) {
-                return (static_cast<uint32_t>(type) << FileFormat::TYPE_MASK_SHIFT) | static_cast<uint32_t>(i);
+                // A FID holds a 12-bit frame id, so a later entry has no FID that names it.
+                if (i > FrmId::MAX_FRAME_ID) {
+                    return std::nullopt;
+                }
+                return FrmId(type, static_cast<uint32_t>(i)).fid();
             }
         }
 

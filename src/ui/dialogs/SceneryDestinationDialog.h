@@ -20,7 +20,7 @@ class SceneryDestinationDialog : public BaseDialog {
     Q_OBJECT
 
 public:
-    SceneryDestinationDialog(Pro::SCENERY_TYPE sceneryType,
+    SceneryDestinationDialog(SceneryType sceneryType,
         uint32_t elevhex, uint32_t map, uint32_t elevtype, uint32_t elevlevel,
         QWidget* parent = nullptr);
 

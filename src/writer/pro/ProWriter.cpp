@@ -19,18 +19,18 @@ bool ProWriter::write(const Pro& pro) {
         // writeItemData/writeWallData and was MISSING from writeCritterData/
         // writeSceneryData, which truncated those prototypes by 8 bytes.
         switch (pro.type()) {
-            case Pro::OBJECT_TYPE::TILE:
-            case Pro::OBJECT_TYPE::MISC:
+            case ObjectType::Tile:
+            case ObjectType::Misc:
                 break;
             default:
                 utils.writeBE32(pro.commonItemData.flagsExt);
                 break;
         }
         switch (pro.type()) {
-            case Pro::OBJECT_TYPE::ITEM:
-            case Pro::OBJECT_TYPE::CRITTER:
-            case Pro::OBJECT_TYPE::SCENERY:
-            case Pro::OBJECT_TYPE::WALL:
+            case ObjectType::Item:
+            case ObjectType::Critter:
+            case ObjectType::Scenery:
+            case ObjectType::Wall:
                 utils.writeBE32(pro.commonItemData.SID);
                 break;
             default:
@@ -38,23 +38,25 @@ bool ProWriter::write(const Pro& pro) {
         }
 
         switch (pro.type()) {
-            case Pro::OBJECT_TYPE::ITEM:
+            case ObjectType::Item:
                 writeItemData(pro);
                 break;
-            case Pro::OBJECT_TYPE::CRITTER:
+            case ObjectType::Critter:
                 writeCritterData(pro);
                 break;
-            case Pro::OBJECT_TYPE::SCENERY:
+            case ObjectType::Scenery:
                 writeSceneryData(pro);
                 break;
-            case Pro::OBJECT_TYPE::WALL:
+            case ObjectType::Wall:
                 writeWallData(pro);
                 break;
-            case Pro::OBJECT_TYPE::TILE:
+            case ObjectType::Tile:
                 writeTileData(pro);
                 break;
-            case Pro::OBJECT_TYPE::MISC:
+            case ObjectType::Misc:
                 writeMiscData(pro);
+                break;
+            default:
                 break;
         }
 
@@ -99,29 +101,31 @@ void ProWriter::writeItemData(const Pro& pro) {
     utils.writeU8(pro.commonItemData.soundId);
 
     // Write item-type-specific data
-    Pro::ITEM_TYPE itemType = static_cast<Pro::ITEM_TYPE>(pro.objectSubtypeId());
+    ItemType itemType = static_cast<ItemType>(pro.objectSubtypeId());
 
     switch (itemType) {
-        case Pro::ITEM_TYPE::ARMOR:
+        case ItemType::Armor:
             writeArmorData(pro);
             break;
-        case Pro::ITEM_TYPE::CONTAINER:
+        case ItemType::Container:
             writeContainerData(pro);
             break;
-        case Pro::ITEM_TYPE::DRUG:
+        case ItemType::Drug:
             writeDrugData(pro);
             break;
-        case Pro::ITEM_TYPE::WEAPON:
+        case ItemType::Weapon:
             writeWeaponData(pro);
             break;
-        case Pro::ITEM_TYPE::AMMO:
+        case ItemType::Ammo:
             writeAmmoData(pro);
             break;
-        case Pro::ITEM_TYPE::MISC:
+        case ItemType::Misc:
             writeMiscItemData(pro);
             break;
-        case Pro::ITEM_TYPE::KEY:
+        case ItemType::Key:
             writeKeyData(pro);
+            break;
+        default:
             break;
     }
 
@@ -346,27 +350,29 @@ void ProWriter::writeSceneryData(const Pro& pro) {
     utils.writeU8(sceneryData.soundId);
 
     // Write subtype-specific data based on scenery type
-    Pro::SCENERY_TYPE sceneryType = static_cast<Pro::SCENERY_TYPE>(pro.objectSubtypeId());
+    SceneryType sceneryType = static_cast<SceneryType>(pro.objectSubtypeId());
 
     switch (sceneryType) {
-        case Pro::SCENERY_TYPE::DOOR:
+        case SceneryType::Door:
             utils.writeBE32(sceneryData.doorData.walkThroughFlag);
             utils.writeBE32(sceneryData.doorData.unknownField);
             break;
-        case Pro::SCENERY_TYPE::STAIRS:
+        case SceneryType::Stairs:
             utils.writeBE32(sceneryData.stairsData.destTile);
             utils.writeBE32(sceneryData.stairsData.destElevation);
             break;
-        case Pro::SCENERY_TYPE::ELEVATOR:
+        case SceneryType::Elevator:
             utils.writeBE32(sceneryData.elevatorData.elevatorType);
             utils.writeBE32(sceneryData.elevatorData.elevatorLevel);
             break;
-        case Pro::SCENERY_TYPE::LADDER_BOTTOM:
-        case Pro::SCENERY_TYPE::LADDER_TOP:
+        case SceneryType::LadderUp:
+        case SceneryType::LadderDown:
             utils.writeBE32(sceneryData.ladderData.destTileAndElevation);
             break;
-        case Pro::SCENERY_TYPE::GENERIC:
+        case SceneryType::Generic:
             utils.writeBE32(sceneryData.genericData.unknownField);
+            break;
+        default:
             break;
     }
 

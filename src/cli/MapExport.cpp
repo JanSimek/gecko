@@ -60,7 +60,7 @@ namespace {
                     // carried, so their inventoryFID is -1 and only header.FID has art. That is 108 of
                     // the 424 item protos, so without the fallback a quarter of them draw nothing.
                     info.fid = pro->header.FID;
-                    if (Pro::typeOfPid(pid) == Pro::OBJECT_TYPE::ITEM
+                    if (ProtoId(pid).objectType() == ObjectType::Item
                         && pro->commonItemData.inventoryFID >= 0) {
                         info.fid = pro->commonItemData.inventoryFID;
                     }
@@ -83,19 +83,19 @@ namespace {
     };
 
     const char* kindOf(std::uint32_t pid) {
-        using enum Pro::OBJECT_TYPE;
-        switch (Pro::typeOfPid(pid)) {
-            case ITEM:
+        using enum ObjectType;
+        switch (ProtoId(pid).objectType()) {
+            case Item:
                 return "item";
-            case CRITTER:
+            case Critter:
                 return "critter";
-            case SCENERY:
+            case Scenery:
                 return "scenery";
-            case WALL:
+            case Wall:
                 return "wall";
-            case TILE:
+            case Tile:
                 return "tile";
-            case MISC:
+            case Misc:
                 return "misc";
             default:
                 return "unknown";
@@ -106,12 +106,12 @@ namespace {
         if (object.isExitGridMarker()) {
             return true;
         }
-        using enum Pro::OBJECT_TYPE;
-        const auto type = Pro::typeOfPid(object.pro_pid);
-        if (type == ITEM || type == CRITTER) {
+        using enum ObjectType;
+        const auto type = ProtoId(object.pro_pid).objectType();
+        if (type == Item || type == Critter) {
             return true;
         }
-        return includeScenery && (type == SCENERY || type == WALL);
+        return includeScenery && (type == Scenery || type == Wall);
     }
 
     // The script attached to an object, as {programIndex, name}, or null. programIndex is the engine's

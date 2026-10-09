@@ -19,6 +19,15 @@ namespace geck {
 
 struct MapObject;
 
+/// Engine MapHeaderFlags (map_defs.h MAP_HEADER_*): bits of Map::MapHeader::flags.
+enum class MapHeaderFlags : uint32_t {
+    None = 0x00,
+    Saved = 0x01,
+    Elevation0 = 0x02, // set when elevation 0 has no tile block
+    Elevation1 = 0x04,
+    Elevation2 = 0x08,
+};
+
 class Map : public IFile {
 public:
     static constexpr unsigned ROWS = 100;
@@ -36,10 +45,15 @@ public:
     Map(std::filesystem::path path)
         : IFile(path) { }
 
-    /// A cleared elevation flag bit (0x2 << elevation) means that elevation's
-    /// tile block is present in the .map file; a set bit means it is absent.
+    /// The MapHeaderFlags::Elevation* bit for an elevation (0..2).
+    static constexpr uint32_t elevationFlag(int elevation) {
+        return static_cast<uint32_t>(MapHeaderFlags::Elevation0) << elevation;
+    }
+
+    /// A cleared elevation flag bit means that elevation's tile block is present in the .map file;
+    /// a set bit means it is absent.
     static constexpr bool elevationIsPresent(uint32_t flags, int elevation) {
-        return (flags & (0x2u << elevation)) == 0;
+        return (flags & elevationFlag(elevation)) == 0;
     }
 
     // Header

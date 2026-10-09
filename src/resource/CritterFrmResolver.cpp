@@ -1,4 +1,7 @@
 #include "CritterFrmResolver.h"
+
+#include "format/frm/FrmId.h"
+
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <unordered_map>
@@ -6,14 +9,13 @@
 namespace geck {
 
 std::string CritterFrmResolver::generateCritterFrmName(const std::string& baseName, uint32_t frmPid) {
-    // Extract components from FRM PID (based on legacy mapper logic)
-    uint32_t index = frmPid & 0x00000FFF;
-    uint32_t id1 = (frmPid & 0x0000F000) >> 12;
-    uint32_t id2 = (frmPid & 0x00FF0000) >> 16;
-    uint32_t id3 = (frmPid & 0x70000000) >> 28;
+    const FrmId fid{ frmPid };
+    const uint32_t id1 = fid.weaponAnimation();
+    const uint32_t id2 = fid.animationType();
+    const Rotation rotation = fid.rotation();
 
-    spdlog::debug("CritterFrmResolver: Generating FRM name for PID 0x{:08X} - index={}, id1={}, id2={}, id3={}",
-        frmPid, index, id1, id2, id3);
+    spdlog::debug("CritterFrmResolver: Generating FRM name for FID 0x{:08X} - index={}, weapon={}, animation={}, rotation={}",
+        frmPid, fid.frameId(), id1, id2, static_cast<int>(rotation));
 
     char suffix1, suffix2;
     if (!getSuffixes(id1, id2, suffix1, suffix2)) {
@@ -26,7 +28,8 @@ std::string CritterFrmResolver::generateCritterFrmName(const std::string& baseNa
     filename += suffix1;
     filename += suffix2;
     filename += ".fr";
-    filename += (id3 && id3 <= 5) ? char('0' + id3 - 1) : 'm';
+    // Rotation NE (0) is the multi-direction .frm; NE+n is the single-direction .fr(n-1).
+    filename += (rotation > Rotation::NE) ? char('0' + static_cast<int>(rotation) - 1) : 'm';
 
     spdlog::debug("CritterFrmResolver: Generated filename: {}", filename);
     return filename;
@@ -45,18 +48,16 @@ uint32_t CritterFrmResolver::deriveCritterFrmPid(const std::string& /* baseName 
         return 0;
     }
 
-    uint32_t id3 = 0;
+    // The inverse of generateCritterFrmName's rotation rule; '5' encodes past Rotation::NW, which
+    // FrmId carries as raw bits.
+    Rotation rotation = Rotation::NE;
     if (direction >= '0' && direction <= '5') {
-        id3 = (direction - '0') + 1;
-    } else if (direction == 'm') {
-        id3 = 0;
-    } else {
+        rotation = static_cast<Rotation>((direction - '0') + 1);
+    } else if (direction != 'm') {
         return 0;
     }
 
-    uint32_t frmPid = (id3 << 28) | (1 << 24) | (id2 << 16) | (id1 << 12) | baseIndex;
-
-    return frmPid;
+    return FrmId(ObjectType::Critter, baseIndex, id2, id1, rotation).fid();
 }
 
 std::string CritterFrmResolver::getAnimationTypeName(const std::string& frmFilename) {

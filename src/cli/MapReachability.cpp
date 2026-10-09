@@ -49,8 +49,8 @@ namespace {
     // Only critters and items are gameplay content worth flagging as "orphaned" if cut off.
     bool isGameplayObject(const MapObject& object) {
         const auto type = object.objectType();
-        return type == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)
-            || type == static_cast<uint32_t>(Pro::OBJECT_TYPE::ITEM);
+        return type == ObjectType::Critter
+            || type == ObjectType::Item;
     }
 
     // Per exit grid, whether the player can walk to it *from the start specifically* (same component as

@@ -2,6 +2,9 @@
 
 #include <cstdint>
 
+#include "format/frm/FrmId.h"
+#include "format/pro/ProtoTypes.h"
+
 namespace geck {
 
 /**
@@ -90,45 +93,20 @@ namespace UI {
     constexpr int TIMER_INTERVAL_MS = 33; ///< Timer interval for 30 FPS updates (33ms = ~30 FPS)
 }
 
-// Object rotation constants
-namespace Rotation {
-    constexpr int DEFAULT_DIRECTION = 0; ///< Default object direction
-    constexpr int DIRECTION_RESET = 0;   ///< Reset direction value
-}
-
 // File format constants
 namespace FileFormat {
-    constexpr int TYPE_MASK_SHIFT = 24;              ///< Bit shift for type field in PIDs/FIDs
-    constexpr uint32_t TYPE_MASK = 0x0F000000;       ///< FID type mask: high nibble only (bits 28-30 hold rotation)
-    constexpr uint32_t FULL_TYPE_MASK = 0xFF000000;  ///< PID type mask: full high byte (PIDs carry no rotation)
-    constexpr uint32_t BASE_ID_MASK = 0x00FFFFFF;    ///< Base ID mask for PIDs/FIDs
-    constexpr uint32_t CRITTER_ID_MASK = 0x00000FFF; ///< Special mask for critter IDs
-    constexpr int FALLOUT2_MAP_VERSION = 20;         ///< Standard Fallout 2 map version
+    constexpr int FALLOUT2_MAP_VERSION = 20; ///< Standard Fallout 2 map version
 }
 
-// Wall Blocker constants
+// Blocker objects
 namespace WallBlockers {
-    // Proto IDs for wall blockers (MISC type objects)
-    // These objects mark hexes as unwalkable for pathfinding
-    constexpr uint32_t NORMAL_WALL_BLOCKER_PID = 0x05000000 | 620;   ///< Proto 620 - Normal wall blocker
-    constexpr uint32_t SHOOT_THROUGH_BLOCKER_PID = 0x05000000 | 621; ///< Proto 621 - Shoot-through wall blocker
-
     // Scroll blockers. The engine identifies them by this exact proto and never looks at the art:
     // _obj_scroll_blocking_at() tests `obj->pid == 0x500000C` (fallout2-ce object.cc), which
     // tileSetCenter() consults to refuse a scroll. Proto 12 is "Scroll Blocker"; proto 24, which
     // this editor used to write, is "Flare" - the engine ignores those entirely.
-    constexpr uint32_t SCROLL_BLOCKER_PID = 0x05000000 | 12;                         ///< Proto 12 - Scroll Blocker
-    constexpr uint32_t SCROLL_BLOCKER_BASE_ID = 1;                                   ///< scrblk.frm's art index, within MISC art
-    constexpr uint32_t SCROLL_BLOCKER_FRM_PID = 0x05000000 | SCROLL_BLOCKER_BASE_ID; ///< art/misc/scrblk.frm
-
-    // Flag bit for blocking objects
-    constexpr uint32_t BLOCKING_FLAG = 0x00000010; ///< Flag indicating object blocks movement
-
-    // MISC object type ID
-    constexpr uint32_t MISC_TYPE_ID = 5; ///< MISC type in object type enum
-
-    // Generic proto ID for simple objects
-    constexpr uint32_t GENERIC_PROTO_ID = 24; ///< Proto 24 - Generic small object
+    constexpr ProtoId SCROLL_BLOCKER_PID{ MiscProtoTypeId::ScrollBlocker };
+    /// The art the shipped Scroll Blocker proto carries (block.frm); FrmResolver draws it as scrblk.frm.
+    constexpr FrmId SCROLL_BLOCKER_FID{ MiscFrameId::Block };
 }
 
 // Exit Grid constants
@@ -160,8 +138,8 @@ namespace ExitGrid {
     constexpr uint32_t WORLD_MAP_EXIT = 0xFFFFFFFE; ///< -2: Opens world map view
 
     // Proto PIDs for exit grids (MISC type 0x05, indices 16-23 = the eight directions)
-    constexpr uint32_t FIRST_EXIT_GRID_PID = 0x05000010; ///< First exit grid proto (index 16, dir 0)
-    constexpr uint32_t LAST_EXIT_GRID_PID = 0x05000017;  ///< Last exit grid proto (index 23, dir 7)
+    constexpr uint32_t FIRST_EXIT_GRID_PID = ProtoId(MiscProtoTypeId::FirstExitGrid).pid(); ///< 0x05000010, dir 0
+    constexpr uint32_t LAST_EXIT_GRID_PID = ProtoId(MiscProtoTypeId::LastExitGrid).pid();   ///< 0x05000017, dir 7
 
     // The eight directions, by the line a user draws / the iso edge the marker caps.
     enum Direction {

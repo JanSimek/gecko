@@ -29,7 +29,7 @@ void ProPreviewPanelWidget::setupUI() {
     layout->setSpacing(0);
     layout->setAlignment(Qt::AlignCenter);
 
-    if (_pro && _pro->type() == Pro::OBJECT_TYPE::ITEM) {
+    if (_pro && _pro->type() == ObjectType::Item) {
         auto* dualWidget = new QWidget(this);
         auto* dualLayout = new QHBoxLayout(dualWidget);
         dualLayout->setContentsMargins(0, 0, 0, 0);
@@ -65,7 +65,7 @@ void ProPreviewPanelWidget::refresh() {
         return;
     }
 
-    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
+    if (_pro->type() == ObjectType::Item) {
         refreshInventoryPreview();
         refreshGroundPreview();
         return;
@@ -112,7 +112,7 @@ void ProPreviewPanelWidget::applyPreview(ObjectPreviewWidget* previewWidget, int
 }
 
 int32_t ProPreviewPanelWidget::inventoryFid() const {
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM) {
+    if (!_pro || _pro->type() != ObjectType::Item) {
         return 0;
     }
 
@@ -120,7 +120,7 @@ int32_t ProPreviewPanelWidget::inventoryFid() const {
 }
 
 int32_t ProPreviewPanelWidget::groundFid() const {
-    if (!_pro || _pro->type() != Pro::OBJECT_TYPE::ITEM) {
+    if (!_pro || _pro->type() != ObjectType::Item) {
         return 0;
     }
 
@@ -141,7 +141,7 @@ void ProPreviewPanelWidget::onPreviewFidChangeRequested() {
     dialog.setObjectTypeFilter(FrmSelectorDialog::filterForObjectType(_pro->type()));
 
     uint32_t initialFid = 0;
-    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
+    if (_pro->type() == ObjectType::Item) {
         if (senderWidget == _inventoryPreviewWidget) {
             const int32_t currentInventoryFid = inventoryFid();
             initialFid = static_cast<uint32_t>(currentInventoryFid > 0 ? currentInventoryFid : groundFid());
@@ -164,7 +164,7 @@ void ProPreviewPanelWidget::onPreviewFidChangeRequested() {
     }
     const uint32_t selectedFrmPid = *selectedFrmPidOpt;
 
-    if (_pro->type() == Pro::OBJECT_TYPE::ITEM) {
+    if (_pro->type() == ObjectType::Item) {
         if (senderWidget == _inventoryPreviewWidget) {
             Q_EMIT inventoryFidSelected(static_cast<int32_t>(selectedFrmPid));
         } else if (senderWidget == _groundPreviewWidget) {

@@ -101,7 +101,7 @@ void Object::setFrm(const Frm* frm) {
     _frm = frm;
 
     _direction = 0;
-    setDirection(ObjectDirection(_direction));
+    setDirection(Rotation(_direction));
 }
 
 void Object::setHexPosition(const Hex& hex) {
@@ -133,7 +133,7 @@ int Object::height() const {
     return _frm->directions().at(_direction).frames().at(0).height();
 }
 
-void Object::setDirection(ObjectDirection direction) {
+void Object::setDirection(Rotation direction) {
     _direction = static_cast<int>(direction);
 
     // Clamp out-of-range direction index. arcaves.map has one scrblk object with an
@@ -163,7 +163,7 @@ void Object::rotate() {
     } else {
         _direction++;
     }
-    setDirection(ObjectDirection(_direction));
+    setDirection(Rotation(_direction));
 }
 
 void Object::select() {

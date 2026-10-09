@@ -12,15 +12,15 @@ namespace {
     constexpr uint32_t bit(Pro::ObjectFlags f) { return static_cast<uint32_t>(f); }
 } // namespace
 
-ObjectFlagsDialog::ObjectFlagsDialog(uint32_t flags, uint32_t objectType, QWidget* parent)
+ObjectFlagsDialog::ObjectFlagsDialog(uint32_t flags, ObjectType objectType, QWidget* parent)
     : BaseDialog("Object Flags", parent)
     , _originalFlags(flags) {
 
     auto* mainLayout = new QVBoxLayout(this);
 
-    const bool isItem = objectType == static_cast<uint32_t>(Pro::OBJECT_TYPE::ITEM);
-    const bool isWallOrScenery = objectType == static_cast<uint32_t>(Pro::OBJECT_TYPE::WALL)
-        || objectType == static_cast<uint32_t>(Pro::OBJECT_TYPE::SCENERY);
+    const bool isItem = objectType == ObjectType::Item;
+    const bool isWallOrScenery = objectType == ObjectType::Wall
+        || objectType == ObjectType::Scenery;
 
     auto* behaviourGroup = new QGroupBox("Behaviour", this);
     auto* behaviourLayout = new QVBoxLayout(behaviourGroup);

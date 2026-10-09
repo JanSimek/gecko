@@ -560,19 +560,19 @@ void SelectionPanel::updateObjectInfo() {
 
             // Per-instance editors, gated by object type.
             const auto objectType = pro->type();
-            const bool isScenery = objectType == Pro::OBJECT_TYPE::SCENERY;
-            Pro::SCENERY_TYPE sceneryType = Pro::SCENERY_TYPE::GENERIC;
+            const bool isScenery = objectType == ObjectType::Scenery;
+            SceneryType sceneryType = SceneryType::Generic;
             if (isScenery) {
-                sceneryType = static_cast<Pro::SCENERY_TYPE>(pro->objectSubtypeId());
+                sceneryType = static_cast<SceneryType>(pro->objectSubtypeId());
             }
             const bool hasDestination = isScenery
-                && (sceneryType == Pro::SCENERY_TYPE::STAIRS
-                    || sceneryType == Pro::SCENERY_TYPE::LADDER_TOP
-                    || sceneryType == Pro::SCENERY_TYPE::LADDER_BOTTOM
-                    || sceneryType == Pro::SCENERY_TYPE::ELEVATOR);
-            const bool isDoor = isScenery && sceneryType == Pro::SCENERY_TYPE::DOOR;
-            const bool isContainer = objectType == Pro::OBJECT_TYPE::ITEM
-                && pro->itemType() == Pro::ITEM_TYPE::CONTAINER;
+                && (sceneryType == SceneryType::Stairs
+                    || sceneryType == SceneryType::LadderDown
+                    || sceneryType == SceneryType::LadderUp
+                    || sceneryType == SceneryType::Elevator);
+            const bool isDoor = isScenery && sceneryType == SceneryType::Door;
+            const bool isContainer = objectType == ObjectType::Item
+                && pro->itemType() == ItemType::Container;
 
             // Flags and light apply to every real object (exit-grid markers use
             // their own editor, handled above).
@@ -580,14 +580,14 @@ void SelectionPanel::updateObjectInfo() {
             _editLightButton->setVisible(true);
             _editDestinationButton->setVisible(hasDestination);
             _editInteractionButton->setVisible(isDoor || isContainer);
-            _editCritterButton->setVisible(objectType == Pro::OBJECT_TYPE::CRITTER);
+            _editCritterButton->setVisible(objectType == ObjectType::Critter);
 
             // Scripts can be attached to items, critters, scenery and walls
             // (engine mapper instance editors). Tiles/misc markers cannot.
-            const bool scriptable = objectType == Pro::OBJECT_TYPE::ITEM
-                || objectType == Pro::OBJECT_TYPE::CRITTER
-                || objectType == Pro::OBJECT_TYPE::SCENERY
-                || objectType == Pro::OBJECT_TYPE::WALL;
+            const bool scriptable = objectType == ObjectType::Item
+                || objectType == ObjectType::Critter
+                || objectType == ObjectType::Scenery
+                || objectType == ObjectType::Wall;
             _scriptContainer->setVisible(scriptable);
             if (scriptable) {
                 updateScriptSection();
@@ -898,8 +898,7 @@ void SelectionPanel::onChangeFrmClicked() {
 
                 Q_EMIT objectFrmPathChanged(_selectedObject.value(), newFrmPath);
 
-                // Custom FID: 0xFF in the high byte of the baseId (not from an LST).
-                bool isCustomFid = ((derivedFrmPid & 0x00FF0000) == 0x00FF0000);
+                const bool isCustomFid = FrmSelectorDialog::isCustomFid(derivedFrmPid);
 
                 if (derivedFrmPid != currentFrmPid) {
                     if (isCustomFid) {
@@ -937,7 +936,7 @@ void SelectionPanel::onChangeFrmClicked() {
                 // Critters are a special case: many FRMs work in-game even if not in the LST.
                 // Deliberate visual-only fallback - keep the original frm_pid for game
                 // compatibility while still showing the new FRM in the editor.
-                if ((currentFrmPid >> 24) == 1) { // FID type field 1 == critter
+                if (FrmId(currentFrmPid).objectType() == ObjectType::Critter) {
                     spdlog::warn("SelectionPanel: FRM '{}' not found in critters.lst - change may not persist in game", filename);
                     spdlog::debug("SelectionPanel: Keeping original FRM PID ({}) for game compatibility", currentFrmPid);
 
@@ -1033,7 +1032,7 @@ void SelectionPanel::onEditFlagsClicked() {
         return;
     }
 
-    const uint32_t objectType = mapObject->objectType();
+    const ObjectType objectType = mapObject->objectType();
     ObjectFlagsDialog dialog(mapObject->flags, objectType, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
@@ -1088,13 +1087,13 @@ void SelectionPanel::onEditDestinationClicked() {
         return;
     }
 
-    Pro::SCENERY_TYPE sceneryType = Pro::SCENERY_TYPE::GENERIC;
+    SceneryType sceneryType = SceneryType::Generic;
     try {
         auto pro = _resources.loadPro(mapObject->pro_pid);
-        if (!pro || pro->type() != Pro::OBJECT_TYPE::SCENERY) {
+        if (!pro || pro->type() != ObjectType::Scenery) {
             return;
         }
-        sceneryType = static_cast<Pro::SCENERY_TYPE>(pro->objectSubtypeId());
+        sceneryType = static_cast<SceneryType>(pro->objectSubtypeId());
     } catch (const std::exception& e) {
         spdlog::warn("onEditDestinationClicked: failed to load pro: {}", e.what());
         return;
@@ -1135,8 +1134,8 @@ void SelectionPanel::onEditInteractionClicked() {
         if (!pro) {
             return;
         }
-        isDoor = pro->type() == Pro::OBJECT_TYPE::SCENERY
-            && static_cast<Pro::SCENERY_TYPE>(pro->objectSubtypeId()) == Pro::SCENERY_TYPE::DOOR;
+        isDoor = pro->type() == ObjectType::Scenery
+            && static_cast<SceneryType>(pro->objectSubtypeId()) == SceneryType::Door;
     } catch (const std::exception& e) {
         spdlog::warn("onEditInteractionClicked: failed to load pro: {}", e.what());
         return;
@@ -1272,9 +1271,9 @@ void SelectionPanel::onAttachScriptClicked() {
         return;
     }
 
-    const uint32_t objectType = mapObject->objectType();
+    const ObjectType objectType = mapObject->objectType();
     // Critters use the CRITTER section; items/scenery/walls use the ITEM section.
-    const int scriptType = (objectType == static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER))
+    const int scriptType = (objectType == ObjectType::Critter)
         ? static_cast<int>(MapScript::ScriptType::CRITTER)
         : static_cast<int>(MapScript::ScriptType::ITEM);
 
@@ -1580,7 +1579,7 @@ void SelectionPanel::updateInventorySection() {
     try {
         auto pro = _resources.loadPro(mapObject->pro_pid);
         if (pro) {
-            bool hasInventory = (pro->type() == Pro::OBJECT_TYPE::ITEM && pro->itemType() == Pro::ITEM_TYPE::CONTAINER) || pro->type() == Pro::OBJECT_TYPE::CRITTER;
+            bool hasInventory = (pro->type() == ObjectType::Item && pro->itemType() == ItemType::Container) || pro->type() == ObjectType::Critter;
 
             _inventoryGroup->setVisible(hasInventory);
 

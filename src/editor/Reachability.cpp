@@ -18,8 +18,8 @@ namespace {
     bool isDoor(resource::GameResources& resources, const MapObject& object) {
         try {
             if (const Pro* pro = resources.loadPro(object.pro_pid); pro != nullptr) {
-                return pro->type() == Pro::OBJECT_TYPE::SCENERY
-                    && static_cast<Pro::SCENERY_TYPE>(pro->objectSubtypeId()) == Pro::SCENERY_TYPE::DOOR;
+                return pro->type() == ObjectType::Scenery
+                    && static_cast<SceneryType>(pro->objectSubtypeId()) == SceneryType::Door;
             }
         } catch (const std::exception&) { // a missing/odd proto just isn't treated as a door
         }
@@ -27,10 +27,10 @@ namespace {
     }
 } // namespace
 
-bool blocksMovementByInstance(std::uint32_t objectType, std::uint32_t flags) {
-    const bool blockingType = objectType == static_cast<std::uint32_t>(Pro::OBJECT_TYPE::CRITTER)
-        || objectType == static_cast<std::uint32_t>(Pro::OBJECT_TYPE::SCENERY)
-        || objectType == static_cast<std::uint32_t>(Pro::OBJECT_TYPE::WALL);
+bool blocksMovementByInstance(ObjectType objectType, std::uint32_t flags) {
+    const bool blockingType = objectType == ObjectType::Critter
+        || objectType == ObjectType::Scenery
+        || objectType == ObjectType::Wall;
     if (!blockingType) {
         return false;
     }

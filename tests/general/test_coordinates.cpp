@@ -59,16 +59,6 @@ TEST_CASE("Free validity helpers agree with the type boundaries", "[coordinates]
     CHECK_FALSE(isValidTileIndex(-1));
 }
 
-TEST_CASE("Elevation conversions validate and round-trip", "[coordinates]") {
-    CHECK(isValidElevation(0));
-    CHECK(isValidElevation(2));
-    CHECK_FALSE(isValidElevation(3));
-    CHECK_FALSE(isValidElevation(-1));
-    CHECK(toInt(Elevation::LEVEL_1) == 0);
-    CHECK(toInt(Elevation::LEVEL_3) == 2);
-    CHECK(toElevation(1) == Elevation::LEVEL_2);
-}
-
 TEST_CASE("CoordinateUtils::toValid* throw on out-of-range input", "[coordinates]") {
     using namespace CoordinateUtils;
     CHECK(toValidHexPosition(0).value() == 0);
@@ -78,9 +68,6 @@ TEST_CASE("CoordinateUtils::toValid* throw on out-of-range input", "[coordinates
 
     CHECK(toValidTileIndex(TileIndex::MAX_VALUE).value() == TileIndex::MAX_VALUE);
     CHECK_THROWS(toValidTileIndex(TileIndex::MAX_VALUE + 1));
-
-    CHECK(toValidElevation(2) == Elevation::LEVEL_3);
-    CHECK_THROWS(toValidElevation(3));
 }
 
 TEST_CASE("WorldCoords and ScreenCoords arithmetic and vector round-trips", "[coordinates]") {

@@ -9,29 +9,6 @@
 #include "format/map/Tile.h"
 
 namespace geck {
-namespace {
-
-    const char* objectTypeName(uint32_t objectTypeId) {
-        switch (static_cast<Pro::OBJECT_TYPE>(objectTypeId)) {
-            case Pro::OBJECT_TYPE::ITEM:
-                return "ITEM";
-            case Pro::OBJECT_TYPE::CRITTER:
-                return "CRITTER";
-            case Pro::OBJECT_TYPE::SCENERY:
-                return "SCENERY";
-            case Pro::OBJECT_TYPE::WALL:
-                return "WALL";
-            case Pro::OBJECT_TYPE::TILE:
-                return "TILE";
-            case Pro::OBJECT_TYPE::MISC:
-                return "MISC";
-            default:
-                return "unknown";
-        }
-    }
-
-} // namespace
-
 bool MapWriter::write(const Map::MapFile& map) {
     try {
         if (!isOpen()) {
@@ -202,7 +179,7 @@ void MapWriter::writeScript(const MapScript& script) {
             break;
         default:
             throw ValidationException("Unknown script PID type", getPath(),
-                "script PID " + std::to_string((script.pid & 0xFF000000) >> 24));
+                "script PID " + std::to_string(MapScript::sidSection(script.pid)));
     }
 
     // Fixed trailer (layout shared with MapReader via the visitor); each field is emitted as a
@@ -221,35 +198,33 @@ void MapWriter::writeObject(const MapObject& object) {
         utils.writeBE32(static_cast<uint32_t>(field));
     });
 
-    uint32_t objectTypeId = object.objectType();
+    const ObjectType objectType = object.objectType();
 
-    spdlog::debug("Writing object type: {}", objectTypeName(objectTypeId));
+    spdlog::debug("Writing object type: {}", Pro::typeToString(objectType));
 
-    auto object_type = static_cast<Pro::OBJECT_TYPE>(objectTypeId);
-
-    switch (object_type) {
-        case Pro::OBJECT_TYPE::ITEM: {
+    switch (objectType) {
+        case ObjectType::Item: {
             auto pro = _loadProCallback(object.pro_pid);
             if (!pro) {
                 throw ValidationException("Cannot load PRO file for object", getPath(), "pro_pid " + std::to_string(object.pro_pid));
             }
 
             uint32_t subtype_id = pro->objectSubtypeId();
-            switch (static_cast<Pro::ITEM_TYPE>(subtype_id)) {
-                case Pro::ITEM_TYPE::AMMO:
-                case Pro::ITEM_TYPE::MISC:
+            switch (static_cast<ItemType>(subtype_id)) {
+                case ItemType::Ammo:
+                case ItemType::Misc:
                     utils.writeBE32(object.ammo); // bullets/charges
                     break;
-                case Pro::ITEM_TYPE::KEY:
+                case ItemType::Key:
                     utils.writeBE32(object.keycode);
                     break;
-                case Pro::ITEM_TYPE::WEAPON:
+                case ItemType::Weapon:
                     utils.writeBE32(object.ammo);     // ammo count
                     utils.writeBE32(object.ammo_pid); // ammo type PID
                     break;
-                case Pro::ITEM_TYPE::ARMOR:
-                case Pro::ITEM_TYPE::CONTAINER:
-                case Pro::ITEM_TYPE::DRUG:
+                case ItemType::Armor:
+                case ItemType::Container:
+                case ItemType::Drug:
                     // No additional data for these item types
                     break;
                 default:
@@ -257,7 +232,7 @@ void MapWriter::writeObject(const MapObject& object) {
                         "item subtype " + std::to_string(subtype_id));
             }
         } break;
-        case Pro::OBJECT_TYPE::CRITTER:
+        case ObjectType::Critter:
             utils.writeBE32(object.damage_last_turn); // engine CritterCombatData.damageLastTurn
             utils.writeBE32(object.maneuver);         // engine CritterCombatData.maneuver
             utils.writeBE32(object.current_ap);       // engine CritterCombatData.ap
@@ -270,32 +245,32 @@ void MapWriter::writeObject(const MapObject& object) {
             utils.writeBE32(object.current_poison);   // current poison level
             break;
 
-        case Pro::OBJECT_TYPE::SCENERY: {
+        case ObjectType::Scenery: {
             auto pro = _loadProCallback(object.pro_pid);
             if (!pro) {
                 throw ValidationException("Cannot load PRO file for scenery object", getPath(), "pro_pid " + std::to_string(object.pro_pid));
             }
 
             uint32_t subtype_id = pro->objectSubtypeId();
-            switch (static_cast<Pro::SCENERY_TYPE>(subtype_id)) {
-                case Pro::SCENERY_TYPE::LADDER_TOP:
-                case Pro::SCENERY_TYPE::LADDER_BOTTOM:
+            switch (static_cast<SceneryType>(subtype_id)) {
+                case SceneryType::LadderDown:
+                case SceneryType::LadderUp:
                     utils.writeBE32(object.map);
                     utils.writeBE32(object.elevhex);
                     break;
-                case Pro::SCENERY_TYPE::STAIRS:
+                case SceneryType::Stairs:
                     // Note: for ladders and stairs, map and elev+hex fields are in different order
                     utils.writeBE32(object.elevhex);
                     utils.writeBE32(object.map);
                     break;
-                case Pro::SCENERY_TYPE::ELEVATOR:
+                case SceneryType::Elevator:
                     utils.writeBE32(object.elevtype);  // elevator type
                     utils.writeBE32(object.elevlevel); // current level
                     break;
-                case Pro::SCENERY_TYPE::DOOR:
+                case SceneryType::Door:
                     utils.writeBE32(object.walkthrough);
                     break;
-                case Pro::SCENERY_TYPE::GENERIC:
+                case SceneryType::Generic:
                     // No additional data for generic scenery
                     break;
                 default:
@@ -303,10 +278,10 @@ void MapWriter::writeObject(const MapObject& object) {
                         "scenery subtype " + std::to_string(subtype_id));
             }
         } break;
-        case Pro::OBJECT_TYPE::WALL:
-        case Pro::OBJECT_TYPE::TILE:
+        case ObjectType::Wall:
+        case ObjectType::Tile:
             break;
-        case Pro::OBJECT_TYPE::MISC:
+        case ObjectType::Misc:
             if (object.isExitGridMarker()) {
                 utils.writeBE32(object.exit_map);
                 utils.writeBE32(object.exit_position);

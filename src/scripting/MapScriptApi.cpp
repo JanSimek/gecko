@@ -233,7 +233,7 @@ std::map<int, int> MapScriptApi::sceneryCounts(const Map& map) const {
     std::unordered_map<int, bool> eligible; // pid -> scatter-eligible (decided once, then cached)
     for (const auto& [elevation, objects] : map.getMapFile().map_objects) {
         for (const auto& object : objects) {
-            if (!object || Pro::typeOfPid(object->pro_pid) != Pro::OBJECT_TYPE::SCENERY) {
+            if (!object || ProtoId(object->pro_pid).objectType() != ObjectType::Scenery) {
                 continue;
             }
             const int pid = static_cast<int>(object->pro_pid);
@@ -301,15 +301,15 @@ namespace {
 
     // Resolved against the engine's own type names (Pro::typeToString), singular or plural, rather
     // than a second hardcoded table. Throws ScriptError on an unknown name.
-    Pro::OBJECT_TYPE objectTypeFromName(const std::string& typeName) {
+    ObjectType objectTypeFromName(const std::string& typeName) {
         const auto lower = [](std::string s) {
             std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             return s;
         };
         const std::string wanted = lower(typeName);
 
-        using enum Pro::OBJECT_TYPE;
-        for (const Pro::OBJECT_TYPE type : { ITEM, CRITTER, SCENERY, WALL, TILE, MISC }) {
+        using enum ObjectType;
+        for (const ObjectType type : { Item, Critter, Scenery, Wall, Tile, Misc }) {
             const std::string name = lower(Pro::typeToString(type));
             if (wanted == name || wanted == name + "s") {
                 return type;
@@ -333,7 +333,7 @@ std::vector<int> MapScriptApi::mapFloorAt(const std::string& mapPath, int elevat
 }
 
 std::vector<int> MapScriptApi::mapObjectsAt(const std::string& mapPath, int elevation, const std::string& typeName) const {
-    const Pro::OBJECT_TYPE wanted = objectTypeFromName(typeName); // throws on an unknown type
+    const ObjectType wanted = objectTypeFromName(typeName); // throws on an unknown type
     const Map& reference = referenceMap(mapPath);
     requireReferenceElevation(reference, mapPath, elevation);
 
@@ -344,7 +344,7 @@ std::vector<int> MapScriptApi::mapObjectsAt(const std::string& mapPath, int elev
         return triples; // the elevation exists but holds no objects — a valid empty answer
     }
     for (const auto& object : it->second) {
-        if (Pro::typeOfPid(object->pro_pid) != wanted) {
+        if (ProtoId(object->pro_pid).objectType() != wanted) {
             continue;
         }
         triples.push_back(static_cast<int>(object->pro_pid));
@@ -465,12 +465,12 @@ double MapScriptApi::noise3d(double x, double y, double z) const {
 }
 
 uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
-    const Pro::OBJECT_TYPE type = objectTypeFromName(typeName); // throws on an unknown type
+    const ObjectType type = objectTypeFromName(typeName); // throws on an unknown type
     // The id occupies the low 24 bits of the PID and is 1-based (proto ids start at 1).
-    if (number <= 0 || number > 0x00FFFFFF) {
+    if (number <= 0 || static_cast<uint32_t>(number) > ProtoId::MAX_PROTO_ID) {
         throw ScriptError(std::format("proto number out of range (1..16777215): {}", number));
     }
-    return Pro::makePid(type, static_cast<uint32_t>(number));
+    return ProtoId(type, static_cast<uint32_t>(number)).pid();
 }
 
 std::string MapScriptApi::protoName(int pid) const {
@@ -902,7 +902,7 @@ void MapScriptApi::quiltSource(int col0, int row0, int col1, int row1) {
 }
 
 int MapScriptApi::quiltObjects(const std::string& typeName, const std::vector<int>& excludePids) {
-    const Pro::OBJECT_TYPE wanted = objectTypeFromName(typeName); // throws on an unknown type
+    const ObjectType wanted = objectTypeFromName(typeName); // throws on an unknown type
     if (_lastQuilt.refElevation < 0) {
         throw ScriptError("quiltObjects: run quiltFloorRect/quiltFloorTiles first — it records which reference cells were copied");
     }
@@ -917,7 +917,7 @@ int MapScriptApi::quiltObjects(const std::string& typeName, const std::vector<in
         return 0; // the reference elevation holds no objects — a valid empty transplant
     }
     for (const auto& object : it->second) {
-        if (!object || object->position == -1 || Pro::typeOfPid(object->pro_pid) != wanted) {
+        if (!object || object->position == -1 || ProtoId(object->pro_pid).objectType() != wanted) {
             continue;
         }
         if (std::ranges::find(excludePids, static_cast<int>(object->pro_pid)) != excludePids.end()) {

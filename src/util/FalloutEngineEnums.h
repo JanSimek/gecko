@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "format/pro/ProtoTypes.h"
+
 namespace geck::fallout {
 
 template <typename Enum>
@@ -20,7 +22,6 @@ constexpr size_t enumCount() {
 }
 
 inline constexpr int NO_ITEM_PERK = -1;
-inline constexpr uint32_t PROTO_ID_MONEY = 41;
 
 inline constexpr int PROTO_MATERIAL_MESSAGE_ID_BASE = 100;
 inline constexpr int PROTO_ITEM_TYPE_MESSAGE_ID_BASE = 150;
@@ -39,26 +40,7 @@ enum class Gender : int {
     Count,
 };
 
-enum class ItemType : int {
-    Armor = 0,
-    Container,
-    Drug,
-    Weapon,
-    Ammo,
-    Misc,
-    Key,
-    Count,
-};
-
-enum class SceneryType : int {
-    Door = 0,
-    Stairs,
-    Elevator,
-    LadderUp,
-    LadderDown,
-    Generic,
-    Count,
-};
+// ItemType and SceneryType live with the rest of proto_types.h in format/pro/ProtoTypes.h.
 
 enum class MaterialType : int {
     Glass = 0,

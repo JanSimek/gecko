@@ -622,7 +622,7 @@ TEST_CASE("Luau places objects headlessly (data only) and they survive save/relo
 
     geck::test::StubProvider provider;
     // Scenery objects read their subtype from the proto during (de)serialization.
-    provider.addScenery(0x02000066u, Pro::SCENERY_TYPE::GENERIC);
+    provider.addScenery(0x02000066u, SceneryType::Generic);
     geck::test::TempFile tmp{ "geck_lua_objects", ".map" };
     {
         MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };

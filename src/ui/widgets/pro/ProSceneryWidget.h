@@ -21,7 +21,7 @@ public:
 private:
     void setupUI();
     void updateTypeSpecificGroups();
-    Pro::SCENERY_TYPE currentSceneryType() const;
+    SceneryType currentSceneryType() const;
 
     QComboBox* _materialIdCombo;
     QSpinBox* _soundIdEdit;
