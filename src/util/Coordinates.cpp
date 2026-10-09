@@ -22,14 +22,5 @@ namespace CoordinateUtils {
         return TileIndex(index);
     }
 
-    Elevation toValidElevation(int elevation) {
-        if (!isValidElevation(elevation)) {
-            throw InvalidArgumentException(
-                "Elevation " + std::to_string(elevation) + " is out of range [0, 2]",
-                "elevation");
-        }
-        return static_cast<Elevation>(elevation);
-    }
-
 } // namespace CoordinateUtils
 } // namespace geck

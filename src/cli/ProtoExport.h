@@ -16,9 +16,9 @@ namespace cli {
 
     struct ProtoExportOptions {
         /// Only this kind of proto (ITEM or CRITTER); nullopt = both.
-        std::optional<Pro::OBJECT_TYPE> kind;
+        std::optional<ObjectType> kind;
         /// Only items of this type; implies kind = ITEM. nullopt = every item type.
-        std::optional<Pro::ITEM_TYPE> itemType;
+        std::optional<ItemType> itemType;
     };
 
     /// Fill `out` from the filter names both frontends accept: kind "item" | "critter", itemType

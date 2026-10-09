@@ -426,20 +426,20 @@ void ObjectPalettePanel::clearObjectSelection() {
 
 std::optional<std::pair<int, ObjectCategory>> ObjectPalettePanel::revealProto(uint32_t pid) {
     ObjectCategory category;
-    switch (Pro::typeOfPid(pid)) {
-        case Pro::OBJECT_TYPE::ITEM:
+    switch (ProtoId(pid).objectType()) {
+        case ObjectType::Item:
             category = ObjectCategory::ITEMS;
             break;
-        case Pro::OBJECT_TYPE::CRITTER:
+        case ObjectType::Critter:
             category = ObjectCategory::CRITTERS;
             break;
-        case Pro::OBJECT_TYPE::SCENERY:
+        case ObjectType::Scenery:
             category = ObjectCategory::SCENERY;
             break;
-        case Pro::OBJECT_TYPE::WALL:
+        case ObjectType::Wall:
             category = ObjectCategory::WALLS;
             break;
-        case Pro::OBJECT_TYPE::MISC:
+        case ObjectType::Misc:
             category = ObjectCategory::MISC;
             break;
         default:

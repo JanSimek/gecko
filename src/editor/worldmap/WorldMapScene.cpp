@@ -2,6 +2,7 @@
 
 #include "format/frm/Frame.h"
 #include "format/frm/Frm.h"
+#include "format/frm/FrmId.h"
 #include "format/pal/Pal.h"
 #include "reader/city/CityTxtReader.h"
 #include "reader/worldmap/WorldmapTxtReader.h"
@@ -19,16 +20,13 @@ namespace geck::worldmap {
 
 namespace {
 
-    // The engine's OBJ_TYPE_INTERFACE. Both the worldmap tiles (worldmap.txt art_idx) and the city
-    // circles are interface art, so their LST indices become FIDs with this type byte.
-    constexpr std::uint32_t INTERFACE_FID_TYPE = 6;
-
     // intrface.lst indices of the small/medium/large city circles: fallout2-ce worldmap.cc builds
     // them as buildFid(OBJ_TYPE_INTERFACE, 336 + citySize).
     constexpr int CITY_SPRITE_BASE_INDEX = 336;
 
+    // Both the worldmap tiles (worldmap.txt art_idx) and the city circles are interface art.
     constexpr std::uint32_t interfaceFid(int lstIndex) {
-        return (INTERFACE_FID_TYPE << 24) | static_cast<std::uint32_t>(lstIndex);
+        return FrmId(ObjectType::Interface, static_cast<std::uint32_t>(lstIndex)).fid();
     }
 
     // The first frame of the interface art at an intrface.lst index, as raw palette indices; every

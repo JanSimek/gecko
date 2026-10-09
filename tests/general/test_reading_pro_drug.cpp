@@ -9,8 +9,8 @@ TEST_CASE("Parse .pro drug file", "[pro]") {
     auto pro_file = pro_reader.openFile(geck::test::dataPath("test_item_drug_radx.pro"));
 
     // Verify it's an item type
-    REQUIRE(pro_file->type() == geck::Pro::OBJECT_TYPE::ITEM);
-    REQUIRE(pro_file->itemType() == geck::Pro::ITEM_TYPE::DRUG);
+    REQUIRE(pro_file->type() == geck::ObjectType::Item);
+    REQUIRE(pro_file->itemType() == geck::ItemType::Drug);
 
     // Verify header fields
     REQUIRE(pro_file->header.message_id == 10900);

@@ -990,12 +990,12 @@ std::shared_ptr<MapObject> EditorWidget::createScrollBlockerObject(int hexPositi
     mapObject->direction = 0;
     mapObject->frame_number = 0;
 
-    mapObject->frm_pid = WallBlockers::SCROLL_BLOCKER_FRM_PID; // art/misc/scrblk.frm
+    mapObject->frm_pid = WallBlockers::SCROLL_BLOCKER_FID.fid(); // block.frm, as the proto ships
 
     // Must be the engine's scroll-blocker proto: _obj_scroll_blocking_at() matches this exact pid
     // and nothing else, so blockers written with any other proto (this used to write 24, "Flare")
     // are inert in game however they are drawn.
-    mapObject->pro_pid = WallBlockers::SCROLL_BLOCKER_PID;
+    mapObject->pro_pid = WallBlockers::SCROLL_BLOCKER_PID.pid();
 
     // Scroll blockers don't block movement, they are visual indicators only
     mapObject->flags = 0;
@@ -1537,7 +1537,7 @@ void EditorWidget::createScrollBlockersFromHexes(const std::vector<int>& borderH
                 auto object = std::make_shared<Object>(frm);
                 sf::Sprite sprite{ _resources.textures().get(frmPath) };
                 object->setSprite(std::move(sprite));
-                object->setDirection(static_cast<ObjectDirection>(scrollBlockerObject->direction));
+                object->setDirection(static_cast<Rotation>(scrollBlockerObject->direction));
                 if (auto hex = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexPos)); hex.has_value()) {
                     object->setHexPosition(hex->get());
                 }
@@ -2726,7 +2726,7 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
         if (frm && _previewObjectInfo && !_previewObjectInfo->frmPath.isEmpty()) {
             sf::Sprite objectSprite{ _resources.textures().get(_previewObjectInfo->frmPath.toStdString()) };
             object->setSprite(std::move(objectSprite));
-            object->setDirection(static_cast<ObjectDirection>(placementDirection));
+            object->setDirection(static_cast<Rotation>(placementDirection));
         }
 
         if (auto hex = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexPosition)); hex.has_value()) {

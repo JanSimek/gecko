@@ -27,8 +27,8 @@ std::unique_ptr<Pro> ProReader::read() {
         });
 
         switch (pro->type()) {
-            case Pro::OBJECT_TYPE::TILE:
-            case Pro::OBJECT_TYPE::MISC:
+            case ObjectType::Tile:
+            case ObjectType::Misc:
                 break;
             default:
                 pro->commonItemData.flagsExt = utils.readBE32();
@@ -36,19 +36,21 @@ std::unique_ptr<Pro> ProReader::read() {
         }
 
         switch (pro->type()) {
-            case Pro::OBJECT_TYPE::ITEM:
-            case Pro::OBJECT_TYPE::CRITTER:
-            case Pro::OBJECT_TYPE::SCENERY:
-            case Pro::OBJECT_TYPE::WALL:
+            case ObjectType::Item:
+            case ObjectType::Critter:
+            case ObjectType::Scenery:
+            case ObjectType::Wall:
                 pro->commonItemData.SID = utils.readBE32();
                 break;
-            case Pro::OBJECT_TYPE::TILE:
-            case Pro::OBJECT_TYPE::MISC:
+            case ObjectType::Tile:
+            case ObjectType::Misc:
+                break;
+            default:
                 break;
         }
 
         switch (pro->type()) {
-            case Pro::OBJECT_TYPE::ITEM: {
+            case ObjectType::Item: {
                 uint32_t subtypeId = utils.readBE32();
                 pro->setObjectSubtypeId(subtypeId);
 
@@ -59,8 +61,8 @@ std::unique_ptr<Pro> ProReader::read() {
                 pro->commonItemData.inventoryFID = utils.readBE32Signed();
                 pro->commonItemData.soundId = utils.readU8();
 
-                switch ((Pro::ITEM_TYPE)subtypeId) {
-                    case Pro::ITEM_TYPE::ARMOR: {
+                switch ((ItemType)subtypeId) {
+                    case ItemType::Armor: {
                         pro->armorData.armorClass = utils.readBE32();
                         for (int i = 0; i < Pro::DAMAGE_TYPES_ARMOR; ++i) {
                             pro->armorData.damageResist[i] = utils.readBE32();
@@ -73,12 +75,12 @@ std::unique_ptr<Pro> ProReader::read() {
                         pro->armorData.armorFemaleFID = utils.readBE32Signed();
                         break;
                     }
-                    case Pro::ITEM_TYPE::CONTAINER: {
+                    case ItemType::Container: {
                         pro->containerData.maxSize = utils.readBE32();
                         pro->containerData.flags = utils.readBE32();
                         break;
                     }
-                    case Pro::ITEM_TYPE::DRUG: {
+                    case ItemType::Drug: {
                         // Immediate effect stats (which stats to modify)
                         pro->drugData.stat0 = utils.readBE32();
                         pro->drugData.stat1 = utils.readBE32();
@@ -103,7 +105,7 @@ std::unique_ptr<Pro> ProReader::read() {
                         pro->drugData.addictionOnset = utils.readBE32();
                         break;
                     }
-                    case Pro::ITEM_TYPE::WEAPON: {
+                    case ItemType::Weapon: {
                         pro->weaponData.animationCode = utils.readBE32();
                         pro->weaponData.damageMin = utils.readBE32();
                         pro->weaponData.damageMax = utils.readBE32();
@@ -132,7 +134,7 @@ std::unique_ptr<Pro> ProReader::read() {
                         }
                         break;
                     }
-                    case Pro::ITEM_TYPE::AMMO: {
+                    case ItemType::Ammo: {
                         pro->ammoData.caliber = utils.readBE32();
                         pro->ammoData.quantity = utils.readBE32();
                         pro->ammoData.damageModifier = utils.readBE32Signed();
@@ -141,20 +143,22 @@ std::unique_ptr<Pro> ProReader::read() {
                         pro->ammoData.damageTypeModifier = utils.readBE32Signed();
                         break;
                     }
-                    case Pro::ITEM_TYPE::MISC: {
+                    case ItemType::Misc: {
                         pro->miscData.powerTypePid = utils.readBE32Signed();
                         pro->miscData.powerType = utils.readBE32();
                         pro->miscData.charges = utils.readBE32();
                         break;
                     }
-                    case Pro::ITEM_TYPE::KEY: {
+                    case ItemType::Key: {
                         pro->keyData.keyId = utils.readBE32();
                         break;
                     }
+                    default:
+                        break;
                 }
                 break;
             }
-            case Pro::OBJECT_TYPE::CRITTER: {
+            case ObjectType::Critter: {
                 auto& critterData = pro->critterData;
 
                 critterData.headFID = utils.readBE32();
@@ -240,7 +244,7 @@ std::unique_ptr<Pro> ProReader::read() {
 
                 break;
             }
-            case Pro::OBJECT_TYPE::SCENERY: {
+            case ObjectType::Scenery: {
                 uint32_t subtypeId = utils.readBE32();
                 pro->setObjectSubtypeId(subtypeId);
 
@@ -249,44 +253,46 @@ std::unique_ptr<Pro> ProReader::read() {
                 sceneryData.materialId = utils.readBE32();
                 sceneryData.soundId = utils.readU8();
 
-                switch ((Pro::SCENERY_TYPE)subtypeId) {
-                    case Pro::SCENERY_TYPE::DOOR: {
+                switch ((SceneryType)subtypeId) {
+                    case SceneryType::Door: {
                         sceneryData.doorData.walkThroughFlag = utils.readBE32();
                         sceneryData.doorData.unknownField = utils.readBE32();
                         break;
                     }
-                    case Pro::SCENERY_TYPE::STAIRS: {
+                    case SceneryType::Stairs: {
                         sceneryData.stairsData.destTile = utils.readBE32();
                         sceneryData.stairsData.destElevation = utils.readBE32();
                         break;
                     }
-                    case Pro::SCENERY_TYPE::ELEVATOR: {
+                    case SceneryType::Elevator: {
                         sceneryData.elevatorData.elevatorType = utils.readBE32();
                         sceneryData.elevatorData.elevatorLevel = utils.readBE32();
                         break;
                     }
-                    case Pro::SCENERY_TYPE::LADDER_BOTTOM:
-                    case Pro::SCENERY_TYPE::LADDER_TOP: {
+                    case SceneryType::LadderUp:
+                    case SceneryType::LadderDown: {
                         sceneryData.ladderData.destTileAndElevation = utils.readBE32();
                         break;
                     }
-                    case Pro::SCENERY_TYPE::GENERIC: {
+                    case SceneryType::Generic: {
                         sceneryData.genericData.unknownField = utils.readBE32();
                         break;
                     }
+                    default:
+                        break;
                 }
 
                 break;
             }
-            case Pro::OBJECT_TYPE::WALL: {
+            case ObjectType::Wall: {
                 pro->wallData.materialId = utils.readBE32();
                 break;
             }
-            case Pro::OBJECT_TYPE::TILE: {
+            case ObjectType::Tile: {
                 pro->tileData.materialId = utils.readBE32();
                 break;
             }
-            case Pro::OBJECT_TYPE::MISC: {
+            case ObjectType::Misc: {
                 // MISC's only type-specific field is its extended flags. The common
                 // prefix above skips flagsExt for MISC, so the proto's final field is
                 // its extendedFlags (Fallout 2 CE reads exactly lightDistance/
@@ -295,6 +301,8 @@ std::unique_ptr<Pro> ProReader::read() {
                 pro->commonItemData.flagsExt = utils.readBE32();
                 break;
             }
+            default:
+                break;
         }
 
         spdlog::debug("Successfully read PRO file: {} (type: {})", _path.string(), pro->typeToString());

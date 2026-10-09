@@ -12,8 +12,8 @@ namespace geck::test {
 /// Builds a PID from an object type (high byte) and a per-type index, matching
 /// the engine's `(type << 24) | index` layout. The MapReader/MapWriter and the
 /// PRO suites all need this to fabricate typed objects without a .pro on disk.
-inline uint32_t pidOf(Pro::OBJECT_TYPE type, uint32_t index) {
-    return (static_cast<uint32_t>(type) << 24) | index;
+inline uint32_t pidOf(ObjectType type, uint32_t index) {
+    return ProtoId(type, index).pid();
 }
 
 /// In-memory PRO provider for MapReader/MapWriter. Only ITEM/SCENERY objects
@@ -23,8 +23,8 @@ inline uint32_t pidOf(Pro::OBJECT_TYPE type, uint32_t index) {
 struct StubProvider {
     std::map<uint32_t, std::unique_ptr<Pro>> pros;
 
-    void addItem(uint32_t pid, Pro::ITEM_TYPE t) { set(pid, static_cast<unsigned int>(t)); }
-    void addScenery(uint32_t pid, Pro::SCENERY_TYPE t) { set(pid, static_cast<unsigned int>(t)); }
+    void addItem(uint32_t pid, ItemType t) { set(pid, static_cast<unsigned int>(t)); }
+    void addScenery(uint32_t pid, SceneryType t) { set(pid, static_cast<unsigned int>(t)); }
 
     void set(uint32_t pid, unsigned int subtype) {
         auto pro = std::make_unique<Pro>(std::filesystem::path("stub"));

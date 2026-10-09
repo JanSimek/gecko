@@ -15,7 +15,7 @@ public:
     static Msg* protoMsgFile(resource::GameResources& resources);
     static Msg* statMsgFile(resource::GameResources& resources);
     static Msg* perkMsgFile(resource::GameResources& resources);
-    static Msg* msgFile(resource::GameResources& resources, Pro::OBJECT_TYPE type);
+    static Msg* msgFile(resource::GameResources& resources, ObjectType type);
 
     static Lst* lstFile(resource::GameResources& resources, uint32_t PID);
 

@@ -24,20 +24,20 @@ using namespace geck::test;
 // supplies the subtypes the (de)serialization dereferences.
 TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roundtrip]") {
     StubProvider provider;
-    const uint32_t containerPid = pidOf(Pro::OBJECT_TYPE::ITEM, 200);
-    const uint32_t armorPid = pidOf(Pro::OBJECT_TYPE::ITEM, 201);
-    const uint32_t weaponPid = pidOf(Pro::OBJECT_TYPE::ITEM, 202);
-    const uint32_t ammoPid = pidOf(Pro::OBJECT_TYPE::ITEM, 203);
-    const uint32_t keyPid = pidOf(Pro::OBJECT_TYPE::ITEM, 204);
-    const uint32_t doorPid = pidOf(Pro::OBJECT_TYPE::SCENERY, 300);
-    const uint32_t stairsPid = pidOf(Pro::OBJECT_TYPE::SCENERY, 301);
-    provider.addItem(containerPid, Pro::ITEM_TYPE::CONTAINER);
-    provider.addItem(armorPid, Pro::ITEM_TYPE::ARMOR);
-    provider.addItem(weaponPid, Pro::ITEM_TYPE::WEAPON);
-    provider.addItem(ammoPid, Pro::ITEM_TYPE::AMMO);
-    provider.addItem(keyPid, Pro::ITEM_TYPE::KEY);
-    provider.addScenery(doorPid, Pro::SCENERY_TYPE::DOOR);
-    provider.addScenery(stairsPid, Pro::SCENERY_TYPE::STAIRS);
+    const uint32_t containerPid = pidOf(ObjectType::Item, 200);
+    const uint32_t armorPid = pidOf(ObjectType::Item, 201);
+    const uint32_t weaponPid = pidOf(ObjectType::Item, 202);
+    const uint32_t ammoPid = pidOf(ObjectType::Item, 203);
+    const uint32_t keyPid = pidOf(ObjectType::Item, 204);
+    const uint32_t doorPid = pidOf(ObjectType::Scenery, 300);
+    const uint32_t stairsPid = pidOf(ObjectType::Scenery, 301);
+    provider.addItem(containerPid, ItemType::Container);
+    provider.addItem(armorPid, ItemType::Armor);
+    provider.addItem(weaponPid, ItemType::Weapon);
+    provider.addItem(ammoPid, ItemType::Ammo);
+    provider.addItem(keyPid, ItemType::Key);
+    provider.addScenery(doorPid, SceneryType::Door);
+    provider.addScenery(stairsPid, SceneryType::Stairs);
 
     auto original = Map::createEmptyMapFile();
     auto& objects = original.map_objects[0];
@@ -51,9 +51,9 @@ TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roun
         return o;
     };
 
-    auto wall = add(pidOf(Pro::OBJECT_TYPE::WALL, 100), 1);
+    auto wall = add(pidOf(ObjectType::Wall, 100), 1);
 
-    auto critter = add(pidOf(Pro::OBJECT_TYPE::CRITTER, 50), 2);
+    auto critter = add(pidOf(ObjectType::Critter, 50), 2);
     critter->damage_last_turn = 301;
     critter->maneuver = 302;
     critter->current_ap = 303;
@@ -91,7 +91,7 @@ TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roun
     stairs->elevhex = 801;
     stairs->map = 802;
 
-    auto exitGrid = add(pidOf(Pro::OBJECT_TYPE::MISC, 16), 9);
+    auto exitGrid = add(pidOf(ObjectType::Misc, 16), 9);
     exitGrid->exit_map = 901;
     exitGrid->exit_position = 902;
     exitGrid->exit_elevation = 903;
@@ -175,13 +175,13 @@ TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roun
 TEST_CASE("MapObject::cloneDeep deep-copies fields and inventory", "[map][clone]") {
     MapObject original;
     fillBase(original, 7);
-    original.pro_pid = pidOf(Pro::OBJECT_TYPE::ITEM, 200);
+    original.pro_pid = pidOf(ObjectType::Item, 200);
     original.elevation = 2;
     original.objects_in_inventory = 1;
 
     auto child = std::make_unique<MapObject>();
     fillBase(*child, 8);
-    child->pro_pid = pidOf(Pro::OBJECT_TYPE::ITEM, 201);
+    child->pro_pid = pidOf(ObjectType::Item, 201);
     child->elevation = 2;
     child->amount = 9;
     original.inventory.push_back(std::move(child));
@@ -225,8 +225,8 @@ TEST_CASE("MAP single-enabled-elevation map keeps engine 3-block object framing"
         objects.push_back(o);
         return o;
     };
-    add(pidOf(Pro::OBJECT_TYPE::WALL, 100), 1);
-    auto critter = add(pidOf(Pro::OBJECT_TYPE::CRITTER, 50), 2);
+    add(pidOf(ObjectType::Wall, 100), 1);
+    auto critter = add(pidOf(ObjectType::Critter, 50), 2);
     critter->current_hp = 42;
 
     const size_t objectCount = objects.size();
@@ -271,7 +271,7 @@ TEST_CASE("MAP non-exit MISC object writes no trailing exit data", "[map][roundt
         auto map = Map::createEmptyMapFile();
         auto o = std::make_shared<MapObject>();
         fillBase(*o, 1);
-        o->pro_pid = pidOf(Pro::OBJECT_TYPE::MISC, miscIndex);
+        o->pro_pid = pidOf(ObjectType::Misc, miscIndex);
         o->elevation = 0;
         o->exit_map = 901;
         o->exit_position = 902;
@@ -350,7 +350,7 @@ TEST_CASE("MAP round-trip keeps an object whose PID has no known type", "[map][r
     // from the wrong offset and its base fields come back as garbage.
     auto wall = std::make_shared<MapObject>();
     fillBase(*wall, 43);
-    wall->pro_pid = pidOf(Pro::OBJECT_TYPE::WALL, 100);
+    wall->pro_pid = pidOf(ObjectType::Wall, 100);
     wall->elevation = 0;
     objects.push_back(wall);
 

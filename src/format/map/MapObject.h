@@ -83,22 +83,19 @@ struct MapObject {
     uint32_t exit_elevation = 0;
     uint32_t exit_orientation = 0;
 
-    /// Object type from the PID's high byte (matches engine PID_TYPE). Values are
-    /// Pro::OBJECT_TYPE — ITEM=0, CRITTER=1, SCENERY=2, WALL=3, TILE=4, MISC=5.
-    uint32_t objectType() const { return (pro_pid & FileFormat::FULL_TYPE_MASK) >> FileFormat::TYPE_MASK_SHIFT; }
+    /// The PID (pro_pid) and FID (frm_pid) as typed ids.
+    ProtoId pid() const { return ProtoId(pro_pid); }
+    FrmId fid() const { return FrmId(frm_pid); }
 
-    /// Proto index: the PID's low 24 bits.
-    uint32_t protoId() const { return pro_pid & FileFormat::BASE_ID_MASK; }
-
-    /// Art index: the FID's (frm_pid) low 24 bits.
-    uint32_t fidBaseId() const { return frm_pid & FileFormat::BASE_ID_MASK; }
+    /// The proto type (engine PID_TYPE), or ObjectType::Invalid for a PID that names none.
+    ObjectType objectType() const { return pid().objectType(); }
 
     bool isScrollBlocker() const {
         // Same test the engine makes: _obj_scroll_blocking_at() matches `obj->pid == 0x500000C`
         // exactly and never looks at the art (fallout2-ce object.cc). Identifying these by their
         // FRM instead classified every object drawn with art index 1 as a blocker - art/items/
         // ammo.frm is FID 0x00000001 - which hid ammo boxes behind the scroll-blocker layer.
-        return pro_pid == WallBlockers::SCROLL_BLOCKER_PID;
+        return pid() == MiscProtoTypeId::ScrollBlocker;
     }
 
     bool isWallObject() const;
@@ -116,23 +113,13 @@ struct MapObject {
         return light_radius > 0 && light_intensity > 0;
     }
 
-    /// True for the specific light-source scenery object: ITEM/index-0 type with PID index 140 (tile #140 in F2 Dims).
-    bool isLightSourceScenery() const {
-        return objectType() == 0 && protoId() == 140;
-    }
-
-    // Exit-grid markers are MISC protos whose PID index falls in 16..23, matching
-    // Fallout 2 CE's FIRST_EXIT_GRID_PID (0x5000010) .. LAST_EXIT_GRID_PID (0x5000017)
-    // and the legacy F2 Mapper (misc_ID && nID 16..23). CE exposes no gecko-side
-    // constant for the index range, so it is named here.
-    static constexpr uint32_t EXIT_GRID_PID_INDEX_FIRST = 16;
-    static constexpr uint32_t EXIT_GRID_PID_INDEX_LAST = 23;
-
-    /// True for exit-grid markers (MISC type, PID index EXIT_GRID_PID_INDEX_FIRST..LAST).
+    /// True for exit-grid markers: MISC protos FirstExitGrid..LastExitGrid (0x05000010..17), the
+    /// engine's FIRST_EXIT_GRID_PID..LAST_EXIT_GRID_PID and the legacy F2 Mapper's misc nID 16..23.
     bool isExitGridMarker() const {
-        return objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::MISC)
-            && protoId() >= EXIT_GRID_PID_INDEX_FIRST
-            && protoId() <= EXIT_GRID_PID_INDEX_LAST;
+        const ProtoId id = pid();
+        return id.objectType() == ObjectType::Misc
+            && id.protoId() >= static_cast<uint32_t>(MiscProtoTypeId::FirstExitGrid)
+            && id.protoId() <= static_cast<uint32_t>(MiscProtoTypeId::LastExitGrid);
     }
 };
 

@@ -254,7 +254,7 @@ void DragDropManager::startDragPreview(int objectIndex, int categoryInt, sf::Vec
                     _dragPreviewObject = std::make_shared<Object>(frm);
                     sf::Sprite previewSprite{ _context.resources().textures().get(frmPath) };
                     _dragPreviewObject->setSprite(std::move(previewSprite));
-                    _dragPreviewObject->setDirection(ObjectDirection(0)); // Single frame for preview
+                    _dragPreviewObject->setDirection(Rotation::NE); // Single frame for preview
                     // Semi-transparent so the underlying map stays visible
                     auto& spriteRef = _dragPreviewObject->getSprite();
                     spriteRef.setColor(sf::Color(255, 255, 255, ui::constants::sfml::DRAG_PREVIEW_ALPHA));

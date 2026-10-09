@@ -208,7 +208,7 @@ void ProArmorWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 }
 
 bool ProArmorWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
-    return pro && pro->type() == Pro::OBJECT_TYPE::ITEM && pro->itemType() == Pro::ITEM_TYPE::ARMOR;
+    return pro && pro->type() == ObjectType::Item && pro->itemType() == ItemType::Armor;
 }
 
 QString ProArmorWidget::getTabLabel() const {
@@ -297,7 +297,7 @@ void ProArmorWidget::selectArmorFid(ObjectPreviewWidget* previewWidget, int32_t&
     }
 
     FrmSelectorDialog dialog(_resources, this);
-    dialog.setObjectTypeFilter(Frm::FRM_TYPE::CRITTER);
+    dialog.setObjectTypeFilter(ObjectType::Critter);
     dialog.setInitialFrmPid(static_cast<uint32_t>(std::max(fid, 0)));
 
     if (dialog.exec() != QDialog::Accepted) {

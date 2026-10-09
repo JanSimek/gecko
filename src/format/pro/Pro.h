@@ -4,6 +4,8 @@
 #include <filesystem>
 
 #include "format/IFile.h"
+#include "format/frm/FrmId.h"
+#include "format/pro/ProtoTypes.h"
 
 namespace geck {
 
@@ -15,34 +17,6 @@ public:
     Pro(std::filesystem::path path);
 
     void initializeDataStructures();
-
-    enum class OBJECT_TYPE : uint32_t {
-        ITEM = 0,
-        CRITTER,
-        SCENERY,
-        WALL,
-        TILE,
-        MISC
-    };
-
-    enum class ITEM_TYPE : uint32_t {
-        ARMOR = 0,
-        CONTAINER,
-        DRUG,
-        WEAPON,
-        AMMO,
-        MISC,
-        KEY
-    };
-
-    enum class SCENERY_TYPE : uint32_t {
-        DOOR = 0,
-        STAIRS,
-        ELEVATOR,
-        LADDER_BOTTOM,
-        LADDER_TOP,
-        GENERIC
-    };
 
     // PRO file format constants
     static constexpr int SPECIAL_STATS_COUNT = 7;  // STR, PER, END, CHR, INT, AGL, LCK
@@ -358,21 +332,17 @@ public:
     unsigned int objectSubtypeId() const;
     void setObjectSubtypeId(unsigned int objectSubtypeId);
 
-    OBJECT_TYPE type() const;
-    ITEM_TYPE itemType() const;
+    ProtoId pid() const { return ProtoId(static_cast<uint32_t>(header.PID)); }
+    FrmId fid() const { return FrmId(static_cast<uint32_t>(header.FID)); }
+
+    ObjectType type() const { return pid().objectType(); }
+    ItemType itemType() const;
 
     const std::string typeToString() const;
     /// Canonical category name for an object type ("Item", "Critter", "Scenery", ...). The
-    /// instance overload forwards to this, so callers holding only a type (e.g. decoded from a
-    /// PID's high byte) reuse the same mapping instead of duplicating it.
-    static std::string typeToString(OBJECT_TYPE type);
-
-    /// A proto PID packs the object type in the high byte and the proto id in the low 24 bits.
-    /// These are the one place that bit layout lives, so callers don't re-derive `>> 24` / `<< 24`.
-    static OBJECT_TYPE typeOfPid(uint32_t pid) { return static_cast<OBJECT_TYPE>((pid >> 24) & 0xFFu); }
-    static uint32_t makePid(OBJECT_TYPE type, uint32_t id) {
-        return (static_cast<uint32_t>(type) << 24) | (id & 0x00FFFFFFu);
-    }
+    /// instance overload forwards to this, so callers holding only a type (e.g. a ProtoId's
+    /// objectType()) reuse the same mapping instead of duplicating it.
+    static std::string typeToString(ObjectType type);
 
     // Allow updating the file path for save operations
     void setPath(const std::filesystem::path& newPath) {

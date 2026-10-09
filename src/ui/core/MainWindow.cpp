@@ -2101,11 +2101,11 @@ void MainWindow::connectPanelSignals() {
                     auto* map = _currentEditorWidget->getMap();
                     if (map) {
                         uint32_t flags = map->getMapFile().header.flags;
-                        if ((flags & 0x2) == 0)
+                        if (Map::elevationIsPresent(flags, ELEVATION_1))
                             elevationChanged(ELEVATION_1);
-                        else if ((flags & 0x4) == 0)
+                        else if (Map::elevationIsPresent(flags, ELEVATION_2))
                             elevationChanged(ELEVATION_2);
-                        else if ((flags & 0x8) == 0)
+                        else if (Map::elevationIsPresent(flags, ELEVATION_3))
                             elevationChanged(ELEVATION_3);
                     }
                     spdlog::debug("MainWindow: Switched away from removed elevation {}", elevation);
@@ -2521,11 +2521,10 @@ void MainWindow::updateElevationMenu(Map* map) {
         return;
     }
 
-    // MAP header flag bits 0x2/0x4/0x8: a set bit means that elevation is DISABLED
     uint32_t map_flags = map->getMapFile().header.flags;
-    bool hasElevation1 = ((map_flags & 0x2) == 0);
-    bool hasElevation2 = ((map_flags & 0x4) == 0);
-    bool hasElevation3 = ((map_flags & 0x8) == 0);
+    bool hasElevation1 = Map::elevationIsPresent(map_flags, ELEVATION_1);
+    bool hasElevation2 = Map::elevationIsPresent(map_flags, ELEVATION_2);
+    bool hasElevation3 = Map::elevationIsPresent(map_flags, ELEVATION_3);
 
     _elevation1Action->setEnabled(hasElevation1);
     _elevation2Action->setEnabled(hasElevation2);

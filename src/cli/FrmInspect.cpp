@@ -3,6 +3,7 @@
 #include "format/frm/Direction.h"
 #include "format/frm/Frame.h"
 #include "format/frm/Frm.h"
+#include "format/frm/FrmId.h"
 #include "format/lst/Lst.h"
 #include "format/pal/Pal.h"
 #include "resource/FrmResolver.h"
@@ -39,7 +40,7 @@ using nlohmann::json;
 
 namespace {
 
-    // The art LSTs, indexed in FRM_TYPE enum order (so the index is the FRM type ordinal).
+    // The art LSTs, indexed in ObjectType order (so the index is the type ordinal).
     struct ArtList {
         std::string_view dir;
         std::string_view lst;
@@ -61,24 +62,24 @@ namespace {
         return s;
     }
 
-    const char* frmTypeName(Frm::FRM_TYPE type) {
-        using enum Frm::FRM_TYPE;
+    const char* frmTypeName(ObjectType type) {
+        using enum ObjectType;
         switch (type) {
-            case ITEM:
+            case Item:
                 return "item";
-            case CRITTER:
+            case Critter:
                 return "critter";
-            case SCENERY:
+            case Scenery:
                 return "scenery";
-            case WALL:
+            case Wall:
                 return "wall";
-            case TILE:
+            case Tile:
                 return "tile";
-            case MISC:
+            case Misc:
                 return "misc";
-            case INTERFACE:
+            case Interface:
                 return "interface";
-            case INVENTORY:
+            case Inventory:
                 return "inventory";
             default:
                 return "unknown";
@@ -436,11 +437,9 @@ int resolveFidCommand(resource::GameResources& resources, const std::string& fid
         return 1;
     }
 
-    // Decode the type byte (engine FID_TYPE = (fid & 0x0F000000) >> 24) and the base index.
-    const auto type = static_cast<Frm::FRM_TYPE>((*fid & FileFormat::TYPE_MASK) >> FileFormat::TYPE_MASK_SHIFT);
-    const uint32_t index = (type == Frm::FRM_TYPE::CRITTER)
-        ? (*fid & FileFormat::CRITTER_ID_MASK)
-        : (*fid & FileFormat::BASE_ID_MASK);
+    const FrmId frmId{ *fid };
+    const ObjectType type = frmId.objectType();
+    const uint32_t index = frmId.frameId();
 
     json info;
     info["fid"] = *fid;

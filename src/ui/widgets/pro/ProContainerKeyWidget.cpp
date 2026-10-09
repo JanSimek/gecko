@@ -99,8 +99,8 @@ void ProContainerKeyWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    _isContainer = (pro->itemType() == Pro::ITEM_TYPE::CONTAINER);
-    _isKey = (pro->itemType() == Pro::ITEM_TYPE::KEY);
+    _isContainer = (pro->itemType() == ItemType::Container);
+    _isKey = (pro->itemType() == ItemType::Key);
 
     if (_isContainer) {
         setupContainerUI();
@@ -158,7 +158,7 @@ void ProContainerKeyWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 }
 
 bool ProContainerKeyWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
-    return pro && pro->type() == Pro::OBJECT_TYPE::ITEM && (pro->itemType() == Pro::ITEM_TYPE::CONTAINER || pro->itemType() == Pro::ITEM_TYPE::KEY);
+    return pro && pro->type() == ObjectType::Item && (pro->itemType() == ItemType::Container || pro->itemType() == ItemType::Key);
 }
 
 QString ProContainerKeyWidget::getTabLabel() const {

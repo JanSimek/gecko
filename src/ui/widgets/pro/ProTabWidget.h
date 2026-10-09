@@ -77,7 +77,7 @@ signals:
      * @param targetField The spin box to update with selected FID
      * @param objectType The type of object to select
      */
-    void fidSelectorRequested(QSpinBox* targetField, Frm::FRM_TYPE objectType);
+    void fidSelectorRequested(QSpinBox* targetField, ObjectType objectType);
 
     /**
      * @brief Emitted when a FID label selector is clicked
@@ -85,7 +85,7 @@ signals:
      * @param fidStorage Pointer to store the selected FID
      * @param objectType The type of object to select
      */
-    void fidLabelSelectorRequested(QLabel* targetLabel, int32_t* fidStorage, Frm::FRM_TYPE objectType);
+    void fidLabelSelectorRequested(QLabel* targetLabel, int32_t* fidStorage, ObjectType objectType);
 
 protected:
     // Common helper methods for derived classes

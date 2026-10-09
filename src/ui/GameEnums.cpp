@@ -153,7 +153,7 @@ QStringList critterBodyTypes(resource::GameResources& resources) {
 }
 
 QStringList sceneryTypes(resource::GameResources& resources) {
-    return requireProtoEnumNames(resources, fallout::SceneryType::Door, "proto.msg scenery");
+    return requireProtoEnumNames(resources, SceneryType::Door, "proto.msg scenery");
 }
 
 } // namespace geck::game::enums

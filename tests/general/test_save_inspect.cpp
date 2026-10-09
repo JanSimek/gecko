@@ -110,7 +110,7 @@ std::vector<uint8_t> buildSaveDat(const std::vector<int32_t>& globals) {
 std::shared_ptr<MapObject> unlistedCritter(int32_t seed, int32_t cid, int elevation, uint32_t flags) {
     auto critter = std::make_shared<MapObject>();
     fillBase(*critter, seed);
-    critter->pro_pid = pidOf(Pro::OBJECT_TYPE::CRITTER, 20);
+    critter->pro_pid = pidOf(ObjectType::Critter, 20);
     critter->elevation = static_cast<uint32_t>(elevation);
     critter->flags = flags;
     critter->critter_index = cid;
@@ -128,7 +128,7 @@ void writeSlotMap(const fs::path& slot, const std::function<void(Map::MapFile&)>
     for (int32_t cid : { 1, 2 }) {
         auto critter = std::make_shared<MapObject>();
         fillBase(*critter, cid);
-        critter->pro_pid = pidOf(Pro::OBJECT_TYPE::CRITTER, 20);
+        critter->pro_pid = pidOf(ObjectType::Critter, 20);
         critter->elevation = 0;
         critter->critter_index = cid;
         critter->position = 17000 + cid;

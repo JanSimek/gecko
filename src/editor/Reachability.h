@@ -5,6 +5,8 @@
 #include <memory>
 #include <vector>
 
+#include "format/ObjTypes.h"
+
 namespace geck {
 
 namespace resource {
@@ -28,7 +30,7 @@ namespace reachability {
     /// The engine's instance-flag movement-blocking rule: a CRITTER/SCENERY/WALL that is neither
     /// `OBJECT_HIDDEN` nor `OBJECT_NO_BLOCK`. Items, misc and tiles never block. (Doors are scenery
     /// but `blockedMask` treats them as passable.)
-    bool blocksMovementByInstance(std::uint32_t objectType, std::uint32_t flags);
+    bool blocksMovementByInstance(ObjectType objectType, std::uint32_t flags);
 
     /// The up-to-6 parity-correct neighbour positions of a hex (empty if `hex` is off-grid).
     std::vector<int> hexNeighbors(int hex);

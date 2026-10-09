@@ -411,9 +411,9 @@ void MapInfoPanel::updateMapInfo() {
         _suppressFieldChanged = true;
 
         // Update elevation checkboxes based on flags (inverted logic: 0 = enabled, 1 = disabled)
-        bool hasElevation1 = (mapInfo.header.flags & 0x2) == 0;
-        bool hasElevation2 = (mapInfo.header.flags & 0x4) == 0;
-        bool hasElevation3 = (mapInfo.header.flags & 0x8) == 0;
+        bool hasElevation1 = Map::elevationIsPresent(mapInfo.header.flags, ELEVATION_1);
+        bool hasElevation2 = Map::elevationIsPresent(mapInfo.header.flags, ELEVATION_2);
+        bool hasElevation3 = Map::elevationIsPresent(mapInfo.header.flags, ELEVATION_3);
 
         // Temporarily disconnect signals to avoid triggering changes during update
         setElevationCheckboxesBlocked(true);
@@ -435,7 +435,7 @@ void MapInfoPanel::updateMapInfo() {
         _mapIdSpin->setValue(static_cast<int>(mapInfo.header.map_id));
         _timestampSpin->setValue(static_cast<int>(mapInfo.header.timestamp));
 
-        bool isSavegame = ((mapInfo.header.flags & 0x1) != 0);
+        bool isSavegame = (mapInfo.header.flags & static_cast<uint32_t>(MapHeaderFlags::Saved)) != 0;
         _savegameCheck->setChecked(isSavegame);
 
         _suppressFieldChanged = false; // done populating; user edits write back from here on
@@ -691,11 +691,10 @@ void MapInfoPanel::onFieldChanged() {
     mapInfo.header.darkness = static_cast<uint32_t>(_darknessSpin->value());
     mapInfo.header.timestamp = static_cast<uint32_t>(_timestampSpin->value());
 
-    // flags bit 0 = savegame map
     if (_savegameCheck->isChecked()) {
-        mapInfo.header.flags |= 0x1;
+        mapInfo.header.flags |= static_cast<uint32_t>(MapHeaderFlags::Saved);
     } else {
-        mapInfo.header.flags &= ~0x1;
+        mapInfo.header.flags &= ~static_cast<uint32_t>(MapHeaderFlags::Saved);
     }
 
     QObject* sender = QObject::sender();
@@ -761,9 +760,9 @@ void MapInfoPanel::updateElevationCheckboxStates() {
 
     // Elevation flag bits are inverted: bit clear (0) = enabled.
     int enabledCount = 0;
-    bool hasElevation1 = (mapFile.header.flags & 0x2) == 0;
-    bool hasElevation2 = (mapFile.header.flags & 0x4) == 0;
-    bool hasElevation3 = (mapFile.header.flags & 0x8) == 0;
+    bool hasElevation1 = Map::elevationIsPresent(mapFile.header.flags, ELEVATION_1);
+    bool hasElevation2 = Map::elevationIsPresent(mapFile.header.flags, ELEVATION_2);
+    bool hasElevation3 = Map::elevationIsPresent(mapFile.header.flags, ELEVATION_3);
 
     if (hasElevation1)
         enabledCount++;
@@ -810,20 +809,16 @@ void MapInfoPanel::onElevationCheckboxChanged() {
     }
 
     int elevation = -1;
-    uint32_t flagBit = 0;
     QString elevationName;
 
     if (sender == _elevation1Check) {
         elevation = ELEVATION_1;
-        flagBit = 0x2;
         elevationName = "Elevation 1";
     } else if (sender == _elevation2Check) {
         elevation = ELEVATION_2;
-        flagBit = 0x4;
         elevationName = "Elevation 2";
     } else if (sender == _elevation3Check) {
         elevation = ELEVATION_3;
-        flagBit = 0x8;
         elevationName = "Elevation 3";
     } else {
         return;
@@ -831,7 +826,8 @@ void MapInfoPanel::onElevationCheckboxChanged() {
 
     auto& mapFile = _map->getMapFile();
     bool isChecked = sender->isChecked();
-    bool wasEnabled = (mapFile.header.flags & flagBit) == 0;
+    const uint32_t flagBit = Map::elevationFlag(elevation);
+    bool wasEnabled = Map::elevationIsPresent(mapFile.header.flags, elevation);
 
     if (isChecked && !wasEnabled) {
         mapFile.header.flags &= ~flagBit; // Clear bit to enable elevation

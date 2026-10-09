@@ -189,32 +189,6 @@ private:
     int _x, _y;
 };
 
-/**
- * @brief Type-safe elevation level
- *
- * Replaces magic numbers and provides bounds checking.
- */
-enum class Elevation : int {
-    LEVEL_1 = 0,
-    LEVEL_2 = 1,
-    LEVEL_3 = 2
-};
-
-constexpr bool isValidElevation(int elevation) noexcept {
-    return elevation >= 0 && elevation <= 2;
-}
-
-constexpr Elevation toElevation(int elevation) {
-    if (!isValidElevation(elevation)) {
-        // Can't throw in constexpr context; callers must validate before calling.
-    }
-    return static_cast<Elevation>(elevation);
-}
-
-constexpr int toInt(Elevation elevation) noexcept {
-    return static_cast<int>(elevation);
-}
-
 // Helper functions for tile validation
 constexpr bool isValidTileIndex(int index) noexcept {
     return index >= 0 && index <= TileIndex::MAX_VALUE;
@@ -261,7 +235,6 @@ namespace CoordinateUtils {
     // Validate and convert (throws on invalid input)
     [[nodiscard]] HexPosition toValidHexPosition(int position);
     [[nodiscard]] TileIndex toValidTileIndex(int index);
-    [[nodiscard]] Elevation toValidElevation(int elevation);
 }
 
 } // namespace geck

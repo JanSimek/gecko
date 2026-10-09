@@ -465,7 +465,7 @@ void ProCritterWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 }
 
 bool ProCritterWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
-    return pro && pro->type() == Pro::OBJECT_TYPE::CRITTER;
+    return pro && pro->type() == ObjectType::Critter;
 }
 
 QString ProCritterWidget::getTabLabel() const {

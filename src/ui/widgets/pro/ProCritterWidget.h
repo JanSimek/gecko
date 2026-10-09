@@ -35,7 +35,7 @@ private:
     // (engine-fidelity: the spin box still stores the raw packet number). Empty if unmounted.
     AiTxt _aiTxt;
 
-    static constexpr Frm::FRM_TYPE HeadFrmObjectType = Frm::FRM_TYPE::CRITTER;
+    static constexpr ObjectType HeadFrmObjectType = ObjectType::Critter;
 
     QSpinBox* _specialStatEdits[7];
     QSpinBox* _skillEdits[18];

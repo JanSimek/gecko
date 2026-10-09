@@ -36,7 +36,7 @@ constexpr int kSealedHex = 20100;
 std::shared_ptr<MapObject> makeExitGrid(int position, int destMap, int destHex, int destElevation) {
     auto exit = std::make_shared<MapObject>();
     exit->position = position;
-    exit->pro_pid = pidOf(Pro::OBJECT_TYPE::MISC, MapObject::EXIT_GRID_PID_INDEX_FIRST);
+    exit->pro_pid = ProtoId(MiscProtoTypeId::FirstExitGrid).pid();
     exit->exit_map = destMap;
     exit->exit_position = destHex;
     exit->exit_elevation = destElevation;
@@ -46,7 +46,7 @@ std::shared_ptr<MapObject> makeExitGrid(int position, int destMap, int destHex, 
 std::shared_ptr<MapObject> makeWall(int position) {
     auto wall = std::make_shared<MapObject>();
     wall->position = position;
-    wall->pro_pid = pidOf(Pro::OBJECT_TYPE::WALL, 1);
+    wall->pro_pid = pidOf(ObjectType::Wall, 1);
     return wall;
 }
 

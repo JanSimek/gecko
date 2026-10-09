@@ -39,7 +39,7 @@ void ProTileWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 }
 
 bool ProTileWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
-    return pro && pro->type() == Pro::OBJECT_TYPE::TILE;
+    return pro && pro->type() == ObjectType::Tile;
 }
 
 QString ProTileWidget::getTabLabel() const {

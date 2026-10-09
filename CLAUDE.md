@@ -134,7 +134,7 @@ decrements before validating (fallout2-ce `sfall_opcodes.cc`).
 - Objects store `position` as hex index in MapObject
 
 ### Visual Feedback
-- Preview objects should use `setDirection(ObjectDirection(0))` to show single frame
+- Preview objects should use `setDirection(Rotation::NE)` to show single frame
 - Apply semi-transparency: `setColor(sf::Color(255, 255, 255, 180))`
 - Objects without MapObject need null checks in `Object::setDirection()`
 
@@ -156,7 +156,7 @@ decrements before validating (fallout2-ce `sfall_opcodes.cc`).
 auto object = std::make_shared<Object>(frm);
 sf::Sprite sprite{ resources.textures().get(frmPath) };
 object->setSprite(std::move(sprite));
-object->setDirection(static_cast<ObjectDirection>(direction));
+object->setDirection(static_cast<Rotation>(direction));
 object->setHexPosition(hex);
 ```
 
@@ -173,6 +173,27 @@ object->setHexPosition(hex);
 - Preserve engine IDs exactly when reading or writing formats. UI widgets should map display labels to stored engine values; do not assume `QComboBox` index is the serialized value unless the format explicitly works that way.
 - Do not add fallback label tables, placeholder enum names, or substitute values when required engine data is missing or incomplete. Surface the failure explicitly and fix the loader or data path.
 - When a format detail is ambiguous, check `/Users/jansimek/Development/fallout2-ce` and match the engine's parsing and naming behavior before adding editor-side constants or reinterpretations.
+
+### Engine ID Types
+PIDs, FIDs and the enums that classify them mirror fallout2-ce's types and names, so engine and
+editor code read side by side:
+
+| gecko | fallout2-ce |
+| --- | --- |
+| `format/ObjTypes.h` `ObjectType`, `Rotation` | `obj_types.h` |
+| `format/pro/ProtoTypes.h` `ProtoId`, `ItemType`, `SceneryType`, `*ProtoTypeId` | `proto_types.h` |
+| `format/frm/FrmId.h` `FrmId`, `MiscFrameId`, `InterfaceFrameId` | `art.h`, `art_defs.h` |
+| `format/map/Map.h` `MapHeaderFlags` | `map_defs.h` |
+
+- Engine enumerators map 1:1 by dropping the prefix: `OBJ_TYPE_ITEM` → `ObjectType::Item`,
+  `SCENERY_TYPE_LADDER_UP` → `SceneryType::LadderUp`, `ROTATION_NE` → `Rotation::NE`.
+- Decode a PID or FID through `ProtoId` / `FrmId` (or `MapObject::pid()` / `fid()`), never with
+  `>> 24` or masks. A PID's type is its whole high byte; a FID's is the nibble under the rotation
+  bits, and its frame id is 12 bits (`fid & 0xFFF`, engine `art.cc`).
+- Unlike the engine's classes these hold the raw value losslessly; `valid()` is a query, so PIDs the
+  engine would reject (see "Objects With No Known Type") still round-trip.
+- Name a well-known id with the engine's `*ProtoTypeId` / `*FrameId` enum, adding the entry under its
+  engine name, rather than a hex literal.
 
 ### Object Hierarchy
 - `MapObject`: Data structure for saving (shared_ptr in Map storage, unique_ptr only during parsing and for inventory children)

@@ -10,8 +10,8 @@ using namespace geck;
 
 namespace {
 
-uint32_t typePid(Pro::OBJECT_TYPE type, uint32_t baseId) {
-    return (static_cast<uint32_t>(type) << FileFormat::TYPE_MASK_SHIFT) | baseId;
+uint32_t typePid(ObjectType type, uint32_t baseId) {
+    return ProtoId(type, baseId).pid();
 }
 
 } // namespace
@@ -22,15 +22,15 @@ uint32_t typePid(Pro::OBJECT_TYPE type, uint32_t baseId) {
 TEST_CASE("isObjectVisible follows the layer toggles that decide what is drawn", "[visibility]") {
     // A plain item: neither a wall (PRO type) nor a scroll blocker (FRM base id 1).
     MapObject regular;
-    regular.pro_pid = typePid(Pro::OBJECT_TYPE::ITEM, 100);
+    regular.pro_pid = typePid(ObjectType::Item, 100);
     regular.frm_pid = 100;
 
     MapObject wall;
-    wall.pro_pid = typePid(Pro::OBJECT_TYPE::WALL, 5);
+    wall.pro_pid = typePid(ObjectType::Wall, 5);
     wall.frm_pid = 5;
 
     MapObject critter;
-    critter.pro_pid = typePid(Pro::OBJECT_TYPE::CRITTER, 50);
+    critter.pro_pid = typePid(ObjectType::Critter, 50);
     critter.frm_pid = 50;
 
     // A scroll blocker is proto 0x0500000C and nothing else — the exact pid the engine matches in
@@ -97,12 +97,12 @@ TEST_CASE("A scroll blocker is the engine's proto, not whatever uses scrblk art"
     // art/items/ammo.frm is FID 0x00000001 - so ammo boxes vanished from the editor while loading,
     // saving and rendering in game perfectly well.
     MapObject ammo;
-    ammo.pro_pid = typePid(Pro::OBJECT_TYPE::ITEM, 29);
+    ammo.pro_pid = typePid(ObjectType::Item, 29);
     ammo.frm_pid = 0x00000001; // art/items/ammo.frm
 
     MapObject blocker;
-    blocker.pro_pid = WallBlockers::SCROLL_BLOCKER_PID;
-    blocker.frm_pid = WallBlockers::SCROLL_BLOCKER_FRM_PID;
+    blocker.pro_pid = WallBlockers::SCROLL_BLOCKER_PID.pid();
+    blocker.frm_pid = WallBlockers::SCROLL_BLOCKER_FID.fid();
 
     CHECK(blocker.pro_pid == 0x0500000Cu); // the literal the engine compares against
     CHECK_FALSE(ammo.isScrollBlocker());
@@ -111,16 +111,16 @@ TEST_CASE("A scroll blocker is the engine's proto, not whatever uses scrblk art"
     // Every other art type that collides on index 1 in shipped maps.
     for (const uint32_t artType : { 0u, 1u, 2u, 3u, 4u }) {
         MapObject other;
-        other.pro_pid = typePid(Pro::OBJECT_TYPE::SCENERY, 7);
-        other.frm_pid = (artType << 24) | 1u;
+        other.pro_pid = typePid(ObjectType::Scenery, 7);
+        other.frm_pid = FrmId(static_cast<ObjectType>(artType), 1).fid();
         CHECK_FALSE(other.isScrollBlocker());
     }
 
     // Proto 24 is "Flare": drawing it with blocker art does not make it one, and the editor must
     // not write it for the Scroll Blocker Rectangle tool.
     MapObject flare;
-    flare.pro_pid = 0x05000000 | WallBlockers::GENERIC_PROTO_ID;
-    flare.frm_pid = WallBlockers::SCROLL_BLOCKER_FRM_PID;
+    flare.pro_pid = 0x05000018; // MISC proto 24, "Flare"
+    flare.frm_pid = WallBlockers::SCROLL_BLOCKER_FID.fid();
     CHECK_FALSE(flare.isScrollBlocker());
 
     VisibilitySettings vis;

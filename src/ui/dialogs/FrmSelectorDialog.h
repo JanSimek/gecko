@@ -15,6 +15,7 @@
 #include <optional>
 
 #include "format/frm/Frm.h"
+#include "format/frm/FrmId.h"
 #include "format/pro/Pro.h"
 
 namespace geck {
@@ -29,8 +30,13 @@ class FrmSelectorDialog : public QDialog {
 public:
     explicit FrmSelectorDialog(resource::GameResources& resources, QWidget* parent = nullptr);
 
-    static std::optional<Frm::FRM_TYPE> filterForObjectType(Pro::OBJECT_TYPE objectType);
-    static std::optional<Frm::FRM_TYPE> filterForFid(uint32_t fid);
+    static std::optional<ObjectType> filterForObjectType(ObjectType objectType);
+    static std::optional<ObjectType> filterForFid(uint32_t fid);
+
+    /// Animation-type code that marks a critter FID made up for art absent from critters.lst. No
+    /// engine animation uses it, so such a FID is display-only and never written to a map.
+    static constexpr uint32_t CUSTOM_FID_ANIMATION_TYPE = 0xFF;
+    static bool isCustomFid(uint32_t fid) { return FrmId(fid).animationType() == CUSTOM_FID_ANIMATION_TYPE; }
 
     /**
      * @brief Get the selected FRM PID
@@ -55,7 +61,7 @@ public:
      * @brief Set object type filter for the FRM list
      * @param objectType Optional object type filter for the FRM list
      */
-    void setObjectTypeFilter(std::optional<Frm::FRM_TYPE> objectType);
+    void setObjectTypeFilter(std::optional<ObjectType> objectType);
 
 private slots:
     void onSearchTextChanged();
@@ -72,7 +78,7 @@ private:
     std::optional<uint32_t> deriveFrmPidFromPath(const std::string& frmPath);
     uint32_t tryFallbackFidDerivation(const std::string& normalizedPath,
         const std::string& filename,
-        uint32_t frmType);
+        ObjectType frmType);
 
     // Animation grouping helpers
     std::string getGroupingKey(const std::string& frmPath);
@@ -109,7 +115,7 @@ private:
     resource::GameResources& _resources;
     std::optional<uint32_t> _selectedFrmPid;
     std::vector<std::pair<uint32_t, std::string>> _frmFiles; // PID, Path pairs
-    std::optional<Frm::FRM_TYPE> _objectTypeFilter;
+    std::optional<ObjectType> _objectTypeFilter;
 };
 
 } // namespace geck

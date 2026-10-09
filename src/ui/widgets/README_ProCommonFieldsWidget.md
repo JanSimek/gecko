@@ -49,7 +49,7 @@ connect(commonFields, &ProCommonFieldsWidget::editMessageRequested,
 commonFields->loadFromPro(proObject);
 
 // Show/hide item-specific fields based on type
-bool isItem = (proObject->type() == Pro::OBJECT_TYPE::ITEM);
+bool isItem = (proObject->type() == ObjectType::Item);
 commonFields->setItemFieldsVisible(isItem);
 
 // Save changes back to PRO

@@ -251,7 +251,7 @@ void ProWeaponWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 }
 
 bool ProWeaponWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
-    return pro && pro->type() == Pro::OBJECT_TYPE::ITEM && pro->itemType() == Pro::ITEM_TYPE::WEAPON;
+    return pro && pro->type() == ObjectType::Item && pro->itemType() == ItemType::Weapon;
 }
 
 QString ProWeaponWidget::getTabLabel() const {

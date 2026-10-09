@@ -60,7 +60,7 @@ private:
     void saveProData();
 
     void refreshInfoPanel();
-    void openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidStorage, Frm::FRM_TYPE objectType);
+    void openFrmSelectorForLabel(QLabel* targetLabel, int32_t* fidStorage, ObjectType objectType);
 
     QString getFrmFilename(int32_t fid);
 

@@ -1,5 +1,6 @@
 #include "FrmSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
+#include "util/Constants.h"
 
 #include <QApplication>
 #include <QPixmap>
@@ -42,32 +43,16 @@ FrmSelectorDialog::FrmSelectorDialog(resource::GameResources& resources, QWidget
     populateFrmList();
 }
 
-std::optional<Frm::FRM_TYPE> FrmSelectorDialog::filterForObjectType(Pro::OBJECT_TYPE objectType) {
-    switch (objectType) {
-        case Pro::OBJECT_TYPE::ITEM:
-            return Frm::FRM_TYPE::ITEM;
-        case Pro::OBJECT_TYPE::CRITTER:
-            return Frm::FRM_TYPE::CRITTER;
-        case Pro::OBJECT_TYPE::SCENERY:
-            return Frm::FRM_TYPE::SCENERY;
-        case Pro::OBJECT_TYPE::WALL:
-            return Frm::FRM_TYPE::WALL;
-        case Pro::OBJECT_TYPE::TILE:
-            return Frm::FRM_TYPE::TILE;
-        case Pro::OBJECT_TYPE::MISC:
-            return Frm::FRM_TYPE::MISC;
-    }
-
-    return std::nullopt;
-}
-
-std::optional<Frm::FRM_TYPE> FrmSelectorDialog::filterForFid(uint32_t fid) {
-    const auto frmType = static_cast<Frm::FRM_TYPE>((fid >> 24) & 0xFF);
-    if (frmType > Frm::FRM_TYPE::MISC) {
+std::optional<ObjectType> FrmSelectorDialog::filterForObjectType(ObjectType objectType) {
+    if (!protoObjectTypeIsValid(static_cast<int>(objectType))) {
         return std::nullopt;
     }
+    return objectType;
+}
 
-    return frmType;
+std::optional<ObjectType> FrmSelectorDialog::filterForFid(uint32_t fid) {
+    // The type nibble, not the whole high byte: a critter FID carries rotation bits above it.
+    return filterForObjectType(FrmId(fid).objectType());
 }
 
 void FrmSelectorDialog::setupUI() {
@@ -190,16 +175,16 @@ void FrmSelectorDialog::populateFrmList() {
         // FRM type -> its lazily-created root node and display label. Types without
         // an entry here (interface, inventory) get no root and stay unparented.
         const struct {
-            Frm::FRM_TYPE type;
+            ObjectType type;
             QTreeWidgetItem** root;
             const char* label;
         } categories[] = {
-            { Frm::FRM_TYPE::CRITTER, &crittersRoot, "Critters" },
-            { Frm::FRM_TYPE::ITEM, &itemsRoot, "Items" },
-            { Frm::FRM_TYPE::SCENERY, &sceneryRoot, "Scenery" },
-            { Frm::FRM_TYPE::WALL, &wallsRoot, "Walls" },
-            { Frm::FRM_TYPE::TILE, &tilesRoot, "Tiles" },
-            { Frm::FRM_TYPE::MISC, &miscRoot, "Misc" },
+            { ObjectType::Critter, &crittersRoot, "Critters" },
+            { ObjectType::Item, &itemsRoot, "Items" },
+            { ObjectType::Scenery, &sceneryRoot, "Scenery" },
+            { ObjectType::Wall, &wallsRoot, "Walls" },
+            { ObjectType::Tile, &tilesRoot, "Tiles" },
+            { ObjectType::Misc, &miscRoot, "Misc" },
         };
 
         for (const auto& group : groupedFiles) {
@@ -461,13 +446,13 @@ std::optional<uint32_t> FrmSelectorDialog::deriveFrmPidFromPath(const std::strin
     // Handle well-known special cases first (use normalized path).
     // These are legitimate (sometimes low-valued) FIDs, not failure sentinels.
     if (normalizedPath == "art/misc/scrblk.frm") {
-        return uint32_t{ 0x05000001 }; // Scroll blocker: MISC (type 5), baseId 1 - matches FrmResolver::resolve
+        return WallBlockers::SCROLL_BLOCKER_FID.fid(); // block.frm, which FrmResolver::resolve draws as scrblk.frm
     }
     if (normalizedPath == "art/misc/wallblock.frm") {
-        return uint32_t{ 0x0300026C }; // Wall blocker: WALL (type 3), baseId 620 - matches FrmResolver::resolve
+        return FrmId(ObjectType::Wall, 620).fid(); // Wall blocker - matches FrmResolver::resolve
     }
     if (normalizedPath == "art/misc/light.frm") {
-        return uint32_t{ 0x02000015 }; // Light source
+        return FrmId(ObjectType::Scenery, 0x15).fid(); // Light source
     }
 
     // Canonical LST-based derivation lives in the resource layer (engine-correct
@@ -480,7 +465,7 @@ std::optional<uint32_t> FrmSelectorDialog::deriveFrmPidFromPath(const std::strin
         // The FRM sits under a known art directory but is absent from its LST:
         // fall back to the editor's heuristic derivation for items and critters.
         if (const auto type = resource::frmTypeForArtPath(normalizedPath)) {
-            const uint32_t fallbackFid = tryFallbackFidDerivation(normalizedPath, filename, static_cast<uint32_t>(*type));
+            const uint32_t fallbackFid = tryFallbackFidDerivation(normalizedPath, filename, *type);
             if (fallbackFid != 0) {
                 return fallbackFid;
             }
@@ -496,8 +481,8 @@ std::optional<uint32_t> FrmSelectorDialog::deriveFrmPidFromPath(const std::strin
 
 uint32_t FrmSelectorDialog::tryFallbackFidDerivation(const std::string& /* normalizedPath */,
     const std::string& filename,
-    uint32_t frmType) {
-    if (frmType == 0) { // ITEMS
+    ObjectType frmType) {
+    if (frmType == ObjectType::Item) {
         std::string baseName = filename;
         size_t dotPos = baseName.find_last_of('.');
         if (dotPos != std::string::npos) {
@@ -507,13 +492,15 @@ uint32_t FrmSelectorDialog::tryFallbackFidDerivation(const std::string& /* norma
         std::regex numPattern("^([a-zA-Z_]+?)_?(\\d+)$");
         std::smatch match;
         if (std::regex_match(baseName, match, numPattern)) {
-            uint32_t index = std::stoul(match[2].str());
-            return (frmType << 24) | index;
+            const uint32_t index = static_cast<uint32_t>(std::stoul(match[2].str()));
+            if (index <= FrmId::MAX_FRAME_ID) {
+                return FrmId(frmType, index).fid();
+            }
         }
     }
 
-    if (frmType == 1) { // Critters
-        return (frmType << 24) | 0x00FF0000;
+    if (frmType == ObjectType::Critter) {
+        return FrmId(ObjectType::Critter, 0, CUSTOM_FID_ANIMATION_TYPE).fid();
     }
 
     return 0;
@@ -618,7 +605,7 @@ QString FrmSelectorDialog::createDisplayName(const std::string& frmPath) {
     return QString::fromStdString(filename);
 }
 
-void FrmSelectorDialog::setObjectTypeFilter(std::optional<Frm::FRM_TYPE> objectType) {
+void FrmSelectorDialog::setObjectTypeFilter(std::optional<ObjectType> objectType) {
     _objectTypeFilter = objectType;
     populateFrmList();
 }
