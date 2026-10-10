@@ -365,6 +365,25 @@ void MainWindow::revealPanel(QDockWidget* dock, QAction* action) {
     }
 }
 
+void MainWindow::syncScriptsPanelSelection() {
+    if (!_scriptsPanel || !_currentEditorWidget) {
+        return;
+    }
+    // The Scripts panel follows the map: a selected spatial script, else the script of the one
+    // selected object. Both signals that can change this arrive here, in either order.
+    uint32_t sid = _currentEditorWidget->selectedSpatialScript();
+    if (sid == MapScript::NONE) {
+        const auto& selection = _currentEditorWidget->getSelectionManager()->getCurrentSelection();
+        if (selection.items.size() == 1 && selection.items[0].type == selection::SelectionType::OBJECT) {
+            const auto object = selection.items[0].getObject();
+            if (object && object->hasMapObject() && object->getMapObject().map_scripts_pid != -1) {
+                sid = static_cast<uint32_t>(object->getMapObject().map_scripts_pid);
+            }
+        }
+    }
+    _scriptsPanel->selectScriptRow(sid);
+}
+
 void MainWindow::showPanel(QDockWidget* dock, QAction* action) {
     if (!dock) {
         return;
@@ -1449,7 +1468,7 @@ void MainWindow::setupDockWidgets() {
     _mapInfoPanel = new MapInfoPanel(*_resourcesShared, _settings);
     _mapInfoDock = createDock("Map Information", "MapInfoDock", _mapInfoPanel, Qt::RightDockWidgetArea, QSizePolicy::Preferred, ui::constants::dock::MIN_HEIGHT_SMALL);
 
-    _selectionPanel = new SelectionPanel(*_resourcesShared);
+    _selectionPanel = new SelectionPanel(*_resourcesShared, _settings);
     _selectionDock = createDock("Selection", "SelectionDock", _selectionPanel, Qt::RightDockWidgetArea, QSizePolicy::Preferred, ui::constants::dock::MIN_HEIGHT_SMALL);
 
     _scriptsPanel = new ScriptsPanel(*_resourcesShared);
@@ -1647,7 +1666,7 @@ void MainWindow::rebuildResourcePanels() {
     _scriptsPanel = new ScriptsPanel(*_resourcesShared);
     replaceDockPanelWidget(_scriptsDock, _scriptsPanel, QSizePolicy::Preferred);
 
-    _selectionPanel = new SelectionPanel(*_resourcesShared);
+    _selectionPanel = new SelectionPanel(*_resourcesShared, _settings);
     replaceDockPanelWidget(_selectionDock, _selectionPanel, QSizePolicy::Preferred);
 
     _tilePalettePanel = new TilePalettePanel(*_resourcesShared);
@@ -2011,6 +2030,15 @@ void MainWindow::connectPanelSignals() {
             if (_scriptSourceService)
                 _scriptSourceService->editScriptSource(programIndex);
         });
+        connect(_selectionPanel, &SelectionPanel::requestShowScriptInPanel, this, [this](uint32_t sid) {
+            showPanel(_scriptsDock, _scriptsPanelAction);
+            if (_scriptsPanel)
+                _scriptsPanel->selectScriptRow(sid);
+        });
+        _selectionPanel->setScriptStatusProvider([this](int programIndex) {
+            return _scriptSourceService ? _scriptSourceService->scriptStatus(programIndex)
+                                        : ScriptSourceService::ScriptStatus{ };
+        });
         connect(_selectionPanel, &SelectionPanel::requestObjectHighlight,
             this, [this](std::shared_ptr<Object> object) {
                 if (!_currentEditorWidget || !object)
@@ -2194,10 +2222,15 @@ void MainWindow::connectPanelSignals() {
                 }
             });
 
-        // Selecting a spatial-script row drives the shared selection (highlights its marker on the map).
+        // Selecting a spatial-script row drives the shared selection: it highlights the marker on the
+        // map and brings it into view, switching elevation when it lives on another one.
         connect(_scriptsPanel, &ScriptsPanel::spatialScriptSelected, this, [this](uint32_t sid) {
-            if (_currentEditorWidget) {
-                _currentEditorWidget->setSelectedSpatialScript(sid);
+            if (!_currentEditorWidget) {
+                return;
+            }
+            _currentEditorWidget->setSelectedSpatialScript(sid);
+            if (sid != MapScript::NONE && _currentEditorWidget->revealSpatialScript(sid)) {
+                updateElevationMenu(_currentEditorWidget->getMap());
             }
         });
         // Edit / delete requested from the panel (context menu or double-click).
@@ -2268,11 +2301,10 @@ void MainWindow::connectToEditorWidget() {
 
     // Spatial-script selection/editing sync (map <-> Scripts panel). The panel mirrors the map-side
     // selection; a map double-click opens the editor; add/edit/delete repopulate the panel.
-    connect(_currentEditorWidget, &EditorWidget::spatialScriptSelectionChanged, this, [this](uint32_t sid) {
-        if (_scriptsPanel) {
-            _scriptsPanel->selectSpatialScriptRow(sid);
-        }
-    });
+    connect(_currentEditorWidget, &EditorWidget::spatialScriptSelectionChanged, this,
+        [this](uint32_t) { syncScriptsPanelSelection(); });
+    connect(_currentEditorWidget, &EditorWidget::selectionChanged, this,
+        [this](const selection::SelectionState&, int) { syncScriptsPanelSelection(); });
     connect(_currentEditorWidget, &EditorWidget::spatialScriptEditActivated, this,
         [this](uint32_t sid) { openSpatialScriptDialog(sid); });
     connect(_currentEditorWidget, &EditorWidget::mapScriptsChanged, this,
@@ -2384,7 +2416,7 @@ void MainWindow::refreshScriptsPanel() {
     if (_scriptsPanel && _currentEditorWidget) {
         _scriptsPanel->setMap(_currentEditorWidget->getMap());
         // populate() drops the selection; re-assert the shared spatial selection so the row stays lit.
-        _scriptsPanel->selectSpatialScriptRow(_currentEditorWidget->selectedSpatialScript());
+        _scriptsPanel->selectScriptRow(_currentEditorWidget->selectedSpatialScript());
     }
 }
 

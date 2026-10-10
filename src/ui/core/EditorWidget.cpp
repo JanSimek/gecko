@@ -2869,6 +2869,18 @@ std::shared_ptr<Object> EditorWidget::visualObjectForSid(int sid) const {
     return nullptr;
 }
 
+bool EditorWidget::revealSpatialScript(uint32_t sid) {
+    const auto info = spatialScriptInfo(sid);
+    if (!info) {
+        return false;
+    }
+    if (_session.currentElevation() != info->elevation) {
+        changeElevation(info->elevation);
+    }
+    centerViewOnHex(static_cast<uint32_t>(info->tile));
+    return true;
+}
+
 bool EditorWidget::revealScriptObject(int sid) {
     const int ownerElevation = scriptOwnerElevation(sid);
     if (ownerElevation < 0) {

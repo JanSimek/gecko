@@ -79,6 +79,8 @@ set(GECK_APP_SOURCES
     ui/panels/ScriptsPanel.cpp
     ui/panels/SelectionPanel.h
     ui/panels/SelectionPanel.cpp
+    ui/panels/ObjectScriptSection.h
+    ui/panels/ObjectScriptSection.cpp
     ui/panels/FileBrowserPanel.h
     ui/panels/FileBrowserPanel.cpp
     ui/panels/LogPanel.h
@@ -139,6 +141,10 @@ set(GECK_APP_SOURCES
     ui/widgets/SFMLWidget.cpp
     ui/widgets/LoadingWidget.h
     ui/widgets/LoadingWidget.cpp
+    ui/widgets/CollapsibleSection.h
+    ui/widgets/CollapsibleSection.cpp
+    ui/widgets/ElidedLabel.h
+    ui/widgets/ElidedLabel.cpp
     ui/widgets/DataPathsWidget.h
     ui/widgets/DataPathsWidget.cpp
     ui/widgets/KeybindingsWidget.h
@@ -503,6 +509,8 @@ add_library(gecko_resource STATIC
     resource/MapNameEditor.cpp
     resource/ScriptSourceLocator.h
     resource/ScriptSourceLocator.cpp
+    resource/ScriptSourceFacts.h
+    resource/ScriptSourceFacts.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 

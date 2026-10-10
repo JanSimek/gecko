@@ -247,6 +247,8 @@ private:
     void revealPanel(QDockWidget* dock, QAction* action);
     /// Show and raise a dock without ever hiding it (revealPanel toggles one already on top).
     void showPanel(QDockWidget* dock, QAction* action);
+    // Select the Scripts panel row of whatever script the map selection names, or none.
+    void syncScriptsPanelSelection();
     // (Re)install the shortcuts scoped to the map canvas. Called whenever an EditorWidget is
     // installed, since the SFML widget they hang off is rebuilt with it.
     void installCanvasShortcuts();
