@@ -255,7 +255,6 @@ void SelectionPanel::setupUI() {
     _editProButton->setEnabled(false);
     connect(_editProButton, &QPushButton::clicked, this, &SelectionPanel::onEditProClicked);
     leftSideLayout->addWidget(_editProButton);
-    leftSideLayout->addStretch();
 
     QFormLayout* objectFormLayout = new QFormLayout();
 
@@ -306,33 +305,34 @@ void SelectionPanel::setupUI() {
     _editExitGridButton->setEnabled(false);
     _editExitGridButton->setVisible(false); // Only shown for exit-grid marker objects
     connect(_editExitGridButton, &QPushButton::clicked, this, &SelectionPanel::onEditExitGridClicked);
-    objectFormLayout->addRow("", _editExitGridButton);
+    leftSideLayout->addWidget(_editExitGridButton);
 
-    // Per-instance editors. Visibility is decided per object type in updateObjectInfo().
+    // Per-instance editors, stacked under Edit PRO so the form keeps its width for the values.
+    // Visibility is decided per object type in updateObjectInfo().
     _editFlagsButton = new QPushButton("Edit Flags...");
     _editFlagsButton->setVisible(false);
     connect(_editFlagsButton, &QPushButton::clicked, this, &SelectionPanel::onEditFlagsClicked);
-    objectFormLayout->addRow("", _editFlagsButton);
+    leftSideLayout->addWidget(_editFlagsButton);
 
     _editLightButton = new QPushButton("Edit Light...");
     _editLightButton->setVisible(false);
     connect(_editLightButton, &QPushButton::clicked, this, &SelectionPanel::onEditLightClicked);
-    objectFormLayout->addRow("", _editLightButton);
+    leftSideLayout->addWidget(_editLightButton);
 
     _editDestinationButton = new QPushButton("Edit Destination...");
     _editDestinationButton->setVisible(false);
     connect(_editDestinationButton, &QPushButton::clicked, this, &SelectionPanel::onEditDestinationClicked);
-    objectFormLayout->addRow("", _editDestinationButton);
+    leftSideLayout->addWidget(_editDestinationButton);
 
     _editInteractionButton = new QPushButton("Edit Interaction...");
     _editInteractionButton->setVisible(false);
     connect(_editInteractionButton, &QPushButton::clicked, this, &SelectionPanel::onEditInteractionClicked);
-    objectFormLayout->addRow("", _editInteractionButton);
+    leftSideLayout->addWidget(_editInteractionButton);
 
     _editCritterButton = new QPushButton("Edit Critter...");
     _editCritterButton->setVisible(false);
     connect(_editCritterButton, &QPushButton::clicked, this, &SelectionPanel::onEditCritterClicked);
-    objectFormLayout->addRow("", _editCritterButton);
+    leftSideLayout->addWidget(_editCritterButton);
 
     // Script attachment controls (spanning row, shown for scriptable objects).
     _scriptContainer = new QWidget();
@@ -364,6 +364,8 @@ void SelectionPanel::setupUI() {
     scriptLayout->addLayout(scriptButtonRow);
     _scriptContainer->setVisible(false);
     objectFormLayout->addRow(_scriptContainer);
+
+    leftSideLayout->addStretch();
 
     objectInfoMainLayout->addLayout(leftSideLayout);
     objectInfoMainLayout->addLayout(objectFormLayout, 1);
