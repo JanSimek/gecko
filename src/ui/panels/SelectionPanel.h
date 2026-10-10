@@ -186,8 +186,6 @@ private:
     // Object page: sections
     CollapsibleSection* _propertiesSection;
     ElidedLabel* _messageIdLabel;
-    ElidedLabel* _facingLabel;
-    ElidedLabel* _lightLabel;
     ElidedLabel* _artPathLabel;
     CollapsibleSection* _scriptSection;
     ObjectScriptSection* _scriptView;

@@ -37,6 +37,7 @@
 #include "ui/dialogs/FrmSelectorDialog.h"
 #include "ui/dialogs/InventoryViewerDialog.h"
 #include "ui/dialogs/ItemSelectorDialog.h"
+#include "ui/dialogs/LightPropertiesDialog.h"
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/widgets/DataPathsWidget.h"
 #include "ui/widgets/ObjectPreviewWidget.h"
@@ -1896,4 +1897,17 @@ TEST_CASE("FRM selector filters a rotated critter FID by its type nibble", "[ui]
     CHECK(geck::FrmSelectorDialog::filterForFid(0x11000001u) == geck::ObjectType::Critter);
     CHECK(geck::FrmSelectorDialog::filterForFid(0x02000015u) == geck::ObjectType::Scenery);
     CHECK_FALSE(geck::FrmSelectorDialog::filterForFid(0x06000003u).has_value()); // interface art
+}
+
+// The dialog edits whole percents of the engine's 65536. Truncating both ways stored 10% as 6553,
+// which read back as 9%; every percent must survive a save and reopen.
+TEST_CASE("Light dialog keeps the intensity percent it stored", "[ui][light]") {
+    for (uint32_t percent = 0; percent <= 100; ++percent) {
+        const uint32_t raw = (percent * 0x10000u + 50) / 100;
+        geck::LightPropertiesDialog dialog(4, raw);
+        INFO("percent " << percent);
+        CHECK(dialog.getLightIntensity() == raw);
+    }
+    geck::LightPropertiesDialog legacy(4, 6553); // saved by the truncating version as 10%
+    CHECK(legacy.getLightIntensity() == 6554);
 }

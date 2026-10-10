@@ -2,6 +2,7 @@
 
 #include <QApplication>
 #include <QLabel>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
@@ -41,6 +42,9 @@ TEST_CASE("Selection panel's object view fits the default dock width whatever it
     for (auto* section : panel.findChildren<CollapsibleSection*>()) {
         section->setVisible(true);
         section->setExpanded(true);
+        for (auto* button : section->findChildren<QPushButton*>()) {
+            button->setVisible(true); // the script actions show only when they apply
+        }
     }
     for (auto* label : panel.findChildren<ElidedLabel*>()) {
         label->setFullText(wide);

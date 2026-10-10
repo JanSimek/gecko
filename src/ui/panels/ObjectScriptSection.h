@@ -11,8 +11,8 @@
 class QCompleter;
 class QLabel;
 class QLineEdit;
+class QPushButton;
 class QStandardItemModel;
-class QToolButton;
 class QTreeWidget;
 
 namespace geck {
@@ -72,11 +72,10 @@ private:
     QCompleter* _completer;
     QStandardItemModel* _catalog; // every scripts.lst entry, built on first use
     QString _shownText;           // the picker text for the attached script, restored after a search
-    QToolButton* _browseButton;
-    QToolButton* _moreButton;
-    QAction* _openSourceAction;
-    QAction* _showInPanelAction;
-    QAction* _detachAction;
+    QAction* _browseAction;       // inside the picker
+    QAction* _detachAction;       // inside the picker, shown while a script is attached
+    QPushButton* _openSourceButton;
+    QPushButton* _showInPanelButton;
     ElidedLabel* _identity;
     QLabel* _warnings; // what stops the script working, or what it overrides
     QLabel* _hint;     // how to get more detail (no source found)

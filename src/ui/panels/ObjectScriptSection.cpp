@@ -4,6 +4,7 @@
 #include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
 #include "resource/ScriptSourceFacts.h"
+#include "ui/IconHelper.h"
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/widgets/ElidedLabel.h"
@@ -13,11 +14,11 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMenu>
+#include <QPushButton>
 #include <QSignalBlocker>
 #include <QStandardItemModel>
 #include <QStringList>
-#include <QToolButton>
+#include <QAction>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -57,8 +58,8 @@ ObjectScriptSection::ObjectScriptSection(resource::GameResources& resources, QWi
     , _picker(new QLineEdit(this))
     , _completer(new QCompleter(this))
     , _catalog(new QStandardItemModel(this))
-    , _browseButton(new QToolButton(this))
-    , _moreButton(new QToolButton(this))
+    , _openSourceButton(new QPushButton("Open source", this))
+    , _showInPanelButton(new QPushButton("Show in Scripts panel", this))
     , _identity(new ElidedLabel(Qt::ElideRight, this))
     , _warnings(new QLabel(this))
     , _hint(new QLabel(this))
@@ -79,25 +80,14 @@ ObjectScriptSection::ObjectScriptSection(resource::GameResources& resources, QWi
     _completer->setMaxVisibleItems(12);
     _picker->setCompleter(_completer);
 
-    _browseButton->setText("…");
-    _browseButton->setToolTip("Browse all scripts");
-    _moreButton->setText("⋯");
-    _moreButton->setToolTip("More script actions");
-    _moreButton->setPopupMode(QToolButton::InstantPopup);
-    _moreButton->setStyleSheet("QToolButton::menu-indicator { image: none; }"); // "⋯" already says menu
-    auto* menu = new QMenu(_moreButton);
-    _openSourceAction = menu->addAction("Open Source");
-    _showInPanelAction = menu->addAction("Show in Scripts Panel");
-    menu->addSeparator();
-    _detachAction = menu->addAction("Detach");
-    _moreButton->setMenu(menu);
-
-    auto* pickerRow = new QHBoxLayout();
-    pickerRow->setSpacing(ui::theme::spacing::TIGHT);
-    pickerRow->addWidget(_picker, 1);
-    pickerRow->addWidget(_browseButton);
-    pickerRow->addWidget(_moreButton);
-    layout->addLayout(pickerRow);
+    // Search-field controls inside the picker: browse the whole list, and clear (detach) the script.
+    _picker->addAction(createIcon(":/icons/ui/search.svg"), QLineEdit::LeadingPosition);
+    // Trailing actions stack leftwards, so the clear-style detach goes in first and ends up last.
+    _detachAction = _picker->addAction(createIcon(":/icons/actions/close.svg"), QLineEdit::TrailingPosition);
+    _detachAction->setToolTip("Detach the script");
+    _browseAction = _picker->addAction(createIcon(":/icons/filetypes/list.svg"), QLineEdit::TrailingPosition);
+    _browseAction->setToolTip("Browse all scripts…");
+    layout->addWidget(_picker);
 
     _identity->setStyleSheet(ui::theme::styles::smallLabel());
     _identity->setToolTip("");
@@ -123,6 +113,15 @@ ObjectScriptSection::ObjectScriptSection(resource::GameResources& resources, QWi
     _localVars->header()->setStretchLastSection(false);
     _localVars->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     _localVars->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    _openSourceButton->setIcon(createIcon(":/icons/filetypes/script.svg"));
+    _showInPanelButton->setIcon(createIcon(":/icons/actions/target-arrow.svg"));
+    auto* actions = new QHBoxLayout();
+    actions->setSpacing(ui::theme::spacing::TIGHT);
+    actions->addWidget(_openSourceButton);
+    actions->addWidget(_showInPanelButton);
+    actions->addStretch();
+    layout->addLayout(actions);
+
     layout->addWidget(_localVarsTitle);
     layout->addWidget(_localVars);
     _localVarsTitle->setVisible(false);
@@ -133,13 +132,13 @@ ObjectScriptSection::ObjectScriptSection(resource::GameResources& resources, QWi
     // A search that ended without a choice puts the attached script back.
     connect(_picker, &QLineEdit::editingFinished, this, [this]() { showPickerText(); });
     connect(_picker, &QLineEdit::textEdited, this, [this]() { ensureCatalog(); });
-    connect(_browseButton, &QToolButton::clicked, this, &ObjectScriptSection::browse);
-    connect(_openSourceAction, &QAction::triggered, this, [this]() {
+    connect(_browseAction, &QAction::triggered, this, &ObjectScriptSection::browse);
+    connect(_openSourceButton, &QPushButton::clicked, this, [this]() {
         if (_programIndex >= 0) {
             Q_EMIT editSourceRequested(_programIndex);
         }
     });
-    connect(_showInPanelAction, &QAction::triggered, this, [this]() {
+    connect(_showInPanelButton, &QPushButton::clicked, this, [this]() {
         if (_object && _object->map_scripts_pid != -1) {
             Q_EMIT showInScriptsPanelRequested(static_cast<uint32_t>(_object->map_scripts_pid));
         }
@@ -227,8 +226,7 @@ void ObjectScriptSection::showObject(Map* map, std::shared_ptr<MapObject> object
 
     const bool enabled = _map != nullptr && _object != nullptr;
     _picker->setEnabled(enabled);
-    _browseButton->setEnabled(enabled);
-    _moreButton->setEnabled(_programIndex >= 0);
+    _browseAction->setEnabled(enabled);
 
     ScriptSourceService::ScriptStatus status;
     if (_programIndex >= 0) {
@@ -255,10 +253,10 @@ void ObjectScriptSection::showObject(Map* map, std::shared_ptr<MapObject> object
     }
     showPickerText();
     _identity->setVisible(_programIndex >= 0);
-    _openSourceAction->setEnabled(_programIndex >= 0);
-    _openSourceAction->setToolTip(status.source ? QString() : QString("No SSL source found for this script"));
-    _showInPanelAction->setEnabled(script != nullptr);
-    _detachAction->setEnabled(_object && _object->map_scripts_pid != -1);
+    // Without a source the hint below says how to add one, so there is nothing to open.
+    _openSourceButton->setVisible(_programIndex >= 0 && status.source.has_value());
+    _showInPanelButton->setVisible(script != nullptr);
+    _detachAction->setVisible(_object && _object->map_scripts_pid != -1);
 
     refreshDetails(script, status);
 }

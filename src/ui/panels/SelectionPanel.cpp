@@ -18,7 +18,6 @@
 #include "format/map/MapScript.h"
 
 #include <algorithm>
-#include <array>
 
 #include <QFormLayout>
 #include <QPixmap>
@@ -169,8 +168,6 @@ SelectionPanel::SelectionPanel(resource::GameResources& resources, std::shared_p
     , _editCritterAction(nullptr)
     , _propertiesSection(nullptr)
     , _messageIdLabel(nullptr)
-    , _facingLabel(nullptr)
-    , _lightLabel(nullptr)
     , _artPathLabel(nullptr)
     , _scriptSection(nullptr)
     , _scriptView(nullptr)
@@ -294,8 +291,6 @@ QWidget* SelectionPanel::createObjectPage() {
     properties->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     properties->setRowWrapPolicy(QFormLayout::DontWrapRows);
     _messageIdLabel = new ElidedLabel();
-    _facingLabel = new ElidedLabel();
-    _lightLabel = new ElidedLabel();
     _artPathLabel = new ElidedLabel(Qt::ElideMiddle);
     auto* changeArtButton = new QToolButton();
     changeArtButton->setIcon(createIcon(":/icons/actions/edit.svg"));
@@ -307,8 +302,6 @@ QWidget* SelectionPanel::createObjectPage() {
     artRow->addWidget(_artPathLabel, 1);
     artRow->addWidget(changeArtButton);
     properties->addRow("Message ID:", _messageIdLabel);
-    properties->addRow("Facing:", _facingLabel);
-    properties->addRow("Light:", _lightLabel);
     properties->addRow("Art:", artRow);
     _propertiesSection->setContentLayout(properties);
     pageLayout->addWidget(_propertiesSection);
@@ -496,23 +489,6 @@ namespace {
         return QString("0x%1").arg(value, 8, 16, QChar('0')).toUpper().replace("0X", "0x");
     }
 
-    QString facingText(uint32_t direction) {
-        static const std::array<const char*, 6> names{ "NE", "E", "SE", "SW", "W", "NW" };
-        return direction < names.size() ? QString("%1 (%2)").arg(names[direction]).arg(direction)
-                                        : QString("%1 (out of range)").arg(direction);
-    }
-
-    QString lightText(const MapObject& object) {
-        if (object.light_radius == 0 && object.light_intensity == 0) {
-            return "None";
-        }
-        // The engine's full intensity is 65536 (light.h LIGHT_INTENSITY_MAX).
-        return QString("radius %1 · intensity %2 (%3%)")
-            .arg(object.light_radius)
-            .arg(object.light_intensity)
-            .arg(object.light_intensity * 100 / 65536);
-    }
-
     QPixmap spritePixmap(const Object& object, QSize maxSize) {
         const auto& sprite = object.getSprite();
         const auto image = sprite.getTexture().copyToImage();
@@ -571,8 +547,6 @@ void SelectionPanel::updateObjectInfo() {
     _objectIdsLabel->setFullText(QString("PID %1 · FID %2").arg(hexId(mapObject.pro_pid), hexId(activeFid)));
 
     _messageIdLabel->setFullText(pro ? QString::number(pro->header.message_id) : QString("—"));
-    _facingLabel->setFullText(facingText(mapObject.direction));
-    _lightLabel->setFullText(lightText(mapObject));
     try {
         _artPathLabel->setFullText(QString::fromStdString(_resources.frmResolver().resolve(activeFid)));
     } catch (const std::exception& e) {
