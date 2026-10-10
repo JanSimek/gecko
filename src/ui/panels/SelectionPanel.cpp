@@ -35,7 +35,6 @@
 #include <spdlog/spdlog.h>
 #include <cmath>
 
-#include "editor/HexagonGrid.h"
 #include "format/map/Map.h"
 #include "format/lst/Lst.h"
 #include "resource/GameResources.h"
@@ -234,12 +233,12 @@ QWidget* SelectionPanel::createObjectPage() {
     pageLayout->setContentsMargins(0, 0, 0, 0);
     pageLayout->setSpacing(ui::theme::spacing::NORMAL);
 
-    // Header: sprite beside who/where/ids, then the edit actions.
-    constexpr int HEADER_SPRITE = 64;
+    // Header: sprite beside name/type/ids and the edit actions. The sprite box is portrait because
+    // critters, the tallest common art, stand ~100 px high.
     _hoverSpriteLabel = new HoverSpriteLabel();
     _hoverSpriteLabel->setText("—");
     _hoverSpriteLabel->setAlignment(Qt::AlignCenter);
-    _hoverSpriteLabel->setFixedSize(HEADER_SPRITE, HEADER_SPRITE);
+    _hoverSpriteLabel->setFixedSize(ui::constants::sizes::PREVIEW_SMALL, ui::constants::sizes::PREVIEW_TILE);
     _hoverSpriteLabel->setScaledContents(false);
     _hoverSpriteLabel->setStyleSheet(ui::theme::styles::previewArea());
     connect(_hoverSpriteLabel->editButton(), &QPushButton::clicked, this, &SelectionPanel::onChangeFrmClicked);
@@ -252,17 +251,13 @@ QWidget* SelectionPanel::createObjectPage() {
     _objectIdsLabel = new ElidedLabel();
     _objectIdsLabel->setStyleSheet(ui::theme::styles::smallLabel());
 
-    auto* identity = new QVBoxLayout();
+    auto* identityWidget = new QWidget();
+    auto* identity = new QVBoxLayout(identityWidget);
+    identity->setContentsMargins(0, 0, 0, 0);
     identity->setSpacing(ui::theme::spacing::TIGHT / 2);
     identity->addWidget(_objectNameLabel);
     identity->addWidget(_objectSummaryLabel);
     identity->addWidget(_objectIdsLabel);
-
-    auto* header = new QHBoxLayout();
-    header->setSpacing(ui::theme::spacing::NORMAL);
-    header->addWidget(_hoverSpriteLabel, 0, Qt::AlignTop);
-    header->addLayout(identity, 1);
-    pageLayout->addLayout(header);
 
     _editProButton = new QPushButton("Edit PRO...");
     _editProButton->setEnabled(false);
@@ -285,7 +280,13 @@ QWidget* SelectionPanel::createObjectPage() {
     actions->addWidget(_editProButton);
     actions->addWidget(_editMenuButton);
     actions->addStretch();
-    pageLayout->addLayout(actions);
+    identity->addLayout(actions); // beside the sprite, which is taller than the text
+
+    auto* header = new QHBoxLayout();
+    header->setSpacing(ui::theme::spacing::NORMAL);
+    header->addWidget(_hoverSpriteLabel, 0, Qt::AlignTop);
+    header->addWidget(identityWidget, 1, Qt::AlignTop); // keeps its natural height, not the sprite's
+    pageLayout->addLayout(header);
 
     // Properties: the instance values the header doesn't show.
     _propertiesSection = createSection("selection.properties", "Properties");
@@ -512,7 +513,7 @@ namespace {
             .arg(object.light_intensity * 100 / 65536);
     }
 
-    QPixmap spritePixmap(const Object& object, int maxSide) {
+    QPixmap spritePixmap(const Object& object, QSize maxSize) {
         const auto& sprite = object.getSprite();
         const auto image = sprite.getTexture().copyToImage();
         const auto rect = sprite.getTextureRect();
@@ -523,8 +524,8 @@ namespace {
             qImage = qImage.copy(); // detach from the SFML pixels, which die with `image`
         }
         QPixmap pixmap = QPixmap::fromImage(qImage);
-        if (!pixmap.isNull() && (pixmap.width() > maxSide || pixmap.height() > maxSide)) {
-            pixmap = pixmap.scaled(maxSide, maxSide, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        if (!pixmap.isNull() && (pixmap.width() > maxSize.width() || pixmap.height() > maxSize.height())) {
+            pixmap = pixmap.scaled(maxSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
         }
         return pixmap;
     }
@@ -563,13 +564,7 @@ void SelectionPanel::updateObjectInfo() {
                                        : name);
 
     const ObjectType objectType = mapObject.objectType();
-    QString summary = QString::fromStdString(Pro::typeToString(objectType));
-    if (mapObject.position >= 0) {
-        const int width = HexagonGrid::GRID_WIDTH;
-        summary += QString(" · hex %1 (%2, %3)").arg(mapObject.position).arg(mapObject.position % width).arg(mapObject.position / width);
-    }
-    summary += QString(" · elevation %1").arg(mapObject.elevation);
-    _objectSummaryLabel->setFullText(summary);
+    _objectSummaryLabel->setFullText(QString::fromStdString(Pro::typeToString(objectType)));
 
     // frm_pid == 0 means the object uses its prototype's FID.
     const uint32_t activeFid = mapObject.frm_pid != 0 || !pro ? mapObject.frm_pid : static_cast<uint32_t>(pro->header.FID);
@@ -612,7 +607,7 @@ void SelectionPanel::updateObjectInfo() {
         updateScriptSection();
     }
 
-    const QPixmap pixmap = spritePixmap(*_selectedObject.value(), _hoverSpriteLabel->width());
+    const QPixmap pixmap = spritePixmap(*_selectedObject.value(), _hoverSpriteLabel->contentsRect().size());
     if (pixmap.isNull()) {
         _hoverSpriteLabel->setPixmap({});
         _hoverSpriteLabel->setText("?");
