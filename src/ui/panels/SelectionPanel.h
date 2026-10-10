@@ -15,16 +15,23 @@
 #include <QStyledItemDelegate>
 #include <QResizeEvent>
 #include <QEnterEvent>
+#include <QToolButton>
+#include <functional>
 #include <memory>
 
 #include "editor/Object.h"
 #include "format/map/Tile.h"
 #include "selection/SelectionState.h"
 #include "editing/commands/ObjectCommandController.h"
+#include "ui/ScriptSourceService.h"
 
 namespace geck {
 
+class CollapsibleSection;
+class ElidedLabel;
 class Map;
+class ObjectScriptSection;
+class Settings;
 namespace resource {
     class GameResources;
 }
@@ -47,13 +54,22 @@ private:
     QPushButton* _editButton = nullptr;
 };
 
+/// The Selection dock: what is selected and its editors. Objects get one column that fits the default
+/// dock width - a header (sprite, name, where, ids, edit actions) over collapsible Properties, Script
+/// and Inventory sections; tiles get their own page.
 class SelectionPanel : public QWidget {
     Q_OBJECT
 
 public:
-    explicit SelectionPanel(resource::GameResources& resources, QWidget* parent = nullptr);
+    /// `settings` remembers which sections are collapsed; without it they all start expanded.
+    explicit SelectionPanel(resource::GameResources& resources, std::shared_ptr<Settings> settings = nullptr,
+        QWidget* parent = nullptr);
 
     void setMap(Map* map);
+
+    /// How the script section learns whether a script is compiled and what its source overrides
+    /// (MainWindow passes ScriptSourceService::scriptStatus).
+    void setScriptStatusProvider(std::function<ScriptSourceService::ScriptStatus(int)> provider);
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
@@ -61,9 +77,6 @@ public:
     /// @brief Opens the PRO editor dialog for the currently selected object.
     /// @return true if a PRO editor was opened, false otherwise.
     bool openProEditorForSelectedObject();
-
-protected:
-    void resizeEvent(QResizeEvent* event) override;
 
 signals:
     void objectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
@@ -93,6 +106,8 @@ signals:
     /// Open the SSL source of the attached script (its 0-based scripts.lst program index).
     /// Handled by MainWindow via ScriptSourceService, exactly like the map-script "Edit Source".
     void requestEditScriptSource(int programIndex);
+    /// Raise the Scripts panel on the row of the script with this SID.
+    void requestShowScriptInPanel(uint32_t sid);
 
 public slots:
     void selectObject(std::shared_ptr<Object> selectedObject);
@@ -111,15 +126,16 @@ private slots:
     void onEditDestinationClicked();
     void onEditInteractionClicked();
     void onEditCritterClicked();
-    void onAttachScriptClicked();
-    void onDetachScriptClicked();
-    void onEditScriptSourceClicked();
+    void onAttachScript(int programIndex);
+    void onDetachScript();
     void onAddInventoryClicked();
     void onRemoveInventoryClicked();
     void onInventoryItemChanged(QTreeWidgetItem* item, int column);
 
 private:
     void setupUI();
+    QWidget* createObjectPage();
+    CollapsibleSection* createSection(const QString& key, const QString& title);
     void updateObjectInfo();
     void updateTileInfo();
     void clearObjectInfo();
@@ -139,15 +155,10 @@ private:
     /// inventory edit. `before` is the snapshot taken before the mutation.
     void commitInventoryEdit(std::vector<std::shared_ptr<MapObject>> before);
 
-    // Script attachment: refreshes the displayed script name/buttons.
+    // Script attachment: refreshes the script section for the selected object.
     void updateScriptSection();
-    QPixmap getItemIconWithQuantity(const MapObject& item) const;
+    QPixmap getItemIcon(const MapObject& item) const;
     QPixmap createPlaceholderIcon() const;
-
-    // Layout management
-    void switchLayout(bool horizontal);
-    void applyHorizontalLayout();
-    void applyVerticalLayout();
 
     QVBoxLayout* _mainLayout;
     QScrollArea* _scrollArea;
@@ -157,38 +168,30 @@ private:
     // Stacked widget to switch between object and tile panels
     QStackedWidget* _stackedWidget;
 
-    // Object panel widgets
+    // Object page: header
     QWidget* _objectPanelWidget;
-    QGroupBox* _objectInfoGroup;
-    QLabel* _objectSpriteLabel;
-    QLineEdit* _objectNameEdit;
-    QLineEdit* _objectTypeEdit;
-    QSpinBox* _objectMessageIdSpin;
-    QSpinBox* _objectPositionSpin;
-    QSpinBox* _objectProtoPidSpin;
-    QSpinBox* _objectFrmPidSpin;
-    QLineEdit* _objectFrmPathEdit;
-    QPushButton* _changeFrmButton;
+    HoverSpriteLabel* _hoverSpriteLabel;
+    ElidedLabel* _objectNameLabel;
+    ElidedLabel* _objectSummaryLabel; // type, hex (col, row), elevation
+    ElidedLabel* _objectIdsLabel;     // PID and FID in hex
     QPushButton* _editProButton;
-    QPushButton* _editExitGridButton;
-    QPushButton* _editFlagsButton;
-    QPushButton* _editLightButton;
-    QPushButton* _editDestinationButton;
-    QPushButton* _editInteractionButton;
-    QPushButton* _editCritterButton;
+    QPushButton* _editMenuButton; // "Edit ▾": the per-object editors that apply
+    QAction* _editExitGridAction;
+    QAction* _editFlagsAction;
+    QAction* _editLightAction;
+    QAction* _editDestinationAction;
+    QAction* _editInteractionAction;
+    QAction* _editCritterAction;
 
-    // Script attachment controls (shown for scriptable object types)
-    QWidget* _scriptContainer;
-    QLineEdit* _scriptValueEdit;
-    QPushButton* _attachScriptButton;
-    QPushButton* _detachScriptButton;
-    QPushButton* _editScriptSourceButton = nullptr;
-    // 0-based scripts.lst program index of the attached script, or -1 when none is attached.
-    // Set by updateScriptSection() so the "Edit Source" button knows which .ssl to open.
-    int _attachedScriptProgramIndex = -1;
-
-    // Inventory section (appears when object has inventory)
-    QGroupBox* _inventoryGroup;
+    // Object page: sections
+    CollapsibleSection* _propertiesSection;
+    ElidedLabel* _messageIdLabel;
+    ElidedLabel* _facingLabel;
+    ElidedLabel* _lightLabel;
+    ElidedLabel* _artPathLabel;
+    CollapsibleSection* _scriptSection;
+    ObjectScriptSection* _scriptView;
+    CollapsibleSection* _inventorySection;
     QStackedWidget* _inventoryViewStack;
     QTreeWidget* _inventoryTree;
     QLabel* _emptyInventoryLabel;
@@ -209,28 +212,22 @@ private:
     QSpinBox* _tileIdSpin;
     QLineEdit* _tileNameEdit;
 
-    // Visual styling constants
-    static const int ICON_SIZE;
+    // Inventory icon size: a row, not a thumbnail - the name and type carry the detail.
+    static constexpr int ICON_SIZE = 32;
 
     // Custom delegate for editable amount column
     class AmountDelegate;
     AmountDelegate* _amountDelegate;
 
-    // Hover sprite label instance
-    HoverSpriteLabel* _hoverSpriteLabel;
-
     // Current selection state
     resource::GameResources& _resources;
+    std::shared_ptr<Settings> _settings;
     std::optional<std::shared_ptr<Object>> _selectedObject;
     int _selectedTileIndex;
     int _selectedElevation;
     bool _isRoofSelected;
     bool _hasTileSelection;
     Map* _map;
-
-    // Layout management
-    static constexpr int HORIZONTAL_LAYOUT_MIN_WIDTH = 650;
-    bool _isHorizontalLayout = false;
 };
 
 } // namespace geck

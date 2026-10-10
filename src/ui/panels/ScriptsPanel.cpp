@@ -270,7 +270,7 @@ int ScriptsPanel::programIndexOfRow(int row) const {
     return idItem == nullptr ? -1 : idItem->data(Qt::DisplayRole).toInt();
 }
 
-void ScriptsPanel::selectSpatialScriptRow(uint32_t sid) {
+void ScriptsPanel::selectScriptRow(uint32_t sid) {
     _suppressSpatialSelectionSignal = true;
     if (sid == MapScript::NONE) {
         _table->clearSelection();

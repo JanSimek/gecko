@@ -168,6 +168,9 @@ public:
     // Find the object owning the script with this SID, switch to its elevation, select and centre on
     // it. False (selection untouched) when no object owns it.
     bool revealScriptObject(int sid);
+    // Bring a spatial script's marker into view: switch to its elevation and centre on its hex.
+    // False when `sid` is no spatial script of this map.
+    bool revealSpatialScript(uint32_t sid);
 
     // Tile placement
     void placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof);

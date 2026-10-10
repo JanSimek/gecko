@@ -7,15 +7,18 @@
 #include "ui/dialogs/SceneryDestinationDialog.h"
 #include "ui/dialogs/InstancePropertiesDialog.h"
 #include "ui/dialogs/CritterPropertiesDialog.h"
-#include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/dialogs/ItemSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
+#include "ui/Settings.h"
+#include "ui/panels/ObjectScriptSection.h"
+#include "ui/widgets/CollapsibleSection.h"
+#include "ui/widgets/ElidedLabel.h"
 #include "resource/AiTxtLoader.h"
 #include "resource/ResourcePaths.h"
-#include "resource/ScriptNames.h"
 #include "format/map/MapScript.h"
 
 #include <algorithm>
+#include <array>
 
 #include <QFormLayout>
 #include <QPixmap>
@@ -26,9 +29,13 @@
 #include <QMessageBox>
 #include <QSpinBox>
 #include <QEnterEvent>
+#include <QMenu>
+#include <QSignalBlocker>
+#include <QToolButton>
 #include <spdlog/spdlog.h>
 #include <cmath>
 
+#include "editor/HexagonGrid.h"
 #include "format/map/Map.h"
 #include "format/lst/Lst.h"
 #include "resource/GameResources.h"
@@ -133,8 +140,6 @@ void HoverSpriteLabel::positionEditButton() {
     _editButton->raise();
 }
 
-const int SelectionPanel::ICON_SIZE = 96; // Larger icons than the separate panel
-
 QSize SelectionPanel::sizeHint() const {
     return QSize(ui::constants::sizes::PANEL_PREFERRED_WIDTH, ui::constants::sizes::PANEL_PREFERRED_HEIGHT);
 }
@@ -143,7 +148,7 @@ QSize SelectionPanel::minimumSizeHint() const {
     return QSize(ui::constants::sizes::PANEL_MIN_SIZE_WIDTH, ui::constants::sizes::PANEL_MIN_SIZE_HEIGHT);
 }
 
-SelectionPanel::SelectionPanel(resource::GameResources& resources, QWidget* parent)
+SelectionPanel::SelectionPanel(resource::GameResources& resources, std::shared_ptr<Settings> settings, QWidget* parent)
     : QWidget(parent)
     , _mainLayout(nullptr)
     , _scrollArea(nullptr)
@@ -151,28 +156,26 @@ SelectionPanel::SelectionPanel(resource::GameResources& resources, QWidget* pare
     , _contentLayout(nullptr)
     , _stackedWidget(nullptr)
     , _objectPanelWidget(nullptr)
-    , _objectInfoGroup(nullptr)
-    , _objectSpriteLabel(nullptr)
-    , _objectNameEdit(nullptr)
-    , _objectTypeEdit(nullptr)
-    , _objectMessageIdSpin(nullptr)
-    , _objectPositionSpin(nullptr)
-    , _objectProtoPidSpin(nullptr)
-    , _objectFrmPidSpin(nullptr)
-    , _objectFrmPathEdit(nullptr)
-    , _changeFrmButton(nullptr)
+    , _hoverSpriteLabel(nullptr)
+    , _objectNameLabel(nullptr)
+    , _objectSummaryLabel(nullptr)
+    , _objectIdsLabel(nullptr)
     , _editProButton(nullptr)
-    , _editExitGridButton(nullptr)
-    , _editFlagsButton(nullptr)
-    , _editLightButton(nullptr)
-    , _editDestinationButton(nullptr)
-    , _editInteractionButton(nullptr)
-    , _editCritterButton(nullptr)
-    , _scriptContainer(nullptr)
-    , _scriptValueEdit(nullptr)
-    , _attachScriptButton(nullptr)
-    , _detachScriptButton(nullptr)
-    , _inventoryGroup(nullptr)
+    , _editMenuButton(nullptr)
+    , _editExitGridAction(nullptr)
+    , _editFlagsAction(nullptr)
+    , _editLightAction(nullptr)
+    , _editDestinationAction(nullptr)
+    , _editInteractionAction(nullptr)
+    , _editCritterAction(nullptr)
+    , _propertiesSection(nullptr)
+    , _messageIdLabel(nullptr)
+    , _facingLabel(nullptr)
+    , _lightLabel(nullptr)
+    , _artPathLabel(nullptr)
+    , _scriptSection(nullptr)
+    , _scriptView(nullptr)
+    , _inventorySection(nullptr)
     , _inventoryViewStack(nullptr)
     , _inventoryTree(nullptr)
     , _emptyInventoryLabel(nullptr)
@@ -190,8 +193,8 @@ SelectionPanel::SelectionPanel(resource::GameResources& resources, QWidget* pare
     , _tileTypeEdit(nullptr)
     , _tileIdSpin(nullptr)
     , _tileNameEdit(nullptr)
-    , _hoverSpriteLabel(nullptr)
     , _resources(resources)
+    , _settings(std::move(settings))
     , _selectedTileIndex(-1)
     , _selectedElevation(-1)
     , _isRoofSelected(false)
@@ -204,6 +207,129 @@ SelectionPanel::SelectionPanel(resource::GameResources& resources, QWidget* pare
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     setupUI();
+}
+
+CollapsibleSection* SelectionPanel::createSection(const QString& key, const QString& title) {
+    auto* section = new CollapsibleSection(key, title);
+    if (_settings) {
+        section->setExpanded(!_settings->getCollapsedSections().contains(key));
+    }
+    connect(section, &CollapsibleSection::expandedChanged, this, [this, key](bool expanded) {
+        if (!_settings) {
+            return;
+        }
+        QStringList collapsed = _settings->getCollapsedSections();
+        collapsed.removeAll(key);
+        if (!expanded) {
+            collapsed.append(key);
+        }
+        _settings->setCollapsedSections(collapsed);
+    });
+    return section;
+}
+
+QWidget* SelectionPanel::createObjectPage() {
+    auto* page = new QWidget();
+    auto* pageLayout = new QVBoxLayout(page);
+    pageLayout->setContentsMargins(0, 0, 0, 0);
+    pageLayout->setSpacing(ui::theme::spacing::NORMAL);
+
+    // Header: sprite beside who/where/ids, then the edit actions.
+    constexpr int HEADER_SPRITE = 64;
+    _hoverSpriteLabel = new HoverSpriteLabel();
+    _hoverSpriteLabel->setText("—");
+    _hoverSpriteLabel->setAlignment(Qt::AlignCenter);
+    _hoverSpriteLabel->setFixedSize(HEADER_SPRITE, HEADER_SPRITE);
+    _hoverSpriteLabel->setScaledContents(false);
+    _hoverSpriteLabel->setStyleSheet(ui::theme::styles::previewArea());
+    connect(_hoverSpriteLabel->editButton(), &QPushButton::clicked, this, &SelectionPanel::onChangeFrmClicked);
+
+    _objectNameLabel = new ElidedLabel();
+    QFont nameFont = _objectNameLabel->font();
+    nameFont.setBold(true);
+    _objectNameLabel->setFont(nameFont);
+    _objectSummaryLabel = new ElidedLabel();
+    _objectIdsLabel = new ElidedLabel();
+    _objectIdsLabel->setStyleSheet(ui::theme::styles::smallLabel());
+
+    auto* identity = new QVBoxLayout();
+    identity->setSpacing(ui::theme::spacing::TIGHT / 2);
+    identity->addWidget(_objectNameLabel);
+    identity->addWidget(_objectSummaryLabel);
+    identity->addWidget(_objectIdsLabel);
+
+    auto* header = new QHBoxLayout();
+    header->setSpacing(ui::theme::spacing::NORMAL);
+    header->addWidget(_hoverSpriteLabel, 0, Qt::AlignTop);
+    header->addLayout(identity, 1);
+    pageLayout->addLayout(header);
+
+    _editProButton = new QPushButton("Edit PRO...");
+    _editProButton->setEnabled(false);
+    connect(_editProButton, &QPushButton::clicked, this, &SelectionPanel::onEditProClicked);
+
+    // The per-object editors; each is shown only for the objects it applies to (updateObjectInfo).
+    _editMenuButton = new QPushButton("Edit");
+    _editMenuButton->setEnabled(false);
+    auto* editMenu = new QMenu(_editMenuButton);
+    _editExitGridAction = editMenu->addAction("Exit Grid...", this, &SelectionPanel::onEditExitGridClicked);
+    _editFlagsAction = editMenu->addAction("Flags...", this, &SelectionPanel::onEditFlagsClicked);
+    _editLightAction = editMenu->addAction("Light...", this, &SelectionPanel::onEditLightClicked);
+    _editDestinationAction = editMenu->addAction("Destination...", this, &SelectionPanel::onEditDestinationClicked);
+    _editInteractionAction = editMenu->addAction("Interaction...", this, &SelectionPanel::onEditInteractionClicked);
+    _editCritterAction = editMenu->addAction("Critter...", this, &SelectionPanel::onEditCritterClicked);
+    _editMenuButton->setMenu(editMenu);
+
+    auto* actions = new QHBoxLayout();
+    actions->setSpacing(ui::theme::spacing::TIGHT);
+    actions->addWidget(_editProButton);
+    actions->addWidget(_editMenuButton);
+    actions->addStretch();
+    pageLayout->addLayout(actions);
+
+    // Properties: the instance values the header doesn't show.
+    _propertiesSection = createSection("selection.properties", "Properties");
+    auto* properties = new QFormLayout();
+    properties->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    properties->setRowWrapPolicy(QFormLayout::DontWrapRows);
+    _messageIdLabel = new ElidedLabel();
+    _facingLabel = new ElidedLabel();
+    _lightLabel = new ElidedLabel();
+    _artPathLabel = new ElidedLabel(Qt::ElideMiddle);
+    auto* changeArtButton = new QToolButton();
+    changeArtButton->setIcon(createIcon(":/icons/actions/edit.svg"));
+    changeArtButton->setToolTip("Change FRM file");
+    changeArtButton->setAutoRaise(true);
+    connect(changeArtButton, &QToolButton::clicked, this, &SelectionPanel::onChangeFrmClicked);
+    auto* artRow = new QHBoxLayout();
+    artRow->setSpacing(ui::theme::spacing::TIGHT);
+    artRow->addWidget(_artPathLabel, 1);
+    artRow->addWidget(changeArtButton);
+    properties->addRow("Message ID:", _messageIdLabel);
+    properties->addRow("Facing:", _facingLabel);
+    properties->addRow("Light:", _lightLabel);
+    properties->addRow("Art:", artRow);
+    _propertiesSection->setContentLayout(properties);
+    pageLayout->addWidget(_propertiesSection);
+
+    // Script: only for the object types the engine lets carry one.
+    _scriptSection = createSection("selection.script", "Script");
+    _scriptView = new ObjectScriptSection(_resources);
+    auto* scriptLayout = new QVBoxLayout();
+    scriptLayout->addWidget(_scriptView);
+    _scriptSection->setContentLayout(scriptLayout);
+    _scriptSection->setVisible(false);
+    connect(_scriptView, &ObjectScriptSection::attachRequested, this, &SelectionPanel::onAttachScript);
+    connect(_scriptView, &ObjectScriptSection::detachRequested, this, &SelectionPanel::onDetachScript);
+    connect(_scriptView, &ObjectScriptSection::editSourceRequested, this, &SelectionPanel::requestEditScriptSource);
+    connect(_scriptView, &ObjectScriptSection::showInScriptsPanelRequested, this, &SelectionPanel::requestShowScriptInPanel);
+    pageLayout->addWidget(_scriptSection);
+
+    setupInventorySection();
+    pageLayout->addWidget(_inventorySection);
+
+    pageLayout->addStretch();
+    return page;
 }
 
 void SelectionPanel::setupUI() {
@@ -225,157 +351,7 @@ void SelectionPanel::setupUI() {
     // Stacked widget switches between the object panel and the tile panel.
     _stackedWidget = new QStackedWidget();
 
-    // === Object Panel ===
-    _objectPanelWidget = new QWidget();
-    QVBoxLayout* objectLayout = new QVBoxLayout(_objectPanelWidget);
-
-    _objectInfoGroup = new QGroupBox("Object Information");
-
-    QHBoxLayout* objectInfoMainLayout = new QHBoxLayout(_objectInfoGroup);
-
-    // Left side: sprite and button container.
-    QVBoxLayout* leftSideLayout = new QVBoxLayout();
-
-    _hoverSpriteLabel = new HoverSpriteLabel();
-    _hoverSpriteLabel->setText("No object selected");
-    _hoverSpriteLabel->setAlignment(Qt::AlignCenter);
-    _hoverSpriteLabel->setMinimumHeight(ui::constants::sizes::PREVIEW_MEDIUM);
-    _hoverSpriteLabel->setMinimumWidth(ui::constants::sizes::PREVIEW_MEDIUM);
-    _hoverSpriteLabel->setMaximumHeight(ui::constants::sizes::PREVIEW_MEDIUM);
-    _hoverSpriteLabel->setMaximumWidth(ui::constants::sizes::PREVIEW_MEDIUM);
-    _hoverSpriteLabel->setScaledContents(false);
-    _hoverSpriteLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    _hoverSpriteLabel->setStyleSheet(ui::theme::styles::previewArea());
-
-    connect(_hoverSpriteLabel->editButton(), &QPushButton::clicked, this, &SelectionPanel::onChangeFrmClicked);
-
-    leftSideLayout->addWidget(_hoverSpriteLabel);
-
-    _editProButton = new QPushButton("Edit PRO...");
-    _editProButton->setEnabled(false);
-    connect(_editProButton, &QPushButton::clicked, this, &SelectionPanel::onEditProClicked);
-    leftSideLayout->addWidget(_editProButton);
-
-    QFormLayout* objectFormLayout = new QFormLayout();
-
-    _objectSpriteLabel = nullptr;
-
-    _objectNameEdit = new QLineEdit();
-    _objectNameEdit->setReadOnly(true);
-    _objectNameEdit->setPlaceholderText("No object selected");
-    objectFormLayout->addRow("Name:", _objectNameEdit);
-
-    _objectTypeEdit = new QLineEdit();
-    _objectTypeEdit->setReadOnly(true);
-    _objectTypeEdit->setPlaceholderText("No object selected");
-    objectFormLayout->addRow("Type:", _objectTypeEdit);
-
-    _objectMessageIdSpin = new QSpinBox();
-    _objectMessageIdSpin->setRange(0, INT_MAX);
-    _objectMessageIdSpin->setReadOnly(true);
-    _objectMessageIdSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    objectFormLayout->addRow("Message ID:", _objectMessageIdSpin);
-
-    _objectPositionSpin = new QSpinBox();
-    _objectPositionSpin->setRange(0, INT_MAX);
-    _objectPositionSpin->setReadOnly(true);
-    _objectPositionSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    objectFormLayout->addRow("Position:", _objectPositionSpin);
-
-    _objectProtoPidSpin = new QSpinBox();
-    _objectProtoPidSpin->setRange(0, INT_MAX);
-    _objectProtoPidSpin->setReadOnly(true);
-    _objectProtoPidSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    objectFormLayout->addRow("Proto PID:", _objectProtoPidSpin);
-
-    _objectFrmPidSpin = new QSpinBox();
-    _objectFrmPidSpin->setRange(0, INT_MAX);
-    _objectFrmPidSpin->setReadOnly(true);
-    _objectFrmPidSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    objectFormLayout->addRow("FRM PID:", _objectFrmPidSpin);
-
-    _objectFrmPathEdit = new QLineEdit();
-    _objectFrmPathEdit->setReadOnly(true);
-    _objectFrmPathEdit->setPlaceholderText("FRM path");
-    objectFormLayout->addRow("FRM Path:", _objectFrmPathEdit);
-
-    _changeFrmButton = nullptr;
-
-    _editExitGridButton = new QPushButton("Edit Exit Grid...");
-    _editExitGridButton->setEnabled(false);
-    _editExitGridButton->setVisible(false); // Only shown for exit-grid marker objects
-    connect(_editExitGridButton, &QPushButton::clicked, this, &SelectionPanel::onEditExitGridClicked);
-    leftSideLayout->addWidget(_editExitGridButton);
-
-    // Per-instance editors, stacked under Edit PRO so the form keeps its width for the values.
-    // Visibility is decided per object type in updateObjectInfo().
-    _editFlagsButton = new QPushButton("Edit Flags...");
-    _editFlagsButton->setVisible(false);
-    connect(_editFlagsButton, &QPushButton::clicked, this, &SelectionPanel::onEditFlagsClicked);
-    leftSideLayout->addWidget(_editFlagsButton);
-
-    _editLightButton = new QPushButton("Edit Light...");
-    _editLightButton->setVisible(false);
-    connect(_editLightButton, &QPushButton::clicked, this, &SelectionPanel::onEditLightClicked);
-    leftSideLayout->addWidget(_editLightButton);
-
-    _editDestinationButton = new QPushButton("Edit Destination...");
-    _editDestinationButton->setVisible(false);
-    connect(_editDestinationButton, &QPushButton::clicked, this, &SelectionPanel::onEditDestinationClicked);
-    leftSideLayout->addWidget(_editDestinationButton);
-
-    _editInteractionButton = new QPushButton("Edit Interaction...");
-    _editInteractionButton->setVisible(false);
-    connect(_editInteractionButton, &QPushButton::clicked, this, &SelectionPanel::onEditInteractionClicked);
-    leftSideLayout->addWidget(_editInteractionButton);
-
-    _editCritterButton = new QPushButton("Edit Critter...");
-    _editCritterButton->setVisible(false);
-    connect(_editCritterButton, &QPushButton::clicked, this, &SelectionPanel::onEditCritterClicked);
-    leftSideLayout->addWidget(_editCritterButton);
-
-    // Script attachment controls (spanning row, shown for scriptable objects).
-    _scriptContainer = new QWidget();
-    QVBoxLayout* scriptLayout = new QVBoxLayout(_scriptContainer);
-    scriptLayout->setContentsMargins(0, 0, 0, 0);
-    // Value row mirrors the Map Info map-script row: [name field][Edit Source]. Keeping the source
-    // button here (not with Attach/Detach) leaves the button row two-wide so the narrow dock doesn't
-    // have to grow to fit a third button.
-    QHBoxLayout* scriptValueRow = new QHBoxLayout();
-    scriptValueRow->addWidget(new QLabel("Script:"));
-    _scriptValueEdit = new QLineEdit();
-    _scriptValueEdit->setReadOnly(true);
-    _scriptValueEdit->setPlaceholderText("None");
-    scriptValueRow->addWidget(_scriptValueEdit, 1);
-    _editScriptSourceButton = new QPushButton("Edit Source...");
-    _editScriptSourceButton->setEnabled(false);
-    _editScriptSourceButton->setToolTip("Open the attached script's SSL source in the configured editor");
-    connect(_editScriptSourceButton, &QPushButton::clicked, this, &SelectionPanel::onEditScriptSourceClicked);
-    scriptValueRow->addWidget(_editScriptSourceButton);
-    scriptLayout->addLayout(scriptValueRow);
-    QHBoxLayout* scriptButtonRow = new QHBoxLayout();
-    _attachScriptButton = new QPushButton("Attach Script...");
-    _detachScriptButton = new QPushButton("Detach");
-    _detachScriptButton->setEnabled(false);
-    connect(_attachScriptButton, &QPushButton::clicked, this, &SelectionPanel::onAttachScriptClicked);
-    connect(_detachScriptButton, &QPushButton::clicked, this, &SelectionPanel::onDetachScriptClicked);
-    scriptButtonRow->addWidget(_attachScriptButton);
-    scriptButtonRow->addWidget(_detachScriptButton);
-    scriptLayout->addLayout(scriptButtonRow);
-    _scriptContainer->setVisible(false);
-    objectFormLayout->addRow(_scriptContainer);
-
-    leftSideLayout->addStretch();
-
-    objectInfoMainLayout->addLayout(leftSideLayout);
-    objectInfoMainLayout->addLayout(objectFormLayout, 1);
-
-    objectLayout->addWidget(_objectInfoGroup);
-
-    setupInventorySection();
-    objectLayout->addWidget(_inventoryGroup);
-
-    objectLayout->addStretch();
+    _objectPanelWidget = createObjectPage();
 
     // === Tile Panel ===
     _tilePanelWidget = new QWidget();
@@ -513,127 +489,138 @@ void SelectionPanel::showTilePanel() {
     _stackedWidget->setCurrentWidget(_tilePanelWidget);
 }
 
+namespace {
+
+    QString hexId(uint32_t value) {
+        return QString("0x%1").arg(value, 8, 16, QChar('0')).toUpper().replace("0X", "0x");
+    }
+
+    QString facingText(uint32_t direction) {
+        static const std::array<const char*, 6> names{ "NE", "E", "SE", "SW", "W", "NW" };
+        return direction < names.size() ? QString("%1 (%2)").arg(names[direction]).arg(direction)
+                                        : QString("%1 (out of range)").arg(direction);
+    }
+
+    QString lightText(const MapObject& object) {
+        if (object.light_radius == 0 && object.light_intensity == 0) {
+            return "None";
+        }
+        // The engine's full intensity is 65536 (light.h LIGHT_INTENSITY_MAX).
+        return QString("radius %1 · intensity %2 (%3%)")
+            .arg(object.light_radius)
+            .arg(object.light_intensity)
+            .arg(object.light_intensity * 100 / 65536);
+    }
+
+    QPixmap spritePixmap(const Object& object, int maxSide) {
+        const auto& sprite = object.getSprite();
+        const auto image = sprite.getTexture().copyToImage();
+        const auto rect = sprite.getTextureRect();
+        QImage qImage(image.getPixelsPtr(), image.getSize().x, image.getSize().y, QImage::Format_RGBA8888);
+        if (rect.size.x > 0 && rect.size.y > 0) {
+            qImage = qImage.copy(rect.position.x, rect.position.y, rect.size.x, rect.size.y);
+        } else {
+            qImage = qImage.copy(); // detach from the SFML pixels, which die with `image`
+        }
+        QPixmap pixmap = QPixmap::fromImage(qImage);
+        if (!pixmap.isNull() && (pixmap.width() > maxSide || pixmap.height() > maxSide)) {
+            pixmap = pixmap.scaled(maxSide, maxSide, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+        return pixmap;
+    }
+
+} // namespace
+
 void SelectionPanel::updateObjectInfo() {
-    if (!_selectedObject || !_selectedObject.value()) {
+    if (!_selectedObject || !_selectedObject.value() || !_selectedObject.value()->hasMapObject()) {
         clearObjectInfo();
         return;
     }
+    const auto mapObjectPtr = _selectedObject.value()->getMapObjectPtr();
+    const MapObject& mapObject = *mapObjectPtr;
 
+    // The map's own data is shown even when the proto can't be loaded; only what needs the proto
+    // (name, message id, art fallback, subtype editors) reports the gap.
+    Pro* pro = nullptr;
     try {
-        auto& selectedMapObject = _selectedObject.value()->getMapObject();
-        int32_t PID = selectedMapObject.pro_pid;
-
-        auto pro = _resources.loadPro(PID);
-
-        if (pro) {
-            auto msg = ProHelper::msgFile(_resources, pro->type());
-            std::string objectName = "Unknown";
-            if (msg) {
-                try {
-                    objectName = msg->message(pro->header.message_id).text;
-                } catch (const std::exception& e) {
-                    spdlog::warn("Failed to get message for ID {}: {}", pro->header.message_id, e.what());
-                }
-            }
-
-            _objectNameEdit->setText(QString::fromStdString(objectName));
-            _objectTypeEdit->setText(QString::fromStdString(pro->typeToString()));
-            _objectMessageIdSpin->setValue(static_cast<int>(pro->header.message_id));
-            _objectPositionSpin->setValue(selectedMapObject.position);
-            _objectProtoPidSpin->setValue(static_cast<int>(selectedMapObject.pro_pid));
-
-            _objectFrmPidSpin->setValue(static_cast<int>(selectedMapObject.frm_pid));
-
-            // frm_pid == 0 means the object uses the prototype's FID.
-            uint32_t activeFrmPid = selectedMapObject.frm_pid != 0 ? selectedMapObject.frm_pid : pro->header.FID;
-            std::string frmPath = _resources.frmResolver().resolve(activeFrmPid);
-            _objectFrmPathEdit->setText(QString::fromStdString(frmPath));
-
-            _hoverSpriteLabel->editButton()->setEnabled(true);
-            _editProButton->setEnabled(true);
-
-            if (selectedMapObject.isExitGridMarker()) {
-                _editExitGridButton->setVisible(true);
-                _editExitGridButton->setEnabled(true);
-            } else {
-                _editExitGridButton->setVisible(false);
-                _editExitGridButton->setEnabled(false);
-            }
-
-            // Per-instance editors, gated by object type.
-            const auto objectType = pro->type();
-            const bool isScenery = objectType == ObjectType::Scenery;
-            SceneryType sceneryType = SceneryType::Generic;
-            if (isScenery) {
-                sceneryType = static_cast<SceneryType>(pro->objectSubtypeId());
-            }
-            const bool hasDestination = isScenery
-                && (sceneryType == SceneryType::Stairs
-                    || sceneryType == SceneryType::LadderDown
-                    || sceneryType == SceneryType::LadderUp
-                    || sceneryType == SceneryType::Elevator);
-            const bool isDoor = isScenery && sceneryType == SceneryType::Door;
-            const bool isContainer = objectType == ObjectType::Item
-                && pro->itemType() == ItemType::Container;
-
-            // Flags and light apply to every real object (exit-grid markers use
-            // their own editor, handled above).
-            _editFlagsButton->setVisible(true);
-            _editLightButton->setVisible(true);
-            _editDestinationButton->setVisible(hasDestination);
-            _editInteractionButton->setVisible(isDoor || isContainer);
-            _editCritterButton->setVisible(objectType == ObjectType::Critter);
-
-            // Scripts can be attached to items, critters, scenery and walls
-            // (engine mapper instance editors). Tiles/misc markers cannot.
-            const bool scriptable = objectType == ObjectType::Item
-                || objectType == ObjectType::Critter
-                || objectType == ObjectType::Scenery
-                || objectType == ObjectType::Wall;
-            _scriptContainer->setVisible(scriptable);
-            if (scriptable) {
-                updateScriptSection();
-            }
-
-            // Convert the SFML sprite to a QPixmap for display.
-            const auto& sprite = _selectedObject.value()->getSprite();
-            const auto& texture = sprite.getTexture();
-
-            auto image = texture.copyToImage();
-            auto textureRect = sprite.getTextureRect();
-
-            const std::uint8_t* pixels = image.getPixelsPtr();
-            QImage qImage(pixels, image.getSize().x, image.getSize().y, QImage::Format_RGBA8888);
-
-            // Crop to the sprite's current frame rectangle.
-            if (textureRect.size.x > 0 && textureRect.size.y > 0) {
-                qImage = qImage.copy(textureRect.position.x, textureRect.position.y, textureRect.size.x, textureRect.size.y);
-            }
-
-            QPixmap pixmap = QPixmap::fromImage(qImage);
-            if (!pixmap.isNull()) {
-                QSize maxSize(128, 128);
-
-                if (pixmap.width() > maxSize.width() || pixmap.height() > maxSize.height()) {
-                    pixmap = pixmap.scaled(maxSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-                }
-
-                _hoverSpriteLabel->setPixmap(pixmap);
-                _hoverSpriteLabel->setText("");
-            } else {
-                _hoverSpriteLabel->setText("Failed to convert sprite");
-            }
-
-            _objectInfoGroup->setTitle("Object Information");
-        } else {
-            spdlog::warn("Failed to load proto file for PID: {}", PID);
-            clearObjectInfo();
-        }
+        pro = _resources.loadPro(mapObject.pro_pid);
     } catch (const std::exception& e) {
-        spdlog::error("Error updating object info: {}", e.what());
-        clearObjectInfo();
+        spdlog::warn("SelectionPanel: proto {} not loaded: {}", hexId(mapObject.pro_pid).toStdString(), e.what());
     }
 
+    QString name;
+    if (pro) {
+        try {
+            if (Msg* msg = ProHelper::msgFile(_resources, pro->type())) {
+                name = QString::fromStdString(msg->message(pro->header.message_id).text);
+            }
+        } catch (const std::exception& e) {
+            spdlog::warn("SelectionPanel: no name for message {}: {}", pro->header.message_id, e.what());
+        }
+    }
+    _objectNameLabel->setFullText(!pro ? QString("Proto %1 not found").arg(hexId(mapObject.pro_pid))
+            : name.isEmpty()           ? QString("Unnamed (message %1)").arg(pro->header.message_id)
+                                       : name);
+
+    const ObjectType objectType = mapObject.objectType();
+    QString summary = QString::fromStdString(Pro::typeToString(objectType));
+    if (mapObject.position >= 0) {
+        const int width = HexagonGrid::GRID_WIDTH;
+        summary += QString(" · hex %1 (%2, %3)").arg(mapObject.position).arg(mapObject.position % width).arg(mapObject.position / width);
+    }
+    summary += QString(" · elevation %1").arg(mapObject.elevation);
+    _objectSummaryLabel->setFullText(summary);
+
+    // frm_pid == 0 means the object uses its prototype's FID.
+    const uint32_t activeFid = mapObject.frm_pid != 0 || !pro ? mapObject.frm_pid : static_cast<uint32_t>(pro->header.FID);
+    _objectIdsLabel->setFullText(QString("PID %1 · FID %2").arg(hexId(mapObject.pro_pid), hexId(activeFid)));
+
+    _messageIdLabel->setFullText(pro ? QString::number(pro->header.message_id) : QString("—"));
+    _facingLabel->setFullText(facingText(mapObject.direction));
+    _lightLabel->setFullText(lightText(mapObject));
+    try {
+        _artPathLabel->setFullText(QString::fromStdString(_resources.frmResolver().resolve(activeFid)));
+    } catch (const std::exception& e) {
+        _artPathLabel->setFullText(QString("Unresolved: %1").arg(e.what()));
+    }
+
+    // Edit actions, gated by object type as the engine's mapper gates its instance editors.
+    const bool isScenery = objectType == ObjectType::Scenery;
+    const SceneryType sceneryType = isScenery && pro ? static_cast<SceneryType>(pro->objectSubtypeId()) : SceneryType::Generic;
+    const bool hasDestination = isScenery
+        && (sceneryType == SceneryType::Stairs || sceneryType == SceneryType::LadderDown
+            || sceneryType == SceneryType::LadderUp || sceneryType == SceneryType::Elevator);
+    const bool isDoor = isScenery && sceneryType == SceneryType::Door;
+    const bool isContainer = objectType == ObjectType::Item && pro && pro->itemType() == ItemType::Container;
+
+    _hoverSpriteLabel->editButton()->setEnabled(true);
+    _editProButton->setEnabled(pro != nullptr);
+    _editMenuButton->setEnabled(true);
+    _editExitGridAction->setVisible(mapObject.isExitGridMarker());
+    _editFlagsAction->setVisible(true);
+    _editLightAction->setVisible(true);
+    _editDestinationAction->setVisible(hasDestination);
+    _editInteractionAction->setVisible(isDoor || isContainer);
+    _editCritterAction->setVisible(objectType == ObjectType::Critter);
+
+    // Scripts can be attached to items, critters, scenery and walls (the engine mapper's instance
+    // editors); tiles and misc markers cannot.
+    const bool scriptable = objectType == ObjectType::Item || objectType == ObjectType::Critter
+        || objectType == ObjectType::Scenery || objectType == ObjectType::Wall;
+    _scriptSection->setVisible(scriptable);
+    if (scriptable) {
+        updateScriptSection();
+    }
+
+    const QPixmap pixmap = spritePixmap(*_selectedObject.value(), _hoverSpriteLabel->width());
+    if (pixmap.isNull()) {
+        _hoverSpriteLabel->setPixmap({});
+        _hoverSpriteLabel->setText("?");
+    } else {
+        _hoverSpriteLabel->setPixmap(pixmap);
+    }
+
+    _propertiesSection->setVisible(true);
     updateInventorySection();
 }
 
@@ -712,36 +699,19 @@ void geck::SelectionPanel::updateTileInfo() {
 }
 
 void geck::SelectionPanel::clearObjectInfo() {
-    _objectNameEdit->clear();
-    _objectNameEdit->setPlaceholderText("No object selected");
-
-    _objectTypeEdit->clear();
-    _objectTypeEdit->setPlaceholderText("No object selected");
-
-    _objectMessageIdSpin->setValue(0);
-    _objectPositionSpin->setValue(0);
-    _objectProtoPidSpin->setValue(0);
-    _objectFrmPidSpin->setValue(0);
-
-    _objectFrmPathEdit->clear();
-    _objectFrmPathEdit->setPlaceholderText("FRM path");
+    _objectNameLabel->setFullText("No object selected");
+    _objectSummaryLabel->setFullText({});
+    _objectIdsLabel->setFullText({});
 
     _hoverSpriteLabel->editButton()->setEnabled(false);
+    _hoverSpriteLabel->setPixmap({});
+    _hoverSpriteLabel->setText("—");
     _editProButton->setEnabled(false);
-    _editExitGridButton->setEnabled(false);
-    _editExitGridButton->setVisible(false);
-    _editFlagsButton->setVisible(false);
-    _editLightButton->setVisible(false);
-    _editDestinationButton->setVisible(false);
-    _editInteractionButton->setVisible(false);
-    _editCritterButton->setVisible(false);
-    _scriptContainer->setVisible(false);
+    _editMenuButton->setEnabled(false);
 
-    _hoverSpriteLabel->clear();
-    _hoverSpriteLabel->setText("No object selected");
-    _objectInfoGroup->setTitle("Object Information");
-
-    _inventoryGroup->setVisible(false);
+    _propertiesSection->setVisible(false);
+    _scriptSection->setVisible(false);
+    _inventorySection->setVisible(false);
 }
 
 void geck::SelectionPanel::clearTileInfo() {
@@ -921,7 +891,7 @@ void SelectionPanel::onChangeFrmClicked() {
                     updateObjectInfo();
                 } else {
                     spdlog::debug("SelectionPanel: FRM PID unchanged ({}), no MapObject update needed", derivedFrmPid);
-                    _objectFrmPathEdit->setText(QString::fromStdString(newFrmPath));
+                    _artPathLabel->setFullText(QString::fromStdString(newFrmPath));
                 }
             } else {
                 // FID derivation failed (no reliable FID for this path).
@@ -949,7 +919,7 @@ void SelectionPanel::onChangeFrmClicked() {
                 // Visual-only update for the derivation-failed path; frm_pid is left untouched.
                 Q_EMIT objectFrmPathChanged(_selectedObject.value(), newFrmPath);
 
-                _objectFrmPathEdit->setText(QString::fromStdString(newFrmPath));
+                _artPathLabel->setFullText(QString::fromStdString(newFrmPath));
                 updateObjectInfo();
             }
 
@@ -1200,57 +1170,22 @@ void SelectionPanel::onEditCritterClicked() {
 // editor's ObjectCommandController (via MainWindow) so it is undoable.
 
 void SelectionPanel::updateScriptSection() {
-    if (!_scriptContainer) {
-        return;
+    std::shared_ptr<MapObject> object;
+    if (_selectedObject && _selectedObject.value() && _selectedObject.value()->hasMapObject()) {
+        object = _selectedObject.value()->getMapObjectPtr();
     }
-    if (!_selectedObject || !_selectedObject.value() || !_map) {
-        _scriptValueEdit->clear();
-        _attachScriptButton->setEnabled(false);
-        _detachScriptButton->setEnabled(false);
-        _editScriptSourceButton->setEnabled(false);
-        _attachedScriptProgramIndex = -1;
-        return;
-    }
-
-    auto mapObject = _selectedObject.value()->getMapObjectPtr();
-    const bool attached = mapObject && mapObject->map_scripts_pid != -1;
-
-    QString text;
-    _attachedScriptProgramIndex = -1;
-
-    // Shared with the Ctrl+Shift+E path in MainWindow, so the two resolve the same script.
-    const std::optional<int> programIndex = attached
-        ? _map->scriptProgramIndexForSid(static_cast<uint32_t>(mapObject->map_scripts_pid))
-        : std::nullopt;
-    if (programIndex.has_value()) {
-        _attachedScriptProgramIndex = *programIndex;
-        const auto scriptId = static_cast<size_t>(*programIndex);
-        auto* lst = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
-        if (lst && scriptId < lst->list().size()) {
-            text = QString::fromStdString(lst->list().at(scriptId));
-            const std::string desc = resource::scriptDescription(_resources, *programIndex);
-            if (!desc.empty()) {
-                text += " — " + QString::fromStdString(desc);
-            }
-        } else {
-            text = QString("Script #%1").arg(*programIndex);
-        }
-    }
-
-    _scriptValueEdit->setText(text);
-    _attachScriptButton->setEnabled(true);
-    _detachScriptButton->setEnabled(attached);
-    _editScriptSourceButton->setEnabled(_attachedScriptProgramIndex >= 0);
+    _scriptView->showObject(_map, object);
 }
 
-void SelectionPanel::onEditScriptSourceClicked() {
-    if (_attachedScriptProgramIndex >= 0) {
-        Q_EMIT requestEditScriptSource(_attachedScriptProgramIndex);
+void SelectionPanel::setScriptStatusProvider(std::function<ScriptSourceService::ScriptStatus(int)> provider) {
+    _scriptView->setStatusProvider(std::move(provider));
+    if (_scriptSection->isVisible()) {
+        updateScriptSection();
     }
 }
 
-void SelectionPanel::onAttachScriptClicked() {
-    if (!_selectedObject || !_selectedObject.value() || !_map) {
+void SelectionPanel::onAttachScript(int programIndex) {
+    if (!_selectedObject || !_selectedObject.value() || !_map || programIndex < 0) {
         return;
     }
     auto mapObject = _selectedObject.value()->getMapObjectPtr();
@@ -1258,24 +1193,8 @@ void SelectionPanel::onAttachScriptClicked() {
         return;
     }
 
-    auto* scriptsLst = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
-    if (!scriptsLst) {
-        QMessageBox::warning(this, "Attach Script", "Could not load scripts.lst.");
-        return;
-    }
-
-    ScriptSelectorDialog dialog(ScriptSelectorDialog::buildEntries(_resources), -1, this);
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-    const int programIndex = dialog.selectedIndex();
-    if (programIndex < 0) {
-        return;
-    }
-
-    const ObjectType objectType = mapObject->objectType();
     // Critters use the CRITTER section; items/scenery/walls use the ITEM section.
-    const int scriptType = (objectType == ObjectType::Critter)
+    const int scriptType = (mapObject->objectType() == ObjectType::Critter)
         ? static_cast<int>(MapScript::ScriptType::CRITTER)
         : static_cast<int>(MapScript::ScriptType::ITEM);
 
@@ -1286,7 +1205,7 @@ void SelectionPanel::onAttachScriptClicked() {
     Q_EMIT statusMessage(QString("Attached script %1 to object").arg(programIndex));
 }
 
-void SelectionPanel::onDetachScriptClicked() {
+void SelectionPanel::onDetachScript() {
     if (!_selectedObject || !_selectedObject.value() || !_map) {
         return;
     }
@@ -1411,115 +1330,34 @@ void SelectionPanel::onInventoryItemChanged(QTreeWidgetItem* item, int column) {
     auto before = ObjectCommandController::cloneInventory(holder->inventory);
     holder->inventory[row]->amount = static_cast<uint32_t>(newAmount);
 
-    // Refresh the icon to reflect the new quantity.
-    uint32_t pid = item->data(COLUMN_ICON, Qt::UserRole).toUInt();
-    QPixmap iconWithQuantity = ui::inventory::loadItemIcon(_resources, pid, ICON_SIZE, true);
-    if (iconWithQuantity.isNull()) {
-        iconWithQuantity = createPlaceholderIcon();
-    }
-    QIcon icon;
-    icon.addPixmap(iconWithQuantity, QIcon::Normal, QIcon::Off);
-    item->setIcon(COLUMN_ICON, icon);
-    item->setSizeHint(COLUMN_ICON, QSize(ICON_SIZE, ICON_SIZE));
-
     auto after = ObjectCommandController::cloneInventory(holder->inventory);
     Q_EMIT requestInventoryEdit(_selectedObject.value()->getMapObjectPtr(),
         std::move(before), std::move(after));
 }
 
-void SelectionPanel::resizeEvent(QResizeEvent* event) {
-    QWidget::resizeEvent(event);
-
-    bool shouldUseHorizontal = (width() >= HORIZONTAL_LAYOUT_MIN_WIDTH && _inventoryGroup && _inventoryGroup->isVisible());
-
-    if (shouldUseHorizontal != _isHorizontalLayout) {
-        switchLayout(shouldUseHorizontal);
-    }
-}
-
-void SelectionPanel::switchLayout(bool horizontal) {
-    if (!_objectInfoGroup || !_inventoryGroup) {
-        return;
-    }
-
-    if (horizontal) {
-        applyHorizontalLayout();
-    } else {
-        applyVerticalLayout();
-    }
-
-    _isHorizontalLayout = horizontal;
-}
-
-void SelectionPanel::applyHorizontalLayout() {
-    QWidget* newContainer = new QWidget();
-    QHBoxLayout* hLayout = new QHBoxLayout(newContainer);
-    hLayout->setContentsMargins(0, 0, 0, 0);
-    hLayout->setSpacing(ui::constants::SPACING_WIDE);
-
-    QWidget* leftSide = new QWidget();
-    QVBoxLayout* leftLayout = new QVBoxLayout(leftSide);
-    leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->addWidget(_objectInfoGroup);
-    leftLayout->addStretch();
-
-    // 50/50 split between object info and inventory.
-    hLayout->addWidget(leftSide, 1);
-    hLayout->addWidget(_inventoryGroup, 1);
-
-    QLayout* oldLayout = _objectPanelWidget->layout();
-    if (oldLayout) {
-        // Detach widgets before deleting the layout so they survive.
-        oldLayout->removeWidget(_objectInfoGroup);
-        oldLayout->removeWidget(_inventoryGroup);
-        delete oldLayout;
-    }
-
-    QVBoxLayout* wrapperLayout = new QVBoxLayout(_objectPanelWidget);
-    wrapperLayout->setContentsMargins(0, 0, 0, 0);
-    wrapperLayout->addWidget(newContainer);
-}
-
-void SelectionPanel::applyVerticalLayout() {
-    if (_objectPanelWidget->layout()) {
-        QLayout* currentLayout = _objectPanelWidget->layout();
-
-        // Detach widgets before deleting the layout so they survive.
-        for (int i = currentLayout->count() - 1; i >= 0; --i) {
-            QLayoutItem* item = currentLayout->itemAt(i);
-            if (item && item->widget()) {
-                item->widget()->setParent(nullptr);
-            }
-        }
-
-        delete currentLayout;
-    }
-
-    QVBoxLayout* vLayout = new QVBoxLayout(_objectPanelWidget);
-    vLayout->setContentsMargins(0, 0, 0, 0);
-    vLayout->addWidget(_objectInfoGroup);
-    vLayout->addWidget(_inventoryGroup);
-    vLayout->addStretch();
-}
-
 void SelectionPanel::setupInventorySection() {
-    _inventoryGroup = new QGroupBox("Inventory");
-    _inventoryGroup->setVisible(false);
+    _inventorySection = createSection("selection.inventory", "Inventory");
+    _inventorySection->setVisible(false);
 
-    QVBoxLayout* inventoryLayout = new QVBoxLayout(_inventoryGroup);
+    auto* inventoryLayout = new QVBoxLayout();
 
     _inventoryTree = new QTreeWidget();
-    _inventoryTree->setHeaderLabels({ "", "Name", "Type", "Amount" });
-    _inventoryTree->setColumnWidth(COLUMN_ICON, ICON_SIZE + 20);
-    _inventoryTree->setColumnWidth(COLUMN_NAME, ui::constants::column_widths::NAME_SHORT);
-    _inventoryTree->setColumnWidth(COLUMN_TYPE, ui::constants::column_widths::TYPE);
-    _inventoryTree->setColumnWidth(COLUMN_AMOUNT, ui::constants::column_widths::AMOUNT_WIDE);
+    _inventoryTree->setHeaderLabels({ "", "Name", "Type", "Qty" });
     _inventoryTree->setRootIsDecorated(false);
     _inventoryTree->setAlternatingRowColors(true);
     _inventoryTree->setSelectionMode(QAbstractItemView::SingleSelection);
+    _inventoryTree->setMinimumWidth(0);
     _inventoryTree->setMinimumHeight(ui::constants::sizes::PANEL_MIN_HEIGHT);
     _inventoryTree->setIconSize(QSize(ICON_SIZE, ICON_SIZE));
     _inventoryTree->setUniformRowHeights(true);
+    _inventoryTree->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    // The name takes what is left; icon, type and quantity size to their content.
+    _inventoryTree->header()->setStretchLastSection(false);
+    _inventoryTree->header()->setSectionResizeMode(COLUMN_ICON, QHeaderView::Fixed);
+    _inventoryTree->header()->resizeSection(COLUMN_ICON, ICON_SIZE + ui::theme::spacing::NORMAL);
+    _inventoryTree->header()->setSectionResizeMode(COLUMN_NAME, QHeaderView::Stretch);
+    _inventoryTree->header()->setSectionResizeMode(COLUMN_TYPE, QHeaderView::ResizeToContents);
+    _inventoryTree->header()->setSectionResizeMode(COLUMN_AMOUNT, QHeaderView::ResizeToContents);
 
     _inventoryTree->setItemDelegateForColumn(COLUMN_AMOUNT, _amountDelegate);
 
@@ -1535,9 +1373,9 @@ void SelectionPanel::setupInventorySection() {
 
     inventoryLayout->addWidget(_inventoryViewStack);
 
-    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    auto* buttonLayout = new QHBoxLayout();
 
-    _addInventoryButton = new QPushButton("Add Item");
+    _addInventoryButton = new QPushButton("Add Item...");
     _removeInventoryButton = new QPushButton("Remove");
     _removeInventoryButton->setEnabled(false);
 
@@ -1552,58 +1390,26 @@ void SelectionPanel::setupInventorySection() {
     buttonLayout->addStretch();
 
     inventoryLayout->addLayout(buttonLayout);
+    _inventorySection->setContentLayout(inventoryLayout);
 }
 
 void SelectionPanel::updateInventorySection() {
-    bool wasVisible = _inventoryGroup->isVisible();
-
-    if (!_selectedObject || !_selectedObject.value()) {
-        _inventoryGroup->setVisible(false);
-        // Re-run layout when inventory visibility changes.
-        if (wasVisible) {
-            resizeEvent(nullptr);
-        }
-        return;
-    }
-
-    auto object = _selectedObject.value();
-    auto mapObject = object->getMapObjectPtr();
-
-    if (!mapObject) {
-        _inventoryGroup->setVisible(false);
-        if (wasVisible) {
-            resizeEvent(nullptr);
-        }
-        return;
-    }
-
+    auto* holder = selectedInventoryHolder();
     // Only containers and critters can hold inventory.
-    try {
-        auto pro = _resources.loadPro(mapObject->pro_pid);
-        if (pro) {
-            bool hasInventory = (pro->type() == ObjectType::Item && pro->itemType() == ItemType::Container) || pro->type() == ObjectType::Critter;
-
-            _inventoryGroup->setVisible(hasInventory);
-
-            if (wasVisible != hasInventory) {
-                resizeEvent(nullptr);
+    bool hasInventory = false;
+    if (holder) {
+        try {
+            if (const Pro* pro = _resources.loadPro(holder->pro_pid)) {
+                hasInventory = (pro->type() == ObjectType::Item && pro->itemType() == ItemType::Container)
+                    || pro->type() == ObjectType::Critter;
             }
-
-            if (hasInventory) {
-                populateInventoryTree();
-            }
-        } else {
-            _inventoryGroup->setVisible(false);
-            if (wasVisible) {
-                resizeEvent(nullptr);
-            }
+        } catch (const std::exception& e) {
+            spdlog::warn("Failed to load pro file for inventory check: {}", e.what());
         }
-    } catch (const std::exception& e) {
-        spdlog::warn("Failed to load pro file for inventory check: {}", e.what());
-        _inventoryGroup->setVisible(false);
-        if (wasVisible) {
-            resizeEvent(nullptr);
-        }
+    }
+    _inventorySection->setVisible(hasInventory);
+    if (hasInventory) {
+        populateInventoryTree();
     }
 }
 
@@ -1626,6 +1432,7 @@ void SelectionPanel::populateInventoryTree() {
 
     if (mapObject->inventory.empty()) {
         _inventoryViewStack->setCurrentWidget(_emptyInventoryLabel);
+        _inventorySection->setTitle("Inventory");
         _removeInventoryButton->setEnabled(false);
         return;
     }
@@ -1638,7 +1445,7 @@ void SelectionPanel::populateInventoryTree() {
     options.setIconSizeHint = true;
     options.userRoleIsPid = true;
     options.userRoleColumn = ui::inventory::COLUMN_ICON;
-    options.iconProvider = [this](const MapObject& item) { return getItemIconWithQuantity(item); };
+    options.iconProvider = [this](const MapObject& item) { return getItemIcon(item); };
     // Block itemChanged while we repopulate so the per-row amount handler does not
     // fire against half-built rows.
     _inventoryTree->blockSignals(true);
@@ -1652,6 +1459,7 @@ void SelectionPanel::populateInventoryTree() {
     }
 
     _inventoryViewStack->setCurrentWidget(_inventoryTree);
+    _inventorySection->setTitle(QString("Inventory (%1)").arg(_inventoryTree->topLevelItemCount()));
 
     _removeInventoryButton->setEnabled(_inventoryTree->currentItem() != nullptr);
 
@@ -1661,7 +1469,7 @@ void SelectionPanel::populateInventoryTree() {
     spdlog::debug("SelectionPanel::populateInventoryTree: Completed with {} items, forcing tree refresh", _inventoryTree->topLevelItemCount());
 }
 
-QPixmap SelectionPanel::getItemIconWithQuantity(const MapObject& item) const {
+QPixmap SelectionPanel::getItemIcon(const MapObject& item) const {
     QPixmap baseIcon = ui::inventory::loadItemIcon(_resources, item.pro_pid, ICON_SIZE, true);
     if (baseIcon.isNull()) {
         baseIcon = createPlaceholderIcon();

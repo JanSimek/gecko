@@ -319,6 +319,11 @@ if (mimeData->hasFormat(ui::mime::GECK_OBJECT)) { ... }
 2. **Parent all widgets** to ensure proper cleanup
 3. **Use `BasePanel::createMainLayout()`** for consistent panel layouts
 4. **Stretch factors**: Add stretch to push content (e.g., `layout->addStretch()`)
+5. **Fit the default dock width** (`ui::constants::sizes::PANEL_PREFERRED_WIDTH`, 360 px). Docked
+   panels are one column: show read-only values with `ElidedLabel` (`ui/widgets/`), not read-only
+   `QLineEdit`/`QSpinBox`, whose minimum widths add up; fold long panels into `CollapsibleSection`s;
+   let explanatory labels word-wrap. "Selection panel's object view fits the default dock width"
+   guards the Selection panel.
 
 ### Signal/Slot Conventions
 

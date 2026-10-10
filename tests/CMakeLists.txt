@@ -64,6 +64,7 @@ add_executable(general_tests
     general/test_resource_repository.cpp
     general/test_script_names.cpp
     general/test_script_source_locator.cpp
+    general/test_script_source_facts.cpp
     general/test_object_visibility.cpp
     general/test_dat_concurrency.cpp
     general/test_map_renderer.cpp
@@ -104,6 +105,7 @@ add_executable(qt_tests
     qt/qt_test_main.cpp
     qt/test_data_path_resolution.cpp
     qt/test_ui_regressions.cpp
+    qt/test_selection_panel.cpp
     qt/test_dat_archive.cpp
     # GameLauncher is an app-layer Qt class, so its ddraw.ini test links gecko::app.
     qt/test_ddraw_ini.cpp
