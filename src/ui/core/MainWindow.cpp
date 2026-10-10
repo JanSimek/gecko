@@ -2125,19 +2125,18 @@ void MainWindow::connectPanelSignals() {
                     return;
                 setMapModified(true);
                 updateElevationMenu(_currentEditorWidget->getMap());
-                if (_currentEditorWidget->getCurrentElevation() == elevation) {
-                    auto* map = _currentEditorWidget->getMap();
-                    if (map) {
-                        uint32_t flags = map->getMapFile().header.flags;
-                        if (Map::elevationIsPresent(flags, ELEVATION_1))
-                            elevationChanged(ELEVATION_1);
-                        else if (Map::elevationIsPresent(flags, ELEVATION_2))
-                            elevationChanged(ELEVATION_2);
-                        else if (Map::elevationIsPresent(flags, ELEVATION_3))
-                            elevationChanged(ELEVATION_3);
-                    }
-                    spdlog::debug("MainWindow: Switched away from removed elevation {}", elevation);
+                if (_currentEditorWidget->getCurrentElevation() != elevation)
+                    return;
+                if (auto* map = _currentEditorWidget->getMap()) {
+                    uint32_t flags = map->getMapFile().header.flags;
+                    if (Map::elevationIsPresent(flags, ELEVATION_1))
+                        elevationChanged(ELEVATION_1);
+                    else if (Map::elevationIsPresent(flags, ELEVATION_2))
+                        elevationChanged(ELEVATION_2);
+                    else if (Map::elevationIsPresent(flags, ELEVATION_3))
+                        elevationChanged(ELEVATION_3);
                 }
+                spdlog::debug("MainWindow: Switched away from removed elevation {}", elevation);
             });
         connect(_mapInfoPanel, &MapInfoPanel::clearElevationRequested,
             this, [this](int elevation) {

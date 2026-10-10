@@ -535,9 +535,12 @@ void SelectionPanel::updateObjectInfo() {
             spdlog::warn("SelectionPanel: no name for message {}: {}", pro->header.message_id, e.what());
         }
     }
-    _objectNameLabel->setFullText(!pro ? QString("Proto %1 not found").arg(hexId(mapObject.pro_pid))
-            : name.isEmpty()           ? QString("Unnamed (message %1)").arg(pro->header.message_id)
-                                       : name);
+    if (!pro) {
+        name = QString("Proto %1 not found").arg(hexId(mapObject.pro_pid));
+    } else if (name.isEmpty()) {
+        name = QString("Unnamed (message %1)").arg(pro->header.message_id);
+    }
+    _objectNameLabel->setFullText(name);
 
     const ObjectType objectType = mapObject.objectType();
     _objectSummaryLabel->setFullText(QString::fromStdString(Pro::typeToString(objectType)));
@@ -1363,7 +1366,7 @@ void SelectionPanel::setupInventorySection() {
 }
 
 void SelectionPanel::updateInventorySection() {
-    auto* holder = selectedInventoryHolder();
+    const auto* holder = selectedInventoryHolder();
     // Only containers and critters can hold inventory.
     bool hasInventory = false;
     if (holder) {

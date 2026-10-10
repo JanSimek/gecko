@@ -7,72 +7,83 @@ namespace geck::resource {
 
 namespace {
 
-    // Blanks out // and /* */ comments and the text of string literals while keeping every newline
-    // and offset, so a match position still maps to its line. Neither can contain a call, and a "//"
-    // inside a string is not a comment.
+    enum class LexState { Code,
+        Line,
+        Block,
+        String };
+
+    // Advances the scan by one character (two for a comment delimiter), blanking it when it belongs to
+    // a comment or a string's text, and returns the state after it.
+    LexState blankStep(std::string& out, std::size_t& i, LexState state) {
+        const char c = out[i];
+        const char next = i + 1 < out.size() ? out[i + 1] : '\0';
+        switch (state) {
+            case LexState::Code:
+                if (c == '"') {
+                    return LexState::String;
+                }
+                if (c == '/' && next == '/') {
+                    out[i] = ' ';
+                    return LexState::Line;
+                }
+                if (c == '/' && next == '*') {
+                    out[i] = ' ';
+                    out[++i] = ' ';
+                    return LexState::Block;
+                }
+                return LexState::Code;
+            case LexState::String:
+                if (c == '"' || c == '\n') {
+                    return LexState::Code; // an unterminated string doesn't swallow the rest of the file
+                }
+                out[i] = ' ';
+                return LexState::String;
+            case LexState::Line:
+                if (c == '\n') {
+                    return LexState::Code;
+                }
+                out[i] = ' ';
+                return LexState::Line;
+            case LexState::Block:
+                if (c == '*' && next == '/') {
+                    out[i] = ' ';
+                    out[++i] = ' ';
+                    return LexState::Code;
+                }
+                if (c != '\n') {
+                    out[i] = ' ';
+                }
+                return LexState::Block;
+        }
+        return state;
+    }
+
+    // Blanks out line and block comments and the text of string literals while keeping every newline
+    // and offset, so a match position still maps to its line. Neither can contain a call, and a
+    // comment opener inside a string is not a comment.
     std::string withoutComments(std::string_view source) {
         std::string out(source);
-        enum class State { Code,
-            Line,
-            Block,
-            String } state = State::Code;
-        for (std::size_t i = 0; i < out.size(); ++i) {
-            const char c = out[i];
-            const char next = i + 1 < out.size() ? out[i + 1] : '\0';
-            switch (state) {
-                case State::Code:
-                    if (c == '"') {
-                        state = State::String;
-                    } else if (c == '/' && next == '/') {
-                        state = State::Line;
-                        out[i] = ' ';
-                    } else if (c == '/' && next == '*') {
-                        state = State::Block;
-                        out[i] = ' ';
-                        out[++i] = ' ';
-                    }
-                    break;
-                case State::String:
-                    if (c == '"') {
-                        state = State::Code;
-                    } else if (c == '\n') {
-                        state = State::Code; // unterminated: don't swallow the rest of the file
-                    } else {
-                        out[i] = ' ';
-                    }
-                    break;
-                case State::Line:
-                    if (c == '\n') {
-                        state = State::Code;
-                    } else {
-                        out[i] = ' ';
-                    }
-                    break;
-                case State::Block:
-                    if (c == '*' && next == '/') {
-                        out[i] = ' ';
-                        out[++i] = ' ';
-                        state = State::Code;
-                    } else if (c != '\n') {
-                        out[i] = ' ';
-                    }
-                    break;
-            }
+        LexState state = LexState::Code;
+        std::size_t i = 0;
+        while (i < out.size()) {
+            state = blankStep(out, i, state);
+            ++i;
         }
         return out;
     }
 
-    int lineAt(const std::string& text, std::size_t offset) {
+    int lineAt(std::string_view text, std::size_t offset) {
         return 1 + static_cast<int>(std::count(text.begin(), text.begin() + static_cast<std::ptrdiff_t>(offset), '\n'));
     }
 
     // The procedure whose body contains `offset`: the last `procedure <name> begin` before it.
     // Forward declarations (`procedure name;`) have no `begin` and are skipped.
-    std::string procedureAt(const std::string& text, std::size_t offset) {
+    std::string procedureAt(std::string_view text, std::size_t offset) {
+        using Iterator = std::regex_iterator<std::string_view::const_iterator>;
         static const std::regex header(R"(\bprocedure\s+(\w+)\s+begin\b)", std::regex::icase);
         std::string name;
         const auto end = text.begin() + static_cast<std::ptrdiff_t>(offset);
-        for (std::sregex_iterator it(text.begin(), end, header), last; it != last; ++it) {
+        for (Iterator it(text.begin(), end, header), last; it != last; ++it) {
             name = (*it)[1].str();
         }
         return name;
@@ -81,7 +92,7 @@ namespace {
 } // namespace
 
 bool ScriptSourceFacts::assigns(Override::Field field) const {
-    return std::any_of(overrides.begin(), overrides.end(), [field](const Override& o) { return o.field == field; });
+    return std::ranges::any_of(overrides, [field](const Override& o) { return o.field == field; });
 }
 
 ScriptSourceFacts inspectScriptSource(std::string_view source) {
@@ -110,15 +121,14 @@ ScriptSourceFacts inspectScriptSource(std::string_view source) {
             if (procedure.empty()) {
                 continue; // a macro definition, not a call
             }
-            facts.overrides.push_back({ pattern.field, procedure, lineAt(code, offset) });
+            facts.overrides.emplace_back(pattern.field, procedure, lineAt(code, offset));
         }
     }
-    std::sort(facts.overrides.begin(), facts.overrides.end(),
-        [](const auto& a, const auto& b) { return a.line < b.line; });
+    std::ranges::sort(facts.overrides, { }, &ScriptSourceFacts::Override::line);
 
     static const std::regex lvar(R"(#define\s+(LVAR_\w+)\s+\(?\s*(\d+)\s*\)?)");
     for (std::sregex_iterator it(code.begin(), code.end(), lvar), last; it != last; ++it) {
-        facts.localVarNames.emplace(std::stoi((*it)[2].str()), (*it)[1].str());
+        facts.localVarNames.try_emplace(std::stoi((*it)[2].str()), (*it)[1].str());
     }
     return facts;
 }

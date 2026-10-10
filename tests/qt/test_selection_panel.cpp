@@ -93,7 +93,7 @@ TEST_CASE("Selection panel remembers which sections are collapsed", "[ui][select
     }
 
     SelectionPanel reopened(resources, settings);
-    for (auto* section : reopened.findChildren<CollapsibleSection*>()) {
+    for (const auto* section : reopened.findChildren<CollapsibleSection*>()) {
         CHECK(section->isExpanded() == (section->key() != "selection.script"));
     }
 }

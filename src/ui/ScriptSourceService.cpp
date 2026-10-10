@@ -59,7 +59,7 @@ ScriptSourceService::ScriptStatus ScriptSourceService::scriptStatus(int programI
     }
     status.resolved = true;
 
-    auto& files = _resources.files();
+    const auto& files = _resources.files();
     status.compiled = files.exists("scripts/" + baseName + ".int");
 
     auto readDiskFile = [](const fs::path& path) -> std::optional<std::string> {
@@ -81,7 +81,7 @@ ScriptSourceService::ScriptStatus ScriptSourceService::scriptStatus(int programI
     if (const auto sourcePaths = _settings->getScriptSourcePaths(); !sourcePaths.empty()) {
         if (const auto match = resource::findScriptSourceInRoots(sourcePaths, baseName)) {
             if (auto text = readDiskFile(match->file)) {
-                _sourceRootHits.emplace(baseName, match->file);
+                _sourceRootHits.try_emplace(baseName, match->file);
                 status.source = std::move(text);
                 return status;
             }

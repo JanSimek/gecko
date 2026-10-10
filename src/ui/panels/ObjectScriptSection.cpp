@@ -36,8 +36,7 @@ namespace {
 
     QString catalogText(const ScriptSelectorDialog::Entry& entry) {
         QString text = QString::fromStdString(entry.filename);
-        const std::string& label = entry.name.empty() ? entry.comment : entry.name;
-        if (!label.empty()) {
+        if (const std::string& label = entry.name.empty() ? entry.comment : entry.name; !label.empty()) {
             text += " — " + QString::fromStdString(label);
         }
         if (!entry.name.empty() && !entry.comment.empty() && entry.comment != entry.name) {

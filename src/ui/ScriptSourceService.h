@@ -2,10 +2,10 @@
 
 #include <QString>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
-#include <unordered_map>
 
 QT_BEGIN_NAMESPACE
 class QWidget;
@@ -64,7 +64,7 @@ private:
     ExternalEditorLauncher& _editorLauncher;
     QWidget* _dialogParent;
     // <name> -> its .ssl under the script-source roots. Only hits are kept: finding one walks the trees.
-    std::unordered_map<std::string, std::filesystem::path> _sourceRootHits;
+    std::map<std::string, std::filesystem::path, std::less<>> _sourceRootHits;
 };
 
 } // namespace geck

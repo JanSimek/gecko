@@ -17,7 +17,7 @@ public:
 
     const QString& key() const { return _key; }
     void setTitle(const QString& title);
-    /// The body's layout; the section takes ownership.
+    /// The body's layout, set once; the section takes ownership.
     void setContentLayout(QLayout* layout);
 
     bool isExpanded() const;

@@ -43,7 +43,7 @@ void CollapsibleSection::setTitle(const QString& title) {
 }
 
 void CollapsibleSection::setContentLayout(QLayout* layout) {
-    delete _body->layout();
+    Q_ASSERT(_body->layout() == nullptr);
     layout->setContentsMargins(ui::theme::spacing::LOOSE, 0, 0, 0);
     _body->setLayout(layout);
 }
