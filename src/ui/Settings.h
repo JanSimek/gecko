@@ -79,6 +79,10 @@ public:
     bool getEdgeScrollEnabled() const;
     void setEdgeScrollEnabled(bool enabled);
 
+    // Keys of the panel sections (CollapsibleSection::key) the user has folded away.
+    QStringList getCollapsedSections() const;
+    void setCollapsedSections(const QStringList& keys);
+
     // Floating dock geometries
     QByteArray getFloatingDockGeometry(const QString& dockName) const;
     void setFloatingDockGeometry(const QString& dockName, const QByteArray& geometry);
@@ -152,6 +156,7 @@ private:
     bool _windowMaximized = true;        // Default to maximized
     bool _mergeSelectionOutlines = true; // Default: merge touching same-category outlines
     bool _edgeScrollEnabled = true;      // Default: auto-scroll when the cursor rests near an edge
+    QStringList _collapsedSections;      // Default: every section expanded
     QMap<QString, QByteArray> _floatingDockGeometries;
     QString _version;
 

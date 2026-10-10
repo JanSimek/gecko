@@ -13,6 +13,8 @@
 #include <spdlog/spdlog.h>
 
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 
 namespace geck {
 
@@ -26,24 +28,71 @@ ScriptSourceService::ScriptSourceService(resource::GameResources& resources,
     , _dialogParent(dialogParent) {
 }
 
-std::string ScriptSourceService::resolveBaseName(int programIndex) {
+std::string ScriptSourceService::baseNameOf(int programIndex) const {
     try {
         const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
         if (lst != nullptr && programIndex >= 0
             && static_cast<size_t>(programIndex) < lst->list().size()) {
-            const std::string baseName
-                = resource::scriptBaseName(lst->list().at(static_cast<size_t>(programIndex)));
-            if (!baseName.empty()) {
-                return baseName;
-            }
+            return resource::scriptBaseName(lst->list().at(static_cast<size_t>(programIndex)));
         }
     } catch (const FileReaderException& e) {
         spdlog::warn("scripts.lst not available: {}", e.what());
     }
-    QtDialogs::showError(_dialogParent, "Edit Script",
-        QString("Script #%1 could not be resolved through scripts.lst — is the game data mounted?")
-            .arg(programIndex));
     return {};
+}
+
+std::string ScriptSourceService::resolveBaseName(int programIndex) {
+    std::string baseName = baseNameOf(programIndex);
+    if (baseName.empty()) {
+        QtDialogs::showError(_dialogParent, "Edit Script",
+            QString("Script #%1 could not be resolved through scripts.lst — is the game data mounted?")
+                .arg(programIndex));
+    }
+    return baseName;
+}
+
+ScriptSourceService::ScriptStatus ScriptSourceService::scriptStatus(int programIndex) {
+    ScriptStatus status;
+    const std::string baseName = baseNameOf(programIndex);
+    if (baseName.empty()) {
+        return status;
+    }
+    status.resolved = true;
+
+    auto& files = _resources.files();
+    status.compiled = files.exists("scripts/" + baseName + ".int");
+
+    auto readDiskFile = [](const fs::path& path) -> std::optional<std::string> {
+        std::ifstream in(path, std::ios::binary);
+        if (!in) {
+            return std::nullopt;
+        }
+        return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    };
+
+    // Same order as editScriptSource: the marked source trees first, then the mounted data.
+    if (auto hit = _sourceRootHits.find(baseName); hit != _sourceRootHits.end()) {
+        if (auto text = readDiskFile(hit->second)) {
+            status.source = std::move(text);
+            return status;
+        }
+        _sourceRootHits.erase(hit); // moved or deleted since; look again
+    }
+    if (const auto sourcePaths = _settings->getScriptSourcePaths(); !sourcePaths.empty()) {
+        if (const auto match = resource::findScriptSourceInRoots(sourcePaths, baseName)) {
+            if (auto text = readDiskFile(match->file)) {
+                _sourceRootHits.emplace(baseName, match->file);
+                status.source = std::move(text);
+                return status;
+            }
+        }
+    }
+    if (const auto source = resource::locateScriptSource(files, baseName)) {
+        if (const auto bytes = files.readRawBytes(source->vfsPath)) {
+            status.source = std::string(bytes->begin(), bytes->end());
+        }
+    }
+    return status;
 }
 
 bool ScriptSourceService::openFromScriptSourceRoots(const std::string& baseName) {
