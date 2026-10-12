@@ -30,10 +30,10 @@ public:
     /// Repopulate the table from `map`, or clear it when `map` is null.
     void setMap(Map* map);
 
-    /// Select the row for the spatial script with this SID (or clear the selection when it is
-    /// MapScript::NONE / not found). Used to mirror a map-side selection. Does not re-emit
-    /// spatialScriptSelected, so it is safe to call in response to that signal.
-    void selectSpatialScriptRow(uint32_t sid);
+    /// Select the row for the script with this SID - a spatial script or an object's - or clear the
+    /// selection when it is MapScript::NONE / not found. Used to mirror a map-side selection. Does not
+    /// re-emit spatialScriptSelected, so it is safe to call in response to that signal.
+    void selectScriptRow(uint32_t sid);
 
 signals:
     /// Emitted when the user double-clicks a row owned by a map object. `sid` is the
@@ -78,7 +78,7 @@ private:
     QTableWidget* _table;
     QTableWidget* _localVarsTable; // local variables (LVARs) of the currently selected script
 
-    // Guards selectSpatialScriptRow() against re-emitting spatialScriptSelected (feedback loop when
+    // Guards selectScriptRow() against re-emitting spatialScriptSelected (feedback loop when
     // the map-side selection drives the panel row and vice versa).
     bool _suppressSpatialSelectionSignal = false;
 };
