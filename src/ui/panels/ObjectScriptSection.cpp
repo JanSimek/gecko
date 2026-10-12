@@ -3,7 +3,6 @@
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
-#include "resource/ScriptSourceFacts.h"
 #include "ui/IconHelper.h"
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
@@ -45,8 +44,27 @@ namespace {
         return text;
     }
 
-    QString fieldName(resource::ScriptSourceFacts::Override::Field field) {
-        return field == resource::ScriptSourceFacts::Override::Field::AiPacket ? "AI packet" : "team";
+    using Override = ssl::ScriptFacts::Override;
+
+    QString fieldName(Override::Field field) {
+        return field == Override::Field::AiPacket ? "AI packet" : "team";
+    }
+
+    // "AI_ARROYO_VILLAGER (2)", "2", or "AI_ARROYO_VILLAGER" when the value is not a constant.
+    QString valueText(const Override& o) {
+        const QString name = QString::fromStdString(o.valueName);
+        if (!o.value) {
+            return name.isEmpty() ? QString("a computed value") : name;
+        }
+        return name.isEmpty() ? QString::number(*o.value) : QString("%1 (%2)").arg(name).arg(*o.value);
+    }
+
+    // "line 106", or "zilocker.ssl line 12" when the call is written in an included file.
+    QString whereText(const Override& o, const std::filesystem::path& script) {
+        if (o.file == script || o.file.empty()) {
+            return QString("line %1").arg(o.line);
+        }
+        return QString("%1 line %2").arg(QString::fromStdString(o.file.filename().string())).arg(o.line);
     }
 
 } // namespace
@@ -253,7 +271,7 @@ void ObjectScriptSection::showObject(Map* map, std::shared_ptr<MapObject> object
     showPickerText();
     _identity->setVisible(_programIndex >= 0);
     // Without a source the hint below says how to add one, so there is nothing to open.
-    _openSourceButton->setVisible(_programIndex >= 0 && status.source.has_value());
+    _openSourceButton->setVisible(_programIndex >= 0 && status.facts != nullptr);
     _showInPanelButton->setVisible(script != nullptr);
     _detachAction->setVisible(_object && _object->map_scripts_pid != -1);
 
@@ -262,8 +280,10 @@ void ObjectScriptSection::showObject(Map* map, std::shared_ptr<MapObject> object
 
 void ObjectScriptSection::refreshDetails(const MapScript* script, const ScriptSourceService::ScriptStatus& status) {
     QStringList warnings;
+    QStringList notes;
     QString hint;
-    resource::ScriptSourceFacts facts;
+    const ssl::ScriptFacts noFacts;
+    const ssl::ScriptFacts& facts = status.facts ? *status.facts : noFacts;
 
     if (_programIndex >= 0 && _statusProvider) {
         if (!status.resolved) {
@@ -271,9 +291,10 @@ void ObjectScriptSection::refreshDetails(const MapScript* script, const ScriptSo
         } else if (!status.compiled) {
             warnings << "⚠ Its compiled .int is not in the mounted data, so the game can't run it.";
         }
-        if (status.source) {
-            facts = resource::inspectScriptSource(*status.source);
-        } else if (status.resolved) {
+        if (status.facts && !facts.problems.empty()) {
+            notes << QString("Some of the source could not be read (%1), so names and values may be missing.")
+                         .arg(QString::fromStdString(facts.problems.front()));
+        } else if (!status.facts && status.resolved) {
             hint = "No SSL source found. Mark a script source tree (e.g. the Restoration Project's "
                    "scripts_src) in Preferences › Data Paths to open it and check what it overrides.";
         }
@@ -282,27 +303,34 @@ void ObjectScriptSection::refreshDetails(const MapScript* script, const ScriptSo
     // Team and AI packet are critter fields; the script's assignment replaces the map's value.
     if (isCritter()) {
         for (const auto& o : facts.overrides) {
-            if (o.procedure == "map_enter_p_proc") {
-                warnings << QString("⚠ Sets the %1 on map entry (map_enter_p_proc, line %2), replacing the "
-                                    "one chosen in Edit Critter every time the map loads.")
-                                .arg(fieldName(o.field))
-                                .arg(o.line);
+            const auto mapValue = static_cast<int>(o.field == Override::Field::AiPacket ? _object->ai_packet : _object->group_id);
+            const QString where = whereText(o, facts.script);
+            if (o.procedure != "map_enter_p_proc") {
+                notes << QString("Changes the %1 to %2 in %3 (%4) while the game runs.")
+                             .arg(fieldName(o.field), valueText(o), QString::fromStdString(o.procedure), where);
+            } else if (o.value == mapValue) {
+                notes << QString("Sets the %1 to %2 on map entry (%3), the same as the map's value.")
+                             .arg(fieldName(o.field), valueText(o), where);
             } else {
-                warnings << QString("Changes the %1 in %2 (line %3) while the game runs.")
-                                .arg(fieldName(o.field), QString::fromStdString(o.procedure))
-                                .arg(o.line);
+                warnings << QString("⚠ Sets the %1 to %2 on map entry (map_enter_p_proc, %3), replacing the map's "
+                                    "%4 every time the map loads.")
+                                .arg(fieldName(o.field), valueText(o), where)
+                                .arg(mapValue);
             }
         }
+    }
+    if (!hint.isEmpty()) {
+        notes << hint;
     }
 
     _warnings->setText(warnings.join('\n'));
     _warnings->setVisible(!warnings.isEmpty());
-    _hint->setText(hint);
-    _hint->setVisible(!hint.isEmpty());
+    _hint->setText(notes.join('\n'));
+    _hint->setVisible(!notes.isEmpty());
     refreshLocalVariables(script, facts);
 }
 
-void ObjectScriptSection::refreshLocalVariables(const MapScript* script, const resource::ScriptSourceFacts& facts) {
+void ObjectScriptSection::refreshLocalVariables(const MapScript* script, const ssl::ScriptFacts& facts) {
     _localVars->clear();
     const bool hasVars = _map && script && script->local_var_offset != MapScript::NONE && script->local_var_count > 0;
     _localVarsTitle->setVisible(hasVars);

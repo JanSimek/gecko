@@ -64,7 +64,9 @@ add_executable(general_tests
     general/test_resource_repository.cpp
     general/test_script_names.cpp
     general/test_script_source_locator.cpp
-    general/test_script_source_facts.cpp
+    general/test_ssl_script_facts.cpp
+    general/test_ssl_preprocessor.cpp
+    general/test_ssl_corpus.cpp
     general/test_object_visibility.cpp
     general/test_dat_concurrency.cpp
     general/test_map_renderer.cpp

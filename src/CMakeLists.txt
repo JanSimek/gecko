@@ -293,6 +293,16 @@ add_library(vault STATIC
     format/IFile.h
     format/ObjTypes.h
 
+    # SSL script source front end
+    ssl/Source.h
+    ssl/Source.cpp
+    ssl/Lexer.h
+    ssl/Lexer.cpp
+    ssl/Preprocessor.h
+    ssl/Preprocessor.cpp
+    ssl/ScriptFacts.h
+    ssl/ScriptFacts.cpp
+
     # DAT
     format/dat/Dat.h
     format/dat/Dat.cpp
@@ -509,8 +519,8 @@ add_library(gecko_resource STATIC
     resource/MapNameEditor.cpp
     resource/ScriptSourceLocator.h
     resource/ScriptSourceLocator.cpp
-    resource/ScriptSourceFacts.h
-    resource/ScriptSourceFacts.cpp
+    resource/VfsSourceProvider.h
+    resource/VfsSourceProvider.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 

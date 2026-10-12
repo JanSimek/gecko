@@ -8,13 +8,12 @@
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
 #include "resource/ScriptSourceLocator.h"
+#include "resource/VfsSourceProvider.h"
 #include "resource/WritableDataRoot.h"
 
 #include <spdlog/spdlog.h>
 
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 
 namespace geck {
 
@@ -62,37 +61,43 @@ ScriptSourceService::ScriptStatus ScriptSourceService::scriptStatus(int programI
     const auto& files = _resources.files();
     status.compiled = files.exists("scripts/" + baseName + ".int");
 
-    auto readDiskFile = [](const fs::path& path) -> std::optional<std::string> {
-        std::ifstream in(path, std::ios::binary);
-        if (!in) {
-            return std::nullopt;
-        }
-        return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-    };
-
     // Same order as editScriptSource: the marked source trees first, then the mounted data.
     if (auto hit = _sourceRootHits.find(baseName); hit != _sourceRootHits.end()) {
-        if (auto text = readDiskFile(hit->second)) {
-            status.source = std::move(text);
+        if ((status.facts = diskFacts(hit->second))) {
             return status;
         }
         _sourceRootHits.erase(hit); // moved or deleted since; look again
     }
     if (const auto sourcePaths = _settings->getScriptSourcePaths(); !sourcePaths.empty()) {
         if (const auto match = resource::findScriptSourceInRoots(sourcePaths, baseName)) {
-            if (auto text = readDiskFile(match->file)) {
+            if ((status.facts = diskFacts(match->file))) {
                 _sourceRootHits.try_emplace(baseName, match->file);
-                status.source = std::move(text);
                 return status;
             }
         }
     }
     if (const auto source = resource::locateScriptSource(files, baseName)) {
-        if (const auto bytes = files.readRawBytes(source->vfsPath)) {
-            status.source = std::string(bytes->begin(), bytes->end());
-        }
+        const resource::VfsSourceProvider provider(files);
+        status.facts = std::make_shared<const ssl::ScriptFacts>(ssl::inspectScript(provider, source->vfsPath));
     }
     return status;
+}
+
+std::shared_ptr<const ssl::ScriptFacts> ScriptSourceService::diskFacts(const fs::path& file) {
+    std::error_code ec;
+    const auto modified = fs::last_write_time(file, ec);
+    if (ec) {
+        _factsByFile.erase(file);
+        return nullptr;
+    }
+    // Keyed on the script alone: an edited header is picked up when the script itself changes.
+    if (const auto it = _factsByFile.find(file); it != _factsByFile.end() && it->second.modified == modified) {
+        return it->second.facts;
+    }
+    const ssl::DiskSourceProvider provider;
+    auto facts = std::make_shared<const ssl::ScriptFacts>(ssl::inspectScript(provider, file));
+    _factsByFile.insert_or_assign(file, CachedFacts{ modified, facts });
+    return facts;
 }
 
 bool ScriptSourceService::openFromScriptSourceRoots(const std::string& baseName) {

@@ -7,6 +7,8 @@
 #include <optional>
 #include <string>
 
+#include "ssl/ScriptFacts.h"
+
 QT_BEGIN_NAMESPACE
 class QWidget;
 QT_END_NAMESPACE
@@ -41,9 +43,10 @@ public:
     /// Where the script at `programIndex` stands, looked up the way editScriptSource looks but with
     /// no dialogs, so it can be shown next to an attached script.
     struct ScriptStatus {
-        bool resolved = false;             // scripts.lst names it
-        bool compiled = false;             // scripts/<name>.int is in the mounted data
-        std::optional<std::string> source; // the .ssl text, when a source was found
+        bool resolved = false; // scripts.lst names it
+        bool compiled = false; // scripts/<name>.int is in the mounted data
+        /// What the .ssl source (with its #includes) does; null when no source was found.
+        std::shared_ptr<const ssl::ScriptFacts> facts;
     };
     ScriptStatus scriptStatus(int programIndex);
 
@@ -65,6 +68,13 @@ private:
     QWidget* _dialogParent;
     // <name> -> its .ssl under the script-source roots. Only hits are kept: finding one walks the trees.
     std::map<std::string, std::filesystem::path, std::less<>> _sourceRootHits;
+    // A source file's facts, kept until the file changes: preprocessing reads every header it includes.
+    struct CachedFacts {
+        std::filesystem::file_time_type modified;
+        std::shared_ptr<const ssl::ScriptFacts> facts;
+    };
+    std::map<std::filesystem::path, CachedFacts> _factsByFile;
+    std::shared_ptr<const ssl::ScriptFacts> diskFacts(const std::filesystem::path& file);
 };
 
 } // namespace geck

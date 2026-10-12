@@ -57,6 +57,7 @@ regressions). There is no ctest label registration for filtering by category.
 - `src/selection/`: Selection management system
 - `src/util/`: Utilities (Settings, Coordinates, helper modules)
 - `src/vfs/`: Virtual file system for game archives
+- `src/ssl/`: SSL script source front end (lexer, preprocessor, `ScriptFacts`); sslc defines the language, see PLAN.md "SSL script analysis"
 
 ### Resource Management
 - Injected `resource::GameResources` facade

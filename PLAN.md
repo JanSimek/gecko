@@ -11,14 +11,15 @@
 
 ## What's next (priority order)
 
-1. **Cave rim quality** — the known-issues list below; highest-value generation work.
-2. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
-3. **SSL script editing** — open question: whether an in-app editor is still wanted now that
+1. **SSL script analysis** — phase 2 (parser) next; see its section.
+2. **Cave rim quality** — the known-issues list below; highest-value generation work.
+3. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
+4. **SSL script editing** — open question: whether an in-app editor is still wanted now that
    compiling lives in VS Code + BGforge MLS (see the SSL section).
-4. **Minimap / overview panel** (feature-gap audit).
-5. **In-game preview mode** — idle animations first.
-6. **Analysis/MCP tail** — small, self-contained items.
-7. **Editor UX** — configurable keybindings + customizable toolbar (share one command/action
+5. **Minimap / overview panel** (feature-gap audit).
+6. **In-game preview mode** — idle animations first.
+7. **Analysis/MCP tail** — small, self-contained items.
+8. **Editor UX** — configurable keybindings + customizable toolbar (share one command/action
    table); undo residuals; log-panel follow-ups.
 
 ---
@@ -201,6 +202,59 @@ revisited, since Save could not compile.
   the engine's index-is-line-number convention (1-based in the map header, `at(index-1)` in `Lst`).
 - A recompiled `.int` has to land where `ResourcePaths::Lst::SCRIPTS` (`scripts/`) expects it, or
   neither the engine nor `repository().load<Lst>` will find it.
+
+---
+
+# SSL script analysis
+
+**Goal:** one SSL front end for the editor, gecko-cli and the MCP server, replacing the remaining
+ad-hoc scanners: `cli/GvarRefs` (line-based, `//` only) and the raw text in `cli/ScriptIntrospect`.
+
+**Shape** — `src/ssl/`, namespace `geck::ssl`, in `vault` (no Qt; JSON stays in `cli/`):
+
+```
+SourceProvider -> lex -> Preprocessor -> [Parser -> AST] -> analysis passes -> ScriptFacts
+.int -> IntDisassembler ------------------------------------------------------> ScriptFacts (subset)
+ScriptIndex: corpus-level, lazily parsed, cached by (path, mtime, size); queried by editor/CLI/MCP
+```
+
+Built: `Source` (providers: disk with case-insensitive fallback, memory; `resource/VfsSourceProvider`
+for the VFS), `Lexer`, `Preprocessor` (includes incl. `#include MACRO`, `#`/`##`/`__VA_ARGS__`,
+conditionals, hide sets, per-token expansion chain, constant evaluation), `ScriptFacts` (self
+team/AI writes with values, LVAR names incl. headers). `Lst::localVars()` keeps `local_vars=N`.
+Corpus check: `GECK_SSL_CORPUS=<scripts_src> general_tests "[.corpus]"` — all 1538 RP scripts
+preprocess with no diagnostics (~8 ms each, Debug).
+
+**Rules**
+- sslc (`../sslc`: `lex.c`, `parse.c`, `parseext.c`, `mcpp_*.c`) defines SSL the way fallout2-ce
+  defines the engine — match its behaviour. **Never copy its code**: it ships no licence.
+- Script-content problems are `Diagnostic` values, never exceptions; every stage returns a result.
+- Match engine opcodes after expansion (by value, engine constants), never macro spellings; the
+  command.h alias names are only a fallback for when the headers are missing.
+- `IntOpcodes.inc` becomes the single opcode catalog (name, opcode, arity, what it reads/writes),
+  shared by the disassembler and the SSL passes.
+
+**Follow-up found in phase 1:** `LstReader` skips blank and `;`-only lines, but the engine
+(`scripts.cc` `scriptsListLoad`) counts every line of scripts.lst as an index. The shipped and RP
+files have none, so indices agree today; a modded scripts.lst with one would shift every later script.
+
+**Phase 2 — parser:** recursive descent after sslc's grammar (`procedure`, `variable`/`import`/
+`export`, `if`/`while`/`for`/`foreach`/`switch`, `call`, `return`, assignments, sslc precedence);
+error recovery at `end` / `;` / `procedure`; AST as a closed `std::variant` set. Opt-in corpus test:
+all 1538 RP scripts parse with zero errors, and each script's procedure names/count equal its
+compiled `.int` (via `IntDisassembler`).
+
+**Phase 3 — passes + index + MCP:** `IScriptAnalysis` registry; passes `LocalVars` (incl. use past the
+`scripts.lst` count — the engine bounds-checks only the whole map array, `map.cc` `mapGetLocalVar`),
+`GlobalVarRefs`, `SelfTraitWrites`, `Handlers`/call graph, `MessageRefs`, `ObjectRefs`. `ScriptIndex`.
+MCP: `describe_script analyze:true`; new `script_refs` (gvar/lvar/macro/procedure/pid/script);
+`find_gvar` kept as an alias on top of it; new `lint_script`. Performance budget in `performance_tests`.
+
+**Phase 4 — editor + bytecode parity:** resolved values and diagnostics in the Script section and the
+Scripts panel; the `.int` front end fills `ScriptFacts` as far as bytecode allows.
+
+**Rejected:** tree-sitter + the BGforge SSL grammar — no preprocessor, and RP hides structure behind
+macros, so phases 1–3 would still be needed on top of a new C dependency.
 
 ---
 
