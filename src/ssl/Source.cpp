@@ -103,4 +103,20 @@ std::string_view SourceManager::text(FileId file) const {
     return _files.at(file).text;
 }
 
+std::string_view SourceManager::line(FileId file, uint32_t line) const {
+    std::string_view text = this->text(file);
+    for (uint32_t current = 1; current < line; ++current) {
+        const auto next = text.find('\n');
+        if (next == std::string_view::npos) {
+            return {};
+        }
+        text.remove_prefix(next + 1);
+    }
+    text = text.substr(0, text.find('\n'));
+    if (!text.empty() && text.back() == '\r') {
+        text.remove_suffix(1);
+    }
+    return text;
+}
+
 } // namespace geck::ssl

@@ -24,6 +24,20 @@ namespace {
 
     using Value = std::optional<int64_t>;
 
+    // sslc's built-in constants (lex.c lexAddConstant), compared case-insensitively like its names.
+    Value sslConstant(std::string_view name) {
+        const auto is = [name](std::string_view word) {
+            return std::ranges::equal(name, word, [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); });
+        };
+        if (is("true")) {
+            return 1;
+        }
+        if (is("false")) {
+            return 0;
+        }
+        return std::nullopt;
+    }
+
     struct BinaryOperator {
         int level; // precedence, loosest first
         Value (*apply)(int64_t, int64_t);
@@ -145,10 +159,13 @@ namespace {
             if (token.kind == TokenKind::Number) {
                 return integerValue(token.text);
             }
-            if (token.kind == TokenKind::Identifier && _identifiersAreZero) {
-                return 0;
+            if (token.kind != TokenKind::Identifier) {
+                return std::nullopt;
             }
-            return std::nullopt;
+            if (_identifiersAreZero) {
+                return 0; // #if: a name that is not a macro is 0
+            }
+            return sslConstant(token.text);
         }
 
         const std::vector<Token>& _tokens;

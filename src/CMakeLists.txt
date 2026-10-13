@@ -305,6 +305,14 @@ add_library(vault STATIC
     ssl/AstWalk.cpp
     ssl/Parser.h
     ssl/Parser.cpp
+    ssl/ConstantFolder.h
+    ssl/ConstantFolder.cpp
+    ssl/CallGraph.h
+    ssl/CallGraph.cpp
+    ssl/VariableRefs.h
+    ssl/VariableRefs.cpp
+    ssl/Corpus.h
+    ssl/Corpus.cpp
     ssl/ScriptUnit.h
     ssl/ScriptUnit.cpp
     ssl/ScriptFacts.h
@@ -479,8 +487,10 @@ target_include_directories(vault PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+find_package(Threads REQUIRED) # ssl/Corpus loads scripts on worker threads
 target_link_libraries(vault PUBLIC
     ZLIB::ZLIB
+    Threads::Threads
 PRIVATE
     gecko::spdlog
 )

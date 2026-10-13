@@ -2,6 +2,8 @@
 
 #include "ssl/Parser.h"
 
+#include <algorithm>
+
 namespace geck::ssl {
 
 ScriptUnit ScriptUnit::load(const SourceProvider& provider, const std::filesystem::path& path, const PreprocessOptions& options) {
@@ -21,6 +23,16 @@ SourceLocation ScriptUnit::writtenAt(TokenRange range) const {
 
 std::vector<const Macro*> ScriptUnit::macroChain(TokenRange range) const {
     return range.begin < _tokens.size() ? _preprocessor->macroChain(_tokens[range.begin]) : std::vector<const Macro*>{};
+}
+
+std::string ScriptUnit::argumentMacro(const Expr& call, const Expr& argument) const {
+    const auto callChain = macroChain(call.range);
+    for (const Macro* macro : macroChain(argument.range)) {
+        if (!macro->functionLike && std::ranges::find(callChain, macro) == callChain.end()) {
+            return std::string(macro->name);
+        }
+    }
+    return {};
 }
 
 std::optional<int64_t> ScriptUnit::evaluate(const Expr& expr) const {
