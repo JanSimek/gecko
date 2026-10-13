@@ -40,7 +40,7 @@ namespace {
                     break;
                 }
             }
-            if (!match) {
+            if (!match.has_value()) {
                 return std::nullopt;
             }
             resolved /= *match;
@@ -55,10 +55,10 @@ namespace {
 } // namespace
 
 std::optional<std::string> DiskSourceProvider::read(const std::filesystem::path& path) const {
-    if (auto text = readFile(path)) {
+    if (auto text = readFile(path); text.has_value()) {
         return text;
     }
-    if (const auto resolved = resolveIgnoringCase(path.lexically_normal())) {
+    if (const auto resolved = resolveIgnoringCase(path.lexically_normal()); resolved.has_value()) {
         return readFile(*resolved);
     }
     return std::nullopt;
@@ -77,7 +77,7 @@ std::optional<std::string> MemorySourceProvider::read(const std::filesystem::pat
 
 SourceManager::SourceManager(const SourceProvider& provider)
     : _provider(provider) {
-    _files.push_back({}); // FileId 0: no file
+    _files.emplace_back(); // FileId 0: no file
 }
 
 std::optional<FileId> SourceManager::load(const std::filesystem::path& path) {
@@ -86,11 +86,11 @@ std::optional<FileId> SourceManager::load(const std::filesystem::path& path) {
         return it->second;
     }
     auto text = _provider.read(normal);
-    if (!text) {
+    if (!text.has_value()) {
         return std::nullopt;
     }
     const auto id = static_cast<FileId>(_files.size());
-    _files.push_back({ std::filesystem::path(normal), std::move(*text) });
+    _files.emplace_back(std::filesystem::path(normal), std::move(*text));
     _byPath.try_emplace(normal, id);
     return id;
 }

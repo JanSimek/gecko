@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <format>
 
 namespace geck::ssl {
 
@@ -29,12 +30,17 @@ namespace {
         int depth = 0;
         for (std::size_t i = open; i < tokens.size(); ++i) {
             const Token& token = tokens[i];
-            if (token.is("(") && depth++ == 0) {
-                continue;
-            }
-            if (token.is(")") && --depth == 0) {
-                end = i + 1;
-                return args;
+            if (token.is("(")) {
+                ++depth;
+                if (depth == 1) {
+                    continue; // the call's own '('
+                }
+            } else if (token.is(")")) {
+                --depth;
+                if (depth == 0) {
+                    end = i + 1;
+                    return args;
+                }
             }
             if (token.is(",") && depth == 1) {
                 args.emplace_back();
@@ -55,7 +61,7 @@ namespace {
         void step(std::size_t i) {
             const Token& token = _tokens[i];
             if (_depth == 0 && is(token, "procedure") && i + 1 < _tokens.size()) {
-                if (const auto begin = bodyStart(i + 2)) {
+                if (const auto begin = bodyStart(i + 2); begin.has_value()) {
                     _name = std::string(_tokens[i + 1].text);
                     _bodyAt = *begin;
                 }
@@ -63,8 +69,11 @@ namespace {
             }
             if (i == _bodyAt || (_depth > 0 && is(token, "begin"))) {
                 ++_depth;
-            } else if (_depth > 0 && is(token, "end") && --_depth == 0) {
-                _name.clear();
+            } else if (_depth > 0 && is(token, "end")) {
+                --_depth;
+                if (_depth == 0) {
+                    _name.clear();
+                }
             }
         }
 
@@ -103,9 +112,9 @@ namespace {
                 if (procedures.current().empty() || _tokens[i].kind != TokenKind::Identifier) {
                     continue;
                 }
-                if (auto override = selfTraitWrite(i)) {
-                    override->procedure = procedures.current();
-                    found.push_back(std::move(*override));
+                if (auto write = selfTraitWrite(i); write.has_value()) {
+                    write->procedure = procedures.current();
+                    found.push_back(std::move(*write));
                 }
             }
             return found;
@@ -119,15 +128,14 @@ namespace {
             const Token& call = _tokens[i];
             std::size_t end = 0;
             const auto args = callArgs(_tokens, i + 1, end);
-            if (!args) {
+            if (!args.has_value()) {
                 return std::nullopt;
             }
             std::optional<ScriptFacts::Override::Field> field;
             const std::vector<Token>* value = nullptr;
             if (is(call, "critter_add_trait") && args->size() == 4 && isSelf((*args)[0])
                 && constant((*args)[1]) == TRAIT_OBJECT) {
-                const auto selector = constant((*args)[2]);
-                if (selector == TRAIT_OBJECT_AI_PACKET) {
+                if (const auto selector = constant((*args)[2]); selector == TRAIT_OBJECT_AI_PACKET) {
                     field = ScriptFacts::Override::Field::AiPacket;
                 } else if (selector == TRAIT_OBJECT_TEAM) {
                     field = ScriptFacts::Override::Field::Team;
@@ -140,20 +148,20 @@ namespace {
                 field = is(call, "set_ai") ? ScriptFacts::Override::Field::AiPacket : ScriptFacts::Override::Field::Team;
                 value = &(*args)[1];
             }
-            if (!field) {
+            if (!field.has_value()) {
                 return std::nullopt;
             }
 
-            ScriptFacts::Override override;
-            override.field = *field;
+            ScriptFacts::Override write;
+            write.field = *field;
             const SourceLocation written = _pp.writtenAt(call);
-            override.file = _pp.sources().path(written.file);
-            override.line = static_cast<int>(written.line);
-            if (const auto number = _pp.evaluate(*value)) {
-                override.value = static_cast<int>(*number);
+            write.file = _pp.sources().path(written.file);
+            write.line = static_cast<int>(written.line);
+            if (const auto number = _pp.evaluate(*value); number.has_value()) {
+                write.value = static_cast<int>(*number);
             }
-            override.valueName = valueMacro(call, *value);
-            return override;
+            write.valueName = valueMacro(call, *value);
+            return write;
         }
 
         static bool isSelf(const std::vector<Token>& arg) {
@@ -162,7 +170,7 @@ namespace {
 
         // A trait selector's value; by name when define.h was not found to define it.
         std::optional<int64_t> constant(const std::vector<Token>& arg) {
-            if (auto value = _pp.evaluate(arg)) {
+            if (auto value = _pp.evaluate(arg); value.has_value()) {
                 return value;
             }
             if (arg.size() == 1) {
@@ -205,7 +213,7 @@ namespace {
             if (macro.functionLike || !macro.name.starts_with("LVAR_")) {
                 continue;
             }
-            if (const auto index = pp.evaluate(macro)) {
+            if (const auto index = pp.evaluate(macro); index.has_value()) {
                 auto& names = macro.location.file == script ? fromScript : fromHeaders;
                 names.insert_or_assign(static_cast<int>(*index), std::string(macro.name));
             }
@@ -227,13 +235,13 @@ ScriptFacts inspectScript(const SourceProvider& provider, const std::filesystem:
 
     ScriptFacts facts;
     facts.overrides = FactsReader(pp, tokens).overrides();
-    if (const auto script = sources.load(path)) {
+    if (const auto script = sources.load(path); script.has_value()) {
         facts.script = sources.path(*script);
         facts.localVarNames = localVarNames(pp, *script);
     }
     for (const Diagnostic& d : pp.diagnostics()) {
         const std::string file = d.location.file != 0 ? sources.path(d.location.file).generic_string() : path.generic_string();
-        facts.problems.push_back(file + ":" + std::to_string(d.location.line) + ": " + d.message);
+        facts.problems.push_back(std::format("{}:{}: {}", file, d.location.line, d.message));
     }
     return facts;
 }

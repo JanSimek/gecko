@@ -1,5 +1,6 @@
 #include "ssl/Lexer.h"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 
@@ -70,7 +71,7 @@ namespace {
         }
 
         void report(std::string message) {
-            _diagnostics.push_back({ Diagnostic::Severity::Error, location(), std::move(message) });
+            _diagnostics.emplace_back(Diagnostic::Severity::Error, location(), std::move(message));
         }
 
         // A backslash followed only by blanks up to the end of the line: the length to skip, else 0.
@@ -120,7 +121,7 @@ namespace {
                 advance();
             }
             if (_pos >= _text.size()) {
-                _diagnostics.push_back({ Diagnostic::Severity::Error, opened, "unterminated /* comment" });
+                _diagnostics.emplace_back(Diagnostic::Severity::Error, opened, "unterminated block comment");
                 return;
             }
             advance();
@@ -143,15 +144,11 @@ namespace {
             if (c == '"' || c == '\'') {
                 return scanQuoted(c);
             }
-            for (std::string_view punct : MULTI_CHAR_PUNCT) {
-                if (_text.substr(_pos, punct.size()) == punct) {
-                    for (std::size_t i = 0; i < punct.size(); ++i) {
-                        advance();
-                    }
-                    return TokenKind::Punct;
-                }
+            const auto multi = std::ranges::find_if(MULTI_CHAR_PUNCT, [this](std::string_view punct) { return _text.substr(_pos, punct.size()) == punct; });
+            const std::size_t length = multi != MULTI_CHAR_PUNCT.end() ? multi->size() : 1;
+            for (std::size_t i = 0; i < length; ++i) {
+                advance();
             }
-            advance();
             return TokenKind::Punct;
         }
 

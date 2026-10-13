@@ -35,7 +35,7 @@ struct Token {
     bool isIdentifier(std::string_view name) const { return kind == TokenKind::Identifier && text == name; }
 };
 
-/// Split `text` into preprocessing tokens the way mcpp, which sslc runs first, does: `//` and `/* */`
+/// Split `text` into preprocessing tokens the way mcpp, which sslc runs first, does: line and block
 /// comments are whitespace, a backslash at the end of a line (trailing blanks allowed) joins it to the
 /// next, and an unterminated string or comment is reported, not fatal. The last token is EndOfFile.
 std::vector<Token> lex(std::string_view text, FileId file, std::vector<Diagnostic>& diagnostics);

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <format>
 #include <utility>
 
 namespace geck::ssl {
@@ -42,6 +43,46 @@ namespace {
         return value;
     }
 
+    using Value = std::optional<int64_t>;
+
+    struct BinaryOperator {
+        int level; // precedence, loosest first
+        Value (*apply)(int64_t, int64_t);
+    };
+
+    Value boolean(bool value) {
+        return value ? 1 : 0;
+    }
+
+    // The C binary operators an #if line or a constant may use.
+    const BinaryOperator* binaryOperator(const Token& token) {
+        static const std::map<std::string_view, BinaryOperator, std::less<>> operators{
+            { "||", { 0, [](int64_t a, int64_t b) { return boolean(a != 0 || b != 0); } } },
+            { "&&", { 1, [](int64_t a, int64_t b) { return boolean(a != 0 && b != 0); } } },
+            { "|", { 2, [](int64_t a, int64_t b) { return Value(a | b); } } },
+            { "^", { 3, [](int64_t a, int64_t b) { return Value(a ^ b); } } },
+            { "&", { 4, [](int64_t a, int64_t b) { return Value(a & b); } } },
+            { "==", { 5, [](int64_t a, int64_t b) { return boolean(a == b); } } },
+            { "!=", { 5, [](int64_t a, int64_t b) { return boolean(a != b); } } },
+            { "<", { 6, [](int64_t a, int64_t b) { return boolean(a < b); } } },
+            { ">", { 6, [](int64_t a, int64_t b) { return boolean(a > b); } } },
+            { "<=", { 6, [](int64_t a, int64_t b) { return boolean(a <= b); } } },
+            { ">=", { 6, [](int64_t a, int64_t b) { return boolean(a >= b); } } },
+            { "<<", { 7, [](int64_t a, int64_t b) { return Value(a << (b & 63)); } } },
+            { ">>", { 7, [](int64_t a, int64_t b) { return Value(a >> (b & 63)); } } },
+            { "+", { 8, [](int64_t a, int64_t b) { return Value(a + b); } } },
+            { "-", { 8, [](int64_t a, int64_t b) { return Value(a - b); } } },
+            { "*", { 9, [](int64_t a, int64_t b) { return Value(a * b); } } },
+            { "/", { 9, [](int64_t a, int64_t b) { return b == 0 ? std::nullopt : Value(a / b); } } },
+            { "%", { 9, [](int64_t a, int64_t b) { return b == 0 ? std::nullopt : Value(a % b); } } },
+        };
+        if (token.kind != TokenKind::Punct) {
+            return nullptr;
+        }
+        const auto it = operators.find(token.text);
+        return it == operators.end() ? nullptr : &it->second;
+    }
+
     /// An integer constant expression over already-expanded tokens, with C precedence.
     class ExpressionEvaluator {
     public:
@@ -49,21 +90,14 @@ namespace {
             : _tokens(tokens)
             , _identifiersAreZero(identifiersAreZero) {}
 
-        std::optional<int64_t> run() {
-            auto value = conditional();
-            if (!value || _pos != _tokens.size() || _failed) {
-                return std::nullopt;
-            }
-            return value;
+        Value run() {
+            Value value = conditional();
+            return value.has_value() && _pos == _tokens.size() ? value : std::nullopt;
         }
 
     private:
-        using Value = std::optional<int64_t>;
-
-        const Token* peek() const { return _pos < _tokens.size() ? &_tokens[_pos] : nullptr; }
-
         bool accept(std::string_view punct) {
-            if (const Token* token = peek(); token && token->is(punct)) {
+            if (_pos < _tokens.size() && _tokens[_pos].is(punct)) {
                 ++_pos;
                 return true;
             }
@@ -71,102 +105,48 @@ namespace {
         }
 
         Value conditional() {
-            Value condition = binary(0);
-            if (!condition || !accept("?")) {
+            const Value condition = binary(0);
+            if (!condition.has_value() || !accept("?")) {
                 return condition;
             }
-            Value whenTrue = conditional();
-            if (!whenTrue || !accept(":")) {
+            const Value whenTrue = conditional();
+            if (!whenTrue.has_value() || !accept(":")) {
                 return std::nullopt;
             }
-            Value whenFalse = conditional();
-            if (!whenFalse) {
+            const Value whenFalse = conditional();
+            if (!whenFalse.has_value()) {
                 return std::nullopt;
             }
             return *condition != 0 ? whenTrue : whenFalse;
         }
 
-        // Binary operators by precedence level, loosest first.
-        static int precedence(std::string_view op) {
-            static const std::map<std::string_view, int> levels{ { "||", 0 }, { "&&", 1 }, { "|", 2 }, { "^", 3 },
-                { "&", 4 }, { "==", 5 }, { "!=", 5 }, { "<", 6 }, { ">", 6 }, { "<=", 6 }, { ">=", 6 }, { "<<", 7 },
-                { ">>", 7 }, { "+", 8 }, { "-", 8 }, { "*", 9 }, { "/", 9 }, { "%", 9 } };
-            const auto it = levels.find(op);
-            return it == levels.end() ? -1 : it->second;
-        }
-
+        // Precedence climbing: operators of at least `minLevel`, left-associative.
         Value binary(int minLevel) {
             Value left = unary();
-            while (left) {
-                const Token* token = peek();
-                const int level = token && token->kind == TokenKind::Punct ? precedence(token->text) : -1;
-                if (level < minLevel) {
+            while (left.has_value() && _pos < _tokens.size()) {
+                const BinaryOperator* op = binaryOperator(_tokens[_pos]);
+                if (op == nullptr || op->level < minLevel) {
                     break;
                 }
                 ++_pos;
-                Value right = binary(level + 1);
-                if (!right) {
-                    return std::nullopt;
-                }
-                left = apply(token->text, *left, *right);
+                const Value right = binary(op->level + 1);
+                left = right.has_value() ? op->apply(*left, *right) : std::nullopt;
             }
             return left;
         }
 
-        Value apply(std::string_view op, int64_t a, int64_t b) {
-            if ((op == "/" || op == "%") && b == 0) {
-                _failed = true;
-                return std::nullopt;
-            }
-            if (op == "||")
-                return (a != 0 || b != 0) ? 1 : 0;
-            if (op == "&&")
-                return (a != 0 && b != 0) ? 1 : 0;
-            if (op == "|")
-                return a | b;
-            if (op == "^")
-                return a ^ b;
-            if (op == "&")
-                return a & b;
-            if (op == "==")
-                return a == b ? 1 : 0;
-            if (op == "!=")
-                return a != b ? 1 : 0;
-            if (op == "<")
-                return a < b ? 1 : 0;
-            if (op == ">")
-                return a > b ? 1 : 0;
-            if (op == "<=")
-                return a <= b ? 1 : 0;
-            if (op == ">=")
-                return a >= b ? 1 : 0;
-            if (op == "<<")
-                return a << (b & 63);
-            if (op == ">>")
-                return a >> (b & 63);
-            if (op == "+")
-                return a + b;
-            if (op == "-")
-                return a - b;
-            if (op == "*")
-                return a * b;
-            if (op == "/")
-                return a / b;
-            return a % b;
-        }
-
         Value unary() {
             if (accept("!")) {
-                Value v = unary();
-                return v ? Value(*v == 0 ? 1 : 0) : std::nullopt;
+                const Value v = unary();
+                return v.has_value() ? boolean(*v == 0) : std::nullopt;
             }
             if (accept("~")) {
-                Value v = unary();
-                return v ? Value(~*v) : std::nullopt;
+                const Value v = unary();
+                return v.has_value() ? Value(~*v) : std::nullopt;
             }
             if (accept("-")) {
-                Value v = unary();
-                return v ? Value(-*v) : std::nullopt;
+                const Value v = unary();
+                return v.has_value() ? Value(-*v) : std::nullopt;
             }
             if (accept("+")) {
                 return unary();
@@ -175,19 +155,18 @@ namespace {
         }
 
         Value primary() {
-            const Token* token = peek();
-            if (!token) {
+            if (_pos >= _tokens.size()) {
                 return std::nullopt;
             }
             if (accept("(")) {
-                Value v = conditional();
-                return v && accept(")") ? v : std::nullopt;
+                const Value v = conditional();
+                return v.has_value() && accept(")") ? v : std::nullopt;
             }
-            ++_pos;
-            if (token->kind == TokenKind::Number) {
-                return parseInteger(token->text);
+            const Token& token = _tokens[_pos++];
+            if (token.kind == TokenKind::Number) {
+                return parseInteger(token.text);
             }
-            if (token->kind == TokenKind::Identifier && _identifiersAreZero) {
+            if (token.kind == TokenKind::Identifier && _identifiersAreZero) {
                 return 0;
             }
             return std::nullopt;
@@ -196,7 +175,6 @@ namespace {
         const std::vector<Token>& _tokens;
         bool _identifiersAreZero;
         std::size_t _pos = 0;
-        bool _failed = false;
     };
 
 } // namespace
@@ -212,8 +190,8 @@ Preprocessor::Preprocessor(SourceManager& sources, PreprocessOptions options)
 std::vector<Token> Preprocessor::run(const std::filesystem::path& path) {
     std::vector<Token> out;
     const auto file = _sources.load(path);
-    if (!file) {
-        report(Diagnostic::Severity::Error, {}, "cannot read " + path.generic_string());
+    if (!file.has_value()) {
+        report(Diagnostic::Severity::Error, {}, std::format("cannot read {}", path.generic_string()));
         return out;
     }
     pushFile(*file, {});
@@ -261,7 +239,7 @@ std::optional<int64_t> Preprocessor::evaluate(const Macro& macro) {
 }
 
 void Preprocessor::report(Diagnostic::Severity severity, SourceLocation location, std::string message) {
-    _diagnostics.push_back({ severity, location, std::move(message) });
+    _diagnostics.emplace_back(severity, location, std::move(message));
 }
 
 bool Preprocessor::active() const {
@@ -277,7 +255,7 @@ bool Preprocessor::pushFile(FileId file, SourceLocation includedAt) {
     if (fresh) {
         it->second = lex(_sources.text(file), file, _diagnostics);
     }
-    _frames.push_back({ file, &it->second, 0, _conditionals.size() });
+    _frames.emplace_back(file, &it->second, 0, _conditionals.size());
     return true;
 }
 
@@ -345,58 +323,72 @@ std::vector<Token> Preprocessor::expandList(const std::vector<Token>& tokens) {
     return out;
 }
 
+// The arguments of a call to function-like `macro` whose name was just read, up to its ')'; nullopt
+// when no '(' follows, so the name is just a name.
+std::optional<Preprocessor::Call> Preprocessor::readCall(const Token& name, const Macro& macro) {
+    if (Token open = nextRaw(); !open.is("(")) {
+        if (open.kind != TokenKind::EndOfFile) {
+            _pending.push_front(open);
+        }
+        return std::nullopt;
+    }
+    Call call;
+    std::vector<Token> current;
+    int depth = 1;
+    for (Token token = nextRaw(); token.kind != TokenKind::EndOfFile; token = nextRaw()) {
+        if (token.is("(")) {
+            ++depth;
+        } else if (token.is(")")) {
+            --depth;
+        }
+        if (depth == 0) {
+            call.close = token;
+            call.args.push_back(std::move(current));
+            return call;
+        }
+        const bool separates = token.is(",") && depth == 1 && !(macro.variadic && call.args.size() == macro.params.size());
+        if (separates) {
+            call.args.push_back(std::move(current));
+            current.clear();
+        } else {
+            current.push_back(token);
+        }
+    }
+    report(Diagnostic::Severity::Error, name.location, std::format("unterminated call of macro {}", macro.name));
+    call.args.push_back(std::move(current));
+    return call;
+}
+
+// Fit the arguments to the parameters: f() passes none, and a count mismatch is reported.
+void Preprocessor::checkArity(const Token& name, const Macro& macro, std::vector<std::vector<Token>>& args) {
+    if (macro.params.empty() && !macro.variadic && args.size() == 1 && args[0].empty()) {
+        args.clear();
+    }
+    const std::size_t expected = macro.params.size() + (macro.variadic ? 1 : 0);
+    if (args.size() != expected && !(macro.variadic && args.size() == macro.params.size())) {
+        report(Diagnostic::Severity::Error, name.location,
+            std::format("macro {} takes {} arguments, {} given", macro.name, macro.params.size(), args.size()));
+    }
+    args.resize(expected);
+}
+
 bool Preprocessor::expand(const Token& name, const Macro& macro) {
     std::vector<std::vector<Token>> args;
     HideSetId hideSet = 0;
     if (macro.functionLike) {
-        Token open = nextRaw();
-        if (!open.is("(")) {
-            if (open.kind != TokenKind::EndOfFile) {
-                _pending.push_front(open); // a function-like macro's name without a call is just a name
-            }
+        auto call = readCall(name, macro);
+        if (!call.has_value()) {
             return false;
         }
-        std::vector<Token> current;
-        int depth = 1;
-        Token close;
-        while (true) {
-            Token token = nextRaw();
-            if (token.kind == TokenKind::EndOfFile) {
-                report(Diagnostic::Severity::Error, name.location, "unterminated call of macro " + std::string(macro.name));
-                break;
-            }
-            if (token.is("(")) {
-                ++depth;
-            } else if (token.is(")") && --depth == 0) {
-                close = token;
-                break;
-            }
-            const bool separates = token.is(",") && depth == 1 && !(macro.variadic && args.size() == macro.params.size());
-            if (separates) {
-                args.push_back(std::move(current));
-                current.clear();
-            } else {
-                current.push_back(token);
-            }
-        }
-        args.push_back(std::move(current));
-        if (macro.params.empty() && !macro.variadic && args.size() == 1 && args[0].empty()) {
-            args.clear(); // f() passes no arguments
-        }
-        const std::size_t expected = macro.params.size() + (macro.variadic ? 1 : 0);
-        if (args.size() != expected && !(macro.variadic && args.size() == macro.params.size())) {
-            report(Diagnostic::Severity::Error, name.location,
-                "macro " + std::string(macro.name) + " takes " + std::to_string(macro.params.size()) + " arguments, "
-                    + std::to_string(args.size()) + " given");
-        }
-        args.resize(expected);
-        hideSet = withName(intersect(name.hideSet, close.hideSet), macro.name);
+        args = std::move(call->args);
+        checkArity(name, macro, args);
+        hideSet = withName(intersect(name.hideSet, call->close.hideSet), macro.name);
     } else {
         hideSet = withName(name.hideSet, macro.name);
     }
 
     const auto expansion = static_cast<ExpansionId>(_expansions.size());
-    _expansions.push_back({ &macro, name.location, name.expansion });
+    _expansions.emplace_back(&macro, name.location, name.expansion);
     std::vector<Token> out = substitute(macro, args, expansion);
     for (Token& token : out) {
         token.hideSet = unite(token.hideSet, hideSet);
@@ -409,11 +401,10 @@ bool Preprocessor::expand(const Token& name, const Macro& macro) {
     return true;
 }
 
-// The macro body with its parameters replaced: by the argument as written next to `#` or `##`,
-// otherwise by the fully expanded argument. Body tokens are marked as coming from `expansion`;
-// argument tokens keep their own origin, which is where the user wrote them.
-std::vector<Token> Preprocessor::substitute(const Macro& macro, const std::vector<std::vector<Token>>& args, ExpansionId expansion) {
-    const auto paramIndex = [&macro](const Token& token) -> std::optional<std::size_t> {
+namespace {
+
+    // Which parameter `token` names in `macro`'s body (__VA_ARGS__ is the one after the named ones).
+    std::optional<std::size_t> paramIndex(const Macro& macro, const Token& token) {
         if (token.kind != TokenKind::Identifier) {
             return std::nullopt;
         }
@@ -421,58 +412,74 @@ std::vector<Token> Preprocessor::substitute(const Macro& macro, const std::vecto
             return macro.params.size();
         }
         const auto it = std::ranges::find(macro.params, token.text);
-        return it == macro.params.end() ? std::nullopt : std::optional(static_cast<std::size_t>(it - macro.params.begin()));
-    };
-    std::map<std::size_t, std::vector<Token>> expandedArgs;
-    const auto operand = [&](std::size_t i, bool raw) {
-        const Token& token = macro.body[i];
-        if (const auto param = paramIndex(token); param && *param < args.size()) {
-            if (raw) {
-                return args[*param];
-            }
-            auto [it, fresh] = expandedArgs.try_emplace(*param);
-            if (fresh) {
-                it->second = expandList(args[*param]);
-            }
-            return it->second;
+        if (it == macro.params.end()) {
+            return std::nullopt;
         }
-        Token copy = token;
-        copy.expansion = expansion;
-        return std::vector<Token>{ copy };
-    };
+        return static_cast<std::size_t>(it - macro.params.begin());
+    }
 
-    std::vector<Token> out;
+} // namespace
+
+// The tokens body[i] stands for: the argument as written (`raw`, beside # or ##) or fully expanded
+// (computed once per parameter), or the body token itself, marked as coming from the expansion.
+std::vector<Token> Preprocessor::operand(Substitution& sub, std::size_t i, bool raw) {
+    const Token& token = sub.macro.body[i];
+    if (const auto param = paramIndex(sub.macro, token); param.has_value() && *param < sub.args.size()) {
+        if (raw) {
+            return sub.args[*param];
+        }
+        auto [it, fresh] = sub.expandedArgs.try_emplace(*param);
+        if (fresh) {
+            it->second = expandList(sub.args[*param]);
+        }
+        return it->second;
+    }
+    Token copy = token;
+    copy.expansion = sub.expansion;
+    return { copy };
+}
+
+// The macro body with its parameters replaced: by the argument as written next to `#` or `##`,
+// otherwise by the fully expanded argument. Body tokens are marked as coming from `expansion`;
+// argument tokens keep their own origin, which is where the user wrote them.
+std::vector<Token> Preprocessor::substitute(const Macro& macro, const std::vector<std::vector<Token>>& args, ExpansionId expansion) {
+    Substitution sub{ macro, args, expansion, {} };
     const std::vector<Token>& body = macro.body;
-    for (std::size_t i = 0; i < body.size(); ++i) {
+    std::vector<Token> out;
+    std::size_t i = 0;
+    while (i < body.size()) {
         const Token& token = body[i];
-        if (macro.functionLike && token.is("#") && i + 1 < body.size() && paramIndex(body[i + 1])) {
-            Token text = stringize(operand(i + 1, true));
+        const bool hasNext = i + 1 < body.size();
+        if (macro.functionLike && token.is("#") && hasNext && paramIndex(macro, body[i + 1]).has_value()) {
+            Token text = stringize(operand(sub, i + 1, true));
             text.expansion = expansion;
             text.location = token.location;
             out.push_back(text);
-            ++i;
-            continue;
-        }
-        if (token.is("##") && i + 1 < body.size()) {
-            std::vector<Token> right = operand(i + 1, true);
-            ++i;
-            if (out.empty() || right.empty()) {
-                out.insert(out.end(), right.begin(), right.end());
-                continue;
+            i += 2;
+        } else if (token.is("##") && hasNext) {
+            appendPasted(out, operand(sub, i + 1, true), expansion);
+            i += 2;
+        } else {
+            std::vector<Token> tokens = operand(sub, i, hasNext && body[i + 1].is("##"));
+            if (!tokens.empty()) {
+                tokens.front().spaceBefore = token.spaceBefore;
             }
-            out.back() = paste(out.back(), right.front());
-            out.back().expansion = expansion;
-            out.insert(out.end(), right.begin() + 1, right.end());
-            continue;
+            out.insert(out.end(), tokens.begin(), tokens.end());
+            ++i;
         }
-        const bool beforePaste = i + 1 < body.size() && body[i + 1].is("##");
-        std::vector<Token> tokens = operand(i, beforePaste);
-        if (!tokens.empty()) {
-            tokens.front().spaceBefore = token.spaceBefore;
-        }
-        out.insert(out.end(), tokens.begin(), tokens.end());
     }
     return out;
+}
+
+// `##`: join the last token so far with the first of `right`.
+void Preprocessor::appendPasted(std::vector<Token>& out, const std::vector<Token>& right, ExpansionId expansion) {
+    if (out.empty() || right.empty()) {
+        out.insert(out.end(), right.begin(), right.end());
+        return;
+    }
+    out.back() = paste(out.back(), right.front());
+    out.back().expansion = expansion;
+    out.insert(out.end(), right.begin() + 1, right.end());
 }
 
 Token Preprocessor::paste(const Token& left, const Token& right) {
@@ -485,7 +492,7 @@ Token Preprocessor::paste(const Token& left, const Token& right) {
         pasted.kind = relexed.front().kind;
     } else {
         report(Diagnostic::Severity::Warning, left.location,
-            "pasting \"" + std::string(left.text) + "\" and \"" + std::string(right.text) + "\" does not give one token");
+            std::format("pasting \"{}\" and \"{}\" does not give one token", left.text, right.text));
     }
     return pasted;
 }
@@ -539,41 +546,7 @@ void Preprocessor::directive(const Token& hash) {
     line.erase(line.begin());
     const std::string_view kind = name.text;
 
-    if (kind == "ifdef" || kind == "ifndef" || kind == "if") {
-        const bool parentActive = active();
-        bool value = false;
-        if (parentActive && kind == "if") {
-            value = evaluateCondition(line);
-        } else if (parentActive) {
-            const bool defined = !line.empty() && find(line.front().text) != nullptr;
-            value = kind == "ifdef" ? defined : !defined;
-        }
-        _conditionals.push_back({ value, value, false, parentActive, hash.location });
-        return;
-    }
-    if (kind == "elif" || kind == "else" || kind == "endif") {
-        if (_conditionals.size() <= _frames.back().conditionalDepth) {
-            report(Diagnostic::Severity::Error, hash.location, "#" + std::string(kind) + " without #if");
-            return;
-        }
-        Conditional& conditional = _conditionals.back();
-        if (kind == "endif") {
-            _conditionals.pop_back();
-            return;
-        }
-        if (conditional.sawElse) {
-            report(Diagnostic::Severity::Error, hash.location, "#" + std::string(kind) + " after #else");
-        }
-        if (kind == "else") {
-            conditional.sawElse = true;
-            conditional.active = conditional.parentActive && !conditional.taken;
-        } else {
-            conditional.active = conditional.parentActive && !conditional.taken && evaluateCondition(line);
-        }
-        conditional.taken = conditional.taken || conditional.active;
-        return;
-    }
-    if (!active()) {
+    if (conditionalDirective(kind, line, hash) || !active()) {
         return;
     }
     if (kind == "include") {
@@ -587,8 +560,49 @@ void Preprocessor::directive(const Token& hash) {
     } else if (kind == "error") {
         report(Diagnostic::Severity::Error, hash.location, "#error");
     } else if (kind != "pragma" && kind != "line" && kind != "warning") {
-        report(Diagnostic::Severity::Warning, hash.location, "unknown directive #" + std::string(kind));
+        report(Diagnostic::Severity::Warning, hash.location, std::format("unknown directive #{}", kind));
     }
+}
+
+// #if, #ifdef, #ifndef, #elif, #else and #endif, which run even inside a branch that is off so the
+// nesting stays right. False for any other directive.
+bool Preprocessor::conditionalDirective(std::string_view kind, const std::vector<Token>& line, const Token& hash) {
+    if (kind == "ifdef" || kind == "ifndef" || kind == "if") {
+        const bool parentActive = active();
+        bool value = false;
+        if (parentActive && kind == "if") {
+            value = evaluateCondition(line);
+        } else if (parentActive) {
+            const bool defined = !line.empty() && find(line.front().text) != nullptr;
+            value = kind == "ifdef" ? defined : !defined;
+        }
+        _conditionals.emplace_back(value, value, false, parentActive, hash.location);
+        return true;
+    }
+    if (kind != "elif" && kind != "else" && kind != "endif") {
+        return false;
+    }
+    if (_conditionals.size() <= _frames.back().conditionalDepth) {
+        report(Diagnostic::Severity::Error, hash.location, std::format("#{} without #if", kind));
+        return true;
+    }
+    Conditional& conditional = _conditionals.back();
+    if (kind == "endif") {
+        _conditionals.pop_back();
+        return true;
+    }
+    if (conditional.sawElse) {
+        report(Diagnostic::Severity::Error, hash.location, std::format("#{} after #else", kind));
+    }
+    const bool open = conditional.parentActive && !conditional.taken;
+    if (kind == "else") {
+        conditional.sawElse = true;
+        conditional.active = open;
+    } else {
+        conditional.active = open && evaluateCondition(line);
+    }
+    conditional.taken = conditional.taken || conditional.active;
+    return true;
 }
 
 void Preprocessor::include(const std::vector<Token>& written, const Token& directive) {
@@ -596,10 +610,9 @@ void Preprocessor::include(const std::vector<Token>& written, const Token& direc
     const bool computed = !written.empty() && written.front().kind == TokenKind::Identifier;
     const std::vector<Token> line = computed ? expandList(written) : written;
     std::string spelled;
-    bool quoted = false;
-    if (!line.empty() && line.front().kind == TokenKind::String && line.front().text.size() >= 2) {
+    const bool quoted = !line.empty() && line.front().kind == TokenKind::String && line.front().text.size() >= 2;
+    if (quoted) {
         spelled = std::string(line.front().text.substr(1, line.front().text.size() - 2));
-        quoted = true;
     } else if (!line.empty() && line.front().is("<")) {
         for (std::size_t i = 1; i < line.size() && !line[i].is(">"); ++i) {
             spelled += line[i].text;
@@ -619,12 +632,12 @@ void Preprocessor::include(const std::vector<Token>& written, const Token& direc
         candidates.push_back(dir / spelled);
     }
     for (const auto& candidate : candidates) {
-        if (const auto file = _sources.load(candidate)) {
+        if (const auto file = _sources.load(candidate); file.has_value()) {
             pushFile(*file, directive.location);
             return;
         }
     }
-    report(Diagnostic::Severity::Error, directive.location, "cannot open include file " + spelled);
+    report(Diagnostic::Severity::Error, directive.location, std::format("cannot open include file {}", spelled));
 }
 
 void Preprocessor::define(const std::vector<Token>& line, const Token& directive) {
@@ -644,7 +657,7 @@ void Preprocessor::define(const std::vector<Token>& line, const Token& directive
             } else if (line[i].kind == TokenKind::Identifier) {
                 macro.params.push_back(line[i].text);
             } else if (!line[i].is(",")) {
-                report(Diagnostic::Severity::Error, line[i].location, "bad parameter list for macro " + std::string(macro.name));
+                report(Diagnostic::Severity::Error, line[i].location, std::format("bad parameter list for macro {}", macro.name));
             }
         }
         ++i; // the ')'
@@ -660,9 +673,10 @@ void Preprocessor::define(const std::vector<Token>& line, const Token& directive
 bool Preprocessor::evaluateCondition(const std::vector<Token>& line) {
     // `defined X` and `defined(X)` are answered before expansion, so X's own definition is not used.
     std::vector<Token> resolved;
-    for (std::size_t i = 0; i < line.size(); ++i) {
+    std::size_t i = 0;
+    while (i < line.size()) {
         if (!line[i].isIdentifier("defined")) {
-            resolved.push_back(line[i]);
+            resolved.push_back(line[i++]);
             continue;
         }
         const bool parens = i + 1 < line.size() && line[i + 1].is("(");
@@ -672,10 +686,10 @@ bool Preprocessor::evaluateCondition(const std::vector<Token>& line) {
             return false;
         }
         resolved.push_back(synthesizedNumber(find(line[nameAt].text) != nullptr ? 1 : 0, line[i]));
-        i = nameAt + (parens ? 1 : 0);
+        i = nameAt + (parens ? 2 : 1); // past the name, and its ')'
     }
     const auto value = ExpressionEvaluator(expandList(resolved), true).run();
-    if (!value) {
+    if (!value.has_value()) {
         report(Diagnostic::Severity::Error, line.empty() ? SourceLocation{} : line.front().location, "malformed #if expression");
         return false;
     }

@@ -34,6 +34,13 @@ struct ScriptFacts {
     /// Preprocessing problems as "file:line: message", e.g. an #include that could not be found.
     std::vector<std::string> problems;
 
+    ScriptFacts() = default;
+    ScriptFacts(const ScriptFacts&) = default;
+    ScriptFacts(ScriptFacts&&) noexcept = default;
+    ScriptFacts& operator=(const ScriptFacts&) = default;
+    ScriptFacts& operator=(ScriptFacts&&) noexcept = default;
+    ~ScriptFacts() = default;
+
     bool assigns(Override::Field field) const;
 };
 

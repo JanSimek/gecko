@@ -53,7 +53,7 @@ namespace {
     // "AI_ARROYO_VILLAGER (2)", "2", or "AI_ARROYO_VILLAGER" when the value is not a constant.
     QString valueText(const Override& o) {
         const QString name = QString::fromStdString(o.valueName);
-        if (!o.value) {
+        if (!o.value.has_value()) {
             return name.isEmpty() ? QString("a computed value") : name;
         }
         return name.isEmpty() ? QString::number(*o.value) : QString("%1 (%2)").arg(name).arg(*o.value);

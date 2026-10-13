@@ -10,7 +10,7 @@ using namespace geck::ssl;
 namespace {
 
 // The preprocessed tokens of `main`, joined with single spaces.
-std::string preprocess(MemorySourceProvider& files, const std::string& main, std::vector<Diagnostic>* diagnostics = nullptr) {
+std::string preprocess(const MemorySourceProvider& files, const std::string& main, std::vector<Diagnostic>* diagnostics = nullptr) {
     SourceManager sources(files);
     Preprocessor pp(sources);
     std::string out;

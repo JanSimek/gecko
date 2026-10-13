@@ -54,7 +54,7 @@ public:
     std::optional<std::string> read(const std::filesystem::path& path) const override;
 
 private:
-    std::map<std::string, std::string> _files;
+    std::map<std::string, std::string, std::less<>> _files;
 };
 
 /// Owns the text of every file a preprocessing run opened, so tokens can view it. Each path is read
@@ -77,7 +77,7 @@ private:
 
     const SourceProvider& _provider;
     std::deque<File> _files; // deque: element addresses, and so the text tokens view, stay put
-    std::map<std::string, FileId> _byPath;
+    std::map<std::string, FileId, std::less<>> _byPath;
 };
 
 } // namespace geck::ssl

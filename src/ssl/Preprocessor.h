@@ -88,6 +88,17 @@ private:
         SourceLocation location;
     };
 
+    struct Call {
+        std::vector<std::vector<Token>> args;
+        Token close; // the ')'
+    };
+    struct Substitution {
+        const Macro& macro;
+        const std::vector<std::vector<Token>>& args;
+        ExpansionId expansion;
+        std::map<std::size_t, std::vector<Token>> expandedArgs;
+    };
+
     bool active() const;
     bool pushFile(FileId file, SourceLocation includedAt);
     void popFile();
@@ -95,13 +106,18 @@ private:
     Token next();
     std::vector<Token> expandList(const std::vector<Token>& tokens);
     bool expand(const Token& name, const Macro& macro);
+    std::optional<Call> readCall(const Token& name, const Macro& macro);
+    void checkArity(const Token& name, const Macro& macro, std::vector<std::vector<Token>>& args);
     std::vector<Token> substitute(const Macro& macro, const std::vector<std::vector<Token>>& args, ExpansionId expansion);
+    std::vector<Token> operand(Substitution& sub, std::size_t i, bool raw);
+    void appendPasted(std::vector<Token>& out, const std::vector<Token>& right, ExpansionId expansion);
     Token paste(const Token& left, const Token& right);
     Token stringize(const std::vector<Token>& arg);
     std::string_view keep(std::string text);
 
     std::vector<Token> directiveLine();
     void directive(const Token& hash);
+    bool conditionalDirective(std::string_view kind, const std::vector<Token>& line, const Token& hash);
     void include(const std::vector<Token>& written, const Token& directive);
     void define(const std::vector<Token>& line, const Token& directive);
     bool evaluateCondition(const std::vector<Token>& line);
