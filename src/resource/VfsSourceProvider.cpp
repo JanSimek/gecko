@@ -4,7 +4,7 @@
 
 namespace geck::resource {
 
-std::optional<std::string> VfsSourceProvider::read(const std::filesystem::path& path) const {
+std::optional<std::string> VfsSourceProvider::readText(const std::filesystem::path& path) const {
     const auto bytes = _files.readRawBytes(path);
     if (!bytes) {
         return std::nullopt;

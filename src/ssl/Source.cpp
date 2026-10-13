@@ -54,7 +54,7 @@ namespace {
 
 } // namespace
 
-std::optional<std::string> DiskSourceProvider::read(const std::filesystem::path& path) const {
+std::optional<std::string> DiskSourceProvider::readText(const std::filesystem::path& path) const {
     if (auto text = readFile(path); text.has_value()) {
         return text;
     }
@@ -68,7 +68,7 @@ void MemorySourceProvider::add(const std::filesystem::path& path, std::string te
     _files[key(path)] = std::move(text);
 }
 
-std::optional<std::string> MemorySourceProvider::read(const std::filesystem::path& path) const {
+std::optional<std::string> MemorySourceProvider::readText(const std::filesystem::path& path) const {
     if (const auto it = _files.find(key(path)); it != _files.end()) {
         return it->second;
     }
@@ -85,7 +85,7 @@ std::optional<FileId> SourceManager::load(const std::filesystem::path& path) {
     if (const auto it = _byPath.find(normal); it != _byPath.end()) {
         return it->second;
     }
-    auto text = _provider.read(normal);
+    auto text = _provider.readText(normal);
     if (!text.has_value()) {
         return std::nullopt;
     }

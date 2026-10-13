@@ -13,7 +13,7 @@ public:
     explicit VfsSourceProvider(const DataFileSystem& files)
         : _files(files) {}
 
-    std::optional<std::string> read(const std::filesystem::path& path) const override;
+    std::optional<std::string> readText(const std::filesystem::path& path) const override;
 
 private:
     const DataFileSystem& _files;

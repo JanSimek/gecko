@@ -37,21 +37,21 @@ struct Diagnostic {
 class SourceProvider {
 public:
     virtual ~SourceProvider() = default;
-    virtual std::optional<std::string> read(const std::filesystem::path& path) const = 0;
+    virtual std::optional<std::string> readText(const std::filesystem::path& path) const = 0;
 };
 
 /// The native filesystem. When a path's exact spelling is absent, each component is matched
 /// case-insensitively, as sources written for Windows expect ("..\HEADERS\Define.h").
 class DiskSourceProvider final : public SourceProvider {
 public:
-    std::optional<std::string> read(const std::filesystem::path& path) const override;
+    std::optional<std::string> readText(const std::filesystem::path& path) const override;
 };
 
 /// Files held in memory, keyed by lexically normal path; for tests and editor buffers.
 class MemorySourceProvider final : public SourceProvider {
 public:
     void add(const std::filesystem::path& path, std::string text);
-    std::optional<std::string> read(const std::filesystem::path& path) const override;
+    std::optional<std::string> readText(const std::filesystem::path& path) const override;
 
 private:
     std::map<std::string, std::string, std::less<>> _files;
