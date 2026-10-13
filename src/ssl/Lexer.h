@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -34,6 +35,10 @@ struct Token {
     bool is(std::string_view punct) const { return kind == TokenKind::Punct && text == punct; }
     bool isIdentifier(std::string_view name) const { return kind == TokenKind::Identifier && text == name; }
 };
+
+/// The value of an integer literal as written: decimal, 0x hex or 0 octal, with any u/l suffix.
+/// nullopt for anything else, including a float.
+std::optional<int64_t> integerValue(std::string_view text);
 
 /// Split `text` into preprocessing tokens the way mcpp, which sslc runs first, does: line and block
 /// comments are whitespace, a backslash at the end of a line (trailing blanks allowed) joins it to the

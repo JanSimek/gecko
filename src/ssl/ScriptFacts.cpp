@@ -4,6 +4,8 @@
 #include <cctype>
 #include <format>
 
+#include "ssl/AstWalk.h"
+
 namespace geck::ssl {
 
 namespace {
@@ -13,188 +15,104 @@ namespace {
     constexpr int64_t TRAIT_OBJECT_AI_PACKET = 5;
     constexpr int64_t TRAIT_OBJECT_TEAM = 6;
 
-    // SSL keywords and opcode names are case-insensitive (sslc compares them with _stricmp).
-    bool is(const Token& token, std::string_view word) {
-        return token.kind == TokenKind::Identifier
-            && std::ranges::equal(token.text, word, [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); });
+    using Field = ScriptFacts::Override::Field;
+
+    // SSL names are case-insensitive (sslc compares them with _stricmp).
+    bool sameName(std::string_view a, std::string_view b) {
+        return std::ranges::equal(a, b, [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
     }
 
-    using Args = std::vector<std::vector<Token>>;
-
-    // The arguments of the call whose '(' is at `open`, split at top-level commas; `end` is set past ')'.
-    std::optional<Args> callArgs(const std::vector<Token>& tokens, std::size_t open, std::size_t& end) {
-        if (open >= tokens.size() || !tokens[open].is("(")) {
-            return std::nullopt;
-        }
-        Args args(1);
-        int depth = 0;
-        for (std::size_t i = open; i < tokens.size(); ++i) {
-            const Token& token = tokens[i];
-            if (token.is("(")) {
-                ++depth;
-                if (depth == 1) {
-                    continue; // the call's own '('
-                }
-            } else if (token.is(")")) {
-                --depth;
-                if (depth == 0) {
-                    end = i + 1;
-                    return args;
-                }
-            }
-            if (token.is(",") && depth == 1) {
-                args.emplace_back();
-            } else {
-                args.back().push_back(token);
-            }
-        }
-        return std::nullopt;
+    bool isName(const ExprPtr& expr, std::string_view name) {
+        const auto* node = expr ? std::get_if<Name>(&expr->node) : nullptr;
+        return node != nullptr && sameName(node->name, name);
     }
-
-    // Tracks which procedure body a token stream position is in: `procedure name [(params)] begin`
-    // opens one; the matching `end` closes it. A forward declaration ends at ';' instead.
-    class ProcedureTracker {
-    public:
-        explicit ProcedureTracker(const std::vector<Token>& tokens)
-            : _tokens(tokens) {}
-
-        void step(std::size_t i) {
-            const Token& token = _tokens[i];
-            if (_depth == 0 && is(token, "procedure") && i + 1 < _tokens.size()) {
-                if (const auto begin = bodyStart(i + 2); begin.has_value()) {
-                    _name = std::string(_tokens[i + 1].text);
-                    _bodyAt = *begin;
-                }
-                return;
-            }
-            if (i == _bodyAt || (_depth > 0 && is(token, "begin"))) {
-                ++_depth;
-            } else if (_depth > 0 && is(token, "end")) {
-                --_depth;
-                if (_depth == 0) {
-                    _name.clear();
-                }
-            }
-        }
-
-        const std::string& current() const { return _name; }
-
-    private:
-        std::optional<std::size_t> bodyStart(std::size_t from) const {
-            for (std::size_t i = from; i < _tokens.size(); ++i) {
-                if (_tokens[i].is(";")) {
-                    return std::nullopt;
-                }
-                if (is(_tokens[i], "begin")) {
-                    return i;
-                }
-            }
-            return std::nullopt;
-        }
-
-        const std::vector<Token>& _tokens;
-        std::string _name;
-        std::size_t _bodyAt = static_cast<std::size_t>(-1);
-        int _depth = 0;
-    };
 
     class FactsReader {
     public:
-        FactsReader(Preprocessor& preprocessor, const std::vector<Token>& tokens)
-            : _pp(preprocessor)
-            , _tokens(tokens) {}
+        explicit FactsReader(const ScriptUnit& unit)
+            : _unit(unit) {}
 
-        std::vector<ScriptFacts::Override> overrides() {
+        std::vector<ScriptFacts::Override> overrides() const {
             std::vector<ScriptFacts::Override> found;
-            ProcedureTracker procedures(_tokens);
-            for (std::size_t i = 0; i < _tokens.size(); ++i) {
-                procedures.step(i);
-                if (procedures.current().empty() || _tokens[i].kind != TokenKind::Identifier) {
+            for (const Procedure& procedure : _unit.program().procedures) {
+                if (!procedure.body.has_value()) {
                     continue;
                 }
-                if (auto write = selfTraitWrite(i); write.has_value()) {
-                    write->procedure = procedures.current();
-                    found.push_back(std::move(*write));
-                }
+                forEachExpression(*procedure.body, [&](const Expr& expr) {
+                    const auto* call = std::get_if<Call>(&expr.node);
+                    if (auto write = call ? selfTraitWrite(expr, *call) : std::nullopt; write.has_value()) {
+                        write->procedure = procedure.name;
+                        found.push_back(std::move(*write));
+                    }
+                });
             }
             return found;
         }
 
     private:
-        // A call at `i` that assigns the AI packet or team of the script's own object. Normally that is
+        // A call that assigns the AI packet or team of the script's own object. Normally that is
         // critter_add_trait after expansion; the command.h aliases are recognised by name only when they
         // survived preprocessing undefined (command.h not found), so a missing header still reports.
-        std::optional<ScriptFacts::Override> selfTraitWrite(std::size_t i) {
-            const Token& call = _tokens[i];
-            std::size_t end = 0;
-            const auto args = callArgs(_tokens, i + 1, end);
-            if (!args.has_value()) {
-                return std::nullopt;
-            }
-            std::optional<ScriptFacts::Override::Field> field;
-            const std::vector<Token>* value = nullptr;
-            if (is(call, "critter_add_trait") && args->size() == 4 && isSelf((*args)[0])
-                && constant((*args)[1]) == TRAIT_OBJECT) {
-                if (const auto selector = constant((*args)[2]); selector == TRAIT_OBJECT_AI_PACKET) {
-                    field = ScriptFacts::Override::Field::AiPacket;
+        std::optional<ScriptFacts::Override> selfTraitWrite(const Expr& expr, const Call& call) const {
+            const auto& args = call.args;
+            std::optional<Field> field;
+            const Expr* value = nullptr;
+            if (sameName(call.callee, "critter_add_trait") && args.size() == 4 && isName(args[0], "self_obj")
+                && constant(*args[1]) == TRAIT_OBJECT) {
+                if (const auto selector = constant(*args[2]); selector == TRAIT_OBJECT_AI_PACKET) {
+                    field = Field::AiPacket;
                 } else if (selector == TRAIT_OBJECT_TEAM) {
-                    field = ScriptFacts::Override::Field::Team;
+                    field = Field::Team;
                 }
-                value = &(*args)[3];
-            } else if ((is(call, "set_self_ai") || is(call, "set_self_team")) && args->size() == 1) {
-                field = is(call, "set_self_ai") ? ScriptFacts::Override::Field::AiPacket : ScriptFacts::Override::Field::Team;
-                value = &(*args)[0];
-            } else if ((is(call, "set_ai") || is(call, "set_team")) && args->size() == 2 && isSelf((*args)[0])) {
-                field = is(call, "set_ai") ? ScriptFacts::Override::Field::AiPacket : ScriptFacts::Override::Field::Team;
-                value = &(*args)[1];
+                value = args[3].get();
+            } else if ((sameName(call.callee, "set_self_ai") || sameName(call.callee, "set_self_team")) && args.size() == 1) {
+                field = sameName(call.callee, "set_self_ai") ? Field::AiPacket : Field::Team;
+                value = args[0].get();
+            } else if ((sameName(call.callee, "set_ai") || sameName(call.callee, "set_team")) && args.size() == 2
+                && isName(args[0], "self_obj")) {
+                field = sameName(call.callee, "set_ai") ? Field::AiPacket : Field::Team;
+                value = args[1].get();
             }
-            if (!field.has_value()) {
+            if (!field.has_value() || value == nullptr) {
                 return std::nullopt;
             }
 
             ScriptFacts::Override write;
             write.field = *field;
-            const SourceLocation written = _pp.writtenAt(call);
-            write.file = _pp.sources().path(written.file);
+            const SourceLocation written = _unit.writtenAt(expr.range);
+            write.file = _unit.sources().path(written.file);
             write.line = static_cast<int>(written.line);
-            if (const auto number = _pp.evaluate(*value); number.has_value()) {
+            if (const auto number = _unit.evaluate(*value); number.has_value()) {
                 write.value = static_cast<int>(*number);
             }
-            write.valueName = valueMacro(call, *value);
+            write.valueName = valueMacro(expr, *value);
             return write;
         }
 
-        static bool isSelf(const std::vector<Token>& arg) {
-            return arg.size() == 1 && is(arg.front(), "self_obj");
-        }
-
         // A trait selector's value; by name when define.h was not found to define it.
-        std::optional<int64_t> constant(const std::vector<Token>& arg) {
-            if (auto value = _pp.evaluate(arg); value.has_value()) {
+        std::optional<int64_t> constant(const Expr& arg) const {
+            if (auto value = _unit.evaluate(arg); value.has_value()) {
                 return value;
             }
-            if (arg.size() == 1) {
-                if (is(arg.front(), "TRAIT_OBJECT")) {
+            if (const auto* name = std::get_if<Name>(&arg.node)) {
+                if (sameName(name->name, "TRAIT_OBJECT")) {
                     return TRAIT_OBJECT;
                 }
-                if (is(arg.front(), "OBJECT_AI_PACKET")) {
+                if (sameName(name->name, "OBJECT_AI_PACKET")) {
                     return TRAIT_OBJECT_AI_PACKET;
                 }
-                if (is(arg.front(), "OBJECT_TEAM_NUM")) {
+                if (sameName(name->name, "OBJECT_TEAM_NUM")) {
                     return TRAIT_OBJECT_TEAM;
                 }
             }
             return std::nullopt;
         }
 
-        // The object-like macro the value was written as: the outermost macro the value's tokens came
-        // out of that is not one the call itself came out of (set_self_ai, set_ai, ...).
-        std::string valueMacro(const Token& call, const std::vector<Token>& value) const {
-            if (value.empty()) {
-                return {};
-            }
-            const auto callChain = _pp.macroChain(call);
-            for (const Macro* macro : _pp.macroChain(value.front())) {
+        // The object-like macro the value was written as: the outermost macro the value came out of
+        // that the call itself did not (set_self_ai, set_ai, ...).
+        std::string valueMacro(const Expr& call, const Expr& value) const {
+            const auto callChain = _unit.macroChain(call.range);
+            for (const Macro* macro : _unit.macroChain(value.range)) {
                 if (!macro->functionLike && std::ranges::find(callChain, macro) == callChain.end()) {
                     return std::string(macro->name);
                 }
@@ -202,19 +120,18 @@ namespace {
             return {};
         }
 
-        Preprocessor& _pp;
-        const std::vector<Token>& _tokens;
+        const ScriptUnit& _unit;
     };
 
-    std::map<int, std::string> localVarNames(Preprocessor& pp, FileId script) {
+    std::map<int, std::string> localVarNames(const ScriptUnit& unit) {
         std::map<int, std::string> fromHeaders;
         std::map<int, std::string> fromScript;
-        for (const Macro& macro : pp.definitions()) {
+        for (const Macro& macro : unit.preprocessor().definitions()) {
             if (macro.functionLike || !macro.name.starts_with("LVAR_")) {
                 continue;
             }
-            if (const auto index = pp.evaluate(macro); index.has_value()) {
-                auto& names = macro.location.file == script ? fromScript : fromHeaders;
+            if (const auto index = unit.evaluate(macro); index.has_value()) {
+                auto& names = macro.location.file == unit.scriptFile() ? fromScript : fromHeaders;
                 names.insert_or_assign(static_cast<int>(*index), std::string(macro.name));
             }
         }
@@ -228,22 +145,22 @@ bool ScriptFacts::assigns(Override::Field field) const {
     return std::ranges::any_of(overrides, [field](const Override& o) { return o.field == field; });
 }
 
-ScriptFacts inspectScript(const SourceProvider& provider, const std::filesystem::path& path, const PreprocessOptions& options) {
-    SourceManager sources(provider);
-    Preprocessor pp(sources, options);
-    const std::vector<Token> tokens = pp.run(path);
-
+ScriptFacts readFacts(const ScriptUnit& unit) {
     ScriptFacts facts;
-    facts.overrides = FactsReader(pp, tokens).overrides();
-    if (const auto script = sources.load(path); script.has_value()) {
-        facts.script = sources.path(*script);
-        facts.localVarNames = localVarNames(pp, *script);
+    if (const auto script = unit.scriptFile(); script.has_value()) {
+        facts.script = unit.sources().path(*script);
     }
-    for (const Diagnostic& d : pp.diagnostics()) {
-        const std::string file = d.location.file != 0 ? sources.path(d.location.file).generic_string() : path.generic_string();
+    facts.overrides = FactsReader(unit).overrides();
+    facts.localVarNames = localVarNames(unit);
+    for (const Diagnostic& d : unit.diagnostics()) {
+        const std::string file = d.location.file != 0 ? unit.sources().path(d.location.file).generic_string() : facts.script.generic_string();
         facts.problems.push_back(std::format("{}:{}: {}", file, d.location.line, d.message));
     }
     return facts;
+}
+
+ScriptFacts inspectScript(const SourceProvider& provider, const std::filesystem::path& path, const PreprocessOptions& options) {
+    return readFacts(ScriptUnit::read(provider, path, options));
 }
 
 } // namespace geck::ssl

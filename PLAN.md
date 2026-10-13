@@ -11,7 +11,7 @@
 
 ## What's next (priority order)
 
-1. **SSL script analysis** — phase 2 (parser) next; see its section.
+1. **SSL script analysis** — phase 3 (passes, index, MCP tools) next; see its section.
 2. **Cave rim quality** — the known-issues list below; highest-value generation work.
 3. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
 4. **SSL script editing** — open question: whether an in-app editor is still wanted now that
@@ -213,17 +213,20 @@ ad-hoc scanners: `cli/GvarRefs` (line-based, `//` only) and the raw text in `cli
 **Shape** — `src/ssl/`, namespace `geck::ssl`, in `vault` (no Qt; JSON stays in `cli/`):
 
 ```
-SourceProvider -> lex -> Preprocessor -> [Parser -> AST] -> analysis passes -> ScriptFacts
+SourceProvider -> lex -> Preprocessor -> Parser -> AST (ScriptUnit) -> analysis passes -> ScriptFacts
 .int -> IntDisassembler ------------------------------------------------------> ScriptFacts (subset)
 ScriptIndex: corpus-level, lazily parsed, cached by (path, mtime, size); queried by editor/CLI/MCP
 ```
 
 Built: `Source` (providers: disk with case-insensitive fallback, memory; `resource/VfsSourceProvider`
 for the VFS), `Lexer`, `Preprocessor` (includes incl. `#include MACRO`, `#`/`##`/`__VA_ARGS__`,
-conditionals, hide sets, per-token expansion chain, constant evaluation), `ScriptFacts` (self
-team/AI writes with values, LVAR names incl. headers). `Lst::localVars()` keeps `local_vars=N`.
-Corpus check: `GECK_SSL_CORPUS=<scripts_src> general_tests "[.corpus]"` — all 1538 RP scripts
-preprocess with no diagnostics (~8 ms each, Debug).
+conditionals, hide sets, per-token expansion chain, constant evaluation), `Parser` + `Ast`
+(sslc's grammar incl. sfall for/foreach/switch/arrays/`a if c else b`, `=` as assignment, error
+recovery), `ScriptUnit` (owns sources, tokens, tree), `AstWalk`, `ScriptFacts` (self team/AI writes
+with values, read from the tree; LVAR names incl. headers). `Lst::localVars()` keeps `local_vars=N`.
+Corpus check: `GECK_SSL_CORPUS=<scripts_src> GECK_SSL_COMPILED=<data/scripts> general_tests "[.corpus]"`
+— all 1513 compiled RP scripts preprocess and parse with no diagnostics, and every procedure in each
+`.int` is found with its argument count (~8 ms per script, Debug).
 
 **Rules**
 - sslc (`../sslc`: `lex.c`, `parse.c`, `parseext.c`, `mcpp_*.c`) defines SSL the way fallout2-ce
@@ -238,17 +241,13 @@ preprocess with no diagnostics (~8 ms each, Debug).
 (`scripts.cc` `scriptsListLoad`) counts every line of scripts.lst as an index. The shipped and RP
 files have none, so indices agree today; a modded scripts.lst with one would shift every later script.
 
-**Phase 2 — parser:** recursive descent after sslc's grammar (`procedure`, `variable`/`import`/
-`export`, `if`/`while`/`for`/`foreach`/`switch`, `call`, `return`, assignments, sslc precedence);
-error recovery at `end` / `;` / `procedure`; AST as a closed `std::variant` set. Opt-in corpus test:
-all 1538 RP scripts parse with zero errors, and each script's procedure names/count equal its
-compiled `.int` (via `IntDisassembler`).
-
 **Phase 3 — passes + index + MCP:** `IScriptAnalysis` registry; passes `LocalVars` (incl. use past the
 `scripts.lst` count — the engine bounds-checks only the whole map array, `map.cc` `mapGetLocalVar`),
 `GlobalVarRefs`, `SelfTraitWrites`, `Handlers`/call graph, `MessageRefs`, `ObjectRefs`. `ScriptIndex`.
 MCP: `describe_script analyze:true`; new `script_refs` (gvar/lvar/macro/procedure/pid/script);
 `find_gvar` kept as an alias on top of it; new `lint_script`. Performance budget in `performance_tests`.
+With the call graph, tighten the corpus check to "exactly the .int's procedures": sslc drops the ones
+nothing calls (most shared header helpers), so today it only checks .int ⊆ parsed.
 
 **Phase 4 — editor + bytecode parity:** resolved values and diagnostics in the Script section and the
 Scripts panel; the `.int` front end fills `ScriptFacts` as far as bytecode allows.
