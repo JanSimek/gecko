@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <charconv>
 
 namespace geck::ssl {
 
@@ -194,6 +195,26 @@ namespace {
     };
 
 } // namespace
+
+std::optional<int64_t> integerValue(std::string_view text) {
+    while (!text.empty() && (text.back() == 'u' || text.back() == 'U' || text.back() == 'l' || text.back() == 'L')) {
+        text.remove_suffix(1);
+    }
+    int base = 10;
+    if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) {
+        base = 16;
+        text.remove_prefix(2);
+    } else if (text.size() > 1 && text[0] == '0') {
+        base = 8;
+        text.remove_prefix(1);
+    }
+    int64_t value = 0;
+    const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), value, base);
+    if (ec != std::errc() || end != text.data() + text.size()) {
+        return std::nullopt;
+    }
+    return value;
+}
 
 std::vector<Token> lex(std::string_view text, FileId file, std::vector<Diagnostic>& diagnostics) {
     return Scanner(text, file, diagnostics).run();

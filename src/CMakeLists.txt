@@ -300,6 +300,13 @@ add_library(vault STATIC
     ssl/Lexer.cpp
     ssl/Preprocessor.h
     ssl/Preprocessor.cpp
+    ssl/Ast.h
+    ssl/AstWalk.h
+    ssl/AstWalk.cpp
+    ssl/Parser.h
+    ssl/Parser.cpp
+    ssl/ScriptUnit.h
+    ssl/ScriptUnit.cpp
     ssl/ScriptFacts.h
     ssl/ScriptFacts.cpp
 

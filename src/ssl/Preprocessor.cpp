@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <charconv>
 #include <format>
 #include <utility>
 
@@ -21,26 +20,6 @@ namespace {
         token.kind = TokenKind::Number;
         token.text = value != 0 ? "1" : "0";
         return token;
-    }
-
-    std::optional<int64_t> parseInteger(std::string_view text) {
-        while (!text.empty() && (text.back() == 'u' || text.back() == 'U' || text.back() == 'l' || text.back() == 'L')) {
-            text.remove_suffix(1);
-        }
-        int base = 10;
-        if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) {
-            base = 16;
-            text.remove_prefix(2);
-        } else if (text.size() > 1 && text[0] == '0') {
-            base = 8;
-            text.remove_prefix(1);
-        }
-        int64_t value = 0;
-        const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), value, base);
-        if (ec != std::errc() || end != text.data() + text.size()) {
-            return std::nullopt;
-        }
-        return value;
     }
 
     using Value = std::optional<int64_t>;
@@ -164,7 +143,7 @@ namespace {
             }
             const Token& token = _tokens[_pos++];
             if (token.kind == TokenKind::Number) {
-                return parseInteger(token.text);
+                return integerValue(token.text);
             }
             if (token.kind == TokenKind::Identifier && _identifiersAreZero) {
                 return 0;

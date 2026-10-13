@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "ssl/Preprocessor.h"
+#include "ssl/ScriptUnit.h"
 
 namespace geck::ssl {
 
@@ -43,6 +43,9 @@ struct ScriptFacts {
 
     bool assigns(Override::Field field) const;
 };
+
+/// The facts above, read from an already parsed script.
+ScriptFacts readFacts(const ScriptUnit& unit);
 
 /// Preprocess the script at `path` (following its #includes through `provider`) and read the facts
 /// above out of the result. Calls are matched after macro expansion, so any macro spelling of the
