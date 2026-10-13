@@ -40,8 +40,35 @@ namespace {
         }
         line.audio = raw.substr(o1 + 1, c1 - o1 - 1);
         line.text = raw.substr(o2 + 1, c2 - o2 - 1);
+        std::erase(line.text, '\n'); // a text that runs over several lines: the engine drops the breaks
         line.inlineComment = raw.substr(c2 + 1); // the trailing "  # ..." (incl. leading ws), or ""
         return true;
+    }
+
+    // The engine reads a field up to its closing '}' whatever lines it spans (message.cc
+    // _message_load_field), so a message whose text runs over several lines is one message. When the
+    // message starting at `first` is not complete on its line, join the following lines until it is
+    // and parse that into `line` (raw keeps the line breaks, so it round-trips). Returns the last line
+    // used, or `first` when no later line completes it.
+    std::size_t continuation(const std::vector<std::string>& rawLines, std::size_t first, MsgLine& line) {
+        if (trim(rawLines[first]).front() != '{') {
+            return first;
+        }
+        std::string joined = rawLines[first];
+        for (std::size_t i = first + 1; i < rawLines.size(); ++i) {
+            joined += '\n';
+            joined += rawLines[i];
+            if (rawLines[i].find('}') == std::string::npos) {
+                continue;
+            }
+            MsgLine candidate;
+            if (parseMessage(joined, candidate)) {
+                candidate.raw = std::move(joined);
+                line = std::move(candidate);
+                return i;
+            }
+        }
+        return first;
     }
 
 } // namespace
@@ -52,14 +79,17 @@ Msg parseMsg(const std::filesystem::path& path, const std::string& content) {
 
     std::vector<MsgLine> lines;
     lines.reserve(rawLines.size());
-    for (const std::string& raw : rawLines) {
+    for (std::size_t i = 0; i < rawLines.size(); ++i) {
         MsgLine line;
-        line.raw = raw;
-        const std::string trimmed = trim(raw);
+        line.raw = rawLines[i];
+        const std::string trimmed = trim(rawLines[i]);
         if (trimmed.empty()) {
             line.kind = MsgLine::Kind::Blank;
-        } else if (trimmed.front() == '{' && parseMessage(raw, line)) {
+        } else if (trimmed.front() == '{' && parseMessage(line.raw, line)) {
             line.kind = MsgLine::Kind::Message;
+        } else if (const std::size_t last = continuation(rawLines, i, line); last != i) {
+            line.kind = MsgLine::Kind::Message;
+            i = last;
         } else {
             line.kind = MsgLine::Kind::Comment; // '#' comment or any non-message line, kept verbatim
         }

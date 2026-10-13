@@ -55,3 +55,14 @@ TEST_CASE("Msg::setMessageText updates (keeping audio + comment) or appends", "[
     CHECK(out.find("# Map Names\n") != std::string::npos);
     CHECK(msg.message(500).text == "Brand New");
 }
+
+TEST_CASE("Msg round-trips a message whose text runs over several lines", "[msg_roundtrip]") {
+    const std::string wrapped = "{160}{}{One line.}\n"
+                                "{161}{}{Talk to Mynoc, the guardian of the\n"
+                                " caravans.}  # trailing comment\n"
+                                "{162}{}{Next.}\n";
+    const Msg msg = parseMsg("wrapped.msg", wrapped);
+
+    CHECK(msg.getMessages().at(161).text == "Talk to Mynoc, the guardian of the caravans.");
+    CHECK(writer::serializeMsg(msg) == wrapped);
+}
