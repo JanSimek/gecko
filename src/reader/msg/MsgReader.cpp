@@ -40,7 +40,7 @@ namespace {
         }
         line.audio = raw.substr(o1 + 1, c1 - o1 - 1);
         line.text = raw.substr(o2 + 1, c2 - o2 - 1);
-        std::erase(line.text, '\n'); // a text that runs over several lines: the engine drops the breaks
+        std::erase(line.text, '\n');             // a text that runs over several lines: the engine drops the breaks
         line.inlineComment = raw.substr(c2 + 1); // the trailing "  # ..." (incl. leading ws), or ""
         return true;
     }
