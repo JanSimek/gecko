@@ -3,8 +3,28 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdlib>
+#include <optional>
+#include <string>
 
 namespace geck::test {
+
+/// The value of environment variable `name`, or nullopt when unset. MSVC rejects std::getenv as
+/// unsafe (C4996, an error under /WX), so Windows reads it through _dupenv_s.
+inline std::optional<std::string> environmentVariable(const char* name) {
+#ifdef _WIN32
+    char* value = nullptr;
+    size_t len = 0;
+    if (_dupenv_s(&value, &len, name) != 0 || value == nullptr) {
+        return std::nullopt;
+    }
+    std::string copy(value);
+    free(value);
+    return copy;
+#else
+    const char* value = std::getenv(name);
+    return value != nullptr ? std::optional<std::string>(value) : std::nullopt;
+#endif
+}
 
 /// True when running under a headless CI environment (CI or GITHUB_ACTIONS set),
 /// where tests that need a graphics context (texture/sprite creation, spatial

@@ -23,7 +23,6 @@ struct MapObject;
 struct MapScript;
 namespace resource {
     class GameResources;
-    struct ScriptSourceFacts;
 }
 
 /// The Selection panel's script section for one object: an inline searchable picker (choosing a
@@ -58,7 +57,7 @@ private:
     void showPickerText();
     void browse();
     void refreshDetails(const MapScript* script, const ScriptSourceService::ScriptStatus& status);
-    void refreshLocalVariables(const MapScript* script, const resource::ScriptSourceFacts& facts);
+    void refreshLocalVariables(const MapScript* script, const ssl::ScriptFacts& facts);
     const MapScript* attachedScript() const;
     bool isCritter() const;
 

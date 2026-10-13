@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <sstream>
+#include <string_view>
 #include <spdlog/spdlog.h>
 
 #include "format/lst/Lst.h"
@@ -50,6 +52,17 @@ std::string parseComment(const std::string& line) {
     return comment;
 }
 
+// A scripts.lst entry's local variable count, read as fallout2-ce scripts.cc does: when the line has a
+// '#', the number after "local_vars=" (atoi, so trailing text is ignored); otherwise 0.
+int parseLocalVars(const std::string& line) {
+    constexpr std::string_view KEY = "local_vars=";
+    if (line.find('#') == std::string::npos) {
+        return 0;
+    }
+    const auto at = line.find(KEY);
+    return at == std::string::npos ? 0 : std::atoi(line.c_str() + at + KEY.size());
+}
+
 std::unique_ptr<Lst> LstReader::read() {
     try {
         auto& utils = getBinaryUtils();
@@ -65,6 +78,7 @@ std::unique_ptr<Lst> LstReader::read() {
 
         std::vector<std::string> list;
         std::vector<std::string> comments;
+        std::vector<int> localVars;
         int lines_processed = 0;
         int valid_entries = 0;
 
@@ -89,6 +103,7 @@ std::unique_ptr<Lst> LstReader::read() {
                 if (!parsed_line.empty()) {
                     list.push_back(parsed_line);
                     comments.push_back(parseComment(line)); // line is the raw text; parseLine took a copy
+                    localVars.push_back(parseLocalVars(line));
                     valid_entries++;
 
                     spdlog::trace("LST entry {}: '{}'", valid_entries, parsed_line);
@@ -102,6 +117,7 @@ std::unique_ptr<Lst> LstReader::read() {
         auto lst = std::make_unique<Lst>(_path);
         lst->setList(list);
         lst->setComments(comments);
+        lst->setLocalVars(localVars);
         return lst;
 
     } catch (const FileReaderException&) {

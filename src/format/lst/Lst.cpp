@@ -18,6 +18,14 @@ const std::vector<std::string>& Lst::comments() const {
     return _comments;
 }
 
+void Lst::setLocalVars(const std::vector<int>& localVars) {
+    _localVars = localVars;
+}
+
+const std::vector<int>& Lst::localVars() const {
+    return _localVars;
+}
+
 const std::string& Lst::at(int line) const {
     // TODO: check boundaries
     return _list.at(line);
