@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "cli/IntDisassembler.h"
+#include "ssl/CallGraph.h"
 #include "ssl/ScriptFacts.h"
 #include "support/GraphicsTestEnv.h"
 
@@ -37,19 +38,36 @@ std::map<std::string, int, std::less<>> compiledProcedures(const std::filesystem
     return procedures;
 }
 
-// The procedures in a script's .int that the parser did not find with the same argument count.
-std::vector<std::string> missingFromParse(const Program& program, const std::filesystem::path& intFile) {
-    std::map<std::string, int, std::less<>> parsed;
+struct ProcedureDiff {
+    std::vector<std::string> onlyParsed;    // kept by the call graph, not in the .int
+    std::vector<std::string> onlyCompiled;  // in the .int, not kept by the call graph
+    std::vector<std::string> otherArgCount; // in both, with a different argument count
+};
+
+// How the procedures CallGraph keeps differ from those a compiled .int holds.
+ProcedureDiff compareWithCompiled(const Program& program, const std::filesystem::path& intFile) {
+    const CallGraph graph(program);
+    std::map<std::string, int, std::less<>> kept;
     for (const Procedure& procedure : program.procedures) {
-        parsed.insert_or_assign(lower(procedure.name), static_cast<int>(procedure.parameters.size()));
-    }
-    std::vector<std::string> missing;
-    for (const auto& [name, argCount] : compiledProcedures(intFile)) {
-        if (const auto it = parsed.find(name); it == parsed.end() || it->second != argCount) {
-            missing.push_back(name);
+        if (graph.isLive(procedure.name)) {
+            kept.insert_or_assign(lower(procedure.name), static_cast<int>(procedure.parameters.size()));
         }
     }
-    return missing;
+    const auto compiled = compiledProcedures(intFile);
+    ProcedureDiff diff;
+    for (const auto& [name, argCount] : kept) {
+        if (const auto it = compiled.find(name); it == compiled.end()) {
+            diff.onlyParsed.push_back(name);
+        } else if (it->second != argCount) {
+            diff.otherArgCount.push_back(name);
+        }
+    }
+    for (const auto& [name, argCount] : compiled) {
+        if (!kept.contains(name)) {
+            diff.onlyCompiled.push_back(name);
+        }
+    }
+    return diff;
 }
 
 } // namespace
@@ -60,9 +78,8 @@ std::vector<std::string> missingFromParse(const Program& program, const std::fil
 //   general_tests "[.corpus]"
 // Every script must preprocess and parse without a diagnostic, as sslc compiles them all. With the
 // compiled scripts, only those sslc produced a .int for are held to that (the rest are include-only
-// templates), and every procedure in a script's .int must be one the parser found, with as many
-// parameters. (Not the reverse: sslc drops procedures nothing calls, such as most of the shared
-// header helpers.)
+// templates), and a script's .int must hold exactly the procedures the call graph says sslc keeps,
+// each with as many parameters as the parser found.
 TEST_CASE("Every script in a source tree reads cleanly", "[.corpus][ssl]") {
     const auto root = geck::test::environmentVariable("GECK_SSL_CORPUS");
     if (!root) {
@@ -106,7 +123,10 @@ TEST_CASE("Every script in a source tree reads cleanly", "[.corpus][ssl]") {
         withLocalVarNames += facts.localVarNames.empty() ? 0 : 1;
 
         if (intFile != compiled.end()) {
-            CHECK(missingFromParse(unit.program(), intFile->second) == std::vector<std::string>{});
+            const ProcedureDiff diff = compareWithCompiled(unit.program(), intFile->second);
+            CHECK(diff.onlyParsed == std::vector<std::string>{});
+            CHECK(diff.onlyCompiled == std::vector<std::string>{});
+            CHECK(diff.otherArgCount == std::vector<std::string>{});
             ++compared;
         }
     }

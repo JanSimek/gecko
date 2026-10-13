@@ -1145,11 +1145,14 @@ namespace {
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolEndings(r, a); }, "" });
         t.push_back({ "find_gvar",
-            "Find where a global variable is used in the mounted .ssl / .h script sources: every script "
-            "that reads or writes 'gvar', with line, source text, and kind 'set' (set_global_var — the "
-            "action that advances/gates a quest) or 'get' (a check). Headers are scanned too, since many "
-            "gvars are only touched via macro aliases there (e.g. caravan.h). The causal link: a quest's "
-            "gvar (from quests) -> the scripts that change it -> describe_script for the logic. An empty "
+            "Find where a global variable is used in the mounted .ssl script sources: every read or write "
+            "of 'gvar' in code a compiled script actually runs, as {script, procedure, line, kind, text}, "
+            "with kind 'set' (set_global_var — the action that advances/gates a quest) or 'get' (a check). "
+            "Scripts are preprocessed and parsed, so an access through a header macro alias (e.g. "
+            "caravan.h) is reported in the script that uses it, with 'via' naming the alias and 'file' "
+            "the header when the code is written there; commented-out code, unused macros, procedures "
+            "nothing calls and branches on a constant are left out. The causal link: a quest's gvar "
+            "(from quests) -> the scripts that change it -> describe_script for the logic. An empty "
             "result means the gvar is genuinely unused (not an error). Needs a script-source tree (e.g. "
             "FRP scripts_src) mounted. Args: gvar (the GVAR_* name).",
             json({ { "type", "object" }, { "properties", { { "gvar", { { "type", "string" } } } } }, { "required", json::array({ "gvar" }) } }),

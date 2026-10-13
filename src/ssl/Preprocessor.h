@@ -68,7 +68,8 @@ public:
     std::vector<const Macro*> macroChain(const Token& token) const;
 
     /// Expand `tokens` with the macros defined now and evaluate them as an integer constant expression
-    /// (C operators and precedence). nullopt when an identifier is left or the expression is malformed.
+    /// (C operators and precedence, and sslc's `true` and `false`). nullopt when another name is left
+    /// or the expression is malformed.
     std::optional<int64_t> evaluate(const std::vector<Token>& tokens);
     /// An object-like macro's value as an integer constant expression.
     std::optional<int64_t> evaluate(const Macro& macro);
