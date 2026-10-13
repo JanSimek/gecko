@@ -17,7 +17,7 @@ class ScriptUnit {
 public:
     /// Preprocess and parse the script at `path`, following its #includes through `provider`.
     /// Always returns a unit; what went wrong is in diagnostics().
-    static ScriptUnit read(const SourceProvider& provider, const std::filesystem::path& path, const PreprocessOptions& options = {});
+    static ScriptUnit load(const SourceProvider& provider, const std::filesystem::path& path, const PreprocessOptions& options = {});
 
     const Program& program() const { return _program; }
     const std::vector<Token>& tokens() const { return _tokens; }

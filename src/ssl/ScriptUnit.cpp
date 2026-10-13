@@ -4,7 +4,7 @@
 
 namespace geck::ssl {
 
-ScriptUnit ScriptUnit::read(const SourceProvider& provider, const std::filesystem::path& path, const PreprocessOptions& options) {
+ScriptUnit ScriptUnit::load(const SourceProvider& provider, const std::filesystem::path& path, const PreprocessOptions& options) {
     ScriptUnit unit;
     unit._sources = std::make_unique<SourceManager>(provider);
     unit._preprocessor = std::make_unique<Preprocessor>(*unit._sources, options);

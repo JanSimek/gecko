@@ -79,7 +79,7 @@ TEST_CASE("Every script in a source tree reads cleanly", "[.corpus][ssl]") {
             continue;
         }
         ++scripts;
-        const ScriptUnit unit = ScriptUnit::read(provider, entry.path());
+        const ScriptUnit unit = ScriptUnit::load(provider, entry.path());
         const ScriptFacts facts = readFacts(unit);
         INFO(entry.path().string());
         for (const auto& problem : facts.problems) {

@@ -9,10 +9,10 @@ using namespace geck::ssl;
 
 namespace {
 
-ScriptUnit read(const std::string& text) {
+ScriptUnit parseText(const std::string& text) {
     MemorySourceProvider files;
     files.add("script.ssl", text);
-    return ScriptUnit::read(files, "script.ssl");
+    return ScriptUnit::load(files, "script.ssl");
 }
 
 // An expression as a fully parenthesised string, to check how it was grouped.
@@ -65,7 +65,7 @@ std::string show(const Expr& expr) {
 
 // The expression `x := <text>;` assigns, inside a procedure.
 std::string grouping(const std::string& text) {
-    const ScriptUnit unit = read("procedure p begin x := " + text + "; end");
+    const ScriptUnit unit = parseText("procedure p begin x := " + text + "; end");
     REQUIRE(unit.diagnostics().empty());
     const auto& statement = unit.program().procedures.at(0).body->statements.at(0);
     return show(*std::get<Assignment>(statement->node).value);
@@ -87,7 +87,7 @@ TEST_CASE("Parser groups operators with sslc's precedence", "[ssl][parser]") {
 }
 
 TEST_CASE("Parser reads declarations: procedures, forward declarations, variables, imports", "[ssl][parser]") {
-    const ScriptUnit unit = read(R"ssl(
+    const ScriptUnit unit = parseText(R"ssl(
 variable counter := 0;
 variable begin first; second := 2; end
 import variable shared_list;
@@ -121,7 +121,7 @@ end
 }
 
 TEST_CASE("Parser reads every statement form", "[ssl][parser]") {
-    const ScriptUnit unit = read(R"ssl(
+    const ScriptUnit unit = parseText(R"ssl(
 procedure p begin
    if (a) then b := 1; else begin c += 2; end
    while (i < 10) do i++;
@@ -166,7 +166,7 @@ end
 }
 
 TEST_CASE("Parser reports a syntax error where it was written and reads on", "[ssl][parser]") {
-    const ScriptUnit unit = read(R"ssl(
+    const ScriptUnit unit = parseText(R"ssl(
 procedure broken begin
    x := ;
    y := 2;
@@ -184,7 +184,7 @@ end
 }
 
 TEST_CASE("Parser locates code a macro wrote at the line that used the macro", "[ssl][parser]") {
-    const ScriptUnit unit = read("#define give(x) give_exp_points(x)\n#define REWARD (100)\nprocedure p begin\n   give(REWARD);\nend\n");
+    const ScriptUnit unit = parseText("#define give(x) give_exp_points(x)\n#define REWARD (100)\nprocedure p begin\n   give(REWARD);\nend\n");
     REQUIRE(unit.diagnostics().empty());
     const auto& statement = *unit.program().procedures.at(0).body->statements.at(0);
     const Expr& call = *std::get<ExpressionStatement>(statement.node).expression;
@@ -194,7 +194,7 @@ TEST_CASE("Parser locates code a macro wrote at the line that used the macro", "
 }
 
 TEST_CASE("forEachExpression visits nested expressions and statements", "[ssl][parser]") {
-    const ScriptUnit unit = read(R"ssl(
+    const ScriptUnit unit = parseText(R"ssl(
 procedure p begin
    if (a(1)) then begin
       while (b) do c(d(2));
