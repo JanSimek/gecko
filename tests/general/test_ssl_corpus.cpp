@@ -25,16 +25,31 @@ std::string lower(std::string text) {
 
 // The procedures a compiled script's procedure table holds, lowercased name -> argument count,
 // without the placeholder entry ("..............") sslc puts first.
-std::map<std::string, int> compiledProcedures(const std::filesystem::path& file) {
+std::map<std::string, int, std::less<>> compiledProcedures(const std::filesystem::path& file) {
     std::ifstream in(file, std::ios::binary);
     const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    std::map<std::string, int> procedures;
+    std::map<std::string, int, std::less<>> procedures;
     for (const auto& procedure : geck::cli::disassembleInt(bytes).procedures) {
         if (!procedure.name.starts_with('.')) {
             procedures.try_emplace(lower(procedure.name), procedure.argCount);
         }
     }
     return procedures;
+}
+
+// The procedures in a script's .int that the parser did not find with the same argument count.
+std::vector<std::string> missingFromParse(const Program& program, const std::filesystem::path& intFile) {
+    std::map<std::string, int, std::less<>> parsed;
+    for (const Procedure& procedure : program.procedures) {
+        parsed.insert_or_assign(lower(procedure.name), static_cast<int>(procedure.parameters.size()));
+    }
+    std::vector<std::string> missing;
+    for (const auto& [name, argCount] : compiledProcedures(intFile)) {
+        if (const auto it = parsed.find(name); it == parsed.end() || it->second != argCount) {
+            missing.push_back(name);
+        }
+    }
+    return missing;
 }
 
 } // namespace
@@ -54,7 +69,7 @@ TEST_CASE("Every script in a source tree reads cleanly", "[.corpus][ssl]") {
         SKIP("GECK_SSL_CORPUS is not set");
     }
     const auto compiledDir = geck::test::environmentVariable("GECK_SSL_COMPILED");
-    std::map<std::string, std::filesystem::path> compiled;
+    std::map<std::string, std::filesystem::path, std::less<>> compiled;
     if (compiledDir) {
         for (const auto& entry : std::filesystem::directory_iterator(*compiledDir)) {
             if (lower(entry.path().extension().string()) == ".int") {
@@ -91,18 +106,7 @@ TEST_CASE("Every script in a source tree reads cleanly", "[.corpus][ssl]") {
         withLocalVarNames += facts.localVarNames.empty() ? 0 : 1;
 
         if (intFile != compiled.end()) {
-            std::map<std::string, int> parsed;
-            for (const Procedure& procedure : unit.program().procedures) {
-                parsed.insert_or_assign(lower(procedure.name), static_cast<int>(procedure.parameters.size()));
-            }
-            std::vector<std::string> mismatched;
-            for (const auto& [name, argCount] : compiledProcedures(intFile->second)) {
-                const auto it = parsed.find(name);
-                if (it == parsed.end() || it->second != argCount) {
-                    mismatched.push_back(name);
-                }
-            }
-            CHECK(mismatched.empty());
+            CHECK(missingFromParse(unit.program(), intFile->second) == std::vector<std::string>{});
             ++compared;
         }
     }

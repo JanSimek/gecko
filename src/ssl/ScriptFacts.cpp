@@ -22,7 +22,7 @@ namespace {
         return std::ranges::equal(a, b, [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
     }
 
-    bool isName(const ExprPtr& expr, std::string_view name) {
+    bool isName(const Expr* expr, std::string_view name) {
         const auto* node = expr ? std::get_if<Name>(&expr->node) : nullptr;
         return node != nullptr && sameName(node->name, name);
     }
@@ -38,7 +38,7 @@ namespace {
                 if (!procedure.body.has_value()) {
                     continue;
                 }
-                forEachExpression(*procedure.body, [&](const Expr& expr) {
+                forEachExpression(*procedure.body, [this, &found, &procedure](const Expr& expr) {
                     const auto* call = std::get_if<Call>(&expr.node);
                     if (auto write = call ? selfTraitWrite(expr, *call) : std::nullopt; write.has_value()) {
                         write->procedure = procedure.name;
@@ -54,23 +54,24 @@ namespace {
         // critter_add_trait after expansion; the command.h aliases are recognised by name only when they
         // survived preprocessing undefined (command.h not found), so a missing header still reports.
         std::optional<ScriptFacts::Override> selfTraitWrite(const Expr& expr, const Call& call) const {
+            using enum ScriptFacts::Override::Field;
             const auto& args = call.args;
             std::optional<Field> field;
             const Expr* value = nullptr;
-            if (sameName(call.callee, "critter_add_trait") && args.size() == 4 && isName(args[0], "self_obj")
+            if (sameName(call.callee, "critter_add_trait") && args.size() == 4 && isName(args[0].get(), "self_obj")
                 && constant(*args[1]) == TRAIT_OBJECT) {
                 if (const auto selector = constant(*args[2]); selector == TRAIT_OBJECT_AI_PACKET) {
-                    field = Field::AiPacket;
+                    field = AiPacket;
                 } else if (selector == TRAIT_OBJECT_TEAM) {
-                    field = Field::Team;
+                    field = Team;
                 }
                 value = args[3].get();
             } else if ((sameName(call.callee, "set_self_ai") || sameName(call.callee, "set_self_team")) && args.size() == 1) {
-                field = sameName(call.callee, "set_self_ai") ? Field::AiPacket : Field::Team;
+                field = sameName(call.callee, "set_self_ai") ? AiPacket : Team;
                 value = args[0].get();
             } else if ((sameName(call.callee, "set_ai") || sameName(call.callee, "set_team")) && args.size() == 2
-                && isName(args[0], "self_obj")) {
-                field = sameName(call.callee, "set_ai") ? Field::AiPacket : Field::Team;
+                && isName(args[0].get(), "self_obj")) {
+                field = sameName(call.callee, "set_ai") ? AiPacket : Team;
                 value = args[1].get();
             }
             if (!field.has_value() || value == nullptr) {

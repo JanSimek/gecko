@@ -31,12 +31,17 @@ namespace {
     std::string unescape(std::string_view quoted) {
         const std::string_view text = quoted.size() >= 2 ? quoted.substr(1, quoted.size() - 2) : std::string_view{};
         std::string out;
-        for (std::size_t i = 0; i < text.size(); ++i) {
-            if (text[i] != '\\' || i + 1 == text.size()) {
-                out += text[i];
+        bool escaped = false;
+        for (const char c : text) {
+            if (!escaped) {
+                escaped = c == '\\';
+                if (!escaped) {
+                    out += c;
+                }
                 continue;
             }
-            switch (const char c = text[++i]; c) {
+            escaped = false;
+            switch (c) {
                 case 'a':
                     out += '\a';
                     break;
@@ -60,6 +65,9 @@ namespace {
                     out += c;
                     break;
             }
+        }
+        if (escaped) {
+            out += '\\'; // a lone backslash at the end stays
         }
         return out;
     }
@@ -207,9 +215,9 @@ namespace {
         void skipToDeclaration() {
             while (!atEnd()) {
                 const Token& token = peek();
-                const bool declaration = isKeyword(token, "procedure") || isKeyword(token, "variable") || isKeyword(token, "import")
-                    || isKeyword(token, "export") || isKeyword(token, "critical") || isKeyword(token, "pure") || isKeyword(token, "inline");
-                if (declaration && token.atLineStart) {
+                if (const bool declaration = isKeyword(token, "procedure") || isKeyword(token, "variable") || isKeyword(token, "import")
+                        || isKeyword(token, "export") || isKeyword(token, "critical") || isKeyword(token, "pure") || isKeyword(token, "inline");
+                    declaration && token.atLineStart) {
                     return;
                 }
                 ++_pos;
@@ -223,7 +231,7 @@ namespace {
                 return;
             }
             if (acceptKeyword("variable")) {
-                program.variables.push_back({ Linkage::Local, variables(true) });
+                program.variables.emplace_back(Linkage::Local, variables(true));
                 return;
             }
             if (isKeyword(peek(), "import") || isKeyword(peek(), "export")) {
@@ -244,7 +252,7 @@ namespace {
             const Linkage linkage = isKeyword(peek(), "import") ? Linkage::Import : Linkage::Export;
             ++_pos; // the import or export keyword
             if (acceptKeyword("variable")) {
-                program.variables.push_back({ linkage, variables(true) });
+                program.variables.emplace_back(linkage, variables(true));
                 return;
             }
             if (!expectKeyword("procedure")) {
@@ -408,8 +416,7 @@ namespace {
 
         StmtPtr statement(bool requireSemicolon) {
             const std::size_t begin = _pos;
-            const Token& token = peek();
-            if (token.is(";")) {
+            if (peek().is(";")) {
                 ++_pos;
                 return makeStmt(Empty{}, begin, _pos);
             }
@@ -864,7 +871,7 @@ namespace {
 
 const Procedure* Program::definition(std::string_view name) const {
     const auto it = std::ranges::find_if(procedures, [name](const Procedure& p) { return p.body.has_value() && equalsIgnoreCase(p.name, name); });
-    return it == procedures.end() ? nullptr : &*it;
+    return it == procedures.end() ? nullptr : std::to_address(it);
 }
 
 Program parse(const std::vector<Token>& tokens, const Preprocessor& preprocessor, std::vector<Diagnostic>& diagnostics) {
