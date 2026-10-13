@@ -11,7 +11,7 @@
 
 ## What's next (priority order)
 
-1. **SSL script analysis** — rest of phase 3 (index, MCP tools) next; see its section.
+1. **SSL script analysis** — phase 4 (editor + bytecode parity) next; see its section.
 2. **Cave rim quality** — the known-issues list below; highest-value generation work.
 3. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
 4. **SSL script editing** — open question: whether an in-app editor is still wanted now that
@@ -245,12 +245,17 @@ in ~1.7 s on all cores).
 (`scripts.cc` `scriptsListLoad`) counts every line of scripts.lst as an index. The shipped and RP
 files have none, so indices agree today; a modded scripts.lst with one would shift every later script.
 
-**Phase 3 (rest) — index + MCP:** passes `MessageRefs` (`mstr`/`NOption`/`display_msg` vs the .msg),
-`ObjectRefs` (`create_object_sid`, `load_map`); local-variable use past the `scripts.lst` count (the
-engine bounds-checks only the whole map array, `map.cc` `mapGetLocalVar`) from `localVariableRefs`.
-`ScriptIndex` (cached across MCP calls). MCP: `describe_script analyze:true`; new `script_refs`
-(gvar/lvar/macro/procedure/pid/script) with `find_gvar` on top; new `lint_script`. Performance budget
-in `performance_tests`.
+**Built on it (CLI + MCP):** `find_gvar`, `script_refs` (gvar/call/procedure/macro), `lint_script`
+(local-vars past `scripts.lst`, missing dialog messages, syntax; unused procedures as notes; `--all`),
+`describe_script analyze`. `ssl/MessageRefs` lists message uses. On the RP tree the lint's errors are
+real bugs, e.g. `eastereg` `local_var(JOTISZ_TILE)` (a tile number as a variable number), `nibasdor`
+LVAR 6 with `local_vars=6`, `epas5` offering `epas1` messages 104/105 that `epas1.msg` lacks.
+
+**Not built, on purpose:** a `ScriptIndex` cache. Every query re-parses the tree in ~2 s on all cores,
+and keeping every parsed script would cost gigabytes; build it only when a tool needs faster answers.
+Still open: an `ObjectRefs` pass (`create_object_sid`, `load_map` targets) — `script_refs call` covers
+the lookup for now; the lint reports `template/*.ssl` include-only files that `scripts.lst` names
+(e.g. sprtrp0) as syntax errors, since they don't compile on their own.
 
 **Phase 4 — editor + bytecode parity:** resolved values and diagnostics in the Script section and the
 Scripts panel; the `.int` front end fills `ScriptFacts` as far as bytecode allows.

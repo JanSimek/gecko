@@ -16,6 +16,8 @@
 #include "cli/ProtoExport.h"
 #include "cli/ResourceInspect.h"
 #include "cli/ScriptIntrospect.h"
+#include "cli/ScriptLint.h"
+#include "cli/ScriptRefs.h"
 #include "resource/GameResources.h"
 
 #include <spdlog/spdlog.h>
@@ -44,7 +46,12 @@ struct CliArgs {
     bool endings = false;
     bool findGvar = false;
     bool dumpGrid = false;
+    bool lintScript = false;
+    bool scriptRefs = false;
     std::string findGvarName;
+    geck::cli::LintOptions lint;
+    bool lintNotes = false; // --notes: also for --all, where notes are off by default
+    geck::cli::ScriptRefsOptions refs;
     std::vector<std::string> dataPaths;
     geck::cli::AnalyzeOptions analyze;
     geck::cli::DumpGridOptions dumpOpts;
@@ -100,7 +107,7 @@ void printUsage(const char* program) {
               << "      --include-floor captures the ground; --include-roof captures the roof layer (a\n"
               << "      tent/building roof is tiles, not an object — without it the stamp is topless).\n"
               << "      Feed the .json to generate --stamp.\n"
-              << "  " << program << " map describe-script --index <n> [--locale english]\n"
+              << "  " << program << " map describe-script --index <n> [--locale english] [--analyze]\n"
               << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      Describe a script by its scripts.lst program index (the script_id analyze reports):\n"
               << "      filename, the .ssl source (if a source tree like FRP scripts_src is mounted via\n"
@@ -137,6 +144,14 @@ void printUsage(const char* program) {
               << "      The endgame win-condition table (endgame.txt): each slide's gvar==value, art, narrator.\n"
               << "  " << program << " map find-gvar <GVAR_NAME> --data <dir-or-.dat> [--data <...>]\n"
               << "      Scripts that read/write a global variable (needs an .ssl source tree mounted): set vs get.\n"
+              << "  " << program << " map script-refs <gvar|call|procedure|macro> <NAME> --data <dir-or-.dat> [--data <...>]\n"
+              << "      Every use of a gvar, an opcode or procedure call, a procedure reference or a macro in code\n"
+              << "      the compiled scripts run (needs an .ssl source tree mounted).\n"
+              << "  " << program << " map lint-script <name> | --index <n> | --all [--notes] [--locale english]\n"
+              << "      --data <dir-or-.dat> [--data <...>]\n"
+              << "      Problems the compiler misses: local variables past scripts.lst's count, messages missing\n"
+              << "      from the dialog .msg, unreadable code; with --notes (default for one script), procedures\n"
+              << "      that never run.\n"
               << "  " << program << " frm info <name-or-fid> --data <dir-or-.dat> [--data <...>]\n"
               << "      FRM metadata as JSON: resolvedArtPath, fid, directionCount, framesPerDirection, and a\n"
               << "      per-frame array of {direction,frame,width,height,offsetX,offsetY}. Accepts an art name\n"
@@ -226,7 +241,7 @@ bool isKnownSubcommand(const std::vector<std::string>& args) {
             || args[1] == "describe-script" || args[1] == "reachability" || args[1] == "describe-map"
             || args[1] == "graph" || args[1] == "world" || args[1] == "encounters"
             || args[1] == "gvars" || args[1] == "quests" || args[1] == "endings" || args[1] == "find-gvar"
-            || args[1] == "dump-grid");
+            || args[1] == "dump-grid" || args[1] == "lint-script" || args[1] == "script-refs");
 }
 
 bool generateMissingRequired(const CliArgs& cli) {
@@ -271,6 +286,33 @@ bool parsePids(const std::string& csv, std::vector<std::uint32_t>& out, const ch
 // Consume the argument(s) starting at args[i]. Returns how many tokens were consumed (1 for a
 // flag-less map/positional, 2 for a flag + its value), or 0 on error (after printing the reason).
 // Keeping the token count explicit lets the caller advance the index instead of mutating it here.
+// lint-script: --index <n>, --locale <l>, --all, --notes, or the script's name.
+int consumeLintArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out, const char* program) {
+    const std::string& arg = args[i];
+    if (arg == "--index") {
+        return parseIntFlag(arg, args[i + 1], out.lint.programIndex, program) ? 2 : 0;
+    }
+    if (arg == "--locale") {
+        out.lint.locale = args[i + 1];
+        return 2;
+    }
+    if (arg == "--all") {
+        out.lint.all = true;
+        return 1;
+    }
+    if (arg == "--notes") {
+        out.lintNotes = true;
+        return 1;
+    }
+    if (arg.rfind("--", 0) == 0 || !out.lint.name.empty()) {
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
+    out.lint.name = arg;
+    return 1;
+}
+
 int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out, const char* program) {
     const std::string& arg = args[i];
     const bool valueFlag = arg == "--data"
@@ -278,6 +320,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim" || arg == "--crop-hex" || arg == "--crop-extent"))
         || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"))
         || (out.describeScript && (arg == "--index" || arg == "--locale"))
+        || (out.lintScript && (arg == "--index" || arg == "--locale"))
         || (out.world && arg == "--render")
         || (out.reachability && arg == "--map")
         || (out.describeMap && arg == "--map")
@@ -444,6 +487,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.describeScript && arg == "--analyze") {
+        out.desc.analyze = true;
+        return 1;
+    }
     if (out.describeScript && arg == "--index") {
         return parseIntFlag(arg, args[i + 1], out.desc.programIndex, program) ? 2 : 0;
     }
@@ -525,6 +572,18 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.lintScript) {
+        return consumeLintArg(args, i, out, program);
+    }
+    if (out.scriptRefs) { // two positionals: the kind, then the name
+        if (arg.rfind("--", 0) == 0 || !out.refs.name.empty()) {
+            std::cerr << "error: script-refs takes a kind and a name: " << arg << "\n";
+            printUsage(program);
+            return 0;
+        }
+        (out.refs.kind.empty() ? out.refs.kind : out.refs.name) = arg;
+        return 1;
+    }
     if (out.findGvar) { // a single positional: the GVAR_* name to search for
         if (arg.rfind("--", 0) == 0 || !out.findGvarName.empty()) {
             std::cerr << "error: find-gvar takes exactly one GVAR name: " << arg << "\n";
@@ -566,6 +625,8 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     out.endings = args[1] == "endings";
     out.findGvar = args[1] == "find-gvar";
     out.dumpGrid = args[1] == "dump-grid";
+    out.lintScript = args[1] == "lint-script";
+    out.scriptRefs = args[1] == "script-refs";
 
     for (std::size_t i = 2; i < args.size();) {
         const int consumed = consumeArg(args, i, out, program);
@@ -592,6 +653,17 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     }
     if (extractMissingRequired(out)) {
         std::cerr << "error: extract-pattern requires --map, --out and --name\n";
+        printUsage(program);
+        return 2;
+    }
+    if (out.lintScript && !out.lint.all && out.lint.name.empty() && out.lint.programIndex < 0) {
+        std::cerr << "error: lint-script requires a script name, --index <n> or --all\n";
+        printUsage(program);
+        return 2;
+    }
+    out.lint.includeNotes = !out.lint.all || out.lintNotes;
+    if (out.scriptRefs && out.refs.name.empty()) {
+        std::cerr << "error: script-refs requires a kind (gvar, call, procedure, macro) and a name\n";
         printUsage(program);
         return 2;
     }
@@ -927,6 +999,12 @@ int main(int argc, char** argv) {
     }
     if (cli.describeScript) {
         return geck::cli::describeScript(resources, cli.desc, std::cout);
+    }
+    if (cli.lintScript) {
+        return geck::cli::lintScripts(resources, cli.lint, std::cout);
+    }
+    if (cli.scriptRefs) {
+        return geck::cli::findScriptRefs(resources, cli.refs, std::cout);
     }
     if (cli.reachability) {
         return geck::cli::analyzeReachability(resources, cli.reach, std::cout);
