@@ -46,9 +46,10 @@ public:
         bool resolved = false; // scripts.lst names it
         bool compiled = false; // scripts/<name>.int is in the mounted data
         int localVarCount = 0; // the `# local_vars=N` scripts.lst gives it
-        /// What the .ssl source (with its #includes) does; null when no source was found.
+        /// What the .ssl source (with its #includes) does, or without one what the compiled .int shows
+        /// (ScriptReport::fromBytecode); null when neither was found.
         std::shared_ptr<const resource::ScriptReport> report;
-        /// The lint's errors and warnings for it (see resource::ScriptLinter); empty without a source.
+        /// The lint's errors and warnings for it (see resource::ScriptLinter); empty without a report.
         std::vector<resource::ScriptFinding> findings;
     };
     ScriptStatus scriptStatus(int programIndex);

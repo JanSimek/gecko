@@ -155,6 +155,8 @@ void printUsage(const char* program) {
               << "      timers without a handler, objects created from missing protos or onto impossible hexes,\n"
               << "      unreadable code. --map checks the scripts a map places, and how it places them. With\n"
               << "      --notes (default for one script): procedures that never run, unused local variables.\n"
+              << "      A script without a mounted .ssl source is checked from its compiled .int (fromBytecode),\n"
+              << "      which shows procedures and literal variable and message numbers only.\n"
               << "  " << program << " script lint <file.ssl> [file.ssl ...] [--data <dir-or-.dat> ...] [--notes] [--json]\n"
               << "      The same checks on .ssl files on disk, printed as file:line: severity: message [check];\n"
               << "      exits 1 when any file has an error. --data adds the checks that need game data.\n"

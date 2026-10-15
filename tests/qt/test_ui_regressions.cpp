@@ -60,6 +60,9 @@
 #include "ui/Settings.h"
 #include "ui/panels/MapInfoPanel.h"
 #include "ui/panels/ScriptsPanel.h"
+#include "ui/ExternalEditorLauncher.h"
+#include "ui/ScriptSourceService.h"
+#include "support/CompiledScript.h"
 #include "ui/tools/ExitGridPlacementManager.h"
 #include "format/map/Map.h"
 #include "format/map/MapScript.h"
@@ -101,6 +104,14 @@ public:
     void mount() {
         _resources->clearAllDataPaths();
         _resources->files().addDataPath(_root.path().toStdString());
+    }
+
+    void writeBinaryFile(const QString& relativePath, const std::vector<uint8_t>& bytes) const {
+        const QString fullPath = _root.filePath(relativePath);
+        QDir().mkpath(QFileInfo(fullPath).path());
+        QFile file(fullPath);
+        REQUIRE(file.open(QIODevice::WriteOnly));
+        file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<qint64>(bytes.size()));
     }
 
     void writeGameMessageFile(const QString& relativePath, const QString& contents) {
@@ -1439,6 +1450,30 @@ TEST_CASE("ScriptsPanel marks scripts wrong for where the map places them", "[qt
     CHECK(filenameCell(0)->toolTip().contains("mapscr.ssl line 30: This is a system script"));
     QTRY_VERIFY_WITH_TIMEOUT(filenameCell(1) != nullptr && !filenameCell(1)->toolTip().isEmpty(), 2000);
     CHECK(filenameCell(1)->toolTip().contains("A spatial script without spatial_p_proc"));
+}
+
+// Without an .ssl source the status comes from the compiled .int, so a vanilla install is checked too.
+TEST_CASE("ScriptSourceService checks a script's compiled .int when it has no source", "[qt][scripts]") {
+    removeTestSettings();
+    ResourceDataScope data;
+    data.writeGameMessageFile("scripts/scripts.lst", "two.int ; second # local_vars=0\n");
+    geck::test::ByteWriter code;
+    geck::test::pushInt(code, 0);
+    geck::test::pushInt(code, 1);
+    code.be16(0x80C2); // op_set_local_var: local variable 0, past the 0 scripts.lst gives
+    data.writeBinaryFile("scripts/two.int", geck::test::compiledScript("talk_p_proc", code.data()));
+    data.mount();
+
+    auto settings = std::make_shared<geck::Settings>();
+    geck::ExternalEditorLauncher launcher(data.resources(), settings, nullptr);
+    geck::ScriptSourceService service(data.resources(), settings, launcher, nullptr);
+    const auto status = service.scriptStatus(0);
+    CHECK(status.compiled);
+    REQUIRE(status.report != nullptr);
+    CHECK(status.report->fromBytecode);
+    REQUIRE(status.findings.size() == 1);
+    CHECK(status.findings[0].check == "local-vars");
+    CHECK(status.findings[0].procedure == "talk_p_proc");
 }
 
 // The unified Exit-Grids tool is one checkable button plus a dropdown whose two items ("Draw edge" /

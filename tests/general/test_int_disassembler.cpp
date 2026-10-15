@@ -7,7 +7,7 @@
 #include <string_view>
 #include <vector>
 
-#include "cli/IntDisassembler.h"
+#include "ssl/IntProgram.h"
 
 using namespace geck;
 
@@ -73,7 +73,7 @@ std::vector<uint8_t> buildProgram() {
 TEST_CASE("disassembleInt decodes the procedure table, pushes and global-variable annotations", "[int_disassembler]") {
     const auto bytes = buildProgram();
     const std::vector<std::string> globals{ "GVAR_A", "GVAR_B" };
-    const auto program = cli::disassembleInt(bytes, &globals);
+    const auto program = ssl::disassembleInt(bytes, &globals);
 
     REQUIRE(program.procedures.size() == 1);
     const auto& procedure = program.procedures[0];
@@ -111,14 +111,14 @@ TEST_CASE("disassembleInt names only literal global-variable indices", "[int_dis
     put32(bytes, record + 16, static_cast<int32_t>(body));
 
     const std::vector<std::string> globals{ "GVAR_A", "GVAR_B", "GVAR_C" };
-    const auto program = cli::disassembleInt(bytes, &globals);
+    const auto program = ssl::disassembleInt(bytes, &globals);
     REQUIRE(program.procedures.at(0).code.size() == 4);
     CHECK(program.procedures[0].code[2].name == "OPCODE_ADD");
     CHECK(program.procedures[0].code[3].name == "op_get_global_var");
     CHECK(program.procedures[0].code[3].note.empty());
 
     // Without a dictionary, even a literal index stays unnamed.
-    const auto unnamed = cli::disassembleInt(buildProgram(), nullptr);
+    const auto unnamed = ssl::disassembleInt(buildProgram(), nullptr);
     CHECK(unnamed.procedures.at(0).code.at(1).note.empty());
 }
 
@@ -136,7 +136,7 @@ TEST_CASE("disassembleInt accepts a script without static strings", "[int_disass
     put32(bytes, record, 4);
     put32(bytes, record + 16, static_cast<int32_t>(body));
 
-    const auto program = cli::disassembleInt(bytes);
+    const auto program = ssl::disassembleInt(bytes);
     REQUIRE(program.procedures.at(0).code.size() == 1);
     CHECK(program.procedures[0].code[0].name == "OPCODE_EXIT_PROGRAM");
 }
@@ -162,7 +162,7 @@ TEST_CASE("disassembleInt disassembles a conditional procedure's condition", "[i
     put32(bytes, record + 12, static_cast<int32_t>(condition));
     put32(bytes, record + 16, static_cast<int32_t>(body));
 
-    const auto program = cli::disassembleInt(bytes);
+    const auto program = ssl::disassembleInt(bytes);
     const auto& procedure = program.procedures.at(0);
     REQUIRE(procedure.code.size() == 1);
     CHECK(procedure.code[0].name == "OPCODE_EXIT_PROGRAM");
@@ -175,5 +175,5 @@ TEST_CASE("disassembleInt disassembles a conditional procedure's condition", "[i
 TEST_CASE("disassembleInt rejects tables that point outside the file", "[int_disassembler]") {
     auto bytes = buildProgram();
     bytes.resize(50);
-    CHECK_THROWS_AS(cli::disassembleInt(bytes), std::runtime_error);
+    CHECK_THROWS_AS(ssl::disassembleInt(bytes), std::runtime_error);
 }

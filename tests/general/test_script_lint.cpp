@@ -6,6 +6,10 @@
 #include <functional>
 #include <algorithm>
 #include <map>
+#include <optional>
+#include <utility>
+#include <vector>
+#include <format>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -18,6 +22,8 @@
 #include "format/map/MapScript.h"
 #include "resource/GameResources.h"
 #include "resource/ScriptLint.h"
+#include "ssl/IntProgram.h"
+#include "support/CompiledScript.h"
 
 #ifndef GECK_TEST_TMP_DIR
 #error "GECK_TEST_TMP_DIR must be defined for this test target (see tests/CMakeLists.txt)"
@@ -97,7 +103,7 @@ TEST_CASE("lint_script reports local variables past scripts.lst's count, missing
     fs::remove_all(root);
 }
 
-TEST_CASE("lint_script all=true checks every script with a source and leaves notes out", "[script_lint]") {
+TEST_CASE("lint_script all=true checks every script it can read and leaves notes out", "[script_lint]") {
     const fs::path root = makeTree("script_lint_all");
     cli::LintOptions options;
     options.all = true;
@@ -105,7 +111,8 @@ TEST_CASE("lint_script all=true checks every script with a source and leaves not
     int rc = -1;
     const auto j = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); }, rc);
     REQUIRE(rc == 0);
-    CHECK(j["scripts"] == 1); // two.int has no source
+    CHECK(j["scripts"] == 1); // two.int has neither a source nor a compiled script
+    CHECK(j["unchecked"] == 1);
     CHECK(j["summary"]["errors"] == 3);
     CHECK_FALSE(j["summary"].contains("notes"));
     fs::remove_all(root);
@@ -252,4 +259,123 @@ TEST_CASE("placementFindings checks a script against where the map places it", "
     CHECK(checks(resource::ScriptPlacement::Item) == std::vector<std::string>{ "handlers" });
     CHECK(checks(resource::ScriptPlacement::Spatial) == std::vector<std::string>{ "spatial", "handlers" });
     CHECK(checks(resource::ScriptPlacement::Map) == std::vector<std::string>{ "local-vars", "handlers" });
+}
+
+namespace {
+
+ssl::IntInstruction literal(int32_t value) {
+    ssl::IntInstruction push;
+    push.name = "OPCODE_PUSH";
+    push.literal = value;
+    return push;
+}
+
+ssl::IntInstruction op(const char* name) {
+    ssl::IntInstruction instruction;
+    instruction.name = name;
+    return instruction;
+}
+
+// A compiled one.int (scripts.lst line 1) with sslc's placeholder procedure first.
+ssl::IntProgram compiledOne() {
+    ssl::IntProgram program;
+    program.procedures.push_back({ "..............", 0, 0, 0, 0, 0, {}, {} });
+    ssl::IntProcedure talk{ "talk_p_proc", 0, 0, 0, 0, 0, {}, {} };
+    talk.code = {
+        literal(1),
+        op("op_get_local_var"), // reads 1
+        literal(5),
+        literal(1),
+        op("op_set_local_var"), // sets 5: past the 2 scripts.lst gives
+        literal(0),
+        literal(0),
+        op("op_get_local_var"),
+        literal(1),
+        op("OPCODE_ADD"),       // sets 0 to a computed value:
+        op("op_set_local_var"), // its index is not known
+        literal(1),
+        literal(150),
+        op("op_message_str"), // not in one.msg
+        literal(1),
+        op("OPCODE_PUSH"),
+        op("op_gsay_reply"), // a string: not a message number
+        literal(7),
+        op("op_get_global_var"),
+    };
+    program.procedures.push_back(std::move(talk));
+    return program;
+}
+
+} // namespace
+
+TEST_CASE("reportInt reads a compiled script's procedures and literal variable and message uses", "[script_lint]") {
+    const resource::ScriptReport report = resource::reportInt(compiledOne(), "scripts/one.int");
+    CHECK(report.fromBytecode);
+    REQUIRE(report.procedures.size() == 1); // the placeholder is left out
+    CHECK(report.procedures[0].name == "talk_p_proc");
+    CHECK(report.procedures[0].entryPoint);
+
+    std::vector<std::pair<bool, std::optional<int>>> locals; // set?, index
+    for (const auto& use : report.locals) {
+        locals.emplace_back(use.ref.kind == ssl::VariableRef::Kind::Set, use.ref.index);
+    }
+    CHECK(locals == std::vector<std::pair<bool, std::optional<int>>>{ { false, 1 }, { true, 5 }, { false, 0 }, { true, std::nullopt } });
+    REQUIRE(report.messages.size() == 1);
+    CHECK(report.messages[0].ref.list == 1);
+    CHECK(report.messages[0].ref.number == 150);
+    REQUIRE(report.globals.size() == 1);
+    CHECK(report.globals[0].ref.index == 7);
+
+    // The lint's checks run on it as on a source; the write of unknown index keeps "never read" notes away.
+    const fs::path root = makeTree("script_lint_int");
+    resource::GameResources resources;
+    resources.files().addDataPath(root.string());
+    const Lst* lst = resources.repository().load<Lst>("scripts/scripts.lst");
+    resource::ScriptLinter linter(resources, lst, "english");
+    std::vector<std::string> checks;
+    for (const auto& finding : linter.findings(report, 0, true)) {
+        checks.push_back(std::format("{} {}:{}", finding.check, finding.where.file, finding.where.line));
+    }
+    CHECK(checks == std::vector<std::string>{ "local-vars scripts/one.int:0", "messages scripts/one.int:0" });
+    // As the map's own script, its local variables read -1.
+    CHECK(resource::placementFindings(report, resource::ScriptPlacement::Map).size() == 1);
+    fs::remove_all(root);
+}
+
+namespace {
+
+// two.int: talk_p_proc does set_local_var(0, 1).
+std::vector<uint8_t> compiledTwo() {
+    test::ByteWriter code;
+    test::pushInt(code, 0);
+    test::pushInt(code, 1);
+    code.be16(0x80C2); // op_set_local_var
+    code.be16(0x8010); // OPCODE_EXIT_PROGRAM
+    return test::compiledScript("talk_p_proc", code.data());
+}
+
+} // namespace
+
+TEST_CASE("lint_script checks a script's compiled .int when no source is mounted", "[script_lint]") {
+    const fs::path root = makeTree("script_lint_compiled");
+    const auto bytes = compiledTwo();
+    std::ofstream(root / "scripts" / "two.int", std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+
+    cli::LintOptions options;
+    options.name = "two";
+    int rc = -1;
+    const auto one = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); }, rc);
+    REQUIRE(rc == 0);
+    CHECK(one["fromBytecode"] == true);
+    CHECK(one["summary"]["errors"] == 1); // local variable 0, past the 0 scripts.lst gives two
+    CHECK(one["findings"][0]["file"] == "scripts/two.int");
+
+    options = {};
+    options.all = true;
+    options.includeNotes = false;
+    const auto all = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); }, rc);
+    CHECK(all["scripts"] == 2);
+    CHECK(all["fromBytecode"] == 1);
+    CHECK(all["unchecked"] == 0);
+    fs::remove_all(root);
 }

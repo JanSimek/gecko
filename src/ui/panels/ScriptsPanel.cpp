@@ -61,7 +61,8 @@ namespace {
     QString findingText(const resource::ScriptFinding& finding) {
         const QString message = QString::fromStdString(finding.message);
         if (finding.where.line == 0) {
-            return message;
+            // Read from the compiled script, or about the script as a whole.
+            return finding.procedure.empty() ? message : QString("%1: %2").arg(QString::fromStdString(finding.procedure), message);
         }
         const QString written = QString::fromStdString(std::filesystem::path(finding.where.file).filename().string());
         return QString("%1 line %2: %3").arg(written).arg(finding.where.line).arg(message);

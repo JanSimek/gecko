@@ -71,6 +71,51 @@ namespace {
         return out;
     }
 
+    // Reports for `targets` (program indices): each script's source where one is mounted, else what its
+    // compiled .int shows. A script with neither is left out, with its index in `unchecked`.
+    struct LoadedReports {
+        std::vector<int> targets;
+        std::vector<ScriptReport> reports;
+        std::vector<int> unchecked;
+    };
+
+    LoadedReports loadReports(resource::GameResources& resources, const Lst& scripts, const std::vector<int>& targets) {
+        const auto sources = sourcesByIndex(resources, scripts);
+        LoadedReports out;
+        std::vector<std::filesystem::path> paths;
+        for (const int index : targets) {
+            if (const auto it = sources.find(index); it != sources.end()) {
+                out.targets.push_back(index);
+                paths.emplace_back(it->second);
+            }
+        }
+        out.reports = resource::reportScripts(resources, paths);
+        for (const int index : targets) {
+            if (sources.contains(index)) {
+                continue;
+            }
+            if (index < 0 || static_cast<std::size_t>(index) >= scripts.list().size()) {
+                out.unchecked.push_back(index);
+            } else if (auto compiled = resource::reportCompiled(resources, toLower(stem(scripts.list()[static_cast<std::size_t>(index)])));
+                compiled.has_value()) {
+                out.targets.push_back(index);
+                out.reports.push_back(std::move(*compiled));
+            } else {
+                out.unchecked.push_back(index);
+            }
+        }
+        return out;
+    }
+
+    // One script's entry in a result list.
+    ordered_json scriptResult(const Lst& scripts, int index, const ScriptReport& report) {
+        ordered_json json{ { "name", stem(scripts.list()[static_cast<std::size_t>(index)]) }, { "programIndex", index } };
+        if (report.fromBytecode) {
+            json["fromBytecode"] = true; // no source mounted: only what the compiled .int shows
+        }
+        return json;
+    }
+
 } // namespace
 
 namespace {
@@ -152,19 +197,19 @@ namespace {
             return 1;
         }
         const MapPlacements placed = placementsOf(*map);
-        const auto sources = sourcesByIndex(resources, scripts);
-        std::vector<int> targets;
-        std::vector<std::filesystem::path> paths;
-        auto unchecked = ordered_json::array();
+        std::vector<int> placedIndices;
         for (const auto& [index, where] : placed.placements) {
-            if (const auto it = sources.find(index); it != sources.end()) {
-                targets.push_back(index);
-                paths.emplace_back(it->second);
-            } else if (index >= 0 && static_cast<std::size_t>(index) < scripts.list().size()) {
+            placedIndices.push_back(index);
+        }
+        const LoadedReports loaded = loadReports(resources, scripts, placedIndices);
+        const std::vector<int>& targets = loaded.targets;
+        const std::vector<ScriptReport>& parsed = loaded.reports;
+        auto unchecked = ordered_json::array();
+        for (const int index : loaded.unchecked) {
+            if (index >= 0 && static_cast<std::size_t>(index) < scripts.list().size()) {
                 unchecked.push_back(stem(scripts.list()[static_cast<std::size_t>(index)]));
             }
         }
-        const std::vector<ScriptReport> parsed = resource::reportScripts(resources, paths);
         resource::ScriptLinter linter(resources, &scripts, options.locale);
         const auto blocks = resource::localVarBlockProblems(*map, scripts);
 
@@ -181,13 +226,15 @@ namespace {
             for (const auto placement : placed.placements.at(index)) {
                 where.push_back(placementName(placement));
             }
-            results.push_back({ { "name", stem(scripts.list()[static_cast<std::size_t>(index)]) }, { "programIndex", index },
-                { "placed", std::move(where) }, { "findings", findingsJson(findings) } });
+            ordered_json result = scriptResult(scripts, index, parsed[i]);
+            result["placed"] = std::move(where);
+            result["findings"] = findingsJson(findings);
+            results.push_back(std::move(result));
         }
         ordered_json root;
         root["map"] = options.map;
         root["scripts"] = parsed.size();
-        root["withoutSource"] = std::move(unchecked);
+        root["unchecked"] = std::move(unchecked); // neither a source nor a compiled .int
         root["summary"] = summary;
         root["results"] = std::move(results);
         emit(out, root);
@@ -205,11 +252,10 @@ int lintScripts(resource::GameResources& resources, const LintOptions& options, 
     if (!options.map.empty()) {
         return lintMap(resources, *scripts, options, out);
     }
-    const auto sources = sourcesByIndex(resources, *scripts);
     std::vector<int> targets;
     if (options.all) {
-        for (const auto& [index, path] : sources) {
-            targets.push_back(index);
+        for (std::size_t i = 0; i < scripts->list().size(); ++i) {
+            targets.push_back(static_cast<int>(i));
         }
     } else {
         const Resolution resolved = resolveScript(*scripts, options.name, options.programIndex);
@@ -223,23 +269,23 @@ int lintScripts(resource::GameResources& resources, const LintOptions& options, 
         }
         targets.push_back(resolved.programIndex);
     }
-    std::vector<std::filesystem::path> paths;
-    for (const int index : targets) {
-        const auto it = sources.find(index);
-        if (it == sources.end()) {
-            out << "lint-script: no .ssl source mounted for " << scripts->list()[static_cast<std::size_t>(index)]
-                << " (mount a script-source tree such as the FRP scripts_src as a --data path)\n";
-            return 1;
-        }
-        paths.emplace_back(it->second);
+    LoadedReports loaded = loadReports(resources, *scripts, targets);
+    if (!options.all && loaded.reports.empty()) {
+        out << "lint-script: neither an .ssl source nor a compiled .int is mounted for "
+            << scripts->list()[static_cast<std::size_t>(targets.front())]
+            << " (mount a script-source tree such as the FRP scripts_src as a --data path)\n";
+        return 1;
     }
-
-    const std::vector<ScriptReport> parsed = resource::reportScripts(resources, paths);
+    targets = std::move(loaded.targets);
+    const std::vector<ScriptReport>& parsed = loaded.reports;
     resource::ScriptLinter linter(resources, scripts, options.locale);
     ordered_json summary = ordered_json::object();
     if (!options.all) {
         const std::vector<ScriptFinding> findings = linter.findings(parsed.front(), targets.front(), options.includeNotes);
         ordered_json root = scriptIdentity(resources, *scripts, targets.front());
+        if (parsed.front().fromBytecode) {
+            root["fromBytecode"] = true;
+        }
         count(findings, summary);
         root["summary"] = summary;
         root["findings"] = findingsJson(findings);
@@ -265,13 +311,17 @@ int lintScripts(resource::GameResources& resources, const LintOptions& options, 
             continue;
         }
         total += findings.size();
-        results.push_back({ { "name", stem(scripts->list()[static_cast<std::size_t>(targets[i])]) }, { "programIndex", targets[i] },
-            { "findings", findingsJson(findings) } });
+        ordered_json result = scriptResult(*scripts, targets[i], parsed[i]);
+        result["findings"] = findingsJson(findings);
+        results.push_back(std::move(result));
     }
     ordered_json root;
     root["scripts"] = parsed.size();
+    root["fromBytecode"] = std::ranges::count_if(parsed, [](const ScriptReport& r) { return r.fromBytecode; });
+    root["unchecked"] = loaded.unchecked.size(); // neither a source nor a compiled .int
     root["summary"] = summary;
-    // A set_global_var with a computed number could set any gvar, so "never set" may miss those.
+    // A set_global_var whose number is computed (or, from a compiled .int, not a literal) could set any
+    // gvar, so "never set" may miss those.
     root["computedGlobalWrites"] = neverSet.dynamicWrites;
     root["capped"] = total >= kMaxFindings;
     root["results"] = std::move(results);

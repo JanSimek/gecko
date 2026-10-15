@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate src/cli/IntOpcodes.inc from a fallout2-ce checkout."""
+"""Regenerate src/ssl/IntOpcodes.inc from a fallout2-ce checkout."""
 #
 # The compiled Fallout 2 script (.int) opcode names are not shipped game data; the engine is the only
 # source of truth. This walks the same registrations the interpreter performs at startup:
@@ -14,7 +14,7 @@
 # index with different names are a hard error rather than a silent pick.
 #
 # Run it from the root of the fallout2-ce checkout; it takes no arguments:
-#   cd /path/to/fallout2-ce && python3 /path/to/gecko/tools/gen_int_opcodes.py > /path/to/gecko/src/cli/IntOpcodes.inc
+#   cd /path/to/fallout2-ce && python3 /path/to/gecko/tools/gen_int_opcodes.py > /path/to/gecko/src/ssl/IntOpcodes.inc
 
 import re
 import sys

@@ -1217,7 +1217,7 @@ namespace {
             json({ { "type", "object" }, { "properties", { { "kind", { { "type", "string" }, { "enum", json::array({ "gvar", "call", "procedure", "macro" }) } } }, { "name", { { "type", "string" } } } } }, { "required", json::array({ "kind", "name" }) } }),
             [](resource::GameResources& r, const json& a) { return toolScriptRefs(r, a); }, "" });
         t.push_back({ "lint_script",
-            "Check scripts' .ssl source for problems the compiler doesn't catch, each {severity, check, message, "
+            "Check scripts for problems the compiler doesn't catch, each {severity, check, message, "
             "file, line, procedure}: 'local-vars' (a local variable number past the count scripts.lst gives "
             "the script — the engine reads/writes the next script's variables), 'messages' (a message number "
             "missing from the dialog .msg it names — the player sees \"Error\"), 'gvars' (a global variable "
@@ -1228,10 +1228,13 @@ namespace {
             "'unused-procedure' and unused local variables. Select one script by 'name' or 0-based "
             "'programIndex'; or 'map' (a map path) for every script it places plus checks on how it places "
             "them (map script using local variables, spatial script without spatial_p_proc, overlapping "
-            "local variable blocks); or all=true for every script with a mounted source; or 'files' (paths "
-            "of .ssl files on disk, e.g. ones being edited). Notes are on for one script or files, off "
-            "otherwise unless notes=true. Needs a script-source tree mounted (except for 'files'), plus game "
-            "text, vault13.gam and protos for those checks. Args: name|programIndex|map|all|files, optional "
+            "local variable blocks); or all=true for every script in scripts.lst; or 'files' (paths of .ssl "
+            "files on disk, e.g. ones being edited). Notes are on for one script or files, off otherwise "
+            "unless notes=true. Reads the .ssl source when a script-source tree is mounted; without one it "
+            "checks the compiled .int (results say fromBytecode: true), which shows procedures and the "
+            "variable and message numbers pushed as literals, so it finds fewer problems and skips timers, "
+            "objects, tiles and the never-set check. Needs game text, vault13.gam and protos for those "
+            "checks. Args: name|programIndex|map|all|files, optional "
             "notes, locale.",
             json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "map", { { "type", "string" } } }, { "all", { { "type", "boolean" } } }, { "files", { { "type", "array" }, { "items", { { "type", "string" } } } } }, { "notes", { { "type", "boolean" } } }, { "locale", { { "type", "string" } } } } } }),
             [](resource::GameResources& r, const json& a) { return toolLintScript(r, a); }, "" });

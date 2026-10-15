@@ -48,8 +48,11 @@ namespace {
 
     using BinaryOp = Value (*)(int64_t, int64_t);
 
-    // The SSL binary operators that fold, by the spelling the parser records (keywords lowercased).
-    // '^' (sfall's power) is left unfolded.
+    // The SSL binary operators sslc's optimizer folds (optimize.c isValidBinaryOp), by the spelling the
+    // parser records (keywords lowercased). '%' and '^' (sfall's power) are not among them, and sslc
+    // never folds and/or (andalso/orelse): its parser puts the operator before the right operand, so
+    // the postfix folding never sees two constants and then the operator. An `if` on such a condition
+    // keeps both branches in the compiled script.
     Value applyBinary(std::string_view op, int64_t a, int64_t b) {
         static const std::map<std::string_view, BinaryOp, std::less<>> operators{
             { "+", [](int64_t x, int64_t y) { return Value(x + y); } },
@@ -57,17 +60,12 @@ namespace {
             { "*", [](int64_t x, int64_t y) { return Value(x * y); } },
             { "/", [](int64_t x, int64_t y) { return y == 0 ? std::nullopt : Value(x / y); } },
             { "div", [](int64_t x, int64_t y) { return y == 0 ? std::nullopt : Value(x / y); } },
-            { "%", [](int64_t x, int64_t y) { return y == 0 ? std::nullopt : Value(x % y); } },
             { "==", [](int64_t x, int64_t y) { return boolean(x == y); } },
             { "!=", [](int64_t x, int64_t y) { return boolean(x != y); } },
             { "<", [](int64_t x, int64_t y) { return boolean(x < y); } },
             { ">", [](int64_t x, int64_t y) { return boolean(x > y); } },
             { "<=", [](int64_t x, int64_t y) { return boolean(x <= y); } },
             { ">=", [](int64_t x, int64_t y) { return boolean(x >= y); } },
-            { "and", [](int64_t x, int64_t y) { return boolean(x != 0 && y != 0); } },
-            { "andalso", [](int64_t x, int64_t y) { return boolean(x != 0 && y != 0); } },
-            { "or", [](int64_t x, int64_t y) { return boolean(x != 0 || y != 0); } },
-            { "orelse", [](int64_t x, int64_t y) { return boolean(x != 0 || y != 0); } },
             { "bwand", [](int64_t x, int64_t y) { return Value(x & y); } },
             { "bwor", [](int64_t x, int64_t y) { return Value(x | y); } },
             { "bwxor", [](int64_t x, int64_t y) { return Value(x ^ y); } },
