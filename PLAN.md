@@ -268,8 +268,8 @@ syntax errors are true and the folder is not skipped.
 **Phase 4 (rest):** the bytecode report (`resource::reportInt`) walks back over each opcode's
 arguments with the engine's stack effects (`IntOpcodes.inc`, generated from the handlers) and skips
 branches under a constant condition. On the RP it shows 99.96% of what the source shows. Left: 34 RP
-writes whose value comes through `OPCODE_POP` (unknown effect), and vanilla `wientdor.int`, whose
-static-string offset (824) runs past its 644-byte file, so the disassembler rejects it.
+writes whose value contains sslc's short-circuit and/or (jumps and `OPCODE_POP`), which the walk
+doesn't model, so their index stays unknown.
 
 **Rejected:** tree-sitter + the BGforge SSL grammar — no preprocessor, and RP hides structure behind
 macros, so phases 1–3 would still be needed on top of a new C dependency.

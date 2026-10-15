@@ -8,6 +8,7 @@
 #include <format>
 #include <set>
 #include <stdexcept>
+#include <string_view>
 
 namespace geck::ssl {
 
@@ -29,6 +30,9 @@ namespace {
     constexpr std::size_t PROCEDURE_RECORD_SIZE = 24;  // sizeof(Procedure): six int32 fields
     constexpr uint16_t OPCODE_INDEX_MASK = 0x3FF;      // the dispatcher indexes handlers by opcode & 0x3FF
     constexpr uint16_t OPCODE_PUSH_INDEX = 0x001;
+    constexpr uint16_t OPCODE_FETCH_EXTERNAL_INDEX = 0x014;
+    constexpr uint16_t OPCODE_STORE_EXTERNAL_INDEX = 0x015;
+    constexpr uint16_t OPCODE_EXPORT_VARIABLE_INDEX = 0x016;
     constexpr uint16_t VALUE_TYPE_INT = 0xC001;
     constexpr uint16_t VALUE_TYPE_FLOAT = 0xA001;
     constexpr uint16_t VALUE_TYPE_STRING = 0x9001;
@@ -36,7 +40,7 @@ namespace {
 
     const std::array<const OpcodeName*, 1024>& opcodeTable() {
         static const std::array<const OpcodeName*, 1024> table = [] {
-            std::array<const OpcodeName*, 1024> t{};
+            std::array<const OpcodeName*, 1024> t{ };
             for (const auto& entry : kOpcodeNames) {
                 t[entry.index] = &entry;
             }
@@ -100,18 +104,70 @@ namespace {
         return out + "\"";
     }
 
-    void disassembleRange(const Bytes& bytes, std::size_t begin, std::size_t end, std::size_t staticStrings,
+    // The opcodes that pop a name the engine reads from the identifier table (fallout2-ce interpreter.cc
+    // programGetIdentifier), not the static strings: an imported or exported variable's.
+    bool popsIdentifier(uint16_t opcode) {
+        const uint16_t index = opcode & OPCODE_INDEX_MASK;
+        return (opcode & 0x8000) != 0 && (index == OPCODE_FETCH_EXTERNAL_INDEX || index == OPCODE_STORE_EXTERNAL_INDEX || index == OPCODE_EXPORT_VARIABLE_INDEX);
+    }
+
+    /// Where names are read from: identifiers are addressed from the identifier table's length field,
+    /// static strings from 4 bytes past theirs.
+    struct NameTables {
+        std::size_t identifiers;
+        std::size_t staticStrings;
+    };
+
+    /// Sets a push's operand (and literal) from its 32-bit `value`. `namesIdentifier`: the next
+    /// instruction imports or exports a variable, so a string is the variable's identifier.
+    void decodePush(const Bytes& bytes, IntInstruction& instruction, int32_t value, bool namesIdentifier, const NameTables& names) {
+        switch (instruction.opcode) {
+            case VALUE_TYPE_INT:
+                instruction.operand = std::to_string(value);
+                instruction.literal = value;
+                break;
+            case VALUE_TYPE_FLOAT:
+                instruction.operand = std::format("{}", std::bit_cast<float>(static_cast<uint32_t>(value)));
+                break;
+            case VALUE_TYPE_STRING:
+                if (namesIdentifier) {
+                    instruction.operand = quoted(bytes.cString(names.identifiers + checkedOffset(value, "identifier offset"), "identifier"));
+                    instruction.note = "identifier";
+                } else {
+                    instruction.operand = quoted(bytes.cString(names.staticStrings + 4 + checkedOffset(value, "string offset"), "static string"));
+                }
+                break;
+            case VALUE_TYPE_DYNAMIC_STRING:
+                instruction.operand = std::format("dynamic string #{}", value);
+                break;
+            default:
+                instruction.operand = std::to_string(value);
+                break;
+        }
+    }
+
+    /// The GVAR_* a global-variable read or write names, when its index is the literal pushed for it.
+    std::string globalVariableNote(std::string_view opcode, const std::vector<int32_t>& literalPushes,
+        const std::vector<std::string>* globalVarNames) {
+        // op_set_global_var pops the value, then the index (fallout2-ce interpreter_extra.cc).
+        std::optional<int32_t> index;
+        if (opcode == "op_get_global_var" && !literalPushes.empty()) {
+            index = literalPushes.back();
+        } else if (opcode == "op_set_global_var" && literalPushes.size() >= 2) {
+            index = literalPushes[literalPushes.size() - 2];
+        }
+        if (!index.has_value() || globalVarNames == nullptr || *index < 0 || static_cast<std::size_t>(*index) >= globalVarNames->size()) {
+            return { };
+        }
+        return (*globalVarNames)[static_cast<std::size_t>(*index)];
+    }
+
+    void disassembleRange(const Bytes& bytes, std::size_t begin, std::size_t end, const NameTables& names,
         const std::vector<std::string>* globalVarNames, std::vector<IntInstruction>& code) {
         const auto& opcodes = opcodeTable();
         // Integer literals pushed immediately before the current instruction, oldest first. Only an
         // uninterrupted run of pushes is trusted to still be on top of the stack.
         std::vector<int32_t> literalPushes;
-        auto globalName = [globalVarNames](int32_t index) -> std::string {
-            if (globalVarNames == nullptr || index < 0 || static_cast<std::size_t>(index) >= globalVarNames->size()) {
-                return {};
-            }
-            return (*globalVarNames)[static_cast<std::size_t>(index)];
-        };
 
         std::size_t ip = begin;
         while (ip + 2 <= end) {
@@ -148,37 +204,14 @@ namespace {
                 }
                 const int32_t value = bytes.be32(ip, "push operand");
                 ip += 4;
-                switch (instruction.opcode) {
-                    case VALUE_TYPE_INT:
-                        instruction.operand = std::to_string(value);
-                        instruction.literal = value;
-                        literalPushes.push_back(value);
-                        break;
-                    case VALUE_TYPE_FLOAT:
-                        instruction.operand = std::format("{}", std::bit_cast<float>(static_cast<uint32_t>(value)));
-                        literalPushes.clear();
-                        break;
-                    case VALUE_TYPE_STRING:
-                        instruction.operand = quoted(bytes.cString(staticStrings + 4 + checkedOffset(value, "string offset"),
-                            "static string"));
-                        literalPushes.clear();
-                        break;
-                    case VALUE_TYPE_DYNAMIC_STRING:
-                        instruction.operand = std::format("dynamic string #{}", value);
-                        literalPushes.clear();
-                        break;
-                    default:
-                        instruction.operand = std::to_string(value);
-                        literalPushes.clear();
-                        break;
+                decodePush(bytes, instruction, value, ip + 2 <= end && popsIdentifier(bytes.be16(ip, "opcode")), names);
+                if (instruction.literal.has_value()) {
+                    literalPushes.push_back(*instruction.literal);
+                } else {
+                    literalPushes.clear();
                 }
             } else {
-                // op_set_global_var pops the value, then the index (fallout2-ce interpreter_extra.cc).
-                if (instruction.name == "op_get_global_var" && !literalPushes.empty()) {
-                    instruction.note = globalName(literalPushes.back());
-                } else if (instruction.name == "op_set_global_var" && literalPushes.size() >= 2) {
-                    instruction.note = globalName(literalPushes[literalPushes.size() - 2]);
-                }
+                instruction.note = globalVariableNote(instruction.name, literalPushes, globalVarNames);
                 literalPushes.clear();
             }
             code.push_back(std::move(instruction));
@@ -226,12 +259,13 @@ IntProgram disassembleInt(const std::vector<uint8_t>& data, const std::vector<st
         program.procedures.push_back(std::move(procedure));
     }
 
-    const auto disassembleFrom = [&bytes, &boundaries, staticStrings, globalVarNames](int32_t offset, const char* what,
+    const NameTables names{ identifiers, staticStrings };
+    const auto disassembleFrom = [&bytes, &boundaries, &names, globalVarNames](int32_t offset, const char* what,
                                      std::vector<IntInstruction>& code) {
         const auto begin = static_cast<std::size_t>(offset);
         const std::size_t end = *boundaries.upper_bound(begin);
         bytes.require(begin, end - begin, what);
-        disassembleRange(bytes, begin, end, staticStrings, globalVarNames, code);
+        disassembleRange(bytes, begin, end, names, globalVarNames, code);
     };
     for (auto& procedure : program.procedures) {
         disassembleFrom(procedure.bodyOffset, "procedure body", procedure.code);

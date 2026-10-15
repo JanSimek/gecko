@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "ssl/IntProgram.h"
+#include "support/CompiledScript.h"
 
 using namespace geck;
 
@@ -176,4 +177,20 @@ TEST_CASE("disassembleInt rejects tables that point outside the file", "[int_dis
     auto bytes = buildProgram();
     bytes.resize(50);
     CHECK_THROWS_AS(ssl::disassembleInt(bytes), std::runtime_error);
+}
+
+TEST_CASE("disassembleInt reads an imported or exported variable's name from the identifier table", "[int_disassembler]") {
+    // Vanilla wientdor.int: no static strings, and `push "<name>"; STORE_EXTERNAL` with the name's
+    // offset into the identifier table, where the engine's programGetIdentifier reads it.
+    test::ByteWriter code;
+    test::pushInt(code, 1);
+    code.be16(0x9001).be32(4); // the identifier at offset 4: the procedure's own name
+    code.be16(0x8015);         // OPCODE_STORE_EXTERNAL
+    const auto program = ssl::disassembleInt(test::compiledScript("Entrance_Door_Ptr", code.data()));
+    REQUIRE(program.procedures.size() == 1);
+    const auto& instructions = program.procedures[0].code;
+    REQUIRE(instructions.size() == 3);
+    CHECK(instructions[1].operand == "\"Entrance_Door_Ptr\"");
+    CHECK(instructions[1].note == "identifier");
+    CHECK(instructions[2].name == "OPCODE_STORE_EXTERNAL");
 }
