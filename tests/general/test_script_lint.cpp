@@ -285,14 +285,14 @@ ssl::IntProgram compiledOne() {
     const auto get = op("op_get_local_var", 1, 1);
     const auto set = op("op_set_local_var", 2, 0);
     talk.code = {
-        // local_var(1)
+        // reads local variable 1
         literal(1),
         get,
-        // set_local_var(5, 1): past the 2 scripts.lst gives
+        // sets local variable 5 to 1: past the 2 scripts.lst gives
         literal(5),
         literal(1),
         set,
-        // set_local_var(0, local_var(0) + 1): reads and sets 0
+        // adds 1 to local variable 0: reads and sets it
         literal(0),
         literal(0),
         get,
@@ -304,18 +304,18 @@ ssl::IntProgram compiledOne() {
         literal(0),
         op("OPCODE_IF", -1, -1),
         set,
-        // message_str(1, 150): not in one.msg
+        // message 150 of list 1: not in one.msg
         literal(1),
         literal(150),
         op("op_message_str", 2, 1),
-        // gsay_reply(1, "text"): a string, not a message number
+        // a reply given as a string, not a message number
         literal(1),
         op("OPCODE_PUSH", 0, 1),
         op("op_gsay_reply", 2, 0),
-        // global_var(7)
+        // reads global variable 7
         literal(7),
         op("op_get_global_var", 1, 1),
-        // add_timer_event(self_obj, 10, 2)
+        // a timer on self_obj, in 10 ticks, with parameter 2
         op("op_self_obj", 0, 1),
         literal(10),
         literal(2),
@@ -406,9 +406,8 @@ TEST_CASE("lint_script checks a script's compiled .int when no source is mounted
 }
 
 TEST_CASE("reportInt leaves out a branch under a constant condition and folds constant arguments", "[script_lint]") {
-    // The original compiler's code for
-    //   if (-1 > 0) then create_object_sid(-1, 0, 0, -1);  (sslc drops this branch)
-    //   set_local_var(1 + 2, 7);
+    // The original compiler's code for an object created under the condition -1 > 0 (a branch sslc
+    // drops), then local variable 1 + 2 set to 7.
     ssl::IntProcedure enter{ "map_enter_p_proc", 0, 0, 0, 0, 0, {}, {} };
     enter.code = { literal(984), literal(1), op("OPCODE_NEGATE", 1, 1), literal(0), op("OPCODE_GREATER_THAN", 2, 1),
         op("OPCODE_IF", -1, -1), literal(1), op("OPCODE_NEGATE", 1, 1), literal(0), literal(0), literal(1),

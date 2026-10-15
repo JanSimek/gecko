@@ -58,7 +58,7 @@ CORE_EXPRESSION_OPCODES = {
 POP = re.compile(r'programStackPop\w*(?:<[^>]*>)?\(program\b')
 PUSH = re.compile(r'programStackPush\w*(?:<[^>]*>)?\(program\b')
 ARG_LOOP = re.compile(r'for \(int (\w+) = 0; \1 < (\d+); \1\+\+\) \{')
-CALL_WITH_PROGRAM = re.compile(r'(\w+)(?:<[^>]*>)?\(program\s*[,)]')
+CALL_WITH_PROGRAM = re.compile(r'\b(\w+)(?:<[^>]*>)?\(program\s*[,)]')
 
 
 def handler_bodies(text):
