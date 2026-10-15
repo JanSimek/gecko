@@ -53,6 +53,9 @@ namespace cli {
         /// runs to thousands of instructions. It is what the engine executes, so it answers what a
         /// script does when no .ssl source tree is mounted.
         bool disassemble = false;
+        /// Also analyse the .ssl source (see cli/ScriptLint.h analyzeScript): procedures and which
+        /// run, variable accesses, self-assigned critter fields, message uses and lint findings.
+        bool analyze = false;
     };
 
     /// Describe a Fallout 2 script, selected by `name` or by 0-based `programIndex` (see the index-base

@@ -309,6 +309,8 @@ add_library(vault STATIC
     ssl/ConstantFolder.cpp
     ssl/CallGraph.h
     ssl/CallGraph.cpp
+    ssl/MessageRefs.h
+    ssl/MessageRefs.cpp
     ssl/VariableRefs.h
     ssl/VariableRefs.cpp
     ssl/Corpus.h
@@ -736,6 +738,12 @@ if(GECK_BUILD_CLI)
         cli/PatternExtract.cpp
         cli/ScriptIntrospect.h
         cli/ScriptIntrospect.cpp
+        cli/ScriptLookup.h
+        cli/ScriptLookup.cpp
+        cli/ScriptRefs.h
+        cli/ScriptRefs.cpp
+        cli/ScriptLint.h
+        cli/ScriptLint.cpp
         cli/MapReachability.h
         cli/MapReachability.cpp
         cli/MapDescribe.h
