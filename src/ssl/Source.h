@@ -68,6 +68,8 @@ public:
 
     const std::filesystem::path& path(FileId file) const;
     std::string_view text(FileId file) const;
+    /// The text of 1-based `line` in `file`, without its line break; empty when out of range.
+    std::string_view line(FileId file, uint32_t line) const;
 
 private:
     struct File {

@@ -112,8 +112,7 @@ void forEachExpression(const Expr& expr, const ExprVisitor& visit) {
         expr.node);
 }
 
-// The expressions a statement holds itself, then those of the statements nested in it.
-void forEachExpression(const Stmt& stmt, const ExprVisitor& visit) {
+void forEachDirectExpression(const Stmt& stmt, const ExprVisitor& visit) {
     std::visit(Overloaded{
                    [&visit](const LocalVariables& node) { visitVariables(node.variables, visit); },
                    [&visit](const Assignment& node) {
@@ -144,6 +143,17 @@ void forEachExpression(const Stmt& stmt, const ExprVisitor& visit) {
                    [](const auto&) { /* the other kinds hold none */ },
                },
         stmt.node);
+}
+
+void forEachChildStatement(const Stmt& stmt, const StmtVisitor& visit) {
+    for (const Stmt* child : children(stmt)) {
+        visit(*child);
+    }
+}
+
+// The expressions a statement holds itself, then those of the statements nested in it.
+void forEachExpression(const Stmt& stmt, const ExprVisitor& visit) {
+    forEachDirectExpression(stmt, visit);
     for (const Stmt* child : children(stmt)) {
         forEachExpression(*child, visit);
     }

@@ -32,6 +32,10 @@ public:
     SourceLocation writtenAt(TokenRange range) const;
     /// The macros the first token of `range` came out of, outermost first.
     std::vector<const Macro*> macroChain(TokenRange range) const;
+    /// The object-like macro `argument` was written as in `call`, e.g. "AI_ARROYO_VILLAGER" in
+    /// `set_self_ai(AI_ARROYO_VILLAGER)`: the outermost macro the argument came out of that the call
+    /// itself did not. Empty when it was written as a literal.
+    std::string argumentMacro(const Expr& call, const Expr& argument) const;
     /// The integer constant `expr` evaluates to, with the script's macros; nullopt when it is not one.
     std::optional<int64_t> evaluate(const Expr& expr) const;
     /// An object-like macro's value as an integer constant, e.g. `LVAR_Hostile`.

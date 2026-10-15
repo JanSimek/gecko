@@ -22,6 +22,8 @@
 #include "cli/ResourceInspect.h"
 #include "cli/SaveInspect.h"
 #include "cli/ScriptIntrospect.h"
+#include "cli/ScriptLint.h"
+#include "cli/ScriptRefs.h"
 #include "format/msg/Msg.h"
 #include "scripting/ScriptApiReference.h"
 #include "format/pro/Pro.h"
@@ -277,6 +279,7 @@ namespace {
             opts.locale = locale;
         }
         opts.disassemble = optBool(args, "disassemble", false);
+        opts.analyze = optBool(args, "analyze", false);
         std::ostringstream oss;
         const int rc = cli::describeScript(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
@@ -478,6 +481,28 @@ namespace {
         } catch (const std::exception& e) {
             return toolText(std::string("endings failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
         }
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolScriptRefs(resource::GameResources& resources, const json& args) {
+        const cli::ScriptRefsOptions opts{ requireString(args, "kind"), requireString(args, "name") };
+        std::ostringstream oss;
+        const int rc = cli::findScriptRefs(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolLintScript(resource::GameResources& resources, const json& args) {
+        cli::LintOptions opts;
+        opts.all = optBool(args, "all", false);
+        if (!opts.all) {
+            readScriptSelector(args, opts.name, opts.programIndex);
+        }
+        opts.includeNotes = optBool(args, "notes", !opts.all);
+        if (const std::string locale = optString(args, "locale"); !locale.empty()) {
+            opts.locale = locale;
+        }
+        std::ostringstream oss;
+        const int rc = cli::lintScripts(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -934,9 +959,11 @@ namespace {
             "1) so the two can be cross-checked. Optional 'locale' picks the dialog language subdir "
             "(default english). Pass disassemble=true to also get the compiled scripts/<name>.int "
             "disassembled (procedures, one line per instruction, literal global-variable indices named by "
-            "GVAR_*): what the engine actually runs, for when no source tree is mounted. Args: name or "
-            "programIndex, optional locale, disassemble.",
-            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } }, { "disassemble", { { "type", "boolean" } } } } }, { "anyOf", json::array({ json{ { "required", json::array({ "name" }) } }, json{ { "required", json::array({ "programIndex" }) } } }) } }),
+            "GVAR_*): what the engine actually runs, for when no source tree is mounted. Pass analyze=true "
+            "for 'analysis' from the parsed .ssl: its procedures (which run, which are engine entry points), "
+            "global and local variable reads/writes, the AI packet/team it sets on itself, and the "
+            "lint_script findings. Args: name or programIndex, optional locale, disassemble, analyze.",
+            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } }, { "disassemble", { { "type", "boolean" } } }, { "analyze", { { "type", "boolean" } } } } }, { "anyOf", json::array({ json{ { "required", json::array({ "name" }) } }, json{ { "required", json::array({ "programIndex" }) } } }) } }),
             [](resource::GameResources& r, const json& a) { return toolDescribeScript(r, a); }, "" });
         t.push_back({ "find_script",
             "Find WHERE a script lives: resolve it by 'name' (or 0-based 'programIndex', same index "
@@ -1145,15 +1172,41 @@ namespace {
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolEndings(r, a); }, "" });
         t.push_back({ "find_gvar",
-            "Find where a global variable is used in the mounted .ssl / .h script sources: every script "
-            "that reads or writes 'gvar', with line, source text, and kind 'set' (set_global_var — the "
-            "action that advances/gates a quest) or 'get' (a check). Headers are scanned too, since many "
-            "gvars are only touched via macro aliases there (e.g. caravan.h). The causal link: a quest's "
-            "gvar (from quests) -> the scripts that change it -> describe_script for the logic. An empty "
+            "Find where a global variable is used in the mounted .ssl script sources: every read or write "
+            "of 'gvar' in code a compiled script actually runs, as {script, procedure, line, kind, text}, "
+            "with kind 'set' (set_global_var — the action that advances/gates a quest) or 'get' (a check). "
+            "Scripts are preprocessed and parsed, so an access through a header macro alias (e.g. "
+            "caravan.h) is reported in the script that uses it, with 'via' naming the alias and 'file' "
+            "the header when the code is written there; commented-out code, unused macros, procedures "
+            "nothing calls and branches on a constant are left out. The causal link: a quest's gvar "
+            "(from quests) -> the scripts that change it -> describe_script for the logic. An empty "
             "result means the gvar is genuinely unused (not an error). Needs a script-source tree (e.g. "
             "FRP scripts_src) mounted. Args: gvar (the GVAR_* name).",
             json({ { "type", "object" }, { "properties", { { "gvar", { { "type", "string" } } } } }, { "required", json::array({ "gvar" }) } }),
             [](resource::GameResources& r, const json& a) { return toolFindGvar(r, a); }, "" });
+        t.push_back({ "script_refs",
+            "Find every use of a name in code the compiled scripts actually run, across all mounted .ssl "
+            "sources (preprocessed and parsed, so macro aliases resolve and comments, unused macros, "
+            "procedures nothing calls and branches on a constant don't count). 'kind' picks what 'name' "
+            "is: 'gvar' (reads/writes of a GVAR_*, as find_gvar), 'call' (an opcode or procedure called "
+            "with parentheses, e.g. load_map, create_object_sid, critter_add_trait), 'procedure' (every "
+            "reference to a procedure: calls, `call x`, x passed as a value, @x), 'macro' (code a macro "
+            "produced, e.g. set_self_ai). Each ref: {script, file? (a header or template), line, "
+            "procedure, text}. Needs a script-source tree (e.g. FRP scripts_src) mounted. Args: kind, name.",
+            json({ { "type", "object" }, { "properties", { { "kind", { { "type", "string" }, { "enum", json::array({ "gvar", "call", "procedure", "macro" }) } } }, { "name", { { "type", "string" } } } } }, { "required", json::array({ "kind", "name" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolScriptRefs(r, a); }, "" });
+        t.push_back({ "lint_script",
+            "Check a script's .ssl for problems the compiler doesn't catch, each {severity, check, message, "
+            "file, line, procedure}: 'local-vars' (a local variable number past the count scripts.lst "
+            "gives the script — the engine doesn't check and reads/writes the next script's variables), "
+            "'messages' (a message number missing from the dialog .msg it names — the player sees "
+            "\"Error\" — or a list naming no script), 'syntax' (code the preprocessor/parser can't read), "
+            "and as notes 'unused-procedure' (written but never run). Select the script by 'name' or "
+            "0-based 'programIndex', or pass all=true for every script with a mounted source (notes off "
+            "unless notes=true). Needs a script-source tree mounted, plus the game text for the message "
+            "check. Args: name or programIndex or all, optional notes, locale.",
+            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "all", { { "type", "boolean" } } }, { "notes", { { "type", "boolean" } } }, { "locale", { { "type", "string" } } } } } }),
+            [](resource::GameResources& r, const json& a) { return toolLintScript(r, a); }, "" });
         t.push_back({ "frm_info",
             "FRM sprite metadata as JSON, so art can be MEASURED instead of inferred from PID "
             "arithmetic. Accepts an art name (ext2grd1 or art/misc/ext2grd1.frm) or a FID (as a string, "

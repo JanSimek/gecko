@@ -4,7 +4,7 @@
 #include <cctype>
 #include <format>
 
-#include "ssl/AstWalk.h"
+#include "ssl/CallGraph.h"
 
 namespace geck::ssl {
 
@@ -29,16 +29,17 @@ namespace {
 
     class FactsReader {
     public:
-        explicit FactsReader(const ScriptUnit& unit)
-            : _unit(unit) {}
+        FactsReader(const ScriptUnit& unit, const CallGraph& graph)
+            : _unit(unit)
+            , _graph(graph) {}
 
         std::vector<ScriptFacts::Override> overrides() const {
             std::vector<ScriptFacts::Override> found;
             for (const Procedure& procedure : _unit.program().procedures) {
-                if (!procedure.body.has_value()) {
-                    continue;
+                if (!procedure.body.has_value() || !_graph.isLive(procedure.name)) {
+                    continue; // not compiled into the script, so it never runs
                 }
-                forEachExpression(*procedure.body, [this, &found, &procedure](const Expr& expr) {
+                _graph.forEachLiveExpression(procedure, [this, &found, &procedure](const Expr& expr) {
                     const auto* call = std::get_if<Call>(&expr.node);
                     if (auto write = call ? selfTraitWrite(expr, *call) : std::nullopt; write.has_value()) {
                         write->procedure = procedure.name;
@@ -86,7 +87,7 @@ namespace {
             if (const auto number = _unit.evaluate(*value); number.has_value()) {
                 write.value = static_cast<int>(*number);
             }
-            write.valueName = valueMacro(expr, *value);
+            write.valueName = _unit.argumentMacro(expr, *value);
             return write;
         }
 
@@ -109,19 +110,8 @@ namespace {
             return std::nullopt;
         }
 
-        // The object-like macro the value was written as: the outermost macro the value came out of
-        // that the call itself did not (set_self_ai, set_ai, ...).
-        std::string valueMacro(const Expr& call, const Expr& value) const {
-            const auto callChain = _unit.macroChain(call.range);
-            for (const Macro* macro : _unit.macroChain(value.range)) {
-                if (!macro->functionLike && std::ranges::find(callChain, macro) == callChain.end()) {
-                    return std::string(macro->name);
-                }
-            }
-            return {};
-        }
-
         const ScriptUnit& _unit;
+        const CallGraph& _graph;
     };
 
     std::map<int, std::string> localVarNames(const ScriptUnit& unit) {
@@ -151,7 +141,8 @@ ScriptFacts readFacts(const ScriptUnit& unit) {
     if (const auto script = unit.scriptFile(); script.has_value()) {
         facts.script = unit.sources().path(*script);
     }
-    facts.overrides = FactsReader(unit).overrides();
+    const CallGraph graph(unit.program());
+    facts.overrides = FactsReader(unit, graph).overrides();
     facts.localVarNames = localVarNames(unit);
     for (const Diagnostic& d : unit.diagnostics()) {
         const std::string file = d.location.file != 0 ? unit.sources().path(d.location.file).generic_string() : facts.script.generic_string();
