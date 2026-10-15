@@ -3,6 +3,8 @@
 #include "format/gam/Gam.h"
 #include "resource/GameResources.h"
 
+#include <spdlog/spdlog.h>
+
 namespace geck::resource {
 
 /// data/vault13.gam (the GAME_GLOBAL_VARS dictionary: every GVAR by index, with its start value)
@@ -13,8 +15,8 @@ inline Gam* loadVault13Gam(GameResources& resources) {
             if (Gam* gam = resources.repository().load<Gam>(path); gam != nullptr) {
                 return gam;
             }
-        } catch (const std::exception&) {
-            // try the next candidate path
+        } catch (const std::exception& e) {
+            spdlog::debug("vault13.gam not at {}: {}", path, e.what()); // try the next candidate path
         }
     }
     return nullptr;

@@ -43,6 +43,21 @@ namespace {
     // Where the map places the row's script (resource::ScriptPlacement), for the placement checks.
     constexpr int PLACEMENT_ROLE = Qt::UserRole + 2;
 
+    /// The script's own findings, then what is wrong with it for where the row `file` places it.
+    std::vector<resource::ScriptFinding> rowFindings(const QTableWidgetItem& file, const ScriptSourceService::ScriptStatus& status) {
+        std::vector<resource::ScriptFinding> findings = status.findings;
+        const QVariant placement = file.data(PLACEMENT_ROLE);
+        if (!placement.isValid() || !status.report) {
+            return findings;
+        }
+        for (auto& finding : resource::placementFindings(*status.report, static_cast<resource::ScriptPlacement>(placement.toInt()))) {
+            if (finding.severity != resource::ScriptFinding::Severity::Note) {
+                findings.push_back(std::move(finding));
+            }
+        }
+        return findings;
+    }
+
     QString findingText(const resource::ScriptFinding& finding) {
         const QString message = QString::fromStdString(finding.message);
         if (finding.where.line == 0) {
@@ -222,15 +237,7 @@ void ScriptsPanel::markRows(int programIndex, const ScriptSourceService::ScriptS
         if (file == nullptr || programIndexOfRow(row) != programIndex) {
             continue;
         }
-        // The script's own findings, then what is wrong with it for where this row places it.
-        std::vector<resource::ScriptFinding> findings = status.findings;
-        if (const QVariant placement = file->data(PLACEMENT_ROLE); placement.isValid() && status.report) {
-            for (auto& finding : resource::placementFindings(*status.report, static_cast<resource::ScriptPlacement>(placement.toInt()))) {
-                if (finding.severity != resource::ScriptFinding::Severity::Note) {
-                    findings.push_back(std::move(finding));
-                }
-            }
-        }
+        const std::vector<resource::ScriptFinding> findings = rowFindings(*file, status);
         QStringList problems;
         bool error = false;
         for (const resource::ScriptFinding& finding : findings) {

@@ -11,6 +11,8 @@
 #include "resource/GameVarsLoader.h"
 #include "resource/ScriptLint.h"
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <format>
 #include <map>
@@ -74,16 +76,17 @@ namespace {
 namespace {
 
     const char* placementName(resource::ScriptPlacement placement) {
+        using enum resource::ScriptPlacement;
         switch (placement) {
-            case resource::ScriptPlacement::Map:
+            case Map:
                 return "map";
-            case resource::ScriptPlacement::Spatial:
+            case Spatial:
                 return "spatial";
-            case resource::ScriptPlacement::Timer:
+            case Timer:
                 return "timer";
-            case resource::ScriptPlacement::Critter:
+            case Critter:
                 return "critter";
-            case resource::ScriptPlacement::Item:
+            case Item:
                 break;
         }
         return "item";
@@ -348,8 +351,8 @@ int lintFiles(resource::GameResources& resources, const std::vector<std::filesys
     const Lst* scripts = nullptr;
     try {
         scripts = resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
-    } catch (const std::exception&) {
-        // no game data: the checks that need scripts.lst are skipped
+    } catch (const std::exception& e) {
+        spdlog::debug("lint: no scripts.lst ({}), so the checks that need it are skipped", e.what());
     }
     resource::ScriptLinter linter(resources, scripts, locale);
     const ssl::DiskSourceProvider provider;

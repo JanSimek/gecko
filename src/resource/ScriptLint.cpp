@@ -108,9 +108,9 @@ std::vector<ScriptFinding> ScriptLinter::findings(const ScriptReport& report, in
         unusedLocalVariables(report, out);
         for (const ScriptProcedure& procedure : report.procedures) {
             if (procedure.inScript && !procedure.live) {
-                out.push_back({ Severity::Note, "unused-procedure",
+                out.emplace_back(Severity::Note, "unused-procedure",
                     std::format("{} never runs: nothing calls it, so sslc leaves it out of the compiled script", procedure.name),
-                    procedure.where, procedure.name });
+                    procedure.where, procedure.name);
             }
         }
     }
@@ -145,7 +145,7 @@ void ScriptLinter::localVariables(const ScriptReport& report, int programIndex, 
             : std::format("{} is past the {} local variables scripts.lst gives {} (\"# local_vars={}\"); the engine does not "
                           "check, so it reads and writes the next script's variables",
                   what, count, script, count);
-        out.push_back({ Severity::Error, "local-vars", message, use.where, use.ref.procedure });
+        out.emplace_back(Severity::Error, "local-vars", message, use.where, use.ref.procedure);
     }
 }
 
@@ -165,19 +165,19 @@ void ScriptLinter::messages(const ScriptReport& report, std::vector<ScriptFindin
             continue;
         }
         if (list <= 0 || static_cast<std::size_t>(list) > _scripts->list().size()) {
-            out.push_back({ Severity::Error, "messages", std::format("{} reads message list {}, which names no scripts.lst line", use.ref.opcode, list),
-                use.where, use.ref.procedure });
+            out.emplace_back(Severity::Error, "messages", std::format("{} reads message list {}, which names no scripts.lst line", use.ref.opcode, list),
+                use.where, use.ref.procedure);
             continue;
         }
         const std::string name = scriptBaseName(_scripts->list()[static_cast<std::size_t>(list - 1)]);
         if (const Msg* dialog = dialogOf(name); dialog == nullptr) {
             if (missingFiles.insert(list).second) {
-                out.push_back({ Severity::Warning, "messages", std::format("dialog/{}.msg is not mounted, so its messages can't be checked", name),
-                    use.where, use.ref.procedure });
+                out.emplace_back(Severity::Warning, "messages", std::format("dialog/{}.msg is not mounted, so its messages can't be checked", name),
+                    use.where, use.ref.procedure);
             }
         } else if (!dialog->getMessages().contains(number)) {
-            out.push_back({ Severity::Error, "messages", std::format("message {} is not in dialog/{}.msg; the engine shows \"Error\" instead", number, name),
-                use.where, use.ref.procedure });
+            out.emplace_back(Severity::Error, "messages", std::format("message {} is not in dialog/{}.msg; the engine shows \"Error\" instead", number, name),
+                use.where, use.ref.procedure);
         }
     }
 }
@@ -286,25 +286,24 @@ void ScriptLinter::globalVariables(const ScriptReport& report, std::vector<Scrip
             continue;
         }
         const std::string what = use.ref.name.empty() ? std::format("global variable {}", *index) : std::format("{} ({})", use.ref.name, *index);
-        out.push_back({ Severity::Error, "gvars",
+        out.emplace_back(Severity::Error, "gvars",
             std::format("{} is not one of vault13.gam's {} global variables, so reading it gives 0 and setting it does nothing", what, count),
-            use.where, use.ref.procedure });
+            use.where, use.ref.procedure);
     }
 }
 
 void ScriptLinter::timers(const ScriptReport& report, std::vector<ScriptFinding>& out) const {
-    const bool handled = std::ranges::any_of(report.procedures, [](const ScriptProcedure& p) {
-        return std::ranges::equal(p.name, std::string_view("timed_event_p_proc"),
-            [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); });
-    });
-    if (handled) {
+    if (std::ranges::any_of(report.procedures, [](const ScriptProcedure& p) {
+            return std::ranges::equal(p.name, std::string_view("timed_event_p_proc"),
+                [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); });
+        })) {
         return;
     }
     for (const auto& use : report.calls) {
         if (use.ref.opcode == "add_timer_event" && !use.ref.self.empty() && use.ref.self.front()) {
-            out.push_back({ Severity::Warning, "timers",
+            out.emplace_back(Severity::Warning, "timers",
                 "add_timer_event on self_obj, but the script has no timed_event_p_proc for the event to run, so it does nothing",
-                use.where, use.ref.procedure });
+                use.where, use.ref.procedure);
             return; // once is enough
         }
     }
@@ -325,7 +324,7 @@ namespace {
     }
 
     void addError(std::vector<ScriptFinding>& out, const ScriptUse<ssl::CallRef>& use, const char* check, std::string message) {
-        out.push_back({ Severity::Error, check, std::move(message), use.where, use.ref.procedure });
+        out.emplace_back(Severity::Error, check, std::move(message), use.where, use.ref.procedure);
     }
 
     /// move_to / critter_attempt_placement(obj, tile, elevation)
@@ -389,9 +388,9 @@ void ScriptLinter::unusedLocalVariables(const ScriptReport& report, std::vector<
         const ScriptUse<ssl::VariableRef>* use = get != nullptr ? get : set;
         const std::string what = use->ref.name.empty() ? std::format("Local variable {}", index) : std::format("{} ({})", use->ref.name, index);
         if (set == nullptr) {
-            out.push_back({ Severity::Note, "local-vars", std::format("{} is read but never set, so it is always 0", what), get->where, get->ref.procedure });
+            out.emplace_back(Severity::Note, "local-vars", std::format("{} is read but never set, so it is always 0", what), get->where, get->ref.procedure);
         } else if (get == nullptr) {
-            out.push_back({ Severity::Note, "local-vars", std::format("{} is set but never read", what), set->where, set->ref.procedure });
+            out.emplace_back(Severity::Note, "local-vars", std::format("{} is set but never read", what), set->where, set->ref.procedure);
         }
     }
 }
@@ -411,14 +410,15 @@ bool ScriptLinter::protoExists(int64_t pid) {
 }
 
 ScriptPlacement placementOf(MapScript::ScriptType type) {
+    using enum MapScript::ScriptType;
     switch (type) {
-        case MapScript::ScriptType::SPATIAL:
+        case SPATIAL:
             return ScriptPlacement::Spatial;
-        case MapScript::ScriptType::TIMER:
+        case TIMER:
             return ScriptPlacement::Timer;
-        case MapScript::ScriptType::ITEM:
+        case ITEM:
             return ScriptPlacement::Item;
-        case MapScript::ScriptType::CRITTER:
+        case CRITTER:
             return ScriptPlacement::Critter;
         default:
             return ScriptPlacement::Map; // a system script, like the map's own
@@ -435,17 +435,17 @@ std::vector<ScriptFinding> placementFindings(const ScriptReport& report, ScriptP
     const ScriptLocation script{ report.script, 0 };
     if (placement == ScriptPlacement::Map && !report.locals.empty()) {
         const auto& use = report.locals.front();
-        out.push_back({ Severity::Error, "local-vars",
-            "This is a system script (the map's own, or one in the System section), and the engine refuses local_var in those: every read gives -1", use.where, use.ref.procedure });
+        out.emplace_back(Severity::Error, "local-vars",
+            "This is a system script (the map's own, or one in the System section), and the engine refuses local_var in those: every read gives -1", use.where, use.ref.procedure);
     }
     if (placement == ScriptPlacement::Spatial && defines("spatial_p_proc") == report.procedures.end()) {
-        out.push_back({ Severity::Warning, "spatial", "A spatial script without spatial_p_proc: stepping into its area does nothing", script, {} });
+        out.emplace_back(Severity::Warning, "spatial", "A spatial script without spatial_p_proc: stepping into its area does nothing", script, std::string());
     }
     if (placement != ScriptPlacement::Critter) {
         for (const char* handler : { "critter_p_proc", "combat_p_proc" }) {
             if (const auto it = defines(handler); it != report.procedures.end()) {
-                out.push_back({ Severity::Note, "handlers", std::format("{} never runs here: the engine calls it only for critter scripts", handler),
-                    it->where, it->name });
+                out.emplace_back(Severity::Note, "handlers", std::format("{} never runs here: the engine calls it only for critter scripts", handler),
+                    it->where, it->name);
             }
         }
     }
@@ -473,7 +473,7 @@ NeverSetGlobals neverSetGlobals(const std::vector<ScriptReport>& reports, const 
             if (use.ref.kind == ssl::VariableRef::Kind::Set) {
                 written.insert(index);
             } else if (readHere.insert(index).second) {
-                auto [it, fresh] = read.try_emplace(index, FirstRead{ i, &use, 0 });
+                auto [it, fresh] = read.try_emplace(index, i, &use, 0);
                 ++it->second.readers;
             }
         }
@@ -487,9 +487,9 @@ NeverSetGlobals neverSetGlobals(const std::vector<ScriptReport>& reports, const 
             continue;
         }
         const std::string others = first.readers > 1 ? std::format(" (as do {} other scripts)", first.readers - 1) : std::string();
-        result.findings[first.report].push_back({ Severity::Warning, "gvars",
+        result.findings[first.report].emplace_back(Severity::Warning, "gvars",
             std::format("{} ({}) is read here{}, but no script sets it, so it stays at its vault13.gam start value of {}", name, index, others, start),
-            first.use->where, first.use->ref.procedure });
+            first.use->where, first.use->ref.procedure);
     }
     return result;
 }
