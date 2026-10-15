@@ -1212,9 +1212,15 @@ namespace {
             "is: 'gvar' (reads/writes of a GVAR_*, as find_gvar), 'call' (an opcode or procedure called "
             "with parentheses, e.g. load_map, create_object_sid, critter_add_trait), 'procedure' (every "
             "reference to a procedure: calls, `call x`, x passed as a value, @x), 'macro' (code a macro "
-            "produced, e.g. set_self_ai). Each ref: {script, file? (a header or template), line, "
+            "produced, e.g. set_self_ai), 'pid' (a constant PID — number, 0x hex or PID_* — passed where an "
+            "opcode takes one, e.g. create_object_sid, obj_is_carrying_obj_pid, party_member_obj, or "
+            "compared with obj_pid(): which scripts create, look for or test that object; adds via, pid, "
+            "name), 'map' (load_map calls sending the player to a map, by file name such as arcaves.map or "
+            "maps.txt index, however the script names it: the script-driven transitions the exit-grid "
+            "graph lacks; adds map, mapIndex, entrance = the value stored in GVAR_LOAD_MAP_INDEX). "
+            "name '*' lists every pid or map use. Each ref: {script, file? (a header or template), line, "
             "procedure, text}. Needs a script-source tree (e.g. FRP scripts_src) mounted. Args: kind, name.",
-            json({ { "type", "object" }, { "properties", { { "kind", { { "type", "string" }, { "enum", json::array({ "gvar", "call", "procedure", "macro" }) } } }, { "name", { { "type", "string" } } } } }, { "required", json::array({ "kind", "name" }) } }),
+            json({ { "type", "object" }, { "properties", { { "kind", { { "type", "string" }, { "enum", json::array({ "gvar", "call", "procedure", "macro", "pid", "map" }) } } }, { "name", { { "type", "string" } } } } }, { "required", json::array({ "kind", "name" }) } }),
             [](resource::GameResources& r, const json& a) { return toolScriptRefs(r, a); }, "" });
         t.push_back({ "lint_script",
             "Check scripts for problems the compiler doesn't catch, each {severity, check, message, "

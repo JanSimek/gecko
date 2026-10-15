@@ -1,18 +1,25 @@
 #include "cli/ScriptRefs.h"
 
+#include "cli/ProtoName.h"
 #include "reader/TextParsing.h"
 #include "resource/GameResources.h"
+#include "resource/MapNameResolver.h"
 #include "resource/VfsSourceProvider.h"
 #include "ssl/Corpus.h"
+#include "ssl/ObjectRefs.h"
 #include "ssl/VariableRefs.h"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <filesystem>
+#include <format>
 #include <functional>
+#include <map>
 #include <optional>
+#include <ranges>
 #include <ostream>
 #include <set>
 #include <string>
@@ -31,6 +38,42 @@ namespace {
         return std::ranges::equal(a, b, [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
     }
 
+    std::string lower(std::string text) {
+        std::ranges::transform(text, text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return text;
+    }
+
+    // A map name as the engine matches it (worldmap.cc wmMapMatchNameToIdx): lowercase, up to the first
+    // '.', here also without a directory.
+    std::string mapStem(const std::string& name) {
+        const std::string file = lower(std::filesystem::path(name).filename().string());
+        return file.substr(0, file.find('.'));
+    }
+
+    // A whole decimal or 0x-prefixed hexadecimal number, or nullopt.
+    std::optional<int64_t> parseNumber(std::string_view text) {
+        int base = 10;
+        if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) {
+            text.remove_prefix(2);
+            base = 16;
+        }
+        int64_t value = 0;
+        const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value, base);
+        if (error != std::errc() || end != text.data() + text.size() || text.empty()) {
+            return std::nullopt;
+        }
+        return value;
+    }
+
+    // What a "map" search looks for, and the maps.txt index -> file name table, both read up front so
+    // the per-script searches (on worker threads) only read them.
+    struct MapTarget {
+        bool any = false;         ///< name "*": every load_map
+        std::optional<int> index; ///< the maps.txt index the target has
+        std::string stem;         ///< its file name as the engine matches it
+        std::map<int, std::string> fileNames;
+    };
+
     bool isScript(const std::filesystem::path& path) {
         std::string ext = path.extension().string();
         std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -40,14 +83,19 @@ namespace {
     // What one script contributes: refs as JSON, in source order.
     class ScriptSearch {
     public:
-        ScriptSearch(const ssl::ScriptUnit& unit, const std::filesystem::path& path)
+        ScriptSearch(const ssl::ScriptUnit& unit, const std::filesystem::path& path, const MapTarget& maps)
             : _unit(unit)
             , _graph(unit.program())
-            , _path(path) {}
+            , _path(path)
+            , _maps(maps) {}
 
         std::vector<ordered_json> run(const ScriptRefsOptions& options) {
             if (options.kind == "gvar") {
                 globalVariable(options.name);
+            } else if (options.kind == "pid") {
+                pids(options.name);
+            } else if (options.kind == "map") {
+                loadMaps();
             } else {
                 forEachLiveExpression([this, &options](const ssl::Procedure& procedure, const ssl::Expr& expr) {
                     if (matches(options, expr)) {
@@ -113,12 +161,66 @@ namespace {
 
         // The number `gvarName` stands for in this script, when its headers define it.
         std::optional<int> targetIndex(const std::string& gvarName) const {
-            if (const ssl::Macro* macro = _unit.preprocessor().find(gvarName); macro != nullptr) {
-                if (const auto value = _unit.evaluate(*macro); value.has_value()) {
-                    return static_cast<int>(*value);
-                }
+            if (const auto value = macroValue(gvarName); value.has_value()) {
+                return static_cast<int>(*value);
             }
             return std::nullopt;
+        }
+
+        std::optional<int64_t> macroValue(const std::string& name) const {
+            if (const ssl::Macro* macro = _unit.preprocessor().find(name); macro != nullptr) {
+                return _unit.evaluate(*macro);
+            }
+            return std::nullopt;
+        }
+
+        // Constant PIDs: `pid` is a number, a PID_* macro this script's headers define, or "*" for all.
+        void pids(const std::string& pid) {
+            const bool any = pid == "*";
+            std::optional<int64_t> target;
+            if (!any) {
+                target = parseNumber(pid);
+                if (!target.has_value()) {
+                    target = macroValue(pid);
+                }
+            }
+            if (!any && !target.has_value()) {
+                return; // a macro this script doesn't define names no PID here
+            }
+            for (const ssl::PidRef& ref : ssl::pidRefs(_unit, _graph)) {
+                if (any || ref.pid == *target) {
+                    if (ordered_json* json = add(ref.procedure, ref.location); json != nullptr) {
+                        (*json)["via"] = ref.via;
+                        (*json)["pid"] = std::format("0x{:08X}", static_cast<uint32_t>(ref.pid));
+                    }
+                }
+            }
+        }
+
+        // load_map calls sending the player to the target map (by index or by file name).
+        void loadMaps() {
+            for (const ssl::MapRef& ref : ssl::mapRefs(_unit, _graph)) {
+                std::optional<int> index = ref.index.has_value() ? std::optional<int>(static_cast<int>(*ref.index)) : std::nullopt;
+                std::string stem = ref.name.has_value() ? mapStem(*ref.name) : std::string();
+                if (index.has_value() && stem.empty()) {
+                    if (const auto it = _maps.fileNames.find(*index); it != _maps.fileNames.end()) {
+                        stem = mapStem(it->second);
+                    }
+                }
+                if (const bool matches = _maps.any || (_maps.index.has_value() && index == _maps.index) || (!stem.empty() && stem == _maps.stem);
+                    !matches) {
+                    continue;
+                }
+                ordered_json* json = add(ref.procedure, ref.location);
+                if (json == nullptr) {
+                    continue;
+                }
+                (*json)["map"] = stem.empty() ? ordered_json(nullptr) : ordered_json(stem + ".map");
+                if (index.has_value()) {
+                    (*json)["mapIndex"] = *index;
+                }
+                (*json)["entrance"] = ref.entrance.has_value() ? ordered_json(*ref.entrance) : ordered_json(nullptr);
+            }
         }
 
         void add(const ssl::Procedure& procedure, ssl::TokenRange range) {
@@ -145,65 +247,116 @@ namespace {
         const ssl::ScriptUnit& _unit;
         const ssl::CallGraph _graph;
         const std::filesystem::path& _path;
+        const MapTarget& _maps;
         std::vector<ordered_json> _found;
         std::set<std::tuple<std::string, ssl::FileId, uint32_t>> _seen;
     };
 
+    // The map a "map" search names (file name or maps.txt index, "*" for all), with the index -> file
+    // name table.
+    MapTarget mapTarget(resource::GameResources& resources, const std::string& name) {
+        MapTarget maps;
+        const resource::MapNameResolver resolver(resources);
+        for (const resource::MapName& map : resolver.allMaps()) {
+            maps.fileNames.try_emplace(map.index, map.fileName);
+        }
+        maps.any = name == "*";
+        if (const auto number = parseNumber(name); number.has_value()) {
+            maps.index = static_cast<int>(*number);
+            maps.stem = mapStem(resolver.fileNameOf(*maps.index));
+        } else if (!maps.any) {
+            maps.stem = mapStem(name);
+            if (const int index = resolver.indexOf(maps.stem + ".map"); index >= 0) {
+                maps.index = index;
+            }
+        }
+        return maps;
+    }
+
+    struct Collected {
+        ordered_json refs = ordered_json::array();
+        std::size_t scripts = 0; ///< scripts with a ref
+        int setters = 0;         ///< gvar writes
+        bool capped = false;
+    };
+
+    // The per-script refs in script order, up to kMaxRefs; a PID ref gets its proto's name, read here
+    // rather than on the worker threads (the repository cache).
+    Collected collect(resource::GameResources& resources, const std::vector<std::vector<ordered_json>>& perScript, bool namePids) {
+        Collected out;
+        std::map<uint32_t, std::string> protoNames;
+        std::set<std::string> referencing;
+        for (const auto& ref : perScript | std::views::join) {
+            if (out.refs.size() >= kMaxRefs) {
+                out.capped = true;
+                break;
+            }
+            out.setters += ref.value("kind", "") == "set" ? 1 : 0;
+            referencing.insert(ref["script"].get<std::string>());
+            out.refs.push_back(ref);
+            if (namePids) {
+                const auto pid = static_cast<uint32_t>(std::stoul(ref["pid"].get<std::string>(), nullptr, 16));
+                auto [name, fresh] = protoNames.try_emplace(pid);
+                if (fresh) {
+                    name->second = protoDisplayName(resources, pid);
+                }
+                out.refs.back()["name"] = name->second;
+            }
+        }
+        out.scripts = referencing.size();
+        return out;
+    }
+
+    // Every mounted .ssl, sorted.
+    std::vector<std::filesystem::path> mountedScripts(resource::GameResources& resources) {
+        std::vector<std::filesystem::path> scripts;
+        try {
+            for (const auto& path : resources.files().list("*")) {
+                if (isScript(path)) {
+                    scripts.push_back(path);
+                }
+            }
+        } catch (const std::exception&) {
+            // no data mounted -> treated as no sources
+        }
+        std::ranges::sort(scripts);
+        return scripts;
+    }
+
 } // namespace
 
 int findScriptRefs(resource::GameResources& resources, const ScriptRefsOptions& options, std::ostream& out) {
-    static const std::set<std::string, std::less<>> KINDS{ "gvar", "call", "procedure", "macro" };
+    static const std::set<std::string, std::less<>> KINDS{ "gvar", "call", "procedure", "macro", "pid", "map" };
     if (!KINDS.contains(options.kind) || options.name.empty()) {
-        out << "script-refs: kind must be gvar, call, procedure or macro, and name must not be empty\n";
+        out << "script-refs: kind must be gvar, call, procedure, macro, pid or map, and name must not be empty\n";
         return 1;
     }
-
-    std::vector<std::filesystem::path> scripts;
-    try {
-        for (const auto& path : resources.files().list("*")) {
-            if (isScript(path)) {
-                scripts.push_back(path);
-            }
-        }
-    } catch (const std::exception&) {
-        // no data mounted -> treated as no sources below
-    }
-    std::ranges::sort(scripts);
+    const MapTarget maps = options.kind == "map" ? mapTarget(resources, options.name) : MapTarget{};
+    const std::vector<std::filesystem::path> scripts = mountedScripts(resources);
 
     std::vector<std::vector<ordered_json>> perScript(scripts.size());
     const resource::VfsSourceProvider provider(resources.files());
-    ssl::loadScripts(provider, scripts, [&perScript, &options, &scripts](std::size_t index, const ssl::ScriptUnit& unit) {
+    ssl::loadScripts(provider, scripts, [&perScript, &options, &scripts, &maps](std::size_t index, const ssl::ScriptUnit& unit) {
         if (unit.scriptFile().has_value()) {
-            perScript[index] = ScriptSearch(unit, scripts[index]).run(options);
+            perScript[index] = ScriptSearch(unit, scripts[index], maps).run(options);
         }
     });
 
-    auto refs = ordered_json::array();
-    int setters = 0;
-    std::set<std::string> referencing;
-    bool capped = false;
-    for (const auto& found : perScript) {
-        for (const auto& ref : found) {
-            if (refs.size() >= kMaxRefs) {
-                capped = true;
-                break;
-            }
-            setters += ref.value("kind", "") == "set" ? 1 : 0;
-            referencing.insert(ref["script"].get<std::string>());
-            refs.push_back(ref);
-        }
-    }
-
+    const Collected collected = collect(resources, perScript, options.kind == "pid");
     ordered_json root;
     root[options.kind == "gvar" ? "gvar" : "name"] = options.name;
     if (options.kind != "gvar") {
         root["kind"] = options.kind;
     }
-    root["refs"] = std::move(refs);
-    root["stats"] = { { "refs", root["refs"].size() }, { "scripts", referencing.size() }, { "scriptsRead", scripts.size() },
-        { "capped", capped } };
+    root["refs"] = collected.refs;
+    root["stats"] = { { "refs", collected.refs.size() }, { "scripts", collected.scripts }, { "scriptsRead", scripts.size() },
+        { "capped", collected.capped } };
     if (options.kind == "gvar") {
-        root["stats"]["setters"] = setters;
+        root["stats"]["setters"] = collected.setters;
+    }
+    if (options.kind == "map" && !maps.any) {
+        root["map"] = maps.stem.empty() ? ordered_json(nullptr) : ordered_json(maps.stem + ".map");
+        root["mapIndex"] = maps.index.has_value() ? ordered_json(*maps.index) : ordered_json(nullptr);
     }
     out << root.dump(2, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     // Not used anywhere is a valid answer; nothing to read means no source tree is mounted, an error

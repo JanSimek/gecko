@@ -5,10 +5,8 @@
 #include "editor/Reachability.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
-#include "format/msg/Msg.h"
-#include "format/pro/Pro.h"
+#include "cli/ProtoName.h"
 #include "resource/GameResources.h"
-#include "util/ProHelper.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -32,18 +30,6 @@ namespace {
         const std::string file = slash == std::string::npos ? path : path.substr(slash + 1);
         const auto dot = file.find_last_of('.');
         return dot == std::string::npos ? file : file.substr(0, dot);
-    }
-
-    std::string protoName(resource::GameResources& resources, uint32_t pid) {
-        try {
-            if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
-                if (Msg* msg = ProHelper::msgFile(resources, pro->type()); msg != nullptr) {
-                    return msg->message(pro->header.message_id).text;
-                }
-            }
-        } catch (const std::exception&) { // a missing/odd proto just yields an empty name
-        }
-        return {};
     }
 
     // Only critters and items are gameplay content worth flagging as "orphaned" if cut off.
@@ -89,7 +75,7 @@ namespace {
             }
             ++total;
             if (array.size() < kMaxReported) {
-                array.push_back({ { "pid", object->pro_pid }, { "name", protoName(resources, object->pro_pid) },
+                array.push_back({ { "pid", object->pro_pid }, { "name", protoDisplayName(resources, object->pro_pid) },
                     { "hex", object->position } });
             }
         }

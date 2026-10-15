@@ -6,13 +6,12 @@
 #include "format/gam/Gam.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
-#include "format/msg/Msg.h"
+#include "cli/ProtoName.h"
 #include "format/pro/Pro.h"
 #include "reader/IniParser.h"
 #include "reader/ReaderExceptions.h"
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
-#include "util/ProHelper.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -178,22 +177,8 @@ namespace {
         return count;
     }
 
-    std::string protoName(resource::GameResources& resources, uint32_t pid) {
-        try {
-            if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
-                if (Msg* msg = ProHelper::msgFile(resources, pro->type()); msg != nullptr) {
-                    return msg->message(pro->header.message_id).text;
-                }
-            }
-        } catch (const std::exception& e) {
-            // Leave the name empty, as proto_info does, rather than invent one.
-            spdlog::debug("describe_save: no display name for pid {}: {}", pid, e.what());
-        }
-        return {};
-    }
-
     ordered_json critterJson(resource::GameResources& resources, const MapObject& critter, bool isDude) {
-        return { { "who", isDude ? std::string("dude") : protoName(resources, critter.pro_pid) },
+        return { { "who", isDude ? std::string("dude") : protoDisplayName(resources, critter.pro_pid) },
             { "pid", std::format("0x{:08X}", critter.pro_pid) }, { "objectId", critter.unknown0 },
             { "hex", critter.position }, { "col", critter.position % 200 }, { "row", critter.position / 200 },
             { "team", critter.group_id }, { "aiPacket", critter.ai_packet },

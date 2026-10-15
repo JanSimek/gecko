@@ -313,6 +313,8 @@ add_library(vault STATIC
     ssl/MessageRefs.cpp
     ssl/CallRefs.h
     ssl/CallRefs.cpp
+    ssl/ObjectRefs.h
+    ssl/ObjectRefs.cpp
     ssl/VariableRefs.h
     ssl/VariableRefs.cpp
     ssl/Corpus.h
@@ -774,6 +776,8 @@ if(GECK_BUILD_CLI)
         cli/EngineTile.h
         cli/IntDisassembler.h
         cli/IntDisassembler.cpp
+        cli/ProtoName.h
+        cli/ProtoName.cpp
         cli/HexSightline.h
         cli/HexSightline.cpp
         cli/SaveInspect.h
