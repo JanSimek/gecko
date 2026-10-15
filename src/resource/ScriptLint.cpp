@@ -1,6 +1,8 @@
 #include "resource/ScriptLint.h"
 
 #include "format/lst/Lst.h"
+#include "format/map/Map.h"
+#include "format/map/MapScript.h"
 #include "format/msg/Msg.h"
 #include "resource/GameResources.h"
 #include "resource/ScriptSourceLocator.h"
@@ -10,6 +12,8 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <cctype>
 #include <format>
 #include <set>
 #include <tuple>
@@ -162,6 +166,82 @@ void ScriptLinter::messages(const ScriptReport& report, std::vector<ScriptFindin
                 use.where, use.ref.procedure });
         }
     }
+}
+
+std::map<uint32_t, std::string> localVarBlockProblems(const Map& map, const Lst& scripts) {
+    const auto& mapFile = map.getMapFile();
+    const bool saved = (mapFile.header.flags & static_cast<uint32_t>(MapHeaderFlags::Saved)) != 0;
+    const auto& counts = scripts.localVars();
+    const auto nameOf = [&scripts](uint32_t programIndex) {
+        return programIndex < scripts.list().size() ? scripts.list()[programIndex] : std::format("script #{}", programIndex);
+    };
+
+    struct Block {
+        uint32_t sid;
+        uint32_t programIndex;
+        std::size_t begin;
+        std::size_t end;
+    };
+    std::vector<Block> blocks;
+    for (const auto& section : mapFile.map_scripts) {
+        for (const MapScript& script : section) {
+            if (script.local_var_offset == MapScript::NONE) {
+                continue; // the engine gives it a fresh block on first use
+            }
+            const int listed = script.script_id < counts.size() ? counts[script.script_id] : 0;
+            const int count = saved && script.local_var_count != 0 ? static_cast<int>(script.local_var_count) : listed;
+            if (count > 0) {
+                blocks.push_back({ script.pid, script.script_id, script.local_var_offset, std::size_t{ script.local_var_offset } + static_cast<std::size_t>(count) });
+            }
+        }
+    }
+    std::ranges::sort(blocks, {}, &Block::begin);
+
+    // Per script: whether its block runs past the array, and which scripts' blocks it overlaps (with
+    // how many of each).
+    struct Overlap {
+        bool pastEnd = false;
+        std::map<std::string, int, std::less<>> others;
+    };
+    std::map<uint32_t, Overlap> found;
+    const std::size_t total = mapFile.map_local_vars.size();
+    for (std::size_t i = 0; i < blocks.size(); ++i) {
+        const Block& block = blocks[i];
+        if (block.end > total) {
+            found[block.sid].pastEnd = true;
+        }
+        for (std::size_t j = i + 1; j < blocks.size() && blocks[j].begin < block.end; ++j) {
+            ++found[block.sid].others[nameOf(blocks[j].programIndex)];
+            ++found[blocks[j].sid].others[nameOf(block.programIndex)];
+        }
+    }
+
+    std::map<uint32_t, std::string> problems;
+    for (const Block& block : blocks) {
+        const auto it = found.find(block.sid);
+        if (it == found.end()) {
+            continue;
+        }
+        std::vector<std::string> parts;
+        if (it->second.pastEnd) {
+            parts.push_back(std::format("its local variables {}-{} run past the map's {}, so those fail to read and write", block.begin,
+                block.end - 1, total));
+        }
+        if (!it->second.others.empty()) {
+            std::string others;
+            for (const auto& [name, times] : it->second.others) {
+                others += (others.empty() ? "" : ", ") + (times > 1 ? std::format("{} ({}x)", name, times) : name);
+            }
+            parts.push_back(std::format("its local variables {}-{} overlap those of {}, so they share them", block.begin, block.end - 1, others));
+        }
+        std::string text;
+        for (const auto& part : parts) {
+            text += (text.empty() ? "" : "; ") + part;
+        }
+        text.front() = static_cast<char>(std::toupper(static_cast<unsigned char>(text.front())));
+        problems.try_emplace(block.sid, text + ".");
+    }
+    return problems;
 }
 
 const Msg* ScriptLinter::dialogOf(const std::string& name) {

@@ -1,6 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <QApplication>
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
@@ -103,16 +106,26 @@ TEST_CASE("Selection panel remembers which sections are collapsed", "[ui][select
 }
 
 // The Script section reports what the script's parsed source does wrong (resource::ScriptLinter) and
-// when the map gives the placed script fewer local variables than scripts.lst does.
-TEST_CASE("Script section shows the script's lint findings and a short local variable block", "[ui][selection]") {
+// when the map puts the script's local variables where another script's are.
+TEST_CASE("Script section shows the script's lint findings and an overlapping local variable block", "[ui][selection]") {
+    QTemporaryDir data;
+    QDir(data.path()).mkpath("scripts");
+    QFile lst(data.filePath("scripts/scripts.lst"));
+    REQUIRE(lst.open(QIODevice::WriteOnly));
+    lst.write("one.int ; first  # local_vars=4\nother.int ; second  # local_vars=2\n");
+    lst.close();
     resource::GameResources resources;
+    resources.files().addDataPath(data.path().toStdString());
+
     Map map("testmap.map");
     map.setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
     auto script = MapScript::makeObjectScript(MapScript::ScriptType::CRITTER, 0, 0, 42);
     script.local_var_offset = 0;
-    script.local_var_count = 2;
     map.getMapFile().map_scripts[static_cast<int>(MapScript::ScriptType::CRITTER)].push_back(script);
-    map.getMapFile().map_local_vars = { 0, 0 };
+    auto other = MapScript::makeObjectScript(MapScript::ScriptType::ITEM, 1, 1, 43);
+    other.local_var_offset = 2; // inside one.int's block 0-3
+    map.getMapFile().map_scripts[static_cast<int>(MapScript::ScriptType::ITEM)].push_back(other);
+    map.getMapFile().map_local_vars = { 0, 0, 0, 0, 0, 0 };
 
     auto critter = std::make_shared<MapObject>();
     critter->pro_pid = 0x01000003;
@@ -135,6 +148,7 @@ TEST_CASE("Script section shows the script's lint findings and a short local var
         ai.value = 2;
         ai.valueName = "AI_CALM";
         report->overrides.push_back(ai);
+        report->locals.push_back({ ssl::VariableRef{}, { "src/one.ssl", 20 } }); // it uses its local variables
         status.report = report;
         status.findings.push_back({ resource::ScriptFinding::Severity::Error, "messages", "message 150 is not in dialog/one.msg",
             { "src/headers/shared.h", 30 }, "talk_p_proc" });
@@ -151,5 +165,5 @@ TEST_CASE("Script section shows the script's lint findings and a short local var
     INFO(shown.toStdString());
     CHECK(shown.contains("Sets the AI packet to AI_CALM (2) on map entry (map_enter_p_proc, line 12), replacing the map's 1"));
     CHECK(shown.contains("shared.h line 30: message 150 is not in dialog/one.msg"));
-    CHECK(shown.contains("The map gives this script 2 local variables, but scripts.lst gives it 4"));
+    CHECK(shown.contains("Its local variables 0-3 overlap those of other.int, so they share them."));
 }

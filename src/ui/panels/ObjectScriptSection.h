@@ -61,7 +61,7 @@ private:
     void browse();
     void refreshDetails(const MapScript* script, const ScriptSourceService::ScriptStatus& status);
     void refreshLocalVariables(const MapScript* script, const std::map<int, std::string>& localVarNames);
-    QString localVariableCountText(const MapScript* script, const ScriptSourceService::ScriptStatus& status) const;
+    QString localVariableBlockText(const MapScript* script, const ScriptSourceService::ScriptStatus& status) const;
     const AiTxt& aiPackets();
     const MapScript* attachedScript() const;
     bool isCritter() const;

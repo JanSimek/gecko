@@ -12,6 +12,7 @@
 
 namespace geck {
 class Lst;
+class Map;
 class Msg;
 }
 
@@ -104,5 +105,16 @@ private:
     std::string _locale;
     std::map<std::string, const Msg*, std::less<>> _dialogs;
 };
+
+/// What is wrong with where a map puts each placed script's local variables, by script SID, as a
+/// sentence ("Its local variables 0-19 run past the map's 2, ...").
+///
+/// The engine gives a script the block of the map's local variable array that starts at its record's
+/// offset. Its length is scripts.lst's `# local_vars=N`, except in a saved game, where the record's own
+/// count is used when it is not 0 (fallout2-ce scripts.cc scriptRead zeroes it for a map that is not
+/// saved, and scriptGetLocalVar then reads scripts.lst). Nothing checks one block against another
+/// (map.cc mapGetLocalVar only bounds the whole array), so a block that overlaps another script's
+/// makes the two share variables, and one past the end of the array fails to read and write.
+std::map<uint32_t, std::string> localVarBlockProblems(const Map& map, const Lst& scripts);
 
 } // namespace geck::resource

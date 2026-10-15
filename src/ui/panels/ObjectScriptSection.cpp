@@ -1,9 +1,12 @@
 #include "ObjectScriptSection.h"
 
+#include "format/lst/Lst.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
 #include "resource/AiTxtLoader.h"
+#include "resource/GameResources.h"
+#include "resource/ResourcePaths.h"
 #include "ui/IconHelper.h"
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
@@ -337,8 +340,8 @@ void ObjectScriptSection::refreshDetails(const MapScript* script, const ScriptSo
             notes << line;
         }
     }
-    if (const QString counts = localVariableCountText(script, status); !counts.isEmpty()) {
-        warnings << counts;
+    if (const QString block = localVariableBlockText(script, status); !block.isEmpty()) {
+        warnings << block;
     }
     if (!hint.isEmpty()) {
         notes << hint;
@@ -351,21 +354,26 @@ void ObjectScriptSection::refreshDetails(const MapScript* script, const ScriptSo
     refreshLocalVariables(script, report.localVarNames);
 }
 
-// The map stores how many local variables each placed script has, and the engine uses that count
-// (fallout2-ce scripts.cc scriptRead). Fewer than scripts.lst's means the script's higher variables
-// fall into the next script's block of the map's array.
-QString ObjectScriptSection::localVariableCountText(const MapScript* script, const ScriptSourceService::ScriptStatus& status) const {
-    if (script == nullptr || !status.resolved || script->local_var_offset == MapScript::NONE) {
+// Where the map puts the placed script's local variables (see resource::localVarBlockProblems), when
+// the script's running code uses them: a block that overlaps another script's or runs past the map's
+// array only matters to a script that reads or writes it.
+QString ObjectScriptSection::localVariableBlockText(const MapScript* script, const ScriptSourceService::ScriptStatus& status) const {
+    if (script == nullptr || _map == nullptr || !status.report || status.report->locals.empty()) {
         return {};
     }
-    const auto stored = static_cast<int>(script->local_var_count);
-    if (stored >= status.localVarCount) {
-        return {};
+    try {
+        const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
+        if (lst == nullptr) {
+            return {};
+        }
+        const auto problems = resource::localVarBlockProblems(*_map, *lst);
+        if (const auto it = problems.find(script->pid); it != problems.end()) {
+            return "⚠ " + QString::fromStdString(it->second);
+        }
+    } catch (const std::exception& e) {
+        spdlog::warn("ObjectScriptSection: scripts.lst unavailable: {}", e.what());
     }
-    return QString("⚠ The map gives this script %1 local variables, but scripts.lst gives it %2 (\"# local_vars=%2\"); "
-                   "variables %1 and up read and write the next script's.")
-        .arg(stored)
-        .arg(status.localVarCount);
+    return {};
 }
 
 const AiTxt& ObjectScriptSection::aiPackets() {
