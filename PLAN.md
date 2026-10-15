@@ -11,15 +11,14 @@
 
 ## What's next (priority order)
 
-1. **SSL script analysis** — rest of phase 4 (Scripts panel markers, bytecode fallback); see its section.
-2. **Cave rim quality** — the known-issues list below; highest-value generation work.
-3. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
-4. **SSL script editing** — open question: whether an in-app editor is still wanted now that
+1. **Cave rim quality** — the known-issues list below; highest-value generation work.
+2. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
+3. **SSL script editing** — open question: whether an in-app editor is still wanted now that
    compiling lives in VS Code + BGforge MLS (see the SSL section).
-5. **Minimap / overview panel** (feature-gap audit).
-6. **In-game preview mode** — idle animations first.
-7. **Analysis/MCP tail** — small, self-contained items.
-8. **Editor UX** — configurable keybindings + customizable toolbar (share one command/action
+4. **Minimap / overview panel** (feature-gap audit).
+5. **In-game preview mode** — idle animations first.
+6. **Analysis/MCP tail** — small, self-contained items.
+7. **Editor UX** — configurable keybindings + customizable toolbar (share one command/action
    table); undo residuals; log-panel follow-ups.
 
 ---
@@ -61,8 +60,7 @@ cave4, vs 53% for a compass bin). Inspect regions with `map render --crop-hex`.
 
 **Remaining content (complementary):**
 
-- **Rim scenery** — shipped caves scatter ~70 Rocks/Stalagmites; the generator places 0
-  (floor-quilt + `quiltObjects` transplant, or a curated palette, is a cheap first step).
+- **Cave lighting** — shipped caves carry ~8 Light Source objects each; the generator places none.
 - **Stamped rock formations** — extract real multi-hex formations from `cave1..4`
   (`extract_pattern`/`placeStamp`) to reuse authored composition.
 - **Town/building walls** — straight `Wall s.t.` runs + door openings differ from organic rims.

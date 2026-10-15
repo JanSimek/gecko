@@ -11,6 +11,9 @@
 --     the up-screen rim and filled lips on the near edge without hand tuning (~79% orientation match
 --     on held-out cave4 vs 53% for the old compass bin),
 --   * invisible blocking hexes sealing the rock side so the player can't walk off the floor,
+--   * floor decoration (rocks, stalagmites, dirt, weeds) at the density the shipped caves have at
+--     each distance from the walls — rocks heaped at their foot, the open floor nearly clear —
+--     never cutting a passage,
 --   * a scroll-blocker rectangle ringing the cavern so the camera stays inside,
 --   * an exit-grid patch on the floor (worldmap by default) and the player start.
 --
@@ -18,7 +21,8 @@
 --       --arg seed=42 --data <master.dat> [--data <critter.dat>]
 --
 -- Tunables: --arg chambers=N (default 5), --arg refs=maps/cave1.map,maps/cave2.map,...
--- (the learning corpus, elevation 1), --arg exit=worldmap|none. Batch with --count N.
+-- (the learning corpus, elevation 1), --arg exit=worldmap|none, --arg decor=<density scale, 0 = none>.
+-- Batch with --count N.
 -- generate warns after writing if any exit grid is unreachable from the player start.
 
 local REFS = {}
@@ -81,6 +85,20 @@ local geomModel = {} -- "faceDirs|rockmask" -> weighted { ... }: finer, used whe
 local geomDirpair = {} -- "faceDirs"          -> weighted { ... }: coarser fallback
 local wallPieces = {} -- compass class       -> weighted { ... }: final fallback (outward-normal bin)
 local wallPiecesAll = {} -- all pieces pooled: last resort
+
+-- Floor decoration: the standing (non-flat) scenery the shipped caves put on open floor, learned per
+-- DISTANCE BAND from the nearest wall piece or rock (1 = touches one, ..., DECOR_BANDS = that far or
+-- more). Measured from the wall art, not the rock tiles: the art covers floor tiles, and the mappers
+-- heap rocks against its foot. Across cave1..4 rocks stand on ~8% of the floor hexes touching a wall,
+-- ~1% one step out and almost none in the open, while stalagmites and weeds spread wider. Each band
+-- keeps its own density (pieces per floor hex) and weighted palette, sampled with the seeded rng.
+-- Band 0 is the walkable-side wall hexes themselves (the shipped maps heap Rocks and Dirt on the
+-- wall's foot); the open floor beyond DECOR_BANDS - 1 steps is pooled, since the references have few
+-- such hexes and a thin sample overstates what grows in the middle of a big chamber.
+local DECOR_BANDS = 4
+local DECOR_SCALE = tonumber(args.decor) or 1.0
+local decorDensity = {} -- band (1..DECOR_BANDS, or "0"..compass for wall hexes) -> pieces per hex
+local decorPalette = {} -- band -> weighted { {pid=, w=}, ... }
 
 -- The cavern floor palette is the cav* ground tiles only; the shipped maps blend edg50xx SAND at
 -- their entrance alcoves, and counting those into the mix speckles the cave floor with sand.
@@ -146,6 +164,8 @@ do
     local pidTotals = {} -- pid -> total count, for the last-resort pool
     local cornerCounts = {} -- "faceDirs" -> { [pid] = count }: corner pieces by turn shape
     local cornerTotals = {} -- proto# -> count (for the per-map frequency cap)
+    local decorCounts = {} -- band -> { [pid] = count }: standing scenery on walkable floor
+    local decorHexes = {} -- band -> walkable hexes at that distance from the rock
     for refIndex, ref in ipairs(REFS) do
         local floor = api:mapFloorAt(ref, REF_ELEVATION)
 
@@ -245,6 +265,87 @@ do
                 end
             end
         end
+
+        -- Floor decoration by distance from the walls: grow the distance over open floor (walkable,
+        -- no wall piece) from the hexes touching a wall or rock, then count the standing scenery on
+        -- each band and the band's size.
+        local wallHex = {}
+        for i = 1, #walls, 3 do
+            wallHex[walls[i + 1]] = true
+        end
+        local function openHex(hex)
+            return walkableHex(hex) and not wallHex[hex]
+        end
+        local dist, frontier = {}, {}
+        for hex = 0, 39999 do
+            if openHex(hex) then
+                for _, n in ipairs(api:hexNeighbors(hex)) do
+                    if not openHex(n) then
+                        dist[hex] = 1
+                        table.insert(frontier, hex)
+                        break
+                    end
+                end
+            end
+        end
+        for band = 2, DECOR_BANDS do
+            local nextFrontier = {}
+            for _, hex in ipairs(frontier) do
+                for _, n in ipairs(api:hexNeighbors(hex)) do
+                    if dist[n] == nil and openHex(n) then
+                        dist[n] = band
+                        table.insert(nextFrontier, n)
+                    end
+                end
+            end
+            frontier = nextFrontier
+        end
+        -- A wall hex's band is keyed by its outward-normal compass class too: rocks heap at the foot
+        -- of a standing face, not on the filled top of the near lip.
+        local function bandOf(hex)
+            if wallHex[hex] then
+                if not walkableHex(hex) then
+                    return nil
+                end
+                local rockDirs = {}
+                for _, n in ipairs(api:hexNeighbors(hex)) do
+                    if not walkableHex(n) then
+                        table.insert(rockDirs, api:hexDir(hex, n))
+                    end
+                end
+                return "0" .. compassOf(rockDirs)
+            end
+            return openHex(hex) and (dist[hex] or DECOR_BANDS) or nil
+        end
+        for hex = 0, 39999 do
+            local band = bandOf(hex)
+            if band ~= nil then
+                decorHexes[band] = (decorHexes[band] or 0) + 1
+            end
+        end
+        local scenery = api:mapObjectsAt(ref, REF_ELEVATION, "scenery")
+        for i = 1, #scenery, 3 do
+            local pid, hex = scenery[i], scenery[i + 1]
+            -- Blockers, lights and exit markers are flat; what stands on the floor is the decoration.
+            local band = bandOf(hex)
+            if band ~= nil and not isFlatWall(pid) then
+                decorCounts[band] = decorCounts[band] or {}
+                decorCounts[band][pid] = (decorCounts[band][pid] or 0) + 1
+            end
+        end
+    end
+
+    for band, hexes in pairs(decorHexes) do
+        local pieces, list = 0, {}
+        for pid, count in pairs(decorCounts[band] or {}) do
+            pieces += count
+            table.insert(list, { pid = pid, w = count })
+        end
+        table.sort(list, function(a, b)
+            return a.pid < b.pid
+        end)
+        decorPalette[band] = list
+        decorDensity[band] = pieces / hexes
     end
 
     -- Keep only the pervasive field tiles: drop any below FLOOR_FIELD_FRACTION of the most-used
@@ -605,6 +706,7 @@ local function tryCorner(dirpair)
 end
 
 local walls = 0
+local wallAt = {} -- hex -> true where a rim piece stands
 local boundaryHexes = #rim
 for _, hex in ipairs(rim) do
     local rm, geom, dirpair = geomKeyAt(hex)
@@ -615,6 +717,7 @@ for _, hex in ipairs(rim) do
     end
     if api:placeProto(pid, hex, 0) then
         walls += 1
+        wallAt[hex] = true
     end
 end
 
@@ -696,3 +799,107 @@ if EXIT ~= "none" then
     print(string.format("Exit patch: %d worldmap exit grids in the last chamber.", placed))
 end
 print(string.format("Player start in the first chamber, tile (%d, %d).", chambers[1].x, chambers[1].y))
+
+-- ============================ floor decoration ================================
+-- Rocks, stalagmites, dirt and weeds at the references' density for each distance from the walls.
+-- A piece that blocks movement goes only where its walkable neighbours form one unbroken run around
+-- it: consecutive hex neighbours touch, so the floor stays connected without that hex and the piece
+-- can never cut a passage (or wall off the exit). The start and the exit patch keep a clear ring.
+if DECOR_SCALE > 0 then
+    local reserved = {}
+    local function reserve(t)
+        if t >= 0 then
+            for _, hex in ipairs(api:tileHexes(t)) do
+                reserved[hex] = true
+                for _, n in ipairs(api:hexNeighbors(hex)) do
+                    reserved[n] = true
+                end
+            end
+        end
+    end
+    reserve(startTile)
+    reserve(api:tileIndex(chambers[#chambers].x, chambers[#chambers].y))
+    reserve(api:tileIndex(chambers[#chambers].x + 1, chambers[#chambers].y))
+
+    local blocked = {} -- hex -> true once a blocking decoration stands there
+    local function walkableNow(hex)
+        return carvedHex(hex) and not wallAt[hex] and not blocked[hex]
+    end
+    -- Does placing a blocker on `hex` keep its walkable neighbours connected to each other?
+    local function keepsPassage(hex)
+        local around = {}
+        for _, n in ipairs(api:hexNeighbors(hex)) do
+            around[api:hexDir(hex, n)] = walkableNow(n)
+        end
+        local runs = 0
+        for d = 0, 5 do
+            if around[d] and not around[(d + 5) % 6] then
+                runs += 1
+            end
+        end
+        return runs <= 1
+    end
+
+    -- Distance from the walls over the open floor, as learned (1 = touches a wall piece or rock).
+    local function openHex(hex)
+        return carvedHex(hex) and not wallAt[hex]
+    end
+    local floorHexes = {} -- the open floor, plus the wall hexes standing on it (band 0)
+    for t in pairs(carved) do
+        for _, hex in ipairs(api:tileHexes(t)) do
+            table.insert(floorHexes, hex)
+        end
+    end
+    table.sort(floorHexes) -- pairs() order is not deterministic; the .map must be
+    local dist, frontier = {}, {}
+    for _, hex in ipairs(floorHexes) do
+        if wallAt[hex] then
+            dist[hex] = 0
+        end
+    end
+    for _, hex in ipairs(floorHexes) do
+        for _, n in ipairs(api:hexNeighbors(hex)) do
+            if openHex(hex) and not openHex(n) then
+                dist[hex] = 1
+                table.insert(frontier, hex)
+                break
+            end
+        end
+    end
+    for band = 2, DECOR_BANDS do
+        local nextFrontier = {}
+        for _, hex in ipairs(frontier) do
+            for _, n in ipairs(api:hexNeighbors(hex)) do
+                if dist[n] == nil and openHex(n) then
+                    dist[n] = band
+                    table.insert(nextFrontier, n)
+                end
+            end
+        end
+        frontier = nextFrontier
+    end
+
+    local blocksCache = {}
+    local placed = 0
+    for _, hex in ipairs(floorHexes) do
+        local onWall = wallAt[hex] == true -- already blocked: decoration there can't cut a passage
+        local band = onWall and "0" .. compassFromVec(outwardNormal(hex)) or dist[hex] or DECOR_BANDS
+        local palette = decorPalette[band] or {}
+        if not reserved[hex] and (onWall or walkableNow(hex)) and #palette > 0
+            and api:rng() < decorDensity[band] * DECOR_SCALE then
+            local pid = pickWall(palette)
+            if blocksCache[pid] == nil then
+                blocksCache[pid] = api:protoBlocks(pid)
+            end
+            if onWall or not blocksCache[pid] or keepsPassage(hex) then
+                if api:placeProto(pid, hex, 0) then
+                    placed += 1
+                    if blocksCache[pid] then
+                        blocked[hex] = true
+                    end
+                end
+            end
+        end
+    end
+    print(string.format("Decorated the floor with %d rocks, stalagmites and the like.", placed))
+end
