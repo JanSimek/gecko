@@ -244,6 +244,9 @@ in ~1.7 s on all cores).
 **Follow-up found in phase 1:** `LstReader` skips blank and `;`-only lines, but the engine
 (`scripts.cc` `scriptsListLoad`) counts every line of scripts.lst as an index. The shipped and RP
 files have none, so indices agree today; a modded scripts.lst with one would shift every later script.
+The engine counts every line of the art lists too (`art.cc` `artReadList`). None of vanilla's 23 or the
+RP's 17 `.lst` files has a blank or comment-only line, and ~24 consumers iterate `Lst::list()` (the
+tile/object palettes would try to load an empty name), so this waits for a mod that needs it.
 
 **Built on it (CLI + MCP):** `find_gvar`, `script_refs` (gvar/call/procedure/macro), `lint_script`
 (local-vars past `scripts.lst`, missing dialog messages, syntax; unused procedures as notes; `--all`),
