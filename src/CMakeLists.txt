@@ -540,6 +540,8 @@ add_library(gecko_resource STATIC
     resource/ScriptSourceLocator.cpp
     resource/VfsSourceProvider.h
     resource/VfsSourceProvider.cpp
+    resource/ScriptLint.h
+    resource/ScriptLint.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 

@@ -7,7 +7,7 @@
 #include <optional>
 #include <string>
 
-#include "ssl/ScriptFacts.h"
+#include "resource/ScriptLint.h"
 
 QT_BEGIN_NAMESPACE
 class QWidget;
@@ -45,8 +45,11 @@ public:
     struct ScriptStatus {
         bool resolved = false; // scripts.lst names it
         bool compiled = false; // scripts/<name>.int is in the mounted data
+        int localVarCount = 0; // the `# local_vars=N` scripts.lst gives it
         /// What the .ssl source (with its #includes) does; null when no source was found.
-        std::shared_ptr<const ssl::ScriptFacts> facts;
+        std::shared_ptr<const resource::ScriptReport> report;
+        /// The lint's errors and warnings for it (see resource::ScriptLinter); empty without a source.
+        std::vector<resource::ScriptFinding> findings;
     };
     ScriptStatus scriptStatus(int programIndex);
 
@@ -69,12 +72,13 @@ private:
     // <name> -> its .ssl under the script-source roots. Only hits are kept: finding one walks the trees.
     std::map<std::string, std::filesystem::path, std::less<>> _sourceRootHits;
     // A source file's facts, kept until the file changes: preprocessing reads every header it includes.
-    struct CachedFacts {
+    struct CachedReport {
         std::filesystem::file_time_type modified;
-        std::shared_ptr<const ssl::ScriptFacts> facts;
+        std::shared_ptr<const resource::ScriptReport> report;
     };
-    std::map<std::filesystem::path, CachedFacts> _factsByFile;
-    std::shared_ptr<const ssl::ScriptFacts> diskFacts(const std::filesystem::path& file);
+    std::map<std::filesystem::path, CachedReport> _reportsByFile;
+    std::shared_ptr<const resource::ScriptReport> diskReport(const std::filesystem::path& file);
+    void lint(int programIndex, ScriptStatus& status);
 };
 
 } // namespace geck

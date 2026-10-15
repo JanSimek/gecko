@@ -12,7 +12,11 @@
 #include "cli/ScriptIntrospect.h"
 #include "cli/ScriptLint.h"
 #include "cli/ScriptRefs.h"
+#include "format/lst/Lst.h"
+#include "format/map/Map.h"
+#include "format/map/MapScript.h"
 #include "resource/GameResources.h"
+#include "resource/ScriptLint.h"
 
 #ifndef GECK_TEST_TMP_DIR
 #error "GECK_TEST_TMP_DIR must be defined for this test target (see tests/CMakeLists.txt)"
@@ -150,5 +154,44 @@ TEST_CASE("script_refs finds calls, procedure references and macro uses in code 
     std::ostringstream bad;
     resource::GameResources resources;
     CHECK(cli::findScriptRefs(resources, { "nonsense", "x" }, bad) != 0);
+    fs::remove_all(root);
+}
+
+TEST_CASE("localVarBlockProblems follows the engine's block sizes and finds overlaps and overruns", "[script_lint]") {
+    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "lvar_blocks";
+    fs::remove_all(root);
+    writeFile(root / "scripts" / "scripts.lst", "a.int ; # local_vars=3\nb.int ; # local_vars=2\nc.int ; # local_vars=1\n");
+    resource::GameResources resources;
+    resources.files().addDataPath(root.string());
+    const Lst* lst = resources.repository().load<Lst>("scripts/scripts.lst");
+    REQUIRE(lst != nullptr);
+
+    Map map("test.map");
+    map.setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
+    auto& file = map.getMapFile();
+    const auto place = [&file](uint32_t id, uint32_t program, uint32_t offset, uint32_t storedCount) {
+        auto script = MapScript::makeObjectScript(MapScript::ScriptType::ITEM, id, program, id + 10);
+        script.local_var_offset = offset;
+        script.local_var_count = storedCount;
+        file.map_scripts[static_cast<int>(MapScript::ScriptType::ITEM)].push_back(script);
+        return script.pid;
+    };
+    const uint32_t a = place(0, 0, 0, 1);             // a.int: 3 per scripts.lst, so 0-2 (the stored 1 is ignored)
+    const uint32_t b = place(1, 1, 2, 0);             // b.int: 2-3, overlaps a at 2
+    const uint32_t c = place(2, 2, 4, 0);             // c.int: 4, clear
+    place(3, 0, MapScript::NONE, 0);                  // no block yet: the engine allocates one
+    file.map_local_vars = std::vector<int32_t>(4, 0); // so c.int's 4 is past the end
+
+    auto problems = resource::localVarBlockProblems(map, *lst);
+    REQUIRE(problems.size() == 3);
+    CHECK(problems[a] == "Its local variables 0-2 overlap those of b.int, so they share them.");
+    CHECK(problems[b] == "Its local variables 2-3 overlap those of a.int, so they share them.");
+    CHECK(problems[c] == "Its local variables 4-4 run past the map's 4, so those fail to read and write.");
+
+    // A saved game keeps each record's own count when it is set: a.int's 1 no longer reaches b.int.
+    file.header.flags |= static_cast<uint32_t>(MapHeaderFlags::Saved);
+    problems = resource::localVarBlockProblems(map, *lst);
+    CHECK_FALSE(problems.contains(a));
+    CHECK_FALSE(problems.contains(b));
     fs::remove_all(root);
 }

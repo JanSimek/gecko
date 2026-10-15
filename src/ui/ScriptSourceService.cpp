@@ -63,41 +63,62 @@ ScriptSourceService::ScriptStatus ScriptSourceService::scriptStatus(int programI
 
     // Same order as editScriptSource: the marked source trees first, then the mounted data.
     if (auto hit = _sourceRootHits.find(baseName); hit != _sourceRootHits.end()) {
-        if ((status.facts = diskFacts(hit->second))) {
-            return status;
+        status.report = diskReport(hit->second);
+        if (!status.report) {
+            _sourceRootHits.erase(hit); // moved or deleted since; look again
         }
-        _sourceRootHits.erase(hit); // moved or deleted since; look again
     }
-    if (const auto sourcePaths = _settings->getScriptSourcePaths(); !sourcePaths.empty()) {
-        if (const auto match = resource::findScriptSourceInRoots(sourcePaths, baseName)) {
-            if ((status.facts = diskFacts(match->file))) {
-                _sourceRootHits.try_emplace(baseName, match->file);
-                return status;
+    if (!status.report) {
+        if (const auto sourcePaths = _settings->getScriptSourcePaths(); !sourcePaths.empty()) {
+            if (const auto match = resource::findScriptSourceInRoots(sourcePaths, baseName); match.has_value()) {
+                status.report = diskReport(match->file);
+                if (status.report) {
+                    _sourceRootHits.try_emplace(baseName, match->file);
+                }
             }
         }
     }
-    if (const auto source = resource::locateScriptSource(files, baseName)) {
-        const resource::VfsSourceProvider provider(files);
-        status.facts = std::make_shared<const ssl::ScriptFacts>(ssl::inspectScript(provider, source->vfsPath));
+    if (!status.report) {
+        if (const auto source = resource::locateScriptSource(files, baseName); source.has_value()) {
+            const resource::VfsSourceProvider provider(files);
+            status.report = std::make_shared<const resource::ScriptReport>(resource::reportScript(ssl::ScriptUnit::load(provider, source->vfsPath)));
+        }
     }
+    lint(programIndex, status);
     return status;
 }
 
-std::shared_ptr<const ssl::ScriptFacts> ScriptSourceService::diskFacts(const fs::path& file) {
+void ScriptSourceService::lint(int programIndex, ScriptStatus& status) {
+    try {
+        const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
+        if (lst == nullptr) {
+            return;
+        }
+        resource::ScriptLinter linter(_resources, *lst, "english");
+        status.localVarCount = linter.localVariableCount(programIndex);
+        if (status.report) {
+            status.findings = linter.findings(*status.report, programIndex, false);
+        }
+    } catch (const FileReaderException& e) {
+        spdlog::warn("scripts.lst not available: {}", e.what());
+    }
+}
+
+std::shared_ptr<const resource::ScriptReport> ScriptSourceService::diskReport(const fs::path& file) {
     std::error_code ec;
     const auto modified = fs::last_write_time(file, ec);
     if (ec) {
-        _factsByFile.erase(file);
+        _reportsByFile.erase(file);
         return nullptr;
     }
     // Keyed on the script alone: an edited header is picked up when the script itself changes.
-    if (const auto it = _factsByFile.find(file); it != _factsByFile.end() && it->second.modified == modified) {
-        return it->second.facts;
+    if (const auto it = _reportsByFile.find(file); it != _reportsByFile.end() && it->second.modified == modified) {
+        return it->second.report;
     }
     const ssl::DiskSourceProvider provider;
-    auto facts = std::make_shared<const ssl::ScriptFacts>(ssl::inspectScript(provider, file));
-    _factsByFile.insert_or_assign(file, CachedFacts{ modified, facts });
-    return facts;
+    auto report = std::make_shared<const resource::ScriptReport>(resource::reportScript(ssl::ScriptUnit::load(provider, file)));
+    _reportsByFile.insert_or_assign(file, CachedReport{ modified, report });
+    return report;
 }
 
 bool ScriptSourceService::openFromScriptSourceRoots(const std::string& baseName) {

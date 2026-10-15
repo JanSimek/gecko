@@ -11,7 +11,7 @@
 
 ## What's next (priority order)
 
-1. **SSL script analysis** — phase 4 (editor + bytecode parity) next; see its section.
+1. **SSL script analysis** — rest of phase 4 (Scripts panel markers, bytecode fallback); see its section.
 2. **Cave rim quality** — the known-issues list below; highest-value generation work.
 3. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
 4. **SSL script editing** — open question: whether an in-app editor is still wanted now that
@@ -244,6 +244,9 @@ in ~1.7 s on all cores).
 **Follow-up found in phase 1:** `LstReader` skips blank and `;`-only lines, but the engine
 (`scripts.cc` `scriptsListLoad`) counts every line of scripts.lst as an index. The shipped and RP
 files have none, so indices agree today; a modded scripts.lst with one would shift every later script.
+The engine counts every line of the art lists too (`art.cc` `artReadList`). None of vanilla's 23 or the
+RP's 17 `.lst` files has a blank or comment-only line, and ~24 consumers iterate `Lst::list()` (the
+tile/object palettes would try to load an empty name), so this waits for a mod that needs it.
 
 **Built on it (CLI + MCP):** `find_gvar`, `script_refs` (gvar/call/procedure/macro), `lint_script`
 (local-vars past `scripts.lst`, missing dialog messages, syntax; unused procedures as notes; `--all`),
@@ -257,8 +260,11 @@ Still open: an `ObjectRefs` pass (`create_object_sid`, `load_map` targets) — `
 the lookup for now; the lint reports `template/*.ssl` include-only files that `scripts.lst` names
 (e.g. sprtrp0) as syntax errors, since they don't compile on their own.
 
-**Phase 4 — editor + bytecode parity:** resolved values and diagnostics in the Script section and the
-Scripts panel; the `.int` front end fills `ScriptFacts` as far as bytecode allows.
+**Phase 4 (rest):** the lint as a marker per row in the Scripts panel (parse the map's scripts off the
+UI thread); the `.int` front end filling a `resource::ScriptReport` as far as bytecode allows
+(procedures, literal variable numbers) when no source is mounted. The Script section already shows
+the lint (`resource::ScriptLinter`), AI packets by their ai.txt names, and a map local-variable block
+shorter than `scripts.lst`'s count.
 
 **Rejected:** tree-sitter + the BGforge SSL grammar — no preprocessor, and RP hides structure behind
 macros, so phases 1–3 would still be needed on top of a new C dependency.

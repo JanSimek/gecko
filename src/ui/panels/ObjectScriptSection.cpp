@@ -1,8 +1,12 @@
 #include "ObjectScriptSection.h"
 
+#include "format/lst/Lst.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
+#include "resource/AiTxtLoader.h"
+#include "resource/GameResources.h"
+#include "resource/ResourcePaths.h"
 #include "ui/IconHelper.h"
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/theme/ThemeManager.h"
@@ -50,21 +54,30 @@ namespace {
         return field == Override::Field::AiPacket ? "AI packet" : "team";
     }
 
-    // "AI_ARROYO_VILLAGER (2)", "2", or "AI_ARROYO_VILLAGER" when the value is not a constant.
-    QString valueText(const Override& o) {
-        const QString name = QString::fromStdString(o.valueName);
-        if (!o.value.has_value()) {
-            return name.isEmpty() ? QString("a computed value") : name;
+    // A value of `field` as the game names it: an AI packet by its ai.txt section ("Arroyo Villager
+    // (2)"), otherwise `fallbackName` (the macro it was written as) with the number.
+    QString namedValue(Override::Field field, int value, const AiTxt& aiTxt, const std::string& fallbackName = {}) {
+        if (field == Override::Field::AiPacket) {
+            if (const AiPacket* packet = aiTxt.byPacketNum(value); packet != nullptr) {
+                return QString("%1 (%2)").arg(QString::fromStdString(packet->name)).arg(value);
+            }
         }
-        return name.isEmpty() ? QString::number(*o.value) : QString("%1 (%2)").arg(name).arg(*o.value);
+        return fallbackName.empty() ? QString::number(value) : QString("%1 (%2)").arg(QString::fromStdString(fallbackName)).arg(value);
     }
 
-    // "line 106", or "zilocker.ssl line 12" when the call is written in an included file.
-    QString whereText(const Override& o, const std::filesystem::path& script) {
-        if (o.file == script || o.file.empty()) {
-            return QString("line %1").arg(o.line);
+    QString valueText(const Override& o, const AiTxt& aiTxt) {
+        if (!o.value.has_value()) {
+            return o.valueName.empty() ? QString("a computed value") : QString::fromStdString(o.valueName);
         }
-        return QString("%1 line %2").arg(QString::fromStdString(o.file.filename().string())).arg(o.line);
+        return namedValue(o.field, *o.value, aiTxt, o.valueName);
+    }
+
+    // "line 106", or "zilocker.ssl line 12" when written in a file the script includes.
+    QString whereText(const std::string& file, uint32_t line, const std::string& script) {
+        if (file == script || file.empty()) {
+            return QString("line %1").arg(line);
+        }
+        return QString("%1 line %2").arg(QString::fromStdString(std::filesystem::path(file).filename().string())).arg(line);
     }
 
 } // namespace
@@ -271,7 +284,7 @@ void ObjectScriptSection::showObject(Map* map, std::shared_ptr<MapObject> object
     showPickerText();
     _identity->setVisible(_programIndex >= 0);
     // Without a source the hint below says how to add one, so there is nothing to open.
-    _openSourceButton->setVisible(_programIndex >= 0 && status.facts != nullptr);
+    _openSourceButton->setVisible(_programIndex >= 0 && status.report != nullptr);
     _showInPanelButton->setVisible(script != nullptr);
     _detachAction->setVisible(_object && _object->map_scripts_pid != -1);
 
@@ -282,8 +295,9 @@ void ObjectScriptSection::refreshDetails(const MapScript* script, const ScriptSo
     QStringList warnings;
     QStringList notes;
     QString hint;
-    const ssl::ScriptFacts noFacts;
-    const ssl::ScriptFacts& facts = status.facts ? *status.facts : noFacts;
+    const resource::ScriptReport noReport;
+    const resource::ScriptReport& report = status.report ? *status.report : noReport;
+    const AiTxt& aiTxt = aiPackets();
 
     if (_programIndex >= 0 && _statusProvider) {
         if (!status.resolved) {
@@ -291,10 +305,7 @@ void ObjectScriptSection::refreshDetails(const MapScript* script, const ScriptSo
         } else if (!status.compiled) {
             warnings << "⚠ Its compiled .int is not in the mounted data, so the game can't run it.";
         }
-        if (status.facts && !facts.problems.empty()) {
-            notes << QString("Some of the source could not be read (%1), so names and values may be missing.")
-                         .arg(QString::fromStdString(facts.problems.front()));
-        } else if (!status.facts && status.resolved) {
+        if (!status.report && status.resolved) {
             hint = "No SSL source found. Mark a script source tree (e.g. the Restoration Project's "
                    "scripts_src) in Preferences › Data Paths to open it and check what it overrides.";
         }
@@ -302,22 +313,35 @@ void ObjectScriptSection::refreshDetails(const MapScript* script, const ScriptSo
 
     // Team and AI packet are critter fields; the script's assignment replaces the map's value.
     if (isCritter()) {
-        for (const auto& o : facts.overrides) {
+        for (const auto& o : report.overrides) {
             const auto mapValue = static_cast<int>(o.field == Override::Field::AiPacket ? _object->ai_packet : _object->group_id);
-            const QString where = whereText(o, facts.script);
+            const QString where = whereText(o.file.generic_string(), static_cast<uint32_t>(o.line), report.script);
             if (o.procedure != "map_enter_p_proc") {
                 notes << QString("Changes the %1 to %2 in %3 (%4) while the game runs.")
-                             .arg(fieldName(o.field), valueText(o), QString::fromStdString(o.procedure), where);
+                             .arg(fieldName(o.field), valueText(o, aiTxt), QString::fromStdString(o.procedure), where);
             } else if (o.value == mapValue) {
                 notes << QString("Sets the %1 to %2 on map entry (%3), the same as the map's value.")
-                             .arg(fieldName(o.field), valueText(o), where);
+                             .arg(fieldName(o.field), valueText(o, aiTxt), where);
             } else {
                 warnings << QString("⚠ Sets the %1 to %2 on map entry (map_enter_p_proc, %3), replacing the map's "
                                     "%4 every time the map loads.")
-                                .arg(fieldName(o.field), valueText(o), where)
-                                .arg(mapValue);
+                                .arg(fieldName(o.field), valueText(o, aiTxt), where, namedValue(o.field, mapValue, aiTxt));
             }
         }
+    }
+
+    // What the lint finds in the script itself (see lint_script).
+    for (const resource::ScriptFinding& finding : status.findings) {
+        const QString line = QString("%1: %2").arg(whereText(finding.where.file, finding.where.line, report.script),
+            QString::fromStdString(finding.message));
+        if (finding.severity == resource::ScriptFinding::Severity::Error) {
+            warnings << "⚠ " + line;
+        } else {
+            notes << line;
+        }
+    }
+    if (const QString block = localVariableBlockText(script, status); !block.isEmpty()) {
+        warnings << block;
     }
     if (!hint.isEmpty()) {
         notes << hint;
@@ -327,10 +351,39 @@ void ObjectScriptSection::refreshDetails(const MapScript* script, const ScriptSo
     _warnings->setVisible(!warnings.isEmpty());
     _hint->setText(notes.join('\n'));
     _hint->setVisible(!notes.isEmpty());
-    refreshLocalVariables(script, facts);
+    refreshLocalVariables(script, report.localVarNames);
 }
 
-void ObjectScriptSection::refreshLocalVariables(const MapScript* script, const ssl::ScriptFacts& facts) {
+// Where the map puts the placed script's local variables (see resource::localVarBlockProblems), when
+// the script's running code uses them: a block that overlaps another script's or runs past the map's
+// array only matters to a script that reads or writes it.
+QString ObjectScriptSection::localVariableBlockText(const MapScript* script, const ScriptSourceService::ScriptStatus& status) const {
+    if (script == nullptr || _map == nullptr || !status.report || status.report->locals.empty()) {
+        return {};
+    }
+    try {
+        const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
+        if (lst == nullptr) {
+            return {};
+        }
+        const auto problems = resource::localVarBlockProblems(*_map, *lst);
+        if (const auto it = problems.find(script->pid); it != problems.end()) {
+            return "⚠ " + QString::fromStdString(it->second);
+        }
+    } catch (const std::exception& e) {
+        spdlog::warn("ObjectScriptSection: scripts.lst unavailable: {}", e.what());
+    }
+    return {};
+}
+
+const AiTxt& ObjectScriptSection::aiPackets() {
+    if (!_aiTxt.has_value()) {
+        _aiTxt = resource::loadAiTxt(_resources);
+    }
+    return *_aiTxt;
+}
+
+void ObjectScriptSection::refreshLocalVariables(const MapScript* script, const std::map<int, std::string>& localVarNames) {
     _localVars->clear();
     const bool hasVars = _map && script && script->local_var_offset != MapScript::NONE && script->local_var_count > 0;
     _localVarsTitle->setVisible(hasVars);
@@ -344,9 +397,9 @@ void ObjectScriptSection::refreshLocalVariables(const MapScript* script, const s
         if (index >= values.size()) {
             break;
         }
-        const auto name = facts.localVarNames.find(static_cast<int>(i));
+        const auto name = localVarNames.find(static_cast<int>(i));
         auto* row = new QTreeWidgetItem(_localVars);
-        row->setText(0, name != facts.localVarNames.end() ? QString::fromStdString(name->second) : QString("LVAR %1").arg(i));
+        row->setText(0, name != localVarNames.end() ? QString::fromStdString(name->second) : QString("LVAR %1").arg(i));
         row->setText(1, QString::number(values[index]));
         row->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
     }

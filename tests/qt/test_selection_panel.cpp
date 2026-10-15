@@ -1,6 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <QApplication>
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
@@ -8,8 +11,12 @@
 #include <QStackedWidget>
 #include <QStyle>
 
+#include "format/map/Map.h"
+#include "format/map/MapObject.h"
+#include "format/map/MapScript.h"
 #include "resource/GameResources.h"
 #include "ui/Settings.h"
+#include "ui/panels/ObjectScriptSection.h"
 #include "ui/panels/SelectionPanel.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/widgets/CollapsibleSection.h"
@@ -96,4 +103,67 @@ TEST_CASE("Selection panel remembers which sections are collapsed", "[ui][select
     for (const auto* section : reopened.findChildren<CollapsibleSection*>()) {
         CHECK(section->isExpanded() == (section->key() != "selection.script"));
     }
+}
+
+// The Script section reports what the script's parsed source does wrong (resource::ScriptLinter) and
+// when the map puts the script's local variables where another script's are.
+TEST_CASE("Script section shows the script's lint findings and an overlapping local variable block", "[ui][selection]") {
+    QTemporaryDir data;
+    QDir(data.path()).mkpath("scripts");
+    QFile lst(data.filePath("scripts/scripts.lst"));
+    REQUIRE(lst.open(QIODevice::WriteOnly));
+    lst.write("one.int ; first  # local_vars=4\nother.int ; second  # local_vars=2\n");
+    lst.close();
+    resource::GameResources resources;
+    resources.files().addDataPath(data.path().toStdString());
+
+    Map map("testmap.map");
+    map.setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
+    auto script = MapScript::makeObjectScript(MapScript::ScriptType::CRITTER, 0, 0, 42);
+    script.local_var_offset = 0;
+    map.getMapFile().map_scripts[static_cast<int>(MapScript::ScriptType::CRITTER)].push_back(script);
+    auto other = MapScript::makeObjectScript(MapScript::ScriptType::ITEM, 1, 1, 43);
+    other.local_var_offset = 2; // inside one.int's block 0-3
+    map.getMapFile().map_scripts[static_cast<int>(MapScript::ScriptType::ITEM)].push_back(other);
+    map.getMapFile().map_local_vars = { 0, 0, 0, 0, 0, 0 };
+
+    auto critter = std::make_shared<MapObject>();
+    critter->pro_pid = 0x01000003;
+    critter->map_scripts_pid = static_cast<int32_t>(script.pid);
+    critter->ai_packet = 1;
+
+    ObjectScriptSection section(resources);
+    section.setStatusProvider([](int) {
+        ScriptSourceService::ScriptStatus status;
+        status.resolved = true;
+        status.compiled = true;
+        status.localVarCount = 4;
+        auto report = std::make_shared<resource::ScriptReport>();
+        report->script = "src/one.ssl";
+        ssl::ScriptFacts::Override ai;
+        ai.field = ssl::ScriptFacts::Override::Field::AiPacket;
+        ai.procedure = "map_enter_p_proc";
+        ai.file = "src/one.ssl";
+        ai.line = 12;
+        ai.value = 2;
+        ai.valueName = "AI_CALM";
+        report->overrides.push_back(ai);
+        report->locals.push_back({ ssl::VariableRef{}, { "src/one.ssl", 20 } }); // it uses its local variables
+        status.report = report;
+        status.findings.push_back({ resource::ScriptFinding::Severity::Error, "messages", "message 150 is not in dialog/one.msg",
+            { "src/headers/shared.h", 30 }, "talk_p_proc" });
+        return status;
+    });
+    section.showObject(&map, critter);
+
+    QString shown;
+    for (const auto* label : section.findChildren<QLabel*>()) {
+        if (label->isVisibleTo(&section)) {
+            shown += label->text() + "\n";
+        }
+    }
+    INFO(shown.toStdString());
+    CHECK(shown.contains("Sets the AI packet to AI_CALM (2) on map entry (map_enter_p_proc, line 12), replacing the map's 1"));
+    CHECK(shown.contains("shared.h line 30: message 150 is not in dialog/one.msg"));
+    CHECK(shown.contains("Its local variables 0-3 overlap those of other.int, so they share them."));
 }
