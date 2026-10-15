@@ -16,6 +16,8 @@ namespace {
     struct OpcodeName {
         uint16_t index;
         const char* name;
+        int pops;
+        int pushes;
     };
 
     constexpr auto kOpcodeNames = std::to_array<OpcodeName>({
@@ -32,11 +34,11 @@ namespace {
     constexpr uint16_t VALUE_TYPE_STRING = 0x9001;
     constexpr uint16_t VALUE_TYPE_DYNAMIC_STRING = 0x9801;
 
-    const std::array<const char*, 1024>& opcodeNameTable() {
-        static const std::array<const char*, 1024> table = [] {
-            std::array<const char*, 1024> t{};
+    const std::array<const OpcodeName*, 1024>& opcodeTable() {
+        static const std::array<const OpcodeName*, 1024> table = [] {
+            std::array<const OpcodeName*, 1024> t{};
             for (const auto& entry : kOpcodeNames) {
-                t[entry.index] = entry.name;
+                t[entry.index] = &entry;
             }
             return t;
         }();
@@ -100,7 +102,7 @@ namespace {
 
     void disassembleRange(const Bytes& bytes, std::size_t begin, std::size_t end, std::size_t staticStrings,
         const std::vector<std::string>* globalVarNames, std::vector<IntInstruction>& code) {
-        const auto& names = opcodeNameTable();
+        const auto& opcodes = opcodeTable();
         // Integer literals pushed immediately before the current instruction, oldest first. Only an
         // uninterrupted run of pushes is trusted to still be on top of the stack.
         std::vector<int32_t> literalPushes;
@@ -128,9 +130,17 @@ namespace {
             }
 
             const uint16_t index = instruction.opcode & OPCODE_INDEX_MASK;
-            instruction.name = names[index] != nullptr ? names[index] : std::format("unknown_0x{:04X}", instruction.opcode);
+            if (const OpcodeName* known = opcodes[index]; known != nullptr) {
+                instruction.name = known->name;
+                instruction.pops = known->pops;
+                instruction.pushes = known->pushes;
+            } else {
+                instruction.name = std::format("unknown_0x{:04X}", instruction.opcode);
+            }
 
             if (index == OPCODE_PUSH_INDEX) {
+                instruction.pops = 0;
+                instruction.pushes = 1;
                 if (ip + 4 > end) {
                     instruction.note = "operand truncated by the end of the procedure";
                     code.push_back(std::move(instruction));

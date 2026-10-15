@@ -265,12 +265,11 @@ the lookup for now. The RP's `template/` holds real Interplay scripts (door, con
 cleanly); only `sprtrp0.ssl` is a placeholder sslc can't compile (the game runs vanilla's .int), so its
 syntax errors are true and the folder is not skipped.
 
-**Phase 4 (rest):** the bytecode report (`resource::reportInt`) reads only the literals pushed just
-before an opcode, so a `set_global_var`/`set_local_var` of a computed value loses its index (vanilla:
-8432 such gvar writes), and the cross-script "never set" check leaves bytecode reports out. Recovering
-those needs each opcode's stack effect (the arity catalog above) to walk back over the value
-expression; the handler sources can't simply be counted (`opRandom` pops in a loop). The corpus test's
-"bytecode uses ⊆ source uses" check would validate it. Timers/objects/tiles need the same walk.
+**Phase 4 (rest):** the bytecode report (`resource::reportInt`) walks back over each opcode's
+arguments with the engine's stack effects (`IntOpcodes.inc`, generated from the handlers) and skips
+branches under a constant condition. On the RP it shows 99.96% of what the source shows. Left: 34 RP
+writes whose value comes through `OPCODE_POP` (unknown effect), and vanilla `wientdor.int`, whose
+static-string offset (824) runs past its 644-byte file, so the disassembler rejects it.
 
 **Rejected:** tree-sitter + the BGforge SSL grammar — no preprocessor, and RP hides structure behind
 macros, so phases 1–3 would still be needed on top of a new C dependency.

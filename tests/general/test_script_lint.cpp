@@ -263,17 +263,18 @@ TEST_CASE("placementFindings checks a script against where the map places it", "
 
 namespace {
 
-ssl::IntInstruction literal(int32_t value) {
-    ssl::IntInstruction push;
-    push.name = "OPCODE_PUSH";
-    push.literal = value;
-    return push;
-}
-
-ssl::IntInstruction op(const char* name) {
+ssl::IntInstruction op(const char* name, int pops, int pushes) {
     ssl::IntInstruction instruction;
     instruction.name = name;
+    instruction.pops = pops;
+    instruction.pushes = pushes;
     return instruction;
+}
+
+ssl::IntInstruction literal(int32_t value) {
+    ssl::IntInstruction push = op("OPCODE_PUSH", 0, 1);
+    push.literal = value;
+    return push;
 }
 
 // A compiled one.int (scripts.lst line 1) with sslc's placeholder procedure first.
@@ -281,26 +282,44 @@ ssl::IntProgram compiledOne() {
     ssl::IntProgram program;
     program.procedures.push_back({ "..............", 0, 0, 0, 0, 0, {}, {} });
     ssl::IntProcedure talk{ "talk_p_proc", 0, 0, 0, 0, 0, {}, {} };
+    const auto get = op("op_get_local_var", 1, 1);
+    const auto set = op("op_set_local_var", 2, 0);
     talk.code = {
+        // reads local variable 1
         literal(1),
-        op("op_get_local_var"), // reads 1
+        get,
+        // sets local variable 5 to 1: past the 2 scripts.lst gives
         literal(5),
         literal(1),
-        op("op_set_local_var"), // sets 5: past the 2 scripts.lst gives
+        set,
+        // adds 1 to local variable 0: reads and sets it
         literal(0),
         literal(0),
-        op("op_get_local_var"),
+        get,
         literal(1),
-        op("OPCODE_ADD"),       // sets 0 to a computed value:
-        op("op_set_local_var"), // its index is not known
+        op("OPCODE_ADD", 2, 1),
+        set,
+        // control flow in the value: the index is not known
+        literal(3),
+        literal(0),
+        op("OPCODE_IF", -1, -1),
+        set,
+        // message 150 of list 1: not in one.msg
         literal(1),
         literal(150),
-        op("op_message_str"), // not in one.msg
+        op("op_message_str", 2, 1),
+        // a reply given as a string, not a message number
         literal(1),
-        op("OPCODE_PUSH"),
-        op("op_gsay_reply"), // a string: not a message number
+        op("OPCODE_PUSH", 0, 1),
+        op("op_gsay_reply", 2, 0),
+        // reads global variable 7
         literal(7),
-        op("op_get_global_var"),
+        op("op_get_global_var", 1, 1),
+        // a timer on self_obj, in 10 ticks, with parameter 2
+        op("op_self_obj", 0, 1),
+        literal(10),
+        literal(2),
+        op("op_add_timer_event", 3, 0),
     };
     program.procedures.push_back(std::move(talk));
     return program;
@@ -319,12 +338,17 @@ TEST_CASE("reportInt reads a compiled script's procedures and literal variable a
     for (const auto& use : report.locals) {
         locals.emplace_back(use.ref.kind == ssl::VariableRef::Kind::Set, use.ref.index);
     }
-    CHECK(locals == std::vector<std::pair<bool, std::optional<int>>>{ { false, 1 }, { true, 5 }, { false, 0 }, { true, std::nullopt } });
+    CHECK(locals
+        == std::vector<std::pair<bool, std::optional<int>>>{ { false, 1 }, { true, 5 }, { false, 0 }, { true, 0 }, { true, std::nullopt } });
     REQUIRE(report.messages.size() == 1);
     CHECK(report.messages[0].ref.list == 1);
     CHECK(report.messages[0].ref.number == 150);
     REQUIRE(report.globals.size() == 1);
     CHECK(report.globals[0].ref.index == 7);
+    REQUIRE(report.calls.size() == 1);
+    CHECK(report.calls[0].ref.opcode == "add_timer_event");
+    CHECK(report.calls[0].ref.self == std::vector<bool>{ true, false, false });
+    CHECK(report.calls[0].ref.args[1] == 10);
 
     // The lint's checks run on it as on a source; the write of unknown index keeps "never read" notes away.
     const fs::path root = makeTree("script_lint_int");
@@ -336,7 +360,8 @@ TEST_CASE("reportInt reads a compiled script's procedures and literal variable a
     for (const auto& finding : linter.findings(report, 0, true)) {
         checks.push_back(std::format("{} {}:{}", finding.check, finding.where.file, finding.where.line));
     }
-    CHECK(checks == std::vector<std::string>{ "local-vars scripts/one.int:0", "messages scripts/one.int:0" });
+    // talk_p_proc also sets a timer on itself, with no timed_event_p_proc to run it.
+    CHECK(checks == std::vector<std::string>{ "local-vars scripts/one.int:0", "messages scripts/one.int:0", "timers scripts/one.int:0" });
     // As the map's own script, its local variables read -1.
     CHECK(resource::placementFindings(report, resource::ScriptPlacement::Map).size() == 1);
     fs::remove_all(root);
@@ -378,4 +403,23 @@ TEST_CASE("lint_script checks a script's compiled .int when no source is mounted
     CHECK(all["fromBytecode"] == 1);
     CHECK(all["unchecked"] == 0);
     fs::remove_all(root);
+}
+
+TEST_CASE("reportInt leaves out a branch under a constant condition and folds constant arguments", "[script_lint]") {
+    // The original compiler's code for an object created under the condition -1 > 0 (a branch sslc
+    // drops), then local variable 1 + 2 set to 7.
+    ssl::IntProcedure enter{ "map_enter_p_proc", 0, 0, 0, 0, 0, {}, {} };
+    enter.code = { literal(984), literal(1), op("OPCODE_NEGATE", 1, 1), literal(0), op("OPCODE_GREATER_THAN", 2, 1),
+        op("OPCODE_IF", -1, -1), literal(1), op("OPCODE_NEGATE", 1, 1), literal(0), literal(0), literal(1),
+        op("OPCODE_NEGATE", 1, 1), op("op_create_object", 4, 1), op("OPCODE_POP", -1, -1), literal(1), literal(2),
+        op("OPCODE_ADD", 2, 1), literal(7), op("op_set_local_var", 2, 0) };
+    for (std::size_t i = 0; i < enter.code.size(); ++i) {
+        enter.code[i].offset = 900 + i * 6; // the else address, 984, is the push of 1 in 1 + 2
+    }
+    ssl::IntProgram program;
+    program.procedures.push_back(std::move(enter));
+    const resource::ScriptReport report = resource::reportInt(program, "scripts/one.int");
+    CHECK(report.calls.empty()); // the create_object_sid never runs
+    REQUIRE(report.locals.size() == 1);
+    CHECK(report.locals[0].ref.index == 3);
 }

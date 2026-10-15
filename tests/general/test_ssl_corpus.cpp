@@ -46,7 +46,7 @@ std::vector<uint8_t> fileBytes(const std::filesystem::path& file) {
     return { std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>() };
 }
 
-using UseKey = std::tuple<char, int, int>; // kind ('l'ocal/'g'lobal get/set or 'm'essage), a, b
+using UseKey = std::tuple<char, int, int>; // kind ('l'ocal/'g'lobal get/set, 'm'essage or a call), a, b
 
 // The variable and message uses a report knows the arguments of.
 std::set<UseKey> knownUses(const geck::resource::ScriptReport& report) {
@@ -61,6 +61,19 @@ std::set<UseKey> knownUses(const geck::resource::ScriptReport& report) {
     for (const auto& use : report.messages) {
         if (use.ref.list.has_value() && use.ref.number.has_value()) {
             uses.emplace('m', *use.ref.list, *use.ref.number);
+        }
+    }
+    // A call's constant and self_obj arguments: the call's first letter (upper case for self_obj), the
+    // argument's position and its value.
+    for (const auto& use : report.calls) {
+        const auto& call = use.ref;
+        for (std::size_t i = 0; i < call.args.size(); ++i) {
+            if (call.args[i].has_value()) {
+                uses.emplace(call.opcode.front(), static_cast<int>(i), static_cast<int>(*call.args[i]));
+            }
+            if (call.self[i]) {
+                uses.emplace(static_cast<char>(std::toupper(call.opcode.front())), static_cast<int>(i), 0);
+            }
         }
     }
     return uses;

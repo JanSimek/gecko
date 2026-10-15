@@ -18,6 +18,10 @@ struct IntInstruction {
     std::string operand;            ///< inline operand of a push: integer, float, or a quoted static string
     std::string note;               ///< annotation, e.g. the GVAR_* a literal global-variable index names
     std::optional<int32_t> literal; ///< the value of an integer push
+    /// How many values it pops off the data stack and pushes (0 or 1), as its engine handler does;
+    /// -1 when that can't be told (control flow, a variable argument count). See IntOpcodes.inc.
+    int pops = -1;
+    int pushes = -1;
 };
 
 struct IntProcedure {
