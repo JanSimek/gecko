@@ -40,6 +40,32 @@ namespace {
     // What is wrong with the placed script's local variable block (resource::localVarBlockProblems),
     // stashed in the Filename cell; the lint marker shows it when the script uses local variables.
     constexpr int LOCAL_VAR_BLOCK_ROLE = Qt::UserRole + 1;
+    // Where the map places the row's script (resource::ScriptPlacement), for the placement checks.
+    constexpr int PLACEMENT_ROLE = Qt::UserRole + 2;
+
+    /// The script's own findings, then what is wrong with it for where the row `file` places it.
+    std::vector<resource::ScriptFinding> rowFindings(const QTableWidgetItem& file, const ScriptSourceService::ScriptStatus& status) {
+        std::vector<resource::ScriptFinding> findings = status.findings;
+        const QVariant placement = file.data(PLACEMENT_ROLE);
+        if (!placement.isValid() || !status.report) {
+            return findings;
+        }
+        for (auto& finding : resource::placementFindings(*status.report, static_cast<resource::ScriptPlacement>(placement.toInt()))) {
+            if (finding.severity != resource::ScriptFinding::Severity::Note) {
+                findings.push_back(std::move(finding));
+            }
+        }
+        return findings;
+    }
+
+    QString findingText(const resource::ScriptFinding& finding) {
+        const QString message = QString::fromStdString(finding.message);
+        if (finding.where.line == 0) {
+            return message;
+        }
+        const QString written = QString::fromStdString(std::filesystem::path(finding.where.file).filename().string());
+        return QString("%1 line %2: %3").arg(written).arg(finding.where.line).arg(message);
+    }
     constexpr int MAX_TOOLTIP_FINDINGS = 6;
 } // namespace
 
@@ -154,6 +180,7 @@ void ScriptsPanel::populate() {
             // The script's own SID (its pid) drives double-click navigation; script_oid is the owner shown.
             addRow(sectionName, static_cast<int>(script.script_id), static_cast<qulonglong>(script.pid),
                 static_cast<qulonglong>(script.script_oid), detail, lst);
+            _table->item(_table->rowCount() - 1, COL_FILENAME)->setData(PLACEMENT_ROLE, static_cast<int>(resource::placementOf(type)));
             if (const auto problem = blockProblems.find(script.pid); problem != blockProblems.end()) {
                 _table->item(_table->rowCount() - 1, COL_FILENAME)->setData(LOCAL_VAR_BLOCK_ROLE, QString::fromStdString(problem->second));
             }
@@ -167,6 +194,7 @@ void ScriptsPanel::populate() {
     if (mapFile.header.script_id > 0) {
         addRow(QStringLiteral("Map"), mapFile.header.script_id - 1, static_cast<qulonglong>(MapScript::NONE),
             static_cast<qulonglong>(MapScript::NONE), QStringLiteral("(map script)"), lst);
+        _table->item(_table->rowCount() - 1, COL_FILENAME)->setData(PLACEMENT_ROLE, static_cast<int>(resource::ScriptPlacement::Map));
     }
 
     _table->setSortingEnabled(true);
@@ -209,17 +237,17 @@ void ScriptsPanel::markRows(int programIndex, const ScriptSourceService::ScriptS
         if (file == nullptr || programIndexOfRow(row) != programIndex) {
             continue;
         }
+        const std::vector<resource::ScriptFinding> findings = rowFindings(*file, status);
         QStringList problems;
         bool error = false;
-        for (const resource::ScriptFinding& finding : status.findings) {
+        for (const resource::ScriptFinding& finding : findings) {
             error = error || finding.severity == resource::ScriptFinding::Severity::Error;
             if (problems.size() < MAX_TOOLTIP_FINDINGS) {
-                const QString written = QString::fromStdString(std::filesystem::path(finding.where.file).filename().string());
-                problems << QString("%1 line %2: %3").arg(written).arg(finding.where.line).arg(QString::fromStdString(finding.message));
+                problems << findingText(finding);
             }
         }
-        if (status.findings.size() > static_cast<std::size_t>(MAX_TOOLTIP_FINDINGS)) {
-            problems << QString("… and %1 more (lint_script lists them all)").arg(status.findings.size() - MAX_TOOLTIP_FINDINGS);
+        if (findings.size() > static_cast<std::size_t>(MAX_TOOLTIP_FINDINGS)) {
+            problems << QString("… and %1 more (lint_script lists them all)").arg(findings.size() - MAX_TOOLTIP_FINDINGS);
         }
         // A bad block only matters to a script whose running code uses its local variables.
         if (const QString block = file->data(LOCAL_VAR_BLOCK_ROLE).toString(); !block.isEmpty() && status.report && !status.report->locals.empty()) {

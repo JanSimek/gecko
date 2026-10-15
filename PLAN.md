@@ -249,8 +249,12 @@ RP's 17 `.lst` files has a blank or comment-only line, and ~24 consumers iterate
 tile/object palettes would try to load an empty name), so this waits for a mod that needs it.
 
 **Built on it (CLI + MCP):** `find_gvar`, `script_refs` (gvar/call/procedure/macro), `lint_script`
-(local-vars past `scripts.lst`, missing dialog messages, syntax; unused procedures as notes; `--all`),
-`describe_script analyze`. `ssl/MessageRefs` lists message uses. On the RP tree the lint's errors are
+(local-vars past `scripts.lst`, missing dialog messages, syntax, gvar indices past vault13.gam,
+timers without `timed_event_p_proc`, `create_object_sid` PIDs/scripts, constant hexes/elevations;
+unused procedures and local variables as notes; `--all` adds gvars no script sets; `--map` checks each
+script against where the map places it), `gecko-cli script lint <files>` (compiler-style output),
+`describe_script analyze`. Gvars set but never read are deliberately not flagged: the engine reads
+gvars itself (character screen, karma, quests, endings, holodisks, worldmap). `ssl/MessageRefs` lists message uses. On the RP tree the lint's errors are
 real bugs, e.g. `eastereg` `local_var(JOTISZ_TILE)` (a tile number as a variable number), `nibasdor`
 LVAR 6 with `local_vars=6`, `epas5` offering `epas1` messages 104/105 that `epas1.msg` lacks.
 
@@ -260,11 +264,9 @@ Still open: an `ObjectRefs` pass (`create_object_sid`, `load_map` targets) — `
 the lookup for now; the lint reports `template/*.ssl` include-only files that `scripts.lst` names
 (e.g. sprtrp0) as syntax errors, since they don't compile on their own.
 
-**Phase 4 (rest):** the lint as a marker per row in the Scripts panel (parse the map's scripts off the
-UI thread); the `.int` front end filling a `resource::ScriptReport` as far as bytecode allows
-(procedures, literal variable numbers) when no source is mounted. The Script section already shows
-the lint (`resource::ScriptLinter`), AI packets by their ai.txt names, and a map local-variable block
-shorter than `scripts.lst`'s count.
+**Phase 4 (rest):** the `.int` front end filling a `resource::ScriptReport` as far as bytecode allows
+(procedures, literal variable numbers) when no source is mounted. The Scripts panel and the Script section
+already show the lint (`resource::ScriptLinter`), including the placement checks.
 
 **Rejected:** tree-sitter + the BGforge SSL grammar — no preprocessor, and RP hides structure behind
 macros, so phases 1–3 would still be needed on top of a new C dependency.

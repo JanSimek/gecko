@@ -1398,6 +1398,49 @@ TEST_CASE("ScriptsPanel marks scripts the lint finds problems in", "[qt][scripts
     CHECK(filenameCell(1)->icon().isNull());
 }
 
+// The marker also checks each script against where the map places it: the map's own script may not
+// use local variables, and a spatial script needs spatial_p_proc.
+TEST_CASE("ScriptsPanel marks scripts wrong for where the map places them", "[qt][scripts]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("scripts/scripts.lst", "mapscr.int ; map # local_vars=1\nspot.int ; trigger # local_vars=0\n");
+    data.mount();
+
+    auto map = makeMap("testmap.map");
+    auto& mapFile = map->getMapFile();
+    mapFile.header.script_id = 1; // 1-based: mapscr.int
+    mapFile.map_scripts[static_cast<int>(geck::MapScript::ScriptType::SPATIAL)].push_back(
+        geck::MapScript::makeObjectScript(geck::MapScript::ScriptType::SPATIAL, 1, 1, 0)); // spot.int
+
+    geck::ScriptsPanel panel(data.resources());
+    panel.setStatusProvider([](int programIndex) {
+        geck::ScriptSourceService::ScriptStatus status;
+        status.resolved = true;
+        auto report = std::make_shared<geck::resource::ScriptReport>();
+        report->script = programIndex == 0 ? "scripts/mapscr.ssl" : "scripts/spot.ssl";
+        if (programIndex == 0) {
+            report->locals.push_back({ geck::ssl::VariableRef{}, { "scripts/mapscr.ssl", 30 } });
+        }
+        status.report = report;
+        return status;
+    });
+    panel.setMap(map.get());
+
+    auto* table = panel.findChild<QTableWidget*>("scriptsTable");
+    REQUIRE(table != nullptr);
+    const auto filenameCell = [table](int programIndex) -> QTableWidgetItem* {
+        for (int row = 0; row < table->rowCount(); ++row) {
+            if (table->item(row, 1)->data(Qt::DisplayRole).toInt() == programIndex) {
+                return table->item(row, 2);
+            }
+        }
+        return nullptr;
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(filenameCell(0) != nullptr && !filenameCell(0)->toolTip().isEmpty(), 2000);
+    CHECK(filenameCell(0)->toolTip().contains("mapscr.ssl line 30: This is a system script"));
+    QTRY_VERIFY_WITH_TIMEOUT(filenameCell(1) != nullptr && !filenameCell(1)->toolTip().isEmpty(), 2000);
+    CHECK(filenameCell(1)->toolTip().contains("A spatial script without spatial_p_proc"));
+}
+
 // The unified Exit-Grids tool is one checkable button plus a dropdown whose two items ("Draw edge" /
 // "Place single hex") are exclusive: triggering one ticks it, unticks the other, keeps the button
 // checked. (Driving the editor mode needs game data, so that half is covered below against EditorWidget.)

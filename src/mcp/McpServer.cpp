@@ -494,13 +494,25 @@ namespace {
     json toolLintScript(resource::GameResources& resources, const json& args) {
         cli::LintOptions opts;
         opts.all = optBool(args, "all", false);
-        if (!opts.all) {
-            readScriptSelector(args, opts.name, opts.programIndex);
-        }
-        opts.includeNotes = optBool(args, "notes", !opts.all);
+        opts.map = optString(args, "map");
         if (const std::string locale = optString(args, "locale"); !locale.empty()) {
             opts.locale = locale;
         }
+        if (args.contains("files") && args["files"].is_array()) {
+            std::vector<std::filesystem::path> files;
+            for (const auto& file : args["files"]) {
+                if (file.is_string()) {
+                    files.emplace_back(file.get<std::string>());
+                }
+            }
+            std::ostringstream oss;
+            cli::lintFiles(resources, files, optBool(args, "notes", true), opts.locale, true, oss);
+            return toolText(oss.str(), false); // errors in the files are the answer, not a tool failure
+        }
+        if (!opts.all && opts.map.empty()) {
+            readScriptSelector(args, opts.name, opts.programIndex);
+        }
+        opts.includeNotes = optBool(args, "notes", !opts.all && opts.map.empty());
         std::ostringstream oss;
         const int rc = cli::lintScripts(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
@@ -522,15 +534,24 @@ namespace {
     /// every entry sits one below its line position. -1 means the weapon carries no perk.
     static const char* weaponPerkName(uint32_t perk) {
         switch (static_cast<int32_t>(perk)) {
-        case 58: return "long_range";
-        case 59: return "accurate";
-        case 60: return "penetrate";
-        case 61: return "knockback";
-        case 64: return "scope_range";
-        case 65: return "fast_reload";
-        case 66: return "night_sight";
-        case 67: return "flameboy";
-        default: return "none";
+            case 58:
+                return "long_range";
+            case 59:
+                return "accurate";
+            case 60:
+                return "penetrate";
+            case 61:
+                return "knockback";
+            case 64:
+                return "scope_range";
+            case 65:
+                return "fast_reload";
+            case 66:
+                return "night_sight";
+            case 67:
+                return "flameboy";
+            default:
+                return "none";
         }
     }
 
@@ -1196,16 +1217,23 @@ namespace {
             json({ { "type", "object" }, { "properties", { { "kind", { { "type", "string" }, { "enum", json::array({ "gvar", "call", "procedure", "macro" }) } } }, { "name", { { "type", "string" } } } } }, { "required", json::array({ "kind", "name" }) } }),
             [](resource::GameResources& r, const json& a) { return toolScriptRefs(r, a); }, "" });
         t.push_back({ "lint_script",
-            "Check a script's .ssl for problems the compiler doesn't catch, each {severity, check, message, "
-            "file, line, procedure}: 'local-vars' (a local variable number past the count scripts.lst "
-            "gives the script — the engine doesn't check and reads/writes the next script's variables), "
-            "'messages' (a message number missing from the dialog .msg it names — the player sees "
-            "\"Error\" — or a list naming no script), 'syntax' (code the preprocessor/parser can't read), "
-            "and as notes 'unused-procedure' (written but never run). Select the script by 'name' or "
-            "0-based 'programIndex', or pass all=true for every script with a mounted source (notes off "
-            "unless notes=true). Needs a script-source tree mounted, plus the game text for the message "
-            "check. Args: name or programIndex or all, optional notes, locale.",
-            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "all", { { "type", "boolean" } } }, { "notes", { { "type", "boolean" } } }, { "locale", { { "type", "string" } } } } } }),
+            "Check scripts' .ssl source for problems the compiler doesn't catch, each {severity, check, message, "
+            "file, line, procedure}: 'local-vars' (a local variable number past the count scripts.lst gives "
+            "the script — the engine reads/writes the next script's variables), 'messages' (a message number "
+            "missing from the dialog .msg it names — the player sees \"Error\"), 'gvars' (a global variable "
+            "past vault13.gam's; with all=true also one some script reads but no script sets, so it never "
+            "leaves its start value), 'timers' (add_timer_event without timed_event_p_proc), 'objects' "
+            "(create_object_sid with a missing proto or a script number that isn't a scripts.lst line), "
+            "'tiles' (a constant hex outside 0-39999 or elevation outside 0-2), 'syntax'; as notes "
+            "'unused-procedure' and unused local variables. Select one script by 'name' or 0-based "
+            "'programIndex'; or 'map' (a map path) for every script it places plus checks on how it places "
+            "them (map script using local variables, spatial script without spatial_p_proc, overlapping "
+            "local variable blocks); or all=true for every script with a mounted source; or 'files' (paths "
+            "of .ssl files on disk, e.g. ones being edited). Notes are on for one script or files, off "
+            "otherwise unless notes=true. Needs a script-source tree mounted (except for 'files'), plus game "
+            "text, vault13.gam and protos for those checks. Args: name|programIndex|map|all|files, optional "
+            "notes, locale.",
+            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "map", { { "type", "string" } } }, { "all", { { "type", "boolean" } } }, { "files", { { "type", "array" }, { "items", { { "type", "string" } } } } }, { "notes", { { "type", "boolean" } } }, { "locale", { { "type", "string" } } } } } }),
             [](resource::GameResources& r, const json& a) { return toolLintScript(r, a); }, "" });
         t.push_back({ "frm_info",
             "FRM sprite metadata as JSON, so art can be MEASURED instead of inferred from PID "

@@ -23,6 +23,7 @@
 #include <spdlog/spdlog.h>
 
 #include <cstdint>
+#include <filesystem>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -147,11 +148,16 @@ void printUsage(const char* program) {
               << "  " << program << " map script-refs <gvar|call|procedure|macro> <NAME> --data <dir-or-.dat> [--data <...>]\n"
               << "      Every use of a gvar, an opcode or procedure call, a procedure reference or a macro in code\n"
               << "      the compiled scripts run (needs an .ssl source tree mounted).\n"
-              << "  " << program << " map lint-script <name> | --index <n> | --all [--notes] [--locale english]\n"
+              << "  " << program << " map lint-script <name> | --index <n> | --map <map> | --all [--notes] [--locale english]\n"
               << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      Problems the compiler misses: local variables past scripts.lst's count, messages missing\n"
-              << "      from the dialog .msg, unreadable code; with --notes (default for one script), procedures\n"
-              << "      that never run.\n"
+              << "      from the dialog .msg, global variables out of range (and, with --all, read but never set),\n"
+              << "      timers without a handler, objects created from missing protos or onto impossible hexes,\n"
+              << "      unreadable code. --map checks the scripts a map places, and how it places them. With\n"
+              << "      --notes (default for one script): procedures that never run, unused local variables.\n"
+              << "  " << program << " script lint <file.ssl> [file.ssl ...] [--data <dir-or-.dat> ...] [--notes] [--json]\n"
+              << "      The same checks on .ssl files on disk, printed as file:line: severity: message [check];\n"
+              << "      exits 1 when any file has an error. --data adds the checks that need game data.\n"
               << "  " << program << " frm info <name-or-fid> --data <dir-or-.dat> [--data <...>]\n"
               << "      FRM metadata as JSON: resolvedArtPath, fid, directionCount, framesPerDirection, and a\n"
               << "      per-frame array of {direction,frame,width,height,offsetX,offsetY}. Accepts an art name\n"
@@ -296,6 +302,10 @@ int consumeLintArg(const std::vector<std::string>& args, std::size_t i, CliArgs&
         out.lint.locale = args[i + 1];
         return 2;
     }
+    if (arg == "--map") {
+        out.lint.map = args[i + 1];
+        return 2;
+    }
     if (arg == "--all") {
         out.lint.all = true;
         return 1;
@@ -320,7 +330,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim" || arg == "--crop-hex" || arg == "--crop-extent"))
         || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"))
         || (out.describeScript && (arg == "--index" || arg == "--locale"))
-        || (out.lintScript && (arg == "--index" || arg == "--locale"))
+        || (out.lintScript && (arg == "--index" || arg == "--locale" || arg == "--map"))
         || (out.world && arg == "--render")
         || (out.reachability && arg == "--map")
         || (out.describeMap && arg == "--map")
@@ -656,12 +666,12 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
         printUsage(program);
         return 2;
     }
-    if (out.lintScript && !out.lint.all && out.lint.name.empty() && out.lint.programIndex < 0) {
-        std::cerr << "error: lint-script requires a script name, --index <n> or --all\n";
+    if (out.lintScript && !out.lint.all && out.lint.map.empty() && out.lint.name.empty() && out.lint.programIndex < 0) {
+        std::cerr << "error: lint-script requires a script name, --index <n>, --map <map> or --all\n";
         printUsage(program);
         return 2;
     }
-    out.lint.includeNotes = !out.lint.all || out.lintNotes;
+    out.lint.includeNotes = (!out.lint.all && out.lint.map.empty()) || out.lintNotes;
     if (out.scriptRefs && out.refs.name.empty()) {
         std::cerr << "error: script-refs requires a kind (gvar, call, procedure, macro) and a name\n";
         printUsage(program);
@@ -893,6 +903,40 @@ int runResourceCommand(const std::vector<std::string>& args, const char* program
 // --- proto subcommand -------------------------------------------------------------------------
 // `proto export` dumps every proto in the item and critter .lst files. Self-contained like
 // `resource`: two optional filters plus its own --data list.
+// `script lint <files> [--data <path>]... [--notes] [--json] [--locale <l>]`
+int runScriptCommand(const std::vector<std::string>& args, const char* program) {
+    std::vector<std::filesystem::path> files;
+    std::vector<std::string> dataPaths;
+    bool notes = false;
+    bool json = false;
+    std::string locale = "english";
+    for (std::size_t i = 2; i < args.size(); ++i) {
+        const std::string& arg = args[i];
+        if ((arg == "--data" || arg == "--locale") && i + 1 < args.size()) {
+            (arg == "--data" ? dataPaths.emplace_back() : locale) = args[++i];
+        } else if (arg == "--notes") {
+            notes = true;
+        } else if (arg == "--json") {
+            json = true;
+        } else if (arg.rfind("--", 0) == 0) {
+            std::cerr << "error: unexpected argument: " << arg << "\n";
+            printUsage(program);
+            return 2;
+        } else {
+            files.emplace_back(arg);
+        }
+    }
+    if (files.empty()) {
+        std::cerr << "error: script lint needs at least one .ssl file\n";
+        printUsage(program);
+        return 2;
+    }
+    spdlog::set_level(spdlog::level::off);
+    geck::resource::GameResources resources;
+    mountData(resources, dataPaths, program);
+    return geck::cli::lintFiles(resources, files, notes, locale, json, std::cout);
+}
+
 struct ProtoArgs {
     std::string kind;
     std::string itemType;
@@ -966,6 +1010,10 @@ int main(int argc, char** argv) {
 
     if (args.size() >= 2 && args[0] == "proto" && args[1] == "export") {
         return runProtoCommand(args, argv[0]);
+    }
+
+    if (args.size() >= 2 && args[0] == "script" && args[1] == "lint") {
+        return runScriptCommand(args, argv[0]);
     }
 
     CliArgs cli;
