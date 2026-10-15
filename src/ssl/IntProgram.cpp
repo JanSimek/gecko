@@ -29,6 +29,9 @@ namespace {
     constexpr std::size_t PROCEDURE_RECORD_SIZE = 24;  // sizeof(Procedure): six int32 fields
     constexpr uint16_t OPCODE_INDEX_MASK = 0x3FF;      // the dispatcher indexes handlers by opcode & 0x3FF
     constexpr uint16_t OPCODE_PUSH_INDEX = 0x001;
+    constexpr uint16_t OPCODE_FETCH_EXTERNAL_INDEX = 0x014;
+    constexpr uint16_t OPCODE_STORE_EXTERNAL_INDEX = 0x015;
+    constexpr uint16_t OPCODE_EXPORT_VARIABLE_INDEX = 0x016;
     constexpr uint16_t VALUE_TYPE_INT = 0xC001;
     constexpr uint16_t VALUE_TYPE_FLOAT = 0xA001;
     constexpr uint16_t VALUE_TYPE_STRING = 0x9001;
@@ -100,7 +103,14 @@ namespace {
         return out + "\"";
     }
 
-    void disassembleRange(const Bytes& bytes, std::size_t begin, std::size_t end, std::size_t staticStrings,
+    // The opcodes that pop a name the engine reads from the identifier table (fallout2-ce interpreter.cc
+    // programGetIdentifier), not the static strings: an imported or exported variable's.
+    bool popsIdentifier(uint16_t opcode) {
+        const uint16_t index = opcode & OPCODE_INDEX_MASK;
+        return (opcode & 0x8000) != 0 && (index == OPCODE_FETCH_EXTERNAL_INDEX || index == OPCODE_STORE_EXTERNAL_INDEX || index == OPCODE_EXPORT_VARIABLE_INDEX);
+    }
+
+    void disassembleRange(const Bytes& bytes, std::size_t begin, std::size_t end, std::size_t identifiers, std::size_t staticStrings,
         const std::vector<std::string>* globalVarNames, std::vector<IntInstruction>& code) {
         const auto& opcodes = opcodeTable();
         // Integer literals pushed immediately before the current instruction, oldest first. Only an
@@ -159,8 +169,14 @@ namespace {
                         literalPushes.clear();
                         break;
                     case VALUE_TYPE_STRING:
-                        instruction.operand = quoted(bytes.cString(staticStrings + 4 + checkedOffset(value, "string offset"),
-                            "static string"));
+                        // The name of a variable the next instruction imports or exports is an identifier.
+                        if (ip + 2 <= end && popsIdentifier(bytes.be16(ip, "opcode"))) {
+                            instruction.operand = quoted(bytes.cString(identifiers + checkedOffset(value, "identifier offset"), "identifier"));
+                            instruction.note = "identifier";
+                        } else {
+                            instruction.operand = quoted(bytes.cString(staticStrings + 4 + checkedOffset(value, "string offset"),
+                                "static string"));
+                        }
                         literalPushes.clear();
                         break;
                     case VALUE_TYPE_DYNAMIC_STRING:
@@ -226,12 +242,12 @@ IntProgram disassembleInt(const std::vector<uint8_t>& data, const std::vector<st
         program.procedures.push_back(std::move(procedure));
     }
 
-    const auto disassembleFrom = [&bytes, &boundaries, staticStrings, globalVarNames](int32_t offset, const char* what,
+    const auto disassembleFrom = [&bytes, &boundaries, identifiers, staticStrings, globalVarNames](int32_t offset, const char* what,
                                      std::vector<IntInstruction>& code) {
         const auto begin = static_cast<std::size_t>(offset);
         const std::size_t end = *boundaries.upper_bound(begin);
         bytes.require(begin, end - begin, what);
-        disassembleRange(bytes, begin, end, staticStrings, globalVarNames, code);
+        disassembleRange(bytes, begin, end, identifiers, staticStrings, globalVarNames, code);
     };
     for (auto& procedure : program.procedures) {
         disassembleFrom(procedure.bodyOffset, "procedure body", procedure.code);
