@@ -19,6 +19,7 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <ranges>
 #include <ostream>
 #include <set>
 #include <string>
@@ -206,8 +207,8 @@ namespace {
                         stem = mapStem(it->second);
                     }
                 }
-                const bool matches = _maps.any || (_maps.index.has_value() && index == _maps.index) || (!stem.empty() && stem == _maps.stem);
-                if (!matches) {
+                if (const bool matches = _maps.any || (_maps.index.has_value() && index == _maps.index) || (!stem.empty() && stem == _maps.stem);
+                    !matches) {
                     continue;
                 }
                 ordered_json* json = add(ref.procedure, ref.location);
@@ -257,7 +258,7 @@ namespace {
         MapTarget maps;
         const resource::MapNameResolver resolver(resources);
         for (const resource::MapName& map : resolver.allMaps()) {
-            maps.fileNames.emplace(map.index, map.fileName);
+            maps.fileNames.try_emplace(map.index, map.fileName);
         }
         maps.any = name == "*";
         if (const auto number = parseNumber(name); number.has_value()) {
@@ -270,6 +271,40 @@ namespace {
             }
         }
         return maps;
+    }
+
+    struct Collected {
+        ordered_json refs = ordered_json::array();
+        std::size_t scripts = 0; ///< scripts with a ref
+        int setters = 0;         ///< gvar writes
+        bool capped = false;
+    };
+
+    // The per-script refs in script order, up to kMaxRefs; a PID ref gets its proto's name, read here
+    // rather than on the worker threads (the repository cache).
+    Collected collect(resource::GameResources& resources, const std::vector<std::vector<ordered_json>>& perScript, bool namePids) {
+        Collected out;
+        std::map<uint32_t, std::string> protoNames;
+        std::set<std::string> referencing;
+        for (const auto& ref : perScript | std::views::join) {
+            if (out.refs.size() >= kMaxRefs) {
+                out.capped = true;
+                break;
+            }
+            out.setters += ref.value("kind", "") == "set" ? 1 : 0;
+            referencing.insert(ref["script"].get<std::string>());
+            out.refs.push_back(ref);
+            if (namePids) {
+                const auto pid = static_cast<uint32_t>(std::stoul(ref["pid"].get<std::string>(), nullptr, 16));
+                auto [name, fresh] = protoNames.try_emplace(pid);
+                if (fresh) {
+                    name->second = protoDisplayName(resources, pid);
+                }
+                out.refs.back()["name"] = name->second;
+            }
+        }
+        out.scripts = referencing.size();
+        return out;
     }
 
     // Every mounted .ssl, sorted.
@@ -307,42 +342,17 @@ int findScriptRefs(resource::GameResources& resources, const ScriptRefsOptions& 
         }
     });
 
-    auto refs = ordered_json::array();
-    std::map<uint32_t, std::string> protoNames;
-    int setters = 0;
-    std::set<std::string> referencing;
-    bool capped = false;
-    for (const auto& found : perScript) {
-        for (const auto& ref : found) {
-            if (refs.size() >= kMaxRefs) {
-                capped = true;
-                break;
-            }
-            setters += ref.value("kind", "") == "set" ? 1 : 0;
-            referencing.insert(ref["script"].get<std::string>());
-            refs.push_back(ref);
-            if (options.kind == "pid") {
-                // The proto's name, read here rather than on the worker threads (the repository cache).
-                const auto pid = static_cast<uint32_t>(std::stoul(ref["pid"].get<std::string>(), nullptr, 16));
-                auto [name, fresh] = protoNames.try_emplace(pid);
-                if (fresh) {
-                    name->second = protoDisplayName(resources, pid);
-                }
-                refs.back()["name"] = name->second;
-            }
-        }
-    }
-
+    const Collected collected = collect(resources, perScript, options.kind == "pid");
     ordered_json root;
     root[options.kind == "gvar" ? "gvar" : "name"] = options.name;
     if (options.kind != "gvar") {
         root["kind"] = options.kind;
     }
-    root["refs"] = std::move(refs);
-    root["stats"] = { { "refs", root["refs"].size() }, { "scripts", referencing.size() }, { "scriptsRead", scripts.size() },
-        { "capped", capped } };
+    root["refs"] = collected.refs;
+    root["stats"] = { { "refs", collected.refs.size() }, { "scripts", collected.scripts }, { "scriptsRead", scripts.size() },
+        { "capped", collected.capped } };
     if (options.kind == "gvar") {
-        root["stats"]["setters"] = setters;
+        root["stats"]["setters"] = collected.setters;
     }
     if (options.kind == "map" && !maps.any) {
         root["map"] = maps.stem.empty() ? ordered_json(nullptr) : ordered_json(maps.stem + ".map");

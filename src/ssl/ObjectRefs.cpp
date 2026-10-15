@@ -41,35 +41,55 @@ namespace {
         }
     }
 
+    // The PID argument of an opcode that takes one, as {pid, opcode}.
+    std::optional<std::pair<int64_t, std::string>> opcodePid(const Expr& expr, const CallGraph& graph) {
+        const auto* call = std::get_if<Call>(&expr.node);
+        if (call == nullptr) {
+            return std::nullopt;
+        }
+        std::string callee = lower(call->callee);
+        const auto it = std::ranges::find(PID_ARGUMENT, std::string_view(callee), &std::pair<std::string_view, std::size_t>::first);
+        if (it == PID_ARGUMENT.end() || it->second >= call->args.size() || !call->args[it->second]) {
+            return std::nullopt;
+        }
+        if (const auto pid = graph.folder().fold(*call->args[it->second]); pid.has_value()) {
+            return std::pair{ *pid, std::move(callee) };
+        }
+        return std::nullopt;
+    }
+
+    // The PID in `obj_pid(x) == PID` or `!=`, either way round, as {pid, "obj_pid"}.
+    std::optional<std::pair<int64_t, std::string>> comparedPid(const Expr& expr, const CallGraph& graph) {
+        const auto* binary = std::get_if<Binary>(&expr.node);
+        if (binary == nullptr || (binary->op != "==" && binary->op != "!=") || !binary->left || !binary->right) {
+            return std::nullopt;
+        }
+        const Expr* other = nullptr;
+        if (isObjPid(binary->left.get())) {
+            other = binary->right.get();
+        } else if (isObjPid(binary->right.get())) {
+            other = binary->left.get();
+        }
+        if (other == nullptr) {
+            return std::nullopt;
+        }
+        if (const auto pid = graph.folder().fold(*other); pid.has_value()) {
+            return std::pair{ *pid, std::string("obj_pid") };
+        }
+        return std::nullopt;
+    }
+
 } // namespace
 
 std::vector<PidRef> pidRefs(const ScriptUnit& unit, const CallGraph& graph) {
     std::vector<PidRef> found;
-    const auto add = [&unit, &found](const Procedure& procedure, const Expr& at, int64_t pid, std::string via) {
-        found.push_back({ pid, std::move(via), procedure.name, unit.writtenAt(at.range) });
-    };
-    forEachLive(unit, graph, [&graph, &add](const Procedure& procedure, const Expr& expr) {
-        if (const auto* call = std::get_if<Call>(&expr.node)) {
-            const std::string callee = lower(call->callee);
-            const auto it = std::ranges::find(PID_ARGUMENT, std::string_view(callee), &std::pair<std::string_view, std::size_t>::first);
-            if (it != PID_ARGUMENT.end() && it->second < call->args.size() && call->args[it->second]) {
-                if (const auto pid = graph.folder().fold(*call->args[it->second]); pid.has_value()) {
-                    add(procedure, expr, *pid, callee);
-                }
-            }
-            return;
+    forEachLive(unit, graph, [&unit, &graph, &found](const Procedure& procedure, const Expr& expr) {
+        auto pid = opcodePid(expr, graph);
+        if (!pid.has_value()) {
+            pid = comparedPid(expr, graph);
         }
-        const auto* binary = std::get_if<Binary>(&expr.node);
-        if (binary == nullptr || (binary->op != "==" && binary->op != "!=") || !binary->left || !binary->right) {
-            return;
-        }
-        // obj_pid(x) == PID, either way round.
-        const Expr* other = isObjPid(binary->left.get()) ? binary->right.get() : isObjPid(binary->right.get()) ? binary->left.get()
-                                                                                                               : nullptr;
-        if (other != nullptr) {
-            if (const auto pid = graph.folder().fold(*other); pid.has_value()) {
-                add(procedure, expr, *pid, "obj_pid");
-            }
+        if (pid.has_value()) {
+            found.emplace_back(pid->first, std::move(pid->second), procedure.name, unit.writtenAt(expr.range));
         }
     });
     return found;
