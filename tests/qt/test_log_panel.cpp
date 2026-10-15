@@ -16,6 +16,15 @@
 
 using namespace geck;
 
+namespace {
+
+// Records reach the model through one queued drain per burst; run it.
+void drainLog() {
+    QCoreApplication::processEvents();
+}
+
+} // namespace
+
 TEST_CASE("LogPanel configures its header only once a model provides columns", "[qt][log]") {
     // Before a source model attaches, the view's header has zero sections — per-index header
     // configuration then violates QHeaderView's precondition, which is a live Q_ASSERT in debug
@@ -38,6 +47,8 @@ TEST_CASE("LogModel stores records with level, message, and time", "[qt][log]") 
 
     model.appendRecord(LogModel::Level::Warning, "tile art missing",
         QDateTime::fromMSecsSinceEpoch(0));
+    CHECK(model.rowCount() == 0); // buffered until the event loop drains the burst
+    drainLog();
 
     REQUIRE(model.rowCount() == 1);
     REQUIRE(model.columnCount() == LogModel::ColumnCount);
@@ -72,10 +83,13 @@ TEST_CASE("LogModel evicts the oldest records beyond the cap", "[qt][log]") {
         == QString::number(LogModel::MAX_RECORDS + 9));
 }
 
-TEST_CASE("LogModel clear empties the store", "[qt][log]") {
+TEST_CASE("LogModel clear empties the store, including records not yet drained", "[qt][log]") {
     LogModel model;
     model.appendRecord(LogModel::Level::Error, "boom");
+    drainLog();
+    model.appendRecord(LogModel::Level::Error, "pending");
     model.clear();
+    drainLog();
     REQUIRE(model.rowCount() == 0);
 }
 
@@ -110,6 +124,7 @@ TEST_CASE("LogModelSink forwards spdlog records with mapped levels", "[qt][log]"
     logger.warn("w");
     logger.error("e");
     logger.critical("c");
+    drainLog();
 
     REQUIRE(model.rowCount() == 6);
     auto levelAt = [&model](int row) {
@@ -133,6 +148,7 @@ TEST_CASE("LogModelSink drops records after detach", "[qt][log]") {
     logger.info("before");
     sink->detach();
     logger.info("after");
+    drainLog();
 
     REQUIRE(model.rowCount() == 1);
     CHECK(model.index(0, LogModel::MessageColumn).data().toString() == "before");
@@ -144,6 +160,7 @@ TEST_CASE("LogFilterProxy filters by minimum level and message text", "[qt][log]
     model.appendRecord(LogModel::Level::Info, "map opened");
     model.appendRecord(LogModel::Level::Warning, "12 tiles.lst entries could not be resolved");
     model.appendRecord(LogModel::Level::Error, "failed to resolve sprite");
+    drainLog();
 
     LogFilterProxy proxy;
     proxy.setSourceModel(&model);

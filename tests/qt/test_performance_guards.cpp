@@ -67,6 +67,33 @@ TEST_CASE("A cross-thread log flood drains without starving the UI thread", "[qt
     CHECK(elapsed < 60000);
 }
 
+TEST_CASE("A UI-thread log flood is buffered, not inserted row by row", "[qt][performance]") {
+    // Regression history: records logged ON the UI thread were inserted one row at a time, and the
+    // panel's ResizeToContents columns re-measure every row on each insert, so a script console run
+    // under --debug (a debug line per painted tile) spent ~15ms per record and hit the console's
+    // 30s budget after ~2000 records, leaving a cave map half painted. Same-thread records now
+    // buffer like cross-thread ones and land as one batched insert.
+    LogModel model;
+    LogPanel panel;
+    panel.setModel(&model);
+    panel.show();
+
+    constexpr int FLOOD = 20000;
+
+    QElapsedTimer timer;
+    timer.start();
+    for (int i = 0; i < FLOOD; ++i) {
+        model.appendRecord(LogModel::Level::Debug, QStringLiteral("record %1").arg(i));
+    }
+    const auto appending = timer.elapsed();
+    INFO("appending " << FLOOD << " UI-thread records took " << appending << "ms");
+    CHECK(appending < 2000);
+
+    REQUIRE(pumpUntil([&model]() { return model.rowCount() == FLOOD; }, 60000));
+    INFO("appending and draining took " << timer.elapsed() << "ms");
+    CHECK(timer.elapsed() < 10000);
+}
+
 TEST_CASE("File-browser tree population stays within its time budget", "[qt][performance]") {
     // Regression history: per-row VFS/proto lookups, sorted proxy inserts on repopulation, and
     // an event-loop-starving chunk pump each independently pushed a ~100ms build into the

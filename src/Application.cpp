@@ -27,10 +27,25 @@
 #include "state/loader/DataPathLoader.h"
 #include "ui/panels/FileBrowserPanel.h"
 
+#include <clocale>
+
 namespace geck {
 
+namespace {
+
+    // Qt adopts the system locale (setlocale(LC_ALL, "")) as the application starts. A decimal-comma
+    // LC_NUMERIC (cs_CZ, de_DE, ...) then breaks C-level number parsing: Luau rejected `1.0` in the
+    // script console as a malformed number. Keep numbers in the C locale, before anything parses.
+    std::unique_ptr<QApplication> createQApplication(int& argc, char** argv) {
+        auto app = std::make_unique<QApplication>(argc, argv);
+        std::setlocale(LC_NUMERIC, "C");
+        return app;
+    }
+
+} // namespace
+
 Application::Application(int argc, char** argv)
-    : _qtApp(std::make_unique<QApplication>(argc, argv))
+    : _qtApp(createQApplication(argc, argv))
     , _settings(std::make_shared<Settings>())
     , _mainWindow(nullptr)
     , _resources(std::make_shared<resource::GameResources>()) {

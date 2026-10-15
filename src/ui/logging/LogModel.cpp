@@ -3,7 +3,6 @@
 #include <mutex>
 
 #include <QColor>
-#include <QThread>
 
 #include "ui/theme/ThemeManager.h"
 
@@ -15,15 +14,14 @@ LogModel::LogModel(QObject* parent)
 
 void LogModel::appendRecord(Level level, const QString& message, const QDateTime& time) {
     Record record{ time, level, message };
-    if (QThread::currentThread() == thread()) {
-        appendBatchOnModelThread({ std::move(record) });
-        return;
-    }
 
-    // Buffer and coalesce: a debug-heavy burst (e.g. thousands of proto reads) must become a
-    // handful of batched model updates, not one queued event + row insert + view relayout per
-    // record — that flood starved the UI thread for tens of seconds. Only the first record of
-    // a burst schedules a drain; if the model is destroyed first, Qt drops the queued call.
+    // Buffer and coalesce, on every thread: a debug-heavy burst (thousands of proto reads on a
+    // loader thread, or a script painting thousands of tiles on this one) must become a handful
+    // of batched model updates, not a row insert + view relayout per record. The view's
+    // ResizeToContents columns re-measure every row on each insert, so per-record inserts are
+    // quadratic: they starved the UI thread for tens of seconds and timed a cave script out at
+    // 2000 records. Only the first record of a burst schedules a drain; if the model is
+    // destroyed first, Qt drops the queued call.
     bool scheduleDrain = false;
     {
         const std::lock_guard<std::mutex> lock(_pendingMutex);
@@ -68,6 +66,10 @@ void LogModel::appendBatchOnModelThread(QList<Record> batch) {
 }
 
 void LogModel::clear() {
+    {
+        const std::lock_guard<std::mutex> lock(_pendingMutex);
+        _pending.clear(); // a drain already queued then finds nothing to add
+    }
     if (_records.isEmpty()) {
         return;
     }

@@ -1,3 +1,4 @@
+#include <clocale>
 #include <cstdio>
 
 #ifdef _WIN32
@@ -75,6 +76,7 @@ int main(int argc, char** argv) {
 #endif
 
     QApplication app(argc, argv);
+    std::setlocale(LC_NUMERIC, "C"); // as Application does: Qt just adopted the system locale
     app.setApplicationName("gecko-qt-tests");
     app.setOrganizationName("gecko");
     Q_INIT_RESOURCE(icons);

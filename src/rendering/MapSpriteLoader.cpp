@@ -208,7 +208,7 @@ void MapSpriteLoader::updateTileSprite(
         sprites[*tileIndex].setTexture(blankTexture());
         sprites[*tileIndex].setColor(TileColors::transparent());
         sprites[*tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
-        spdlog::debug("MapSpriteLoader::updateTileSprite: Set tile {} to empty [roof: {}]", *tileIndex, isRoof);
+        spdlog::trace("MapSpriteLoader::updateTileSprite: Set tile {} to empty [roof: {}]", *tileIndex, isRoof);
         return;
     }
 
@@ -228,7 +228,7 @@ void MapSpriteLoader::updateTileSprite(
         auto screenPos = indexToScreenPosition(*tileIndex, isRoof);
         sprites[*tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
 
-        spdlog::debug("MapSpriteLoader::updateTileSprite: Updated sprite for hex {} -> tile {} ({}) [roof: {}], elevation {}",
+        spdlog::trace("MapSpriteLoader::updateTileSprite: Updated sprite for hex {} -> tile {} ({}) [roof: {}], elevation {}",
             hexIndex, *tileIndex, tileName, isRoof, elevation);
     } catch (const std::exception& e) {
         spdlog::warn("MapSpriteLoader::updateTileSprite: Failed to update tile sprite: {}", e.what());
