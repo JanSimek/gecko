@@ -8,6 +8,7 @@
 #include <format>
 #include <set>
 #include <stdexcept>
+#include <string_view>
 
 namespace geck::ssl {
 
@@ -39,7 +40,7 @@ namespace {
 
     const std::array<const OpcodeName*, 1024>& opcodeTable() {
         static const std::array<const OpcodeName*, 1024> table = [] {
-            std::array<const OpcodeName*, 1024> t{};
+            std::array<const OpcodeName*, 1024> t{ };
             for (const auto& entry : kOpcodeNames) {
                 t[entry.index] = &entry;
             }
@@ -146,7 +147,7 @@ namespace {
     }
 
     /// The GVAR_* a global-variable read or write names, when its index is the literal pushed for it.
-    std::string globalVariableNote(const std::string& opcode, const std::vector<int32_t>& literalPushes,
+    std::string globalVariableNote(std::string_view opcode, const std::vector<int32_t>& literalPushes,
         const std::vector<std::string>* globalVarNames) {
         // op_set_global_var pops the value, then the index (fallout2-ce interpreter_extra.cc).
         std::optional<int32_t> index;
@@ -156,7 +157,7 @@ namespace {
             index = literalPushes[literalPushes.size() - 2];
         }
         if (!index.has_value() || globalVarNames == nullptr || *index < 0 || static_cast<std::size_t>(*index) >= globalVarNames->size()) {
-            return {};
+            return { };
         }
         return (*globalVarNames)[static_cast<std::size_t>(*index)];
     }
