@@ -4,10 +4,9 @@
 #include "cli/MapLoad.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
-#include "format/msg/Msg.h"
+#include "cli/ProtoName.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
-#include "util/ProHelper.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -38,20 +37,6 @@ namespace {
         return Pro::hasFlag(object.flags, flag);
     }
 
-    std::string protoName(resource::GameResources& resources, uint32_t pid) {
-        try {
-            if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
-                if (Msg* msg = ProHelper::msgFile(resources, pro->type()); msg != nullptr) {
-                    return msg->message(pro->header.message_id).text;
-                }
-            }
-        } catch (const std::exception& e) {
-            // An unresolvable proto leaves the name empty, as proto_info does.
-            spdlog::debug("hex_sightline: no display name for pid {}: {}", pid, e.what());
-        }
-        return {};
-    }
-
     ordered_json hexJson(int hex) {
         return { { "hex", hex }, { "col", hex % enginetile::GRID_WIDTH }, { "row", hex / enginetile::GRID_WIDTH } };
     }
@@ -61,7 +46,7 @@ namespace {
     }
 
     ordered_json objectJson(resource::GameResources& resources, const MapObject& object) {
-        return { { "pid", std::format("0x{:08X}", object.pro_pid) }, { "name", protoName(resources, object.pro_pid) },
+        return { { "pid", std::format("0x{:08X}", object.pro_pid) }, { "name", protoDisplayName(resources, object.pro_pid) },
             { "type", Pro::typeToString(ProtoId(object.pro_pid).objectType()) }, { "hex", object.position },
             { "flags", std::format("0x{:08X}", object.flags) } };
     }
