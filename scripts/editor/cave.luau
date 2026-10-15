@@ -21,7 +21,7 @@
 --       --arg seed=42 --data <master.dat> [--data <critter.dat>]
 --
 -- Tunables: --arg chambers=N (default 5), --arg refs=maps/cave1.map,maps/cave2.map,...
--- (the learning corpus, elevation 1), --arg exit=worldmap|none, --arg decor=<density scale, 0 = none>.
+-- (the learning corpus, elevation 1), --arg exit=worldmap|none, --arg decor=<density scale: 1 = the references', default 0.5, 0 = none>.
 -- Batch with --count N.
 -- generate warns after writing if any exit grid is unreachable from the player start.
 
@@ -96,7 +96,9 @@ local wallPiecesAll = {} -- all pieces pooled: last resort
 -- wall's foot); the open floor beyond DECOR_BANDS - 1 steps is pooled, since the references have few
 -- such hexes and a thin sample overstates what grows in the middle of a big chamber.
 local DECOR_BANDS = 4
-local DECOR_SCALE = tonumber(args.decor) or 1.0
+-- Half the references' density by default: their full count (~80 pieces a cave) reads as clutter on a
+-- generated cavern. --arg decor=1 restores it.
+local DECOR_SCALE = tonumber(args.decor) or 0.5
 local decorDensity = {} -- band (1..DECOR_BANDS, or "0"..compass for wall hexes) -> pieces per hex
 local decorPalette = {} -- band -> weighted { {pid=, w=}, ... }
 
