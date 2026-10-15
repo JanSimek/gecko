@@ -99,11 +99,28 @@ procedure helper(variable who) begin
 end
 procedure map_enter_p_proc begin
    set_self_ai(6);
+   call helper(1);
 end
 )ssl");
     REQUIRE(facts.overrides.size() == 2);
     CHECK(facts.overrides[0].procedure == "helper");
     CHECK(facts.overrides[1].procedure == "map_enter_p_proc");
+}
+
+TEST_CASE("inspectScript ignores code the compiled script does not run", "[ssl][facts]") {
+    // sslc drops a procedure nothing calls, and the branch of an `if` on a constant that can't run.
+    const auto facts = inspect(R"ssl(
+#define USE_BERSERK false
+procedure unused begin
+   set_self_team(5);
+end
+procedure map_enter_p_proc begin
+   if (USE_BERSERK) then set_self_ai(7);
+   else set_self_ai(6);
+end
+)ssl");
+    REQUIRE(facts.overrides.size() == 1);
+    CHECK(facts.overrides[0].value == 6);
 }
 
 TEST_CASE("inspectScript still recognises the command.h aliases when the headers are missing", "[ssl][facts]") {
