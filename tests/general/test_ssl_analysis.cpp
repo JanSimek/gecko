@@ -31,12 +31,14 @@ procedure talk_p_proc begin
    tvarCBack(@callback);
    if (USE_OLD) then call old_way;
    if (mode == 1) then call never_in_mode_0;
+   if ((1 == 2) or (1 == 3)) then call kept_by_or;
 end
 procedure Node001 begin Node002(); end
 procedure Node002 begin end
 procedure callback begin end
 procedure old_way begin end
 procedure never_in_mode_0 begin end
+procedure kept_by_or begin end
 procedure orphan begin call Node002; end
 procedure timer in 10 begin end
 procedure shadows(variable Node003) begin Node003 := 1; end
@@ -44,7 +46,8 @@ procedure Node003 begin end
 )ssl");
     REQUIRE(unit.diagnostics().empty());
     const CallGraph graph(unit.program());
-    for (const char* live : { "talk_p_proc", "node001", "node002", "callback", "shared", "timer" }) {
+    // kept_by_or: sslc does not fold `or`, so it keeps both branches of that `if`.
+    for (const char* live : { "talk_p_proc", "node001", "node002", "callback", "shared", "timer", "kept_by_or" }) {
         INFO(live);
         CHECK(graph.isLive(live));
     }
@@ -55,7 +58,7 @@ procedure Node003 begin end
         CHECK_FALSE(graph.isLive(dead));
     }
     // Calls on a dead branch are not references at all.
-    CHECK(graph.references("TALK_P_PROC") == std::set<std::string>{ "callback", "node001" });
+    CHECK(graph.references("TALK_P_PROC") == std::set<std::string>{ "callback", "kept_by_or", "node001" });
 }
 
 TEST_CASE("ConstantFolder folds literals, sslc's true/false and globals nothing assigns", "[ssl][analysis]") {
@@ -68,6 +71,8 @@ procedure start begin
    x := fixed * 2 + (3 if true else 9);
    y := changed;
    z := shared;
+   w := 7 % 2;
+   v := 1 and 0;
 end
 )ssl");
     REQUIRE(unit.diagnostics().empty());
@@ -78,6 +83,8 @@ end
     CHECK(valueOf(1) == 11);
     CHECK_FALSE(valueOf(2).has_value()); // assigned in start
     CHECK_FALSE(valueOf(3).has_value()); // imported: another script may set it
+    CHECK_FALSE(valueOf(4).has_value()); // sslc folds neither '%' nor and/or
+    CHECK_FALSE(valueOf(5).has_value());
 }
 
 TEST_CASE("globalVariableRefs and localVariableRefs report each access with its number and macro", "[ssl][analysis]") {
