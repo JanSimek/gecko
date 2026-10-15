@@ -45,6 +45,21 @@ TEST_CASE("MsgReader parses id, audio and text from inline content", "[msg]") {
     CHECK(msg->message(200).text == "World");
 }
 
+// RP and vanilla dialog files wrap long lines (acvillgr.msg 161, 172, 303); the engine reads a field
+// up to its '}' across line breaks and drops the breaks (message.cc _message_load_field).
+TEST_CASE("MsgReader reads a message whose text runs over several lines", "[msg]") {
+    geck::MsgReader reader;
+    auto msg = reader.openFile("wrapped.msg", msgBytes("{160}{}{One line.}\r\n"
+                                                       "{161}{}{Talk to Mynoc, the guardian of the\r\n"
+                                                       " caravans.}  # trailing comment\r\n"
+                                                       "{162}{}{Next.}\r\n"));
+    REQUIRE(msg != nullptr);
+    CHECK(msg->message(160).text == "One line.");
+    CHECK(msg->message(161).text == "Talk to Mynoc, the guardian of the caravans.");
+    CHECK(msg->message(162).text == "Next.");
+    CHECK(msg->getMessages().size() == 3);
+}
+
 TEST_CASE("MsgReader returns an empty message for an unknown id", "[msg]") {
     geck::MsgReader reader;
     auto msg = reader.openFile("inline.msg", msgBytes("{1}{}{Only}\n"));
