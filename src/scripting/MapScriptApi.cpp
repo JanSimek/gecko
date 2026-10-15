@@ -547,7 +547,7 @@ std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
 
 std::vector<int> MapScriptApi::artRect(int pid, int hex) const {
     if (!isValidHex(hex)) {
-        throw ScriptError("artRect: hex " + std::to_string(hex) + " is off the 200x200 hex grid");
+        throw ScriptError(std::format("artRect: hex {} is off the 200x200 hex grid", hex));
     }
     const auto& direction = protoFrm(pid).directions().front();
     if (direction.frames().empty()) {

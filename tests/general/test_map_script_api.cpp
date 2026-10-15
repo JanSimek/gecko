@@ -1094,7 +1094,7 @@ TEST_CASE("A detached MapScriptApi raises on every host-backed call", "[scriptin
 // centred on x with its bottom on y. Cave rims are laid by abutting these rects pixel-exactly, so the
 // geometry is pinned on three neighbouring hexes of one 16x120 strip with a (8, -4) shift.
 TEST_CASE("MapScriptApi artRect gives the screen rectangle the engine draws a proto's art in", "[scripting]") {
-    const auto root = std::filesystem::temp_directory_path() / "geck_artrect";
+    const auto root = std::filesystem::path{ GECK_TEST_TMP_DIR } / "geck_artrect"; // inside the build tree
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root / "proto" / "walls");
     std::filesystem::create_directories(root / "art" / "walls");
