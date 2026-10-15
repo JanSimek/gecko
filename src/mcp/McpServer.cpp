@@ -1231,10 +1231,9 @@ namespace {
             "local variable blocks); or all=true for every script in scripts.lst; or 'files' (paths of .ssl "
             "files on disk, e.g. ones being edited). Notes are on for one script or files, off otherwise "
             "unless notes=true. Reads the .ssl source when a script-source tree is mounted; without one it "
-            "checks the compiled .int (results say fromBytecode: true), which shows procedures and the "
-            "variable and message numbers pushed as literals, so it finds fewer problems and skips timers, "
-            "objects, tiles and the never-set check. Needs game text, vault13.gam and protos for those "
-            "checks. Args: name|programIndex|map|all|files, optional "
+            "checks the compiled .int (results say fromBytecode: true): the same checks except syntax and "
+            "unused-procedure notes, with no line numbers (the procedure is given), and an argument computed "
+            "through control flow stays unknown. Needs game text, vault13.gam and protos for those checks. Args: name|programIndex|map|all|files, optional "
             "notes, locale.",
             json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "map", { { "type", "string" } } }, { "all", { { "type", "boolean" } } }, { "files", { { "type", "array" }, { "items", { { "type", "string" } } } } }, { "notes", { { "type", "boolean" } } }, { "locale", { { "type", "string" } } } } } }),
             [](resource::GameResources& r, const json& a) { return toolLintScript(r, a); }, "" });

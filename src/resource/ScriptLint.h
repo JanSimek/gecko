@@ -81,11 +81,13 @@ struct ScriptReport {
 
 ScriptReport reportScript(const ssl::ScriptUnit& unit);
 
-/// What the compiled script at `path` shows when no source is mounted: its procedures, and the
-/// local variable, global variable and message uses whose arguments sslc pushed as literals just
-/// before the opcode. A write whose index or value is computed is kept with an unknown index, so the
-/// checks that need every write treat the script as they do a computed one. Locations are the .int
-/// with no line, and macros, includes, calls and overrides are not known.
+/// What the compiled script at `path` shows when no source is mounted: its procedures, and its local
+/// variable, global variable, message and ScriptReport::calls uses. Each opcode's arguments are found by
+/// walking back over the code with the engine's stack effects (IntOpcodes.inc); an argument is known
+/// when its code folds to a constant. A branch under a constant condition is left out, as sslc drops it
+/// (the original compiler kept it in the .int). An argument behind control flow stays unknown; a write
+/// with an unknown index counts as computed. Locations are the .int with no line, and macros, includes
+/// and overrides are not known.
 ScriptReport reportInt(const ssl::IntProgram& program, std::string path);
 
 /// reportInt for the mounted scripts/<baseName>.int, or nullopt when it is absent or unreadable.
@@ -171,7 +173,7 @@ std::vector<ScriptFinding> placementFindings(const ScriptReport& report, ScriptP
 /// start value, so whatever waits for it to change never happens. One "gvars" warning per variable,
 /// at its first read, keyed by the index of the report it is in. Writes with a computed variable
 /// number could set any of them; `dynamicWrites` counts them so the caller can say so. Reports read
-/// from a compiled script (fromBytecode) are left out: a write of a computed value loses its index there.
+/// from a compiled script (fromBytecode) take part like the others: see reportInt.
 struct NeverSetGlobals {
     std::map<std::size_t, std::vector<ScriptFinding>> findings;
     std::size_t dynamicWrites = 0;

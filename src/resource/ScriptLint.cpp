@@ -92,13 +92,107 @@ ScriptReport reportScript(const ssl::ScriptUnit& unit) {
 
 namespace {
 
-    /// An opcode whose arguments reportInt reads from the literals pushed just before it.
-    struct IntUse {
-        std::string_view opcode;
-        std::size_t args;
+    /// What the code before an opcode shows of one of its arguments.
+    struct IntArg {
+        std::optional<int64_t> value; ///< the argument's code computes a constant
+        bool self = false;            ///< the argument is self_obj
+        std::size_t start = 0;        ///< its code: [start, end) of the run, when known
+        std::size_t end = 0;
     };
 
-    /// Reads the variable and message uses out of one run of code (a body or a condition).
+    /// The integer the postfix code [start, end) computes when it only combines integer literals with
+    /// operators the engine applies to integers as written, or nullopt.
+    std::optional<int64_t> constantOf(const std::vector<ssl::IntInstruction>& code, std::size_t start, std::size_t end) {
+        using Binary = int64_t (*)(int64_t, int64_t);
+        static const std::map<std::string_view, Binary, std::less<>> BINARY{
+            { "OPCODE_ADD", [](int64_t a, int64_t b) { return a + b; } },
+            { "OPCODE_SUB", [](int64_t a, int64_t b) { return a - b; } },
+            { "OPCODE_MUL", [](int64_t a, int64_t b) { return a * b; } },
+            { "OPCODE_EQUAL", [](int64_t a, int64_t b) { return int64_t{ a == b }; } },
+            { "OPCODE_NOT_EQUAL", [](int64_t a, int64_t b) { return int64_t{ a != b }; } },
+            { "OPCODE_LESS_THAN", [](int64_t a, int64_t b) { return int64_t{ a < b }; } },
+            { "OPCODE_LESS_THAN_EQUAL", [](int64_t a, int64_t b) { return int64_t{ a <= b }; } },
+            { "OPCODE_GREATER_THAN", [](int64_t a, int64_t b) { return int64_t{ a > b }; } },
+            { "OPCODE_GREATER_THAN_EQUAL", [](int64_t a, int64_t b) { return int64_t{ a >= b }; } },
+            { "OPCODE_AND", [](int64_t a, int64_t b) { return int64_t{ a != 0 && b != 0 }; } },
+            { "OPCODE_OR", [](int64_t a, int64_t b) { return int64_t{ a != 0 || b != 0 }; } },
+        };
+        std::vector<int64_t> stack;
+        for (std::size_t i = start; i < end; ++i) {
+            const ssl::IntInstruction& instruction = code[i];
+            if (instruction.literal.has_value()) {
+                stack.push_back(*instruction.literal);
+            } else if ((instruction.name == "OPCODE_NEGATE" || instruction.name == "OPCODE_NOT") && !stack.empty()) {
+                stack.back() = instruction.name == "OPCODE_NEGATE" ? -stack.back() : int64_t{ stack.back() == 0 };
+            } else if (const auto op = BINARY.find(instruction.name); op != BINARY.end() && stack.size() >= 2) {
+                const int64_t right = stack.back();
+                stack.pop_back();
+                stack.back() = op->second(stack.back(), right);
+            } else {
+                return std::nullopt;
+            }
+        }
+        return stack.size() == 1 ? std::optional(stack.front()) : std::nullopt;
+    }
+
+    /// The `count` arguments of the opcode at `code[at]`. Walking back, each argument is the shortest
+    /// run of code that leaves exactly one value on the stack (in postfix code no proper suffix of an
+    /// expression does). An instruction whose stack effect is unknown (control flow, such as sslc's
+    /// short-circuit and/or) ends the walk, and the arguments before it stay unknown.
+    std::vector<IntArg> argumentsOf(const std::vector<ssl::IntInstruction>& code, std::size_t at, std::size_t count) {
+        std::vector<IntArg> args(count);
+        std::size_t end = at;
+        for (std::size_t arg = count; arg-- > 0;) {
+            int values = 0;
+            std::size_t start = end;
+            while (values < 1 && start > 0) {
+                const ssl::IntInstruction& instruction = code[--start];
+                if (instruction.pops < 0 || instruction.pushes < 0) {
+                    return args;
+                }
+                values += instruction.pushes - instruction.pops;
+            }
+            if (values != 1) {
+                return args;
+            }
+            args[arg] = { constantOf(code, start, end), end - start == 1 && code[start].name == "op_self_obj", start, end };
+            end = start;
+        }
+        return args;
+    }
+
+    /// The code an `if` on a constant condition never runs, as [first, last) instruction offsets. sslc
+    /// drops such a branch, but the original compiler kept it: `push else; <condition>; IF; <then>
+    /// [push end; JUMP]; else: ...`. IF pops the condition, then the else address it jumps to when the
+    /// condition is false (fallout2-ce interpreter.cc opIf).
+    std::vector<std::pair<std::size_t, std::size_t>> deadBranches(const std::vector<ssl::IntInstruction>& code) {
+        std::vector<std::pair<std::size_t, std::size_t>> dead;
+        for (std::size_t i = 0; i < code.size(); ++i) {
+            if (code[i].name != "OPCODE_IF") {
+                continue;
+            }
+            const auto args = argumentsOf(code, i, 2);
+            const auto& elseAddress = args[0].value;
+            const auto& condition = args[1].value;
+            if (!elseAddress.has_value() || !condition.has_value() || *elseAddress <= static_cast<int64_t>(code[i].offset)) {
+                continue;
+            }
+            const auto elseAt = static_cast<std::size_t>(*elseAddress);
+            if (*condition == 0) {
+                dead.emplace_back(code[i].offset + 1, elseAt);
+                continue;
+            }
+            // Always true: the else branch, when the then branch ends by jumping over it.
+            const auto jump = std::ranges::find_if(code, [elseAt](const ssl::IntInstruction& in) { return in.offset >= elseAt; });
+            const auto at = static_cast<std::size_t>(jump - code.begin());
+            if (at >= 2 && code[at - 1].name == "OPCODE_JUMP" && code[at - 2].literal.has_value() && *code[at - 2].literal > *elseAddress) {
+                dead.emplace_back(elseAt, static_cast<std::size_t>(*code[at - 2].literal));
+            }
+        }
+        return dead;
+    }
+
+    /// Reads the variable, message and call uses out of one run of code (a body or a condition).
     class IntUseReader {
     public:
         IntUseReader(ScriptReport& report, const std::string& procedure)
@@ -106,69 +200,85 @@ namespace {
             , _procedure(procedure) {}
 
         void readCode(const std::vector<ssl::IntInstruction>& code) {
-            // Only an uninterrupted run of integer pushes is known to be what the next opcode pops.
-            std::vector<int32_t> literals;
-            for (const ssl::IntInstruction& instruction : code) {
-                if (instruction.literal.has_value()) {
-                    literals.push_back(*instruction.literal);
-                    continue;
+            const auto dead = deadBranches(code);
+            for (std::size_t i = 0; i < code.size(); ++i) {
+                const std::size_t offset = code[i].offset;
+                if (std::ranges::none_of(dead, [offset](const auto& range) { return offset >= range.first && offset < range.second; })) {
+                    use(code, i);
                 }
-                use(instruction.name, literals);
-                literals.clear();
             }
         }
 
     private:
-        /// The last `count` literals, when that many were pushed.
-        static std::optional<std::span<const int32_t>> lastArgs(const std::vector<int32_t>& literals, std::size_t count) {
-            if (literals.size() < count) {
-                return std::nullopt;
-            }
-            return std::span<const int32_t>(literals).last(count);
+        static std::optional<int> asInt(const IntArg& arg) {
+            return arg.value.has_value() ? std::optional<int>(static_cast<int>(*arg.value)) : std::nullopt;
         }
 
-        void variable(std::vector<ScriptUse<ssl::VariableRef>>& into, ssl::VariableRef::Kind kind, const std::vector<int32_t>& literals) const {
+        void variable(std::vector<ScriptUse<ssl::VariableRef>>& into, ssl::VariableRef::Kind kind, const std::vector<IntArg>& args) const {
             // get pops the index; set pops the value, then the index (fallout2-ce interpreter_extra.cc).
-            const auto args = lastArgs(literals, kind == ssl::VariableRef::Kind::Get ? 1 : 2);
             ssl::VariableRef ref;
             ref.kind = kind;
-            ref.index = args.has_value() ? std::optional<int>(args->front()) : std::nullopt;
+            ref.index = asInt(args.front());
             ref.procedure = _procedure;
             into.emplace_back(std::move(ref), where());
         }
 
-        void use(const std::string& opcode, const std::vector<int32_t>& literals) {
+        void use(const std::vector<ssl::IntInstruction>& code, std::size_t at) {
             using Kind = ssl::VariableRef::Kind;
+            const std::string& opcode = code[at].name;
+            const auto args = [&code, at](std::size_t count) { return argumentsOf(code, at, count); };
             if (opcode == "op_get_local_var" || opcode == "op_set_local_var") {
-                variable(_report.locals, opcode == "op_get_local_var" ? Kind::Get : Kind::Set, literals);
-                return;
+                const bool get = opcode == "op_get_local_var";
+                variable(_report.locals, get ? Kind::Get : Kind::Set, args(get ? 1 : 2));
+            } else if (opcode == "op_get_global_var" || opcode == "op_set_global_var") {
+                const bool get = opcode == "op_get_global_var";
+                variable(_report.globals, get ? Kind::Get : Kind::Set, args(get ? 1 : 2));
+            } else if (const auto message = messageOpcode(opcode); message.has_value()) {
+                const auto& [name, listArg, count] = *message;
+                const auto values = args(count);
+                if (values[listArg].value.has_value() && values[listArg + 1].value.has_value()) {
+                    ssl::MessageRef ref;
+                    ref.opcode = std::string(name.substr(3)); // without "op_"
+                    ref.list = asInt(values[listArg]);
+                    ref.number = asInt(values[listArg + 1]);
+                    ref.procedure = _procedure;
+                    _report.messages.emplace_back(std::move(ref), where());
+                }
+            } else if (const auto call = callOpcode(opcode); call.has_value()) {
+                ssl::CallRef ref;
+                ref.opcode = std::string(call->first);
+                for (const IntArg& arg : args(call->second)) {
+                    ref.args.push_back(arg.value);
+                    ref.self.push_back(arg.self);
+                }
+                ref.procedure = _procedure;
+                _report.calls.emplace_back(std::move(ref), where());
             }
-            if (opcode == "op_get_global_var" || opcode == "op_set_global_var") {
-                variable(_report.globals, opcode == "op_get_global_var" ? Kind::Get : Kind::Set, literals);
-                return;
-            }
-            // The same list and number arguments as ssl::messageRefs.
-            static constexpr std::array<std::tuple<std::string_view, std::size_t, std::size_t>, 5> MESSAGE_OPCODES{ {
+        }
+
+        /// The same list and number arguments as ssl::messageRefs: {opcode, list argument, argument count}.
+        static std::optional<std::tuple<std::string_view, std::size_t, std::size_t>> messageOpcode(std::string_view opcode) {
+            static constexpr std::array<std::tuple<std::string_view, std::size_t, std::size_t>, 5> OPCODES{ {
                 { "op_message_str", 0, 2 },
                 { "op_gsay_reply", 0, 2 },
                 { "op_gsay_message", 0, 3 },
                 { "op_gsay_option", 0, 4 },
                 { "op_giq_option", 1, 5 },
             } };
-            for (const auto& [name, listArg, count] : MESSAGE_OPCODES) {
-                if (opcode != name) {
-                    continue;
-                }
-                if (const auto args = lastArgs(literals, count); args.has_value()) {
-                    ssl::MessageRef ref;
-                    ref.opcode = std::string(name.substr(3)); // without "op_"
-                    ref.list = (*args)[listArg];
-                    ref.number = (*args)[listArg + 1];
-                    ref.procedure = _procedure;
-                    _report.messages.emplace_back(std::move(ref), where());
-                }
-                return;
-            }
+            const auto it = std::ranges::find(OPCODES, opcode, [](const auto& entry) { return std::get<0>(entry); });
+            return it != OPCODES.end() ? std::optional(*it) : std::nullopt;
+        }
+
+        /// The calls ScriptReport::calls keeps, by their engine name: {SSL name, argument count}.
+        static std::optional<std::pair<std::string_view, std::size_t>> callOpcode(std::string_view opcode) {
+            static constexpr std::array<std::tuple<std::string_view, std::string_view, std::size_t>, 4> OPCODES{ {
+                { "op_add_timer_event", "add_timer_event", 3 },
+                { "op_create_object", "create_object_sid", 4 },
+                { "op_move_to", "move_to", 3 },
+                { "critter_attempt_placement", "critter_attempt_placement", 3 },
+            } };
+            const auto it = std::ranges::find(OPCODES, opcode, [](const auto& entry) { return std::get<0>(entry); });
+            return it != OPCODES.end() ? std::optional(std::pair{ std::get<1>(*it), std::get<2>(*it) }) : std::nullopt;
         }
 
         ScriptLocation where() const { return { _report.script, 0 }; }
@@ -590,9 +700,6 @@ NeverSetGlobals neverSetGlobals(const std::vector<ScriptReport>& reports, const 
     };
     std::map<int, FirstRead> read;
     for (std::size_t i = 0; i < reports.size(); ++i) {
-        if (reports[i].fromBytecode) {
-            continue; // its writes of computed values lost their index, so it can't vouch for "never set"
-        }
         std::set<int> readHere;
         for (const auto& use : reports[i].globals) {
             if (!use.ref.index.has_value()) {
