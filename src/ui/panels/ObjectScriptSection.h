@@ -4,8 +4,11 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
+#include <optional>
 
+#include "format/ai/AiPacket.h"
 #include "ui/ScriptSourceService.h"
 
 class QCompleter;
@@ -57,7 +60,9 @@ private:
     void showPickerText();
     void browse();
     void refreshDetails(const MapScript* script, const ScriptSourceService::ScriptStatus& status);
-    void refreshLocalVariables(const MapScript* script, const ssl::ScriptFacts& facts);
+    void refreshLocalVariables(const MapScript* script, const std::map<int, std::string>& localVarNames);
+    QString localVariableCountText(const MapScript* script, const ScriptSourceService::ScriptStatus& status) const;
+    const AiTxt& aiPackets();
     const MapScript* attachedScript() const;
     bool isCritter() const;
 
@@ -80,6 +85,7 @@ private:
     QLabel* _hint;     // how to get more detail (no source found)
     QLabel* _localVarsTitle;
     QTreeWidget* _localVars;
+    std::optional<AiTxt> _aiTxt; // ai.txt, read the first time a packet is named
 };
 
 } // namespace geck
