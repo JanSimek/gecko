@@ -330,8 +330,13 @@ void ObjectScriptSection::refreshDetails(const MapScript* script, const ScriptSo
         }
     }
 
-    // What the lint finds in the script itself (see lint_script).
-    for (const resource::ScriptFinding& finding : status.findings) {
+    // What the lint finds in the script itself (see lint_script), then for where this object places it.
+    std::vector<resource::ScriptFinding> findings = status.findings;
+    if (script != nullptr && status.report) {
+        std::ranges::move(resource::placementFindings(*status.report, resource::placementOf(MapScript::fromPid(script->pid))),
+            std::back_inserter(findings));
+    }
+    for (const resource::ScriptFinding& finding : findings) {
         const QString line = QString("%1: %2").arg(whereText(finding.where.file, finding.where.line, report.script),
             QString::fromStdString(finding.message));
         if (finding.severity == resource::ScriptFinding::Severity::Error) {

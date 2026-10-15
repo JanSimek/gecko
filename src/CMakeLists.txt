@@ -311,6 +311,8 @@ add_library(vault STATIC
     ssl/CallGraph.cpp
     ssl/MessageRefs.h
     ssl/MessageRefs.cpp
+    ssl/CallRefs.h
+    ssl/CallRefs.cpp
     ssl/VariableRefs.h
     ssl/VariableRefs.cpp
     ssl/Corpus.h
@@ -540,6 +542,7 @@ add_library(gecko_resource STATIC
     resource/ScriptSourceLocator.cpp
     resource/VfsSourceProvider.h
     resource/VfsSourceProvider.cpp
+    resource/GameVarsLoader.h
     resource/ScriptLint.h
     resource/ScriptLint.cpp
 )

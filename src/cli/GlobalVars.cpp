@@ -1,5 +1,7 @@
 #include "cli/GlobalVars.h"
 
+#include "resource/GameVarsLoader.h"
+
 #include "format/gam/Gam.h"
 #include "resource/GameResources.h"
 
@@ -15,16 +17,7 @@ namespace {
 }
 
 Gam* loadGameGam(resource::GameResources& resources) {
-    for (const char* path : { "data/vault13.gam", "vault13.gam" }) {
-        try {
-            if (Gam* gam = resources.repository().load<Gam>(path); gam != nullptr) {
-                return gam;
-            }
-        } catch (const std::exception&) {
-            // try the next candidate path
-        }
-    }
-    return nullptr;
+    return resource::loadVault13Gam(resources);
 }
 
 int buildGlobalVars(resource::GameResources& resources, std::ostream& out) {

@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <algorithm>
 #include <map>
 #include <fstream>
 #include <sstream>
@@ -75,7 +76,7 @@ TEST_CASE("lint_script reports local variables past scripts.lst's count, missing
     REQUIRE(rc == 0);
     CHECK(j["name"] == "one");
     CHECK(j["summary"]["errors"] == 3);
-    CHECK(j["summary"]["notes"] == 1);
+    CHECK(j["summary"]["notes"] == 3); // the unused procedure, and local variables 1 (never set) and 5 (never read)
 
     const auto& findings = j["findings"];
     const auto find = [&findings](const std::string& check, int line) {
@@ -130,7 +131,7 @@ TEST_CASE("describe_script analyze=true summarises the parsed script", "[script_
     CHECK(analysis["localVariables"]["count"] == 2);
     CHECK(analysis["localVariables"]["uses"].size() == 2);
     CHECK(analysis["messageUses"] == 4);
-    CHECK(analysis["findings"].size() == 4);
+    CHECK(analysis["findings"].size() == 6);
     fs::remove_all(root);
 }
 
@@ -194,4 +195,61 @@ TEST_CASE("localVarBlockProblems follows the engine's block sizes and finds over
     CHECK_FALSE(problems.contains(a));
     CHECK_FALSE(problems.contains(b));
     fs::remove_all(root);
+}
+
+TEST_CASE("lint_script checks global variables, timers, created objects and tiles", "[script_lint]") {
+    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "script_lint_calls";
+    fs::remove_all(root);
+    writeFile(root / "scripts" / "scripts.lst", "one.int ; first # local_vars=1\n");
+    writeFile(root / "data" / "vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_A :=0;\nGVAR_B :=0;\n");
+    writeFile(root / "src" / "one.ssl",
+        "procedure map_enter_p_proc begin\n"
+        "   set_global_var(2, 1);\n"                     // line 2: vault13.gam has 2 (0-1)
+        "   x := global_var(1);\n"                       // fine
+        "   add_timer_event(self_obj, 10, 1);\n"         // line 4: no timed_event_p_proc
+        "   create_object_sid(0, 100, 0, -1);\n"         // line 5: PID 0
+        "   create_object_sid(16777217, 40000, 3, 9);\n" // line 6: no proto, bad hex, elevation, script
+        "   move_to(self_obj, 7, 5);\n"                  // line 7: bad elevation
+        "end\n");
+    cli::LintOptions options;
+    options.name = "one";
+    options.includeNotes = false;
+    int rc = -1;
+    const auto j = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); }, rc);
+    REQUIRE(rc == 0);
+    std::multimap<int, std::string> found; // line -> check
+    for (const auto& f : j["findings"]) {
+        found.emplace(f["line"].get<int>(), f["check"].get<std::string>());
+    }
+    const auto at = [&found](int line, const std::string& check) {
+        const auto [first, last] = found.equal_range(line);
+        return std::count_if(first, last, [&check](const auto& entry) { return entry.second == check; });
+    };
+    CHECK(at(2, "gvars") == 1);
+    CHECK(at(3, "gvars") == 0);
+    CHECK(at(4, "timers") == 1);
+    CHECK(at(5, "objects") == 1);
+    CHECK(at(6, "objects") == 2); // no proto, and script 9 is not a scripts.lst line
+    CHECK(at(6, "tiles") == 2);   // hex 40000 and elevation 3
+    CHECK(at(7, "tiles") == 1);
+    fs::remove_all(root);
+}
+
+TEST_CASE("placementFindings checks a script against where the map places it", "[script_lint]") {
+    resource::ScriptReport report;
+    report.script = "one.ssl";
+    report.procedures.push_back({ "critter_p_proc", true, true, 0, { "one.ssl", 3 }, true });
+    report.locals.push_back({ ssl::VariableRef{}, { "one.ssl", 5 } });
+
+    const auto checks = [&report](resource::ScriptPlacement placement) {
+        std::vector<std::string> out;
+        for (const auto& f : resource::placementFindings(report, placement)) {
+            out.push_back(f.check);
+        }
+        return out;
+    };
+    CHECK(checks(resource::ScriptPlacement::Critter).empty());
+    CHECK(checks(resource::ScriptPlacement::Item) == std::vector<std::string>{ "handlers" });
+    CHECK(checks(resource::ScriptPlacement::Spatial) == std::vector<std::string>{ "spatial", "handlers" });
+    CHECK(checks(resource::ScriptPlacement::Map) == std::vector<std::string>{ "local-vars", "handlers" });
 }

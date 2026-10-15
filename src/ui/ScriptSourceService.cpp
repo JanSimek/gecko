@@ -94,7 +94,7 @@ void ScriptSourceService::lint(int programIndex, ScriptStatus& status) {
         if (lst == nullptr) {
             return;
         }
-        resource::ScriptLinter linter(_resources, *lst, "english");
+        resource::ScriptLinter linter(_resources, lst, "english");
         status.localVarCount = linter.localVariableCount(programIndex);
         if (status.report) {
             status.findings = linter.findings(*status.report, programIndex, false);
