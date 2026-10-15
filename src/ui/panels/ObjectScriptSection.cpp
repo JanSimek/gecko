@@ -80,6 +80,32 @@ namespace {
         return QString("%1 line %2").arg(QString::fromStdString(std::filesystem::path(file).filename().string())).arg(line);
     }
 
+    // A finding read from the compiled script, or about the script as a whole, has no line.
+    QString findingLine(const resource::ScriptFinding& finding, const std::string& script) {
+        const QString message = QString::fromStdString(finding.message);
+        if (finding.where.line != 0) {
+            return QString("%1: %2").arg(whereText(finding.where.file, finding.where.line, script), message);
+        }
+        if (!finding.procedure.empty()) {
+            return QString("%1: %2").arg(QString::fromStdString(finding.procedure), message);
+        }
+        return message;
+    }
+
+    // How to get the source checked, when it was not found.
+    QString sourceHint(const ScriptSourceService::ScriptStatus& status) {
+        if (status.report && status.report->fromBytecode) {
+            return "No SSL source found, so only the compiled .int was checked. Mark a script source tree "
+                   "(e.g. the Restoration Project's scripts_src) in Preferences › Data Paths to open it and "
+                   "check it fully.";
+        }
+        if (!status.report && status.resolved) {
+            return "No SSL source found. Mark a script source tree (e.g. the Restoration Project's "
+                   "scripts_src) in Preferences › Data Paths to open it and check what it overrides.";
+        }
+        return {};
+    }
+
 } // namespace
 
 ObjectScriptSection::ObjectScriptSection(resource::GameResources& resources, QWidget* parent)
@@ -284,7 +310,7 @@ void ObjectScriptSection::showObject(Map* map, std::shared_ptr<MapObject> object
     showPickerText();
     _identity->setVisible(_programIndex >= 0);
     // Without a source the hint below says how to add one, so there is nothing to open.
-    _openSourceButton->setVisible(_programIndex >= 0 && status.report != nullptr);
+    _openSourceButton->setVisible(_programIndex >= 0 && status.report != nullptr && !status.report->fromBytecode);
     _showInPanelButton->setVisible(script != nullptr);
     _detachAction->setVisible(_object && _object->map_scripts_pid != -1);
 
@@ -305,10 +331,7 @@ void ObjectScriptSection::refreshDetails(const MapScript* script, const ScriptSo
         } else if (!status.compiled) {
             warnings << "⚠ Its compiled .int is not in the mounted data, so the game can't run it.";
         }
-        if (!status.report && status.resolved) {
-            hint = "No SSL source found. Mark a script source tree (e.g. the Restoration Project's "
-                   "scripts_src) in Preferences › Data Paths to open it and check what it overrides.";
-        }
+        hint = sourceHint(status);
     }
 
     // Team and AI packet are critter fields; the script's assignment replaces the map's value.
@@ -337,8 +360,7 @@ void ObjectScriptSection::refreshDetails(const MapScript* script, const ScriptSo
             std::back_inserter(findings));
     }
     for (const resource::ScriptFinding& finding : findings) {
-        const QString line = QString("%1: %2").arg(whereText(finding.where.file, finding.where.line, report.script),
-            QString::fromStdString(finding.message));
+        const QString line = findingLine(finding, report.script);
         if (finding.severity == resource::ScriptFinding::Severity::Error) {
             warnings << "⚠ " + line;
         } else {

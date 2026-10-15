@@ -8,9 +8,12 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <set>
+#include <tuple>
 #include <vector>
 
-#include "cli/IntDisassembler.h"
+#include "resource/ScriptLint.h"
+#include "ssl/IntProgram.h"
 #include "ssl/CallGraph.h"
 #include "ssl/ScriptFacts.h"
 #include "support/GraphicsTestEnv.h"
@@ -30,12 +33,37 @@ std::map<std::string, int, std::less<>> compiledProcedures(const std::filesystem
     std::ifstream in(file, std::ios::binary);
     const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     std::map<std::string, int, std::less<>> procedures;
-    for (const auto& procedure : geck::cli::disassembleInt(bytes).procedures) {
+    for (const auto& procedure : geck::ssl::disassembleInt(bytes).procedures) {
         if (!procedure.name.starts_with('.')) {
             procedures.try_emplace(lower(procedure.name), procedure.argCount);
         }
     }
     return procedures;
+}
+
+std::vector<uint8_t> fileBytes(const std::filesystem::path& file) {
+    std::ifstream in(file, std::ios::binary);
+    return { std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>() };
+}
+
+using UseKey = std::tuple<char, int, int>; // kind ('l'ocal/'g'lobal get/set or 'm'essage), a, b
+
+// The variable and message uses a report knows the arguments of.
+std::set<UseKey> knownUses(const geck::resource::ScriptReport& report) {
+    std::set<UseKey> uses;
+    for (const auto& [prefix, refs] : { std::pair{ 'l', &report.locals }, std::pair{ 'g', &report.globals } }) {
+        for (const auto& use : *refs) {
+            if (use.ref.index.has_value()) {
+                uses.emplace(prefix, use.ref.kind == VariableRef::Kind::Get ? 0 : 1, *use.ref.index);
+            }
+        }
+    }
+    for (const auto& use : report.messages) {
+        if (use.ref.list.has_value() && use.ref.number.has_value()) {
+            uses.emplace('m', *use.ref.list, *use.ref.number);
+        }
+    }
+    return uses;
 }
 
 struct ProcedureDiff {
@@ -101,6 +129,8 @@ TEST_CASE("Every script in a source tree reads cleanly", "[.corpus][ssl]") {
     int setAiPacket = 0;
     int setTeam = 0;
     int withLocalVarNames = 0;
+    std::size_t sourceUses = 0;
+    std::size_t bytecodeUses = 0;
     const auto start = std::chrono::steady_clock::now();
     for (const auto& entry : std::filesystem::recursive_directory_iterator(*root)) {
         if (entry.path().extension() != ".ssl") {
@@ -128,11 +158,25 @@ TEST_CASE("Every script in a source tree reads cleanly", "[.corpus][ssl]") {
             CHECK(diff.onlyCompiled == std::vector<std::string>{});
             CHECK(diff.otherArgCount == std::vector<std::string>{});
             ++compared;
+
+            // What the .int alone shows of the script's variable and message uses is part of what the
+            // source shows.
+            const auto fromSource = knownUses(geck::resource::reportScript(unit));
+            const auto fromBytecode = knownUses(geck::resource::reportInt(disassembleInt(fileBytes(intFile->second)), intFile->second.string()));
+            std::vector<UseKey> onlyInBytecode;
+            std::ranges::set_difference(fromBytecode, fromSource, std::back_inserter(onlyInBytecode));
+            for (const auto& [kind, first, second] : onlyInBytecode) {
+                UNSCOPED_INFO(kind << " " << first << " " << second);
+            }
+            CHECK(onlyInBytecode == std::vector<UseKey>{});
+            sourceUses += fromSource.size();
+            bytecodeUses += fromBytecode.size();
         }
     }
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
     std::cout << scripts << " scripts in " << elapsed.count() << " ms (" << compared << " compared with their .int); "
               << setAiPacket << " set their own AI packet, " << setTeam << " their team, " << withLocalVarNames
-              << " name local variables\n";
+              << " name local variables; the .int shows " << bytecodeUses << " of the source's " << sourceUses
+              << " known variable and message uses\n";
     CHECK(scripts > 0);
 }

@@ -5,6 +5,7 @@
 #include "format/map/MapScript.h"
 #include "format/gam/Gam.h"
 #include "format/msg/Msg.h"
+#include "DataFileSystem.h"
 #include "resource/GameResources.h"
 #include "resource/GameVarsLoader.h"
 #include "resource/ScriptSourceLocator.h"
@@ -19,6 +20,9 @@
 #include <cctype>
 #include <format>
 #include <set>
+#include <string_view>
+#include <optional>
+#include <span>
 #include <tuple>
 
 namespace geck::resource {
@@ -83,6 +87,127 @@ ScriptReport reportScript(const ssl::ScriptUnit& unit) {
     r.overrides = std::move(facts.overrides);
     r.localVarNames = std::move(facts.localVarNames);
     return r;
+}
+
+namespace {
+
+    /// An opcode whose arguments reportInt reads from the literals pushed just before it.
+    struct IntUse {
+        std::string_view opcode;
+        std::size_t args;
+    };
+
+    /// Reads the variable and message uses out of one run of code (a body or a condition).
+    class IntUseReader {
+    public:
+        IntUseReader(ScriptReport& report, const std::string& procedure)
+            : _report(report)
+            , _procedure(procedure) {}
+
+        void readCode(const std::vector<ssl::IntInstruction>& code) {
+            // Only an uninterrupted run of integer pushes is known to be what the next opcode pops.
+            std::vector<int32_t> literals;
+            for (const ssl::IntInstruction& instruction : code) {
+                if (instruction.literal.has_value()) {
+                    literals.push_back(*instruction.literal);
+                    continue;
+                }
+                use(instruction.name, literals);
+                literals.clear();
+            }
+        }
+
+    private:
+        /// The last `count` literals, when that many were pushed.
+        static std::optional<std::span<const int32_t>> lastArgs(const std::vector<int32_t>& literals, std::size_t count) {
+            if (literals.size() < count) {
+                return std::nullopt;
+            }
+            return std::span<const int32_t>(literals).last(count);
+        }
+
+        void variable(std::vector<ScriptUse<ssl::VariableRef>>& into, ssl::VariableRef::Kind kind, const std::vector<int32_t>& literals) {
+            // get pops the index; set pops the value, then the index (fallout2-ce interpreter_extra.cc).
+            const auto args = lastArgs(literals, kind == ssl::VariableRef::Kind::Get ? 1 : 2);
+            ssl::VariableRef ref;
+            ref.kind = kind;
+            ref.index = args.has_value() ? std::optional<int>(args->front()) : std::nullopt;
+            ref.procedure = _procedure;
+            into.push_back({ std::move(ref), where() });
+        }
+
+        void use(const std::string& opcode, const std::vector<int32_t>& literals) {
+            using Kind = ssl::VariableRef::Kind;
+            if (opcode == "op_get_local_var" || opcode == "op_set_local_var") {
+                variable(_report.locals, opcode == "op_get_local_var" ? Kind::Get : Kind::Set, literals);
+                return;
+            }
+            if (opcode == "op_get_global_var" || opcode == "op_set_global_var") {
+                variable(_report.globals, opcode == "op_get_global_var" ? Kind::Get : Kind::Set, literals);
+                return;
+            }
+            // The same list and number arguments as ssl::messageRefs.
+            static constexpr std::array<std::tuple<std::string_view, std::size_t, std::size_t>, 5> MESSAGE_OPCODES{ {
+                { "op_message_str", 0, 2 },
+                { "op_gsay_reply", 0, 2 },
+                { "op_gsay_message", 0, 3 },
+                { "op_gsay_option", 0, 4 },
+                { "op_giq_option", 1, 5 },
+            } };
+            for (const auto& [name, listArg, count] : MESSAGE_OPCODES) {
+                if (opcode != name) {
+                    continue;
+                }
+                if (const auto args = lastArgs(literals, count); args.has_value()) {
+                    ssl::MessageRef ref;
+                    ref.opcode = std::string(name.substr(3)); // without "op_"
+                    ref.list = (*args)[listArg];
+                    ref.number = (*args)[listArg + 1];
+                    ref.procedure = _procedure;
+                    _report.messages.push_back({ std::move(ref), where() });
+                }
+                return;
+            }
+        }
+
+        ScriptLocation where() const { return { _report.script, 0 }; }
+
+        ScriptReport& _report;
+        const std::string& _procedure;
+    };
+
+} // namespace
+
+ScriptReport reportInt(const ssl::IntProgram& program, std::string path) {
+    ScriptReport r;
+    r.script = std::move(path);
+    r.fromBytecode = true;
+    for (const ssl::IntProcedure& procedure : program.procedures) {
+        // sslc puts a placeholder procedure ("..............") first.
+        if (procedure.name.empty() || procedure.name.front() == '.') {
+            continue;
+        }
+        r.procedures.push_back({ procedure.name, true, ssl::isEngineProcedure(procedure.name),
+            static_cast<std::size_t>(std::max(procedure.argCount, 0)), { r.script, 0 }, false });
+        IntUseReader reader(r, procedure.name);
+        reader.readCode(procedure.condition);
+        reader.readCode(procedure.code);
+    }
+    return r;
+}
+
+std::optional<ScriptReport> reportCompiled(GameResources& resources, const std::string& baseName) {
+    const std::string path = "scripts/" + baseName + ".int";
+    const auto bytes = resources.files().readRawBytes(path);
+    if (!bytes) {
+        return std::nullopt;
+    }
+    try {
+        return reportInt(ssl::disassembleInt(*bytes), path);
+    } catch (const std::runtime_error& e) {
+        spdlog::warn("could not read {}: {}", path, e.what());
+        return std::nullopt;
+    }
 }
 
 std::vector<ScriptReport> reportScripts(GameResources& resources, const std::vector<std::filesystem::path>& paths) {
@@ -464,6 +589,9 @@ NeverSetGlobals neverSetGlobals(const std::vector<ScriptReport>& reports, const 
     };
     std::map<int, FirstRead> read;
     for (std::size_t i = 0; i < reports.size(); ++i) {
+        if (reports[i].fromBytecode) {
+            continue; // its writes of computed values lost their index, so it can't vouch for "never set"
+        }
         std::set<int> readHere;
         for (const auto& use : reports[i].globals) {
             if (!use.ref.index.has_value()) {

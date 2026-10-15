@@ -75,7 +75,7 @@ namespace {
             }
         }
         try {
-            root["disassembly"] = intProgramToJson(disassembleInt(*bytes, globalVarNames.empty() ? nullptr : &globalVarNames));
+            root["disassembly"] = intProgramToJson(ssl::disassembleInt(*bytes, globalVarNames.empty() ? nullptr : &globalVarNames));
         } catch (const std::runtime_error& e) {
             root["disassembly"] = nullptr;
             root["disassemblyError"] = std::string("could not disassemble ") + path + ": " + e.what();

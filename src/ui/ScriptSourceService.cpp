@@ -84,6 +84,12 @@ ScriptSourceService::ScriptStatus ScriptSourceService::scriptStatus(int programI
             status.report = std::make_shared<const resource::ScriptReport>(resource::reportScript(ssl::ScriptUnit::load(provider, source->vfsPath)));
         }
     }
+    // Without a source, what the compiled script itself shows.
+    if (!status.report && status.compiled) {
+        if (auto compiled = resource::reportCompiled(_resources, baseName); compiled.has_value()) {
+            status.report = std::make_shared<const resource::ScriptReport>(std::move(*compiled));
+        }
+    }
     lint(programIndex, status);
     return status;
 }

@@ -321,6 +321,9 @@ add_library(vault STATIC
     ssl/ScriptUnit.cpp
     ssl/ScriptFacts.h
     ssl/ScriptFacts.cpp
+    ssl/IntProgram.h
+    ssl/IntProgram.cpp
+    ssl/IntOpcodes.inc
 
     # DAT
     format/dat/Dat.h

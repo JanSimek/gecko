@@ -49,7 +49,7 @@ namespace cli {
         /// "EPAC17.int"). Preferred over `programIndex`: no index base to get wrong.
         std::string name;
         std::string locale = "english"; ///< dialog .msg locale subdirectory
-        /// Also disassemble the compiled scripts/<name>.int (see cli/IntDisassembler.h). Opt-in: a script
+        /// Also disassemble the compiled scripts/<name>.int (see ssl/IntProgram.h). Opt-in: a script
         /// runs to thousands of instructions. It is what the engine executes, so it answers what a
         /// script does when no .ssl source tree is mounted.
         bool disassemble = false;

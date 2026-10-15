@@ -261,12 +261,16 @@ LVAR 6 with `local_vars=6`, `epas5` offering `epas1` messages 104/105 that `epas
 **Not built, on purpose:** a `ScriptIndex` cache. Every query re-parses the tree in ~2 s on all cores,
 and keeping every parsed script would cost gigabytes; build it only when a tool needs faster answers.
 Still open: an `ObjectRefs` pass (`create_object_sid`, `load_map` targets) — `script_refs call` covers
-the lookup for now; the lint reports `template/*.ssl` include-only files that `scripts.lst` names
-(e.g. sprtrp0) as syntax errors, since they don't compile on their own.
+the lookup for now. The RP's `template/` holds real Interplay scripts (door, containr, generic parse
+cleanly); only `sprtrp0.ssl` is a placeholder sslc can't compile (the game runs vanilla's .int), so its
+syntax errors are true and the folder is not skipped.
 
-**Phase 4 (rest):** the `.int` front end filling a `resource::ScriptReport` as far as bytecode allows
-(procedures, literal variable numbers) when no source is mounted. The Scripts panel and the Script section
-already show the lint (`resource::ScriptLinter`), including the placement checks.
+**Phase 4 (rest):** the bytecode report (`resource::reportInt`) reads only the literals pushed just
+before an opcode, so a `set_global_var`/`set_local_var` of a computed value loses its index (vanilla:
+8432 such gvar writes), and the cross-script "never set" check leaves bytecode reports out. Recovering
+those needs each opcode's stack effect (the arity catalog above) to walk back over the value
+expression; the handler sources can't simply be counted (`opRandom` pops in a loop). The corpus test's
+"bytecode uses ⊆ source uses" check would validate it. Timers/objects/tiles need the same walk.
 
 **Rejected:** tree-sitter + the BGforge SSL grammar — no preprocessor, and RP hides structure behind
 macros, so phases 1–3 would still be needed on top of a new C dependency.
