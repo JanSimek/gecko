@@ -106,7 +106,7 @@ public:
         _resources->files().addDataPath(_root.path().toStdString());
     }
 
-    void writeBinaryFile(const QString& relativePath, const std::vector<uint8_t>& bytes) {
+    void writeBinaryFile(const QString& relativePath, const std::vector<uint8_t>& bytes) const {
         const QString fullPath = _root.filePath(relativePath);
         QDir().mkpath(QFileInfo(fullPath).path());
         QFile file(fullPath);

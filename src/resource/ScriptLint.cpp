@@ -10,6 +10,7 @@
 #include "resource/GameVarsLoader.h"
 #include "resource/ScriptSourceLocator.h"
 #include "resource/VfsSourceProvider.h"
+#include "reader/ReaderExceptions.h"
 #include "ssl/CallGraph.h"
 #include "ssl/Corpus.h"
 
@@ -126,14 +127,14 @@ namespace {
             return std::span<const int32_t>(literals).last(count);
         }
 
-        void variable(std::vector<ScriptUse<ssl::VariableRef>>& into, ssl::VariableRef::Kind kind, const std::vector<int32_t>& literals) {
+        void variable(std::vector<ScriptUse<ssl::VariableRef>>& into, ssl::VariableRef::Kind kind, const std::vector<int32_t>& literals) const {
             // get pops the index; set pops the value, then the index (fallout2-ce interpreter_extra.cc).
             const auto args = lastArgs(literals, kind == ssl::VariableRef::Kind::Get ? 1 : 2);
             ssl::VariableRef ref;
             ref.kind = kind;
             ref.index = args.has_value() ? std::optional<int>(args->front()) : std::nullopt;
             ref.procedure = _procedure;
-            into.push_back({ std::move(ref), where() });
+            into.emplace_back(std::move(ref), where());
         }
 
         void use(const std::string& opcode, const std::vector<int32_t>& literals) {
@@ -164,7 +165,7 @@ namespace {
                     ref.list = (*args)[listArg];
                     ref.number = (*args)[listArg + 1];
                     ref.procedure = _procedure;
-                    _report.messages.push_back({ std::move(ref), where() });
+                    _report.messages.emplace_back(std::move(ref), where());
                 }
                 return;
             }
@@ -204,7 +205,7 @@ std::optional<ScriptReport> reportCompiled(GameResources& resources, const std::
     }
     try {
         return reportInt(ssl::disassembleInt(*bytes), path);
-    } catch (const std::runtime_error& e) {
+    } catch (const ParseException& e) {
         spdlog::warn("could not read {}: {}", path, e.what());
         return std::nullopt;
     }

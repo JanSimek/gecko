@@ -9,6 +9,7 @@
 #include <optional>
 #include <utility>
 #include <vector>
+#include <format>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -333,7 +334,7 @@ TEST_CASE("reportInt reads a compiled script's procedures and literal variable a
     resource::ScriptLinter linter(resources, lst, "english");
     std::vector<std::string> checks;
     for (const auto& finding : linter.findings(report, 0, true)) {
-        checks.push_back(finding.check + " " + finding.where.file + ":" + std::to_string(finding.where.line));
+        checks.push_back(std::format("{} {}:{}", finding.check, finding.where.file, finding.where.line));
     }
     CHECK(checks == std::vector<std::string>{ "local-vars scripts/one.int:0", "messages scripts/one.int:0" });
     // As the map's own script, its local variables read -1.
