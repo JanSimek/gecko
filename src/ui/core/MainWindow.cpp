@@ -2039,6 +2039,12 @@ void MainWindow::connectPanelSignals() {
             return _scriptSourceService ? _scriptSourceService->scriptStatus(programIndex)
                                         : ScriptSourceService::ScriptStatus{ };
         });
+        if (_scriptsPanel) {
+            _scriptsPanel->setStatusProvider([this](int programIndex) {
+                return _scriptSourceService ? _scriptSourceService->scriptStatus(programIndex)
+                                            : ScriptSourceService::ScriptStatus{ };
+            });
+        }
         connect(_selectionPanel, &SelectionPanel::requestObjectHighlight,
             this, [this](std::shared_ptr<Object> object) {
                 if (!_currentEditorWidget || !object)

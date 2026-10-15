@@ -1343,6 +1343,61 @@ TEST_CASE("ScriptsPanel shows the selected script's local variables", "[qt][scri
     CHECK(lvarTable->item(1, 1)->data(Qt::DisplayRole).toInt() == 222);
 }
 
+// After the table fills, each script is linted (one per event-loop turn) and its rows get a marker:
+// the lint's findings, and a placed script whose local variable block overlaps another's.
+TEST_CASE("ScriptsPanel marks scripts the lint finds problems in", "[qt][scripts]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player # local_vars=4\nclean.int ; fine # local_vars=1\n");
+    data.mount();
+
+    auto map = makeMap("testmap.map");
+    auto& mapFile = map->getMapFile();
+    auto dude = geck::MapScript::makeObjectScript(geck::MapScript::ScriptType::CRITTER, 0, 0, 42);
+    dude.local_var_offset = 0; // 0-3
+    mapFile.map_scripts[static_cast<int>(geck::MapScript::ScriptType::CRITTER)].push_back(dude);
+    auto clean = geck::MapScript::makeObjectScript(geck::MapScript::ScriptType::ITEM, 1, 1, 7);
+    clean.local_var_offset = 3; // inside obj_dude's block, but clean.int never uses its variable
+    mapFile.map_scripts[static_cast<int>(geck::MapScript::ScriptType::ITEM)].push_back(clean);
+    mapFile.map_local_vars = { 0, 0, 0, 0 };
+
+    geck::ScriptsPanel panel(data.resources());
+    panel.setStatusProvider([](int programIndex) {
+        geck::ScriptSourceService::ScriptStatus status;
+        status.resolved = true;
+        auto report = std::make_shared<geck::resource::ScriptReport>();
+        if (programIndex == 0) {
+            report->locals.push_back({ geck::ssl::VariableRef{}, { "scripts/obj_dude.ssl", 20 } }); // uses its variables
+        }
+        status.report = report;
+        if (programIndex == 0) {
+            status.findings.push_back({ geck::resource::ScriptFinding::Severity::Error, "messages", "message 150 is not in dialog/obj_dude.msg",
+                { "scripts/obj_dude.ssl", 12 }, "talk_p_proc" });
+        }
+        return status;
+    });
+    panel.setMap(map.get());
+
+    auto* table = panel.findChild<QTableWidget*>("scriptsTable");
+    REQUIRE(table != nullptr);
+    const auto filenameCell = [table](int programIndex) -> QTableWidgetItem* {
+        for (int row = 0; row < table->rowCount(); ++row) {
+            if (table->item(row, 1)->data(Qt::DisplayRole).toInt() == programIndex) {
+                return table->item(row, 2);
+            }
+        }
+        return nullptr;
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(filenameCell(0) != nullptr && !filenameCell(0)->toolTip().isEmpty(), 2000);
+    const QString tip = filenameCell(0)->toolTip();
+    CHECK(tip.contains("Its local variables 0-3 overlap those of clean.int, so they share them."));
+    CHECK(tip.contains("obj_dude.ssl line 12: message 150 is not in dialog/obj_dude.msg"));
+    CHECK_FALSE(filenameCell(0)->icon().isNull());
+    QCoreApplication::processEvents();
+    REQUIRE(filenameCell(1) != nullptr);
+    CHECK(filenameCell(1)->toolTip().isEmpty()); // nothing wrong with the clean script
+    CHECK(filenameCell(1)->icon().isNull());
+}
+
 // The unified Exit-Grids tool is one checkable button plus a dropdown whose two items ("Draw edge" /
 // "Place single hex") are exclusive: triggering one ticks it, unticks the other, keeps the button
 // checked. (Driving the editor mode needs game data, so that half is covered below against EditorWidget.)
