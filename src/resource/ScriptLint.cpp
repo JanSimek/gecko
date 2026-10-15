@@ -411,17 +411,18 @@ bool ScriptLinter::protoExists(int64_t pid) {
 
 ScriptPlacement placementOf(MapScript::ScriptType type) {
     using enum MapScript::ScriptType;
+    using enum ScriptPlacement;
     switch (type) {
         case SPATIAL:
-            return ScriptPlacement::Spatial;
+            return Spatial;
         case TIMER:
-            return ScriptPlacement::Timer;
+            return Timer;
         case ITEM:
-            return ScriptPlacement::Item;
+            return Item;
         case CRITTER:
-            return ScriptPlacement::Critter;
+            return Critter;
         default:
-            return ScriptPlacement::Map; // a system script, like the map's own
+            return ScriptPlacement::Map; // not the Map class: a system script, like the map's own
     }
 }
 
