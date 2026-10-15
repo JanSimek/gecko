@@ -5,17 +5,23 @@
 #include "format/map/MapScript.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
+#include "resource/ScriptLint.h"
 #include "resource/ScriptNames.h"
+#include "ui/IconHelper.h"
 
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QSplitter>
+#include <QTimer>
 #include <QTableWidget>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <cstdint>
+#include <set>
+#include <filesystem>
 #include <string>
 
 namespace geck {
@@ -30,11 +36,19 @@ namespace {
         COL_DETAIL = 5,
         COL_COUNT = 6,
     };
+
+    // What is wrong with the placed script's local variable block (resource::localVarBlockProblems),
+    // stashed in the Filename cell; the lint marker shows it when the script uses local variables.
+    constexpr int LOCAL_VAR_BLOCK_ROLE = Qt::UserRole + 1;
+    constexpr int MAX_TOOLTIP_FINDINGS = 6;
 } // namespace
 
 ScriptsPanel::ScriptsPanel(resource::GameResources& resources, QWidget* parent)
     : QWidget(parent)
-    , _resources(resources) {
+    , _resources(resources)
+    , _lintTimer(new QTimer(this)) {
+    _lintTimer->setInterval(0);
+    connect(_lintTimer, &QTimer::timeout, this, &ScriptsPanel::lintNext);
 
     auto* mainLayout = new QVBoxLayout(this);
 
@@ -91,6 +105,11 @@ ScriptsPanel::ScriptsPanel(resource::GameResources& resources, QWidget* parent)
     connect(_table, &QTableWidget::customContextMenuRequested, this, &ScriptsPanel::onTableContextMenu);
 }
 
+void ScriptsPanel::setStatusProvider(StatusProvider provider) {
+    _statusProvider = std::move(provider);
+    startLint();
+}
+
 void ScriptsPanel::setMap(Map* map) {
     _map = map;
     populate();
@@ -118,6 +137,7 @@ void ScriptsPanel::populate() {
     const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
 
     const auto& mapFile = _map->getMapFile();
+    const auto blockProblems = lst != nullptr ? resource::localVarBlockProblems(*_map, *lst) : std::map<uint32_t, std::string>{};
 
     for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
         // The map_scripts section index is the script type (System/Spatial/Timer/Item/Critter).
@@ -134,6 +154,9 @@ void ScriptsPanel::populate() {
             // The script's own SID (its pid) drives double-click navigation; script_oid is the owner shown.
             addRow(sectionName, static_cast<int>(script.script_id), static_cast<qulonglong>(script.pid),
                 static_cast<qulonglong>(script.script_oid), detail, lst);
+            if (const auto problem = blockProblems.find(script.pid); problem != blockProblems.end()) {
+                _table->item(_table->rowCount() - 1, COL_FILENAME)->setData(LOCAL_VAR_BLOCK_ROLE, QString::fromStdString(problem->second));
+            }
         }
     }
 
@@ -151,6 +174,66 @@ void ScriptsPanel::populate() {
     applyFilter(); // a re-populate (map switch) must honour the filter still shown in the box
 
     _suppressSpatialSelectionSignal = false;
+    startLint();
+}
+
+void ScriptsPanel::startLint() {
+    _lintQueue.clear();
+    _lintTimer->stop();
+    if (!_statusProvider || _map == nullptr) {
+        return;
+    }
+    std::set<int> programs;
+    for (int row = 0; row < _table->rowCount(); ++row) {
+        if (const int index = programIndexOfRow(row); index >= 0) {
+            programs.insert(index);
+        }
+    }
+    _lintQueue.assign(programs.rbegin(), programs.rend()); // popped from the back: lowest index first
+    _lintTimer->start();
+}
+
+void ScriptsPanel::lintNext() {
+    if (_lintQueue.empty()) {
+        _lintTimer->stop();
+        return;
+    }
+    const int programIndex = _lintQueue.back();
+    _lintQueue.pop_back();
+    markRows(programIndex, _statusProvider(programIndex));
+}
+
+void ScriptsPanel::markRows(int programIndex, const ScriptSourceService::ScriptStatus& status) {
+    for (int row = 0; row < _table->rowCount(); ++row) {
+        QTableWidgetItem* file = _table->item(row, COL_FILENAME);
+        if (file == nullptr || programIndexOfRow(row) != programIndex) {
+            continue;
+        }
+        QStringList problems;
+        bool error = false;
+        for (const resource::ScriptFinding& finding : status.findings) {
+            error = error || finding.severity == resource::ScriptFinding::Severity::Error;
+            if (problems.size() < MAX_TOOLTIP_FINDINGS) {
+                const QString file = QString::fromStdString(std::filesystem::path(finding.where.file).filename().string());
+                problems << QString("%1 line %2: %3").arg(file).arg(finding.where.line).arg(QString::fromStdString(finding.message));
+            }
+        }
+        if (status.findings.size() > static_cast<std::size_t>(MAX_TOOLTIP_FINDINGS)) {
+            problems << QString("… and %1 more (lint_script lists them all)").arg(status.findings.size() - MAX_TOOLTIP_FINDINGS);
+        }
+        // A bad block only matters to a script whose running code uses its local variables.
+        if (const QString block = file->data(LOCAL_VAR_BLOCK_ROLE).toString(); !block.isEmpty() && status.report && !status.report->locals.empty()) {
+            error = true;
+            problems.prepend(block);
+        }
+        if (problems.isEmpty()) {
+            file->setIcon({});
+            file->setToolTip({});
+            continue;
+        }
+        file->setIcon(createIcon(error ? ":/icons/ui/error.svg" : ":/icons/ui/warning.svg"));
+        file->setToolTip(problems.join('\n'));
+    }
 }
 
 void ScriptsPanel::addRow(const QString& section, int programIndex, qulonglong rowSid, qulonglong ownerOid,
