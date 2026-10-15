@@ -288,9 +288,6 @@ quest logic and static win-path extraction would be brittle; the MCP supplies gr
 
 Open items:
 
-- **Script transitions in `map_graph`** — the graph has only exit-grid edges; `script_refs map *`
-  lists the `load_map` calls (96 in 67 RP scripts, e.g. caravans to `vctyctyd.map`) that a
-  `scriptEdges` list could add, keyed to the calling script's maps.
 - **Corpus / world index** — index `analyze` + the semantic facts across all shipped maps so an
   agent can query *examples* ("how do shipped towns place and wire shopkeepers?") — improves
   generation, not just analysis.

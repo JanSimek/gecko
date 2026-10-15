@@ -3,10 +3,14 @@
 #include "resource/ConfigLoad.h"
 #include "cli/MapAnalyzer.h" // collectMapExits, listMapPaths, MapExit
 #include "cli/MapLoad.h"     // loadMap
+#include "cli/ScriptLookup.h"
+#include "cli/ScriptRefs.h" // scriptMapTransitions
+#include "format/lst/Lst.h"
 #include "editor/Reachability.h"
 #include "format/city/CityTxt.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
+#include "format/map/MapScript.h"
 #include "reader/city/CityTxtReader.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
@@ -14,6 +18,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <format>
 #include <map>
 #include <memory>
 #include <optional>
@@ -64,6 +69,26 @@ namespace {
     using Nodes = std::map<std::string, NodeInfo, std::less<>>;
     using Edges = std::map<std::pair<std::string, std::string>, EdgeInfo>;
     using StringMap = std::map<std::string, std::string, std::less<>>;
+    // Analysed map file -> the scripts.lst program indices it places (its own script + map_scripts).
+    using PlacedScripts = std::map<std::string, std::set<int>, std::less<>>;
+    // (from, to) -> the load_map calls behind the script edge.
+    using ScriptEdges = std::map<std::pair<std::string, std::string>, std::vector<ScriptMapTransition>>;
+
+    // The program indices a map places: its own (header) script, 1-based in the header, and every
+    // map_scripts entry, 0-based (CLAUDE.md "Script Index Bases").
+    std::set<int> placedScripts(const Map& map) {
+        const Map::MapFile& file = map.getMapFile();
+        std::set<int> out;
+        if (file.header.script_id > 0) {
+            out.insert(file.header.script_id - 1);
+        }
+        for (const auto& section : file.map_scripts) {
+            for (const MapScript& script : section) {
+                out.insert(static_cast<int>(script.script_id));
+            }
+        }
+        return out;
+    }
 
     // .map filename -> owning worldmap area name, from city.txt entrances (resolved lookup_name ->
     // file). Gives each map_graph node its area, the reverse of world_map's area.maps[].mapFile.
@@ -120,7 +145,7 @@ namespace {
     // Load each map and fold its exit grids into the node/edge maps; returns how many maps loaded.
     // `pathOf` records each analysed node's full path so the one-way join can re-load it.
     int buildGraph(resource::GameResources& resources, const resource::MapNameResolver& names,
-        const std::vector<std::string>& mapPaths, Nodes& nodes, Edges& edges, StringMap& pathOf) {
+        const std::vector<std::string>& mapPaths, Nodes& nodes, Edges& edges, StringMap& pathOf, PlacedScripts& placed) {
         int analysed = 0;
         for (const auto& mapPath : mapPaths) {
             const std::unique_ptr<Map> map = loadMap(resources, mapPath);
@@ -135,6 +160,7 @@ namespace {
                 fromNode.displayName = names.displayName(fromIndex, 0);
             }
             pathOf.try_emplace(fromFile, mapPath);
+            placed[fromFile] = placedScripts(*map);
             ++analysed;
             for (const MapExit& exit : collectMapExits(*map)) {
                 addExit(names, fromFile, exit, nodes, edges);
@@ -264,6 +290,105 @@ namespace {
             { "oneWayEdges", std::move(oneWay) } };
     }
 
+    // The script layer: each load_map call joined to the maps that place its script.
+    struct ScriptLayer {
+        ScriptEdges edges;
+        std::vector<ScriptMapTransition> unplaced; ///< calls whose script no analysed map places
+        std::size_t scriptsRead = 0;
+    };
+
+    ScriptLayer scriptLayer(resource::GameResources& resources, const resource::MapNameResolver& names,
+        const PlacedScripts& placed, Nodes& nodes) {
+        ScriptLayer layer;
+        std::vector<ScriptMapTransition> calls = scriptMapTransitions(resources, &layer.scriptsRead);
+        if (calls.empty()) {
+            return layer;
+        }
+        // scripts.lst base name -> program index, and program index -> the maps placing it.
+        std::map<std::string, int, std::less<>> indexOf;
+        if (const Lst* lst = script_lookup::loadScriptsLst(resources); lst != nullptr) {
+            for (std::size_t i = 0; i < lst->list().size(); ++i) {
+                indexOf.try_emplace(script_lookup::toLower(script_lookup::stem(lst->list()[i])), static_cast<int>(i));
+            }
+        }
+        std::map<int, std::vector<std::string>> mapsPlacing;
+        for (const auto& [file, indices] : placed) {
+            for (const int index : indices) {
+                mapsPlacing[index].push_back(file);
+            }
+        }
+        for (ScriptMapTransition& call : calls) {
+            std::string to = call.mapFile;
+            if (to.empty()) {
+                to = call.mapIndex.has_value() ? std::format("<map {}>", *call.mapIndex) : std::string("<unknown map>");
+            } else if (NodeInfo& toNode = nodes[to]; toNode.displayName.empty()) {
+                toNode.displayName = names.displayName(names.indexOf(to), 0);
+            }
+            const auto index = indexOf.find(script_lookup::toLower(script_lookup::stem(call.script)));
+            const auto from = index != indexOf.end() ? mapsPlacing.find(index->second) : mapsPlacing.end();
+            if (from == mapsPlacing.end()) {
+                layer.unplaced.push_back(std::move(call));
+                continue;
+            }
+            for (const std::string& fromFile : from->second) {
+                layer.edges[{ fromFile, to }].push_back(call);
+            }
+        }
+        return layer;
+    }
+
+    ordered_json callJson(const ScriptMapTransition& call) {
+        ordered_json json{ { "script", call.script } };
+        if (!call.file.empty()) {
+            json["file"] = call.file;
+        }
+        json["line"] = call.line;
+        json["procedure"] = call.procedure;
+        json["entrance"] = call.entrance.has_value() ? ordered_json(*call.entrance) : ordered_json(nullptr);
+        json["text"] = call.text;
+        return json;
+    }
+
+    void addScriptLayer(ordered_json& root, const ScriptLayer& layer, const Edges& edges) {
+        auto edgesJson = ordered_json::array();
+        std::set<std::string, std::less<>> scriptTargets;
+        for (const auto& [key, calls] : layer.edges) {
+            auto callsJson = ordered_json::array();
+            for (const ScriptMapTransition& call : calls) {
+                callsJson.push_back(callJson(call));
+            }
+            edgesJson.push_back({ { "from", key.first }, { "to", key.second }, { "calls", std::move(callsJson) } });
+            if (key.first != key.second) {
+                scriptTargets.insert(key.second);
+            }
+        }
+        auto unplaced = ordered_json::array();
+        for (const ScriptMapTransition& call : layer.unplaced) {
+            ordered_json json = callJson(call);
+            json["to"] = call.mapFile.empty() ? ordered_json(nullptr) : ordered_json(call.mapFile);
+            unplaced.push_back(std::move(json));
+        }
+        root["scriptEdges"] = std::move(edgesJson);
+        root["unplacedScriptCalls"] = std::move(unplaced);
+        // Maps no other map's exit grid leads into that a script transition does (a world-map
+        // entrance may lead there too; that layer is world_map's).
+        std::set<std::string, std::less<>> exitTargets;
+        for (const auto& [key, edge] : edges) {
+            if (edge.kind == "map" && key.first != key.second) {
+                exitTargets.insert(key.second);
+            }
+        }
+        auto onlyByScript = ordered_json::array(); // sorted: scriptTargets is a std::set
+        for (const std::string& file : scriptTargets) {
+            if (!exitTargets.contains(file)) {
+                onlyByScript.push_back(file);
+            }
+        }
+        root["stats"]["scriptsRead"] = layer.scriptsRead;
+        root["stats"]["scriptEdges"] = layer.edges.size();
+        root["stats"]["noIncomingExceptScript"] = std::move(onlyByScript);
+    }
+
     ordered_json graphToJson(const Nodes& nodes, const Edges& edges, int analysed,
         const resource::MapNameResolver& names, const StringMap& areaOf) {
         auto nodesJson = ordered_json::array();
@@ -307,9 +432,15 @@ int buildMapGraph(resource::GameResources& resources, const MapGraphOptions& opt
     Nodes nodes;
     Edges edges;
     StringMap pathOf;
-    const int analysed = buildGraph(resources, names, mapPaths, nodes, edges, pathOf);
+    PlacedScripts placed;
+    const int analysed = buildGraph(resources, names, mapPaths, nodes, edges, pathOf, placed);
     annotateReturnPaths(resources, nodes, edges, pathOf);
-    out << graphToJson(nodes, edges, analysed, names, areaOf).dump(2, ' ', false, ordered_json::error_handler_t::replace) << "\n";
+    const ScriptLayer scripts = options.scripts ? scriptLayer(resources, names, placed, nodes) : ScriptLayer{};
+    ordered_json root = graphToJson(nodes, edges, analysed, names, areaOf);
+    if (options.scripts) {
+        addScriptLayer(root, scripts, edges);
+    }
+    out << root.dump(2, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     return 0;
 }
 

@@ -197,30 +197,58 @@ namespace {
             }
         }
 
+    public:
+        // Every load_map call, with its map resolved through maps.txt (by index or by file name).
+        std::vector<ScriptMapTransition> transitions() {
+            std::vector<ScriptMapTransition> out;
+            for (const ssl::MapRef& ref : ssl::mapRefs(_unit, _graph)) {
+                auto transition = place(ref.procedure, ref.location);
+                if (!transition.has_value()) {
+                    continue;
+                }
+                if (ref.index.has_value()) {
+                    transition->mapIndex = static_cast<int>(*ref.index);
+                }
+                std::string stem = ref.name.has_value() ? mapStem(*ref.name) : std::string();
+                if (const auto it = transition->mapIndex.has_value() ? _maps.fileNames.find(*transition->mapIndex) : _maps.fileNames.end();
+                    stem.empty() && it != _maps.fileNames.end()) {
+                    stem = mapStem(it->second);
+                }
+                transition->mapFile = stem.empty() ? std::string() : stem + ".map";
+                transition->entrance = ref.entrance;
+                out.push_back(std::move(*transition));
+            }
+            return out;
+        }
+
+    private:
         // load_map calls sending the player to the target map (by index or by file name).
         void loadMaps() {
-            for (const ssl::MapRef& ref : ssl::mapRefs(_unit, _graph)) {
-                std::optional<int> index = ref.index.has_value() ? std::optional<int>(static_cast<int>(*ref.index)) : std::nullopt;
-                std::string stem = ref.name.has_value() ? mapStem(*ref.name) : std::string();
-                if (index.has_value() && stem.empty()) {
-                    if (const auto it = _maps.fileNames.find(*index); it != _maps.fileNames.end()) {
-                        stem = mapStem(it->second);
-                    }
-                }
-                if (const bool matches = _maps.any || (_maps.index.has_value() && index == _maps.index) || (!stem.empty() && stem == _maps.stem);
+            for (const ScriptMapTransition& t : transitions()) {
+                const std::string stem = t.mapFile.empty() ? std::string() : mapStem(t.mapFile);
+                if (const bool matches = _maps.any || (_maps.index.has_value() && t.mapIndex == _maps.index) || (!stem.empty() && stem == _maps.stem);
                     !matches) {
                     continue;
                 }
-                ordered_json* json = add(ref.procedure, ref.location);
-                if (json == nullptr) {
-                    continue;
+                ordered_json json = placeJson(t);
+                json["map"] = t.mapFile.empty() ? ordered_json(nullptr) : ordered_json(t.mapFile);
+                if (t.mapIndex.has_value()) {
+                    json["mapIndex"] = *t.mapIndex;
                 }
-                (*json)["map"] = stem.empty() ? ordered_json(nullptr) : ordered_json(stem + ".map");
-                if (index.has_value()) {
-                    (*json)["mapIndex"] = *index;
-                }
-                (*json)["entrance"] = ref.entrance.has_value() ? ordered_json(*ref.entrance) : ordered_json(nullptr);
+                json["entrance"] = t.entrance.has_value() ? ordered_json(*t.entrance) : ordered_json(nullptr);
+                _found.push_back(std::move(json));
             }
+        }
+
+        static ordered_json placeJson(const ScriptMapTransition& written) {
+            ordered_json json{ { "script", written.script } };
+            if (!written.file.empty()) {
+                json["file"] = written.file;
+            }
+            json["line"] = written.line;
+            json["procedure"] = written.procedure;
+            json["text"] = written.text;
+            return json;
         }
 
         void add(const ssl::Procedure& procedure, ssl::TokenRange range) {
@@ -230,18 +258,29 @@ namespace {
         // A ref at `where`, once per written place (a macro expands into several expressions); nullptr
         // when that place is already reported.
         ordered_json* add(const std::string& procedure, const ssl::SourceLocation& where) {
-            if (!_seen.emplace(procedure, where.file, where.line).second) {
+            auto written = place(procedure, where);
+            if (!written.has_value()) {
                 return nullptr;
             }
-            ordered_json json{ { "script", _path.filename().string() } };
-            if (const auto& written = _unit.sources().path(where.file); _unit.scriptFile() && written != _unit.sources().path(*_unit.scriptFile())) {
-                json["file"] = written.generic_string(); // a header or template the script includes
-            }
-            json["line"] = where.line;
-            json["procedure"] = procedure;
-            json["text"] = geck::text::trim(std::string(_unit.sources().line(where.file, where.line)));
-            _found.push_back(std::move(json));
+            _found.push_back(placeJson(*written));
             return &_found.back();
+        }
+
+        // Where a ref was written, once per written place (a macro expands into several expressions);
+        // nullopt when that place is already reported.
+        std::optional<ScriptMapTransition> place(const std::string& procedure, const ssl::SourceLocation& where) {
+            if (!_seen.emplace(procedure, where.file, where.line).second) {
+                return std::nullopt;
+            }
+            ScriptMapTransition written;
+            written.script = _path.filename().string();
+            if (const auto& path = _unit.sources().path(where.file); _unit.scriptFile().has_value() && path != _unit.sources().path(*_unit.scriptFile())) {
+                written.file = path.generic_string(); // a header or template the script includes
+            }
+            written.line = where.line;
+            written.procedure = procedure;
+            written.text = geck::text::trim(std::string(_unit.sources().line(where.file, where.line)));
+            return written;
         }
 
         const ssl::ScriptUnit& _unit;
@@ -362,6 +401,26 @@ int findScriptRefs(resource::GameResources& resources, const ScriptRefsOptions& 
     // Not used anywhere is a valid answer; nothing to read means no source tree is mounted, an error
     // so the MCP flags isError.
     return scripts.empty() ? 1 : 0;
+}
+
+std::vector<ScriptMapTransition> scriptMapTransitions(resource::GameResources& resources, std::size_t* scriptsRead) {
+    const MapTarget maps = mapTarget(resources, "*");
+    const std::vector<std::filesystem::path> scripts = mountedScripts(resources);
+    if (scriptsRead != nullptr) {
+        *scriptsRead = scripts.size();
+    }
+    std::vector<std::vector<ScriptMapTransition>> perScript(scripts.size());
+    const resource::VfsSourceProvider provider(resources.files());
+    ssl::loadScripts(provider, scripts, [&perScript, &scripts, &maps](std::size_t index, const ssl::ScriptUnit& unit) {
+        if (unit.scriptFile().has_value()) {
+            perScript[index] = ScriptSearch(unit, scripts[index], maps).transitions();
+        }
+    });
+    std::vector<ScriptMapTransition> out;
+    for (auto& found : perScript) {
+        std::ranges::move(found, std::back_inserter(out));
+    }
+    return out;
 }
 
 } // namespace geck::cli
