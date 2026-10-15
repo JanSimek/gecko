@@ -210,7 +210,7 @@ namespace {
                     transition->mapIndex = static_cast<int>(*ref.index);
                 }
                 std::string stem = ref.name.has_value() ? mapStem(*ref.name) : std::string();
-                if (const auto it = transition->mapIndex ? _maps.fileNames.find(*transition->mapIndex) : _maps.fileNames.end();
+                if (const auto it = transition->mapIndex.has_value() ? _maps.fileNames.find(*transition->mapIndex) : _maps.fileNames.end();
                     stem.empty() && it != _maps.fileNames.end()) {
                     stem = mapStem(it->second);
                 }
@@ -274,7 +274,7 @@ namespace {
             }
             ScriptMapTransition written;
             written.script = _path.filename().string();
-            if (const auto& path = _unit.sources().path(where.file); _unit.scriptFile() && path != _unit.sources().path(*_unit.scriptFile())) {
+            if (const auto& path = _unit.sources().path(where.file); _unit.scriptFile().has_value() && path != _unit.sources().path(*_unit.scriptFile())) {
                 written.file = path.generic_string(); // a header or template the script includes
             }
             written.line = where.line;

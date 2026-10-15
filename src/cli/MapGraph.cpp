@@ -18,6 +18,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <format>
 #include <map>
 #include <memory>
 #include <optional>
@@ -319,7 +320,7 @@ namespace {
         for (ScriptMapTransition& call : calls) {
             std::string to = call.mapFile;
             if (to.empty()) {
-                to = call.mapIndex.has_value() ? "<map " + std::to_string(*call.mapIndex) + ">" : "<unknown map>";
+                to = call.mapIndex.has_value() ? std::format("<map {}>", *call.mapIndex) : std::string("<unknown map>");
             } else if (NodeInfo& toNode = nodes[to]; toNode.displayName.empty()) {
                 toNode.displayName = names.displayName(names.indexOf(to), 0);
             }
@@ -350,7 +351,7 @@ namespace {
 
     void addScriptLayer(ordered_json& root, const ScriptLayer& layer, const Edges& edges) {
         auto edgesJson = ordered_json::array();
-        std::set<std::string> scriptTargets;
+        std::set<std::string, std::less<>> scriptTargets;
         for (const auto& [key, calls] : layer.edges) {
             auto callsJson = ordered_json::array();
             for (const ScriptMapTransition& call : calls) {
@@ -371,7 +372,7 @@ namespace {
         root["unplacedScriptCalls"] = std::move(unplaced);
         // Maps no other map's exit grid leads into that a script transition does (a world-map
         // entrance may lead there too; that layer is world_map's).
-        std::set<std::string> exitTargets;
+        std::set<std::string, std::less<>> exitTargets;
         for (const auto& [key, edge] : edges) {
             if (edge.kind == "map" && key.first != key.second) {
                 exitTargets.insert(key.second);
