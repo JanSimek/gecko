@@ -313,6 +313,8 @@ add_library(vault STATIC
     ssl/MessageRefs.cpp
     ssl/CallRefs.h
     ssl/CallRefs.cpp
+    ssl/ObjectRefs.h
+    ssl/ObjectRefs.cpp
     ssl/VariableRefs.h
     ssl/VariableRefs.cpp
     ssl/Corpus.h

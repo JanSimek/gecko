@@ -260,8 +260,7 @@ LVAR 6 with `local_vars=6`, `epas5` offering `epas1` messages 104/105 that `epas
 
 **Not built, on purpose:** a `ScriptIndex` cache. Every query re-parses the tree in ~2 s on all cores,
 and keeping every parsed script would cost gigabytes; build it only when a tool needs faster answers.
-Still open: an `ObjectRefs` pass (`create_object_sid`, `load_map` targets) — `script_refs call` covers
-the lookup for now. The RP's `template/` holds real Interplay scripts (door, containr, generic parse
+`script_refs pid`/`map` (`ssl/ObjectRefs`) find a PID's uses and the `load_map` calls into a map. The RP's `template/` holds real Interplay scripts (door, containr, generic parse
 cleanly); only `sprtrp0.ssl` is a placeholder sslc can't compile (the game runs vanilla's .int), so its
 syntax errors are true and the folder is not skipped.
 
@@ -289,6 +288,9 @@ quest logic and static win-path extraction would be brittle; the MCP supplies gr
 
 Open items:
 
+- **Script transitions in `map_graph`** — the graph has only exit-grid edges; `script_refs map *`
+  lists the `load_map` calls (96 in 67 RP scripts, e.g. caravans to `vctyctyd.map`) that a
+  `scriptEdges` list could add, keyed to the calling script's maps.
 - **Corpus / world index** — index `analyze` + the semantic facts across all shipped maps so an
   agent can query *examples* ("how do shipped towns place and wire shopkeepers?") — improves
   generation, not just analysis.

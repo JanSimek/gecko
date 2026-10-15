@@ -145,9 +145,10 @@ void printUsage(const char* program) {
               << "      The endgame win-condition table (endgame.txt): each slide's gvar==value, art, narrator.\n"
               << "  " << program << " map find-gvar <GVAR_NAME> --data <dir-or-.dat> [--data <...>]\n"
               << "      Scripts that read/write a global variable (needs an .ssl source tree mounted): set vs get.\n"
-              << "  " << program << " map script-refs <gvar|call|procedure|macro> <NAME> --data <dir-or-.dat> [--data <...>]\n"
-              << "      Every use of a gvar, an opcode or procedure call, a procedure reference or a macro in code\n"
-              << "      the compiled scripts run (needs an .ssl source tree mounted).\n"
+              << "  " << program << " map script-refs <gvar|call|procedure|macro|pid|map> <NAME> --data <dir-or-.dat> [--data <...>]\n"
+              << "      Every use of a gvar, an opcode or procedure call, a procedure reference, a macro, a constant\n"
+              << "      PID (pid: number, 0x hex or PID_*) or a load_map target (map: file name or maps.txt index)\n"
+              << "      in code the compiled scripts run (needs an .ssl source tree mounted); '*' lists all pid/map.\n"
               << "  " << program << " map lint-script <name> | --index <n> | --map <map> | --all [--notes] [--locale english]\n"
               << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      Problems the compiler misses: local variables past scripts.lst's count, messages missing\n"
@@ -675,7 +676,7 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     }
     out.lint.includeNotes = (!out.lint.all && out.lint.map.empty()) || out.lintNotes;
     if (out.scriptRefs && out.refs.name.empty()) {
-        std::cerr << "error: script-refs requires a kind (gvar, call, procedure, macro) and a name\n";
+        std::cerr << "error: script-refs requires a kind (gvar, call, procedure, macro, pid, map) and a name\n";
         printUsage(program);
         return 2;
     }

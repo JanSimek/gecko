@@ -165,6 +165,58 @@ TEST_CASE("script_refs finds calls, procedure references and macro uses in code 
     fs::remove_all(root);
 }
 
+// A load_map target is found whether the script names it as a string or as a maps.txt index, and a
+// PID through any opcode that takes one or an obj_pid() comparison.
+TEST_CASE("script_refs finds a PID's uses and the load_map calls into a map", "[script_lint]") {
+    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "script_refs_objects";
+    fs::remove_all(root);
+    writeFile(root / "data" / "maps.txt", "[Map 000]\nlookup_name=Town\nmap_name=town\n[Map 001]\nlookup_name=Cave\nmap_name=cave\n");
+    writeFile(root / "src" / "obj.ssl",
+        "#define PID_ROCK (0x0200004B)\n"
+        "#define TOWN_MAP (0)\n"
+        "procedure start begin\n"
+        "   variable x;\n"
+        "   x := create_object_sid(PID_ROCK, 0, 0, -1);\n"             // line 5
+        "   if (obj_pid(x) == PID_ROCK) then x := 0;\n"                // line 6
+        "   x := party_member_obj(16777216);\n"                        // line 7: another PID
+        "   load_map(\"Town.MAP\", 2);\n"                              // line 8
+        "   load_map(TOWN_MAP, 3);\n"                                  // line 9
+        "   load_map(\"cave.map\", 0);\n"                              // line 10
+        "   if (0) then x := create_object_sid(PID_ROCK, 0, 0, -1);\n" // never runs
+        "end\n");
+    int rc = -1;
+
+    const auto rock = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "pid", "PID_ROCK" }, out); }, rc);
+    REQUIRE(rc == 0);
+    REQUIRE(rock["stats"]["refs"] == 2);
+    CHECK(rock["refs"][0]["line"] == 5);
+    CHECK(rock["refs"][0]["via"] == "create_object_sid");
+    CHECK(rock["refs"][0]["pid"] == "0x0200004B");
+    CHECK(rock["refs"][1]["line"] == 6);
+    CHECK(rock["refs"][1]["via"] == "obj_pid");
+    const auto byNumber = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "pid", "0x0200004b" }, out); }, rc);
+    CHECK(byNumber["stats"]["refs"] == 2);
+    const auto every = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "pid", "*" }, out); }, rc);
+    CHECK(every["stats"]["refs"] == 3);
+
+    const auto town = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "map", "town" }, out); }, rc);
+    REQUIRE(rc == 0);
+    CHECK(town["mapIndex"] == 0);
+    REQUIRE(town["stats"]["refs"] == 2);
+    CHECK(town["refs"][0]["line"] == 8);
+    CHECK(town["refs"][0]["map"] == "town.map");
+    CHECK(town["refs"][0]["entrance"] == 2);
+    CHECK(town["refs"][1]["line"] == 9);
+    CHECK(town["refs"][1]["mapIndex"] == 0);
+    CHECK(town["refs"][1]["map"] == "town.map");
+    const auto byIndex = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "map", "1" }, out); }, rc);
+    REQUIRE(byIndex["stats"]["refs"] == 1);
+    CHECK(byIndex["refs"][0]["map"] == "cave.map");
+    const auto allMaps = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "map", "*" }, out); }, rc);
+    CHECK(allMaps["stats"]["refs"] == 3);
+    fs::remove_all(root);
+}
+
 TEST_CASE("localVarBlockProblems follows the engine's block sizes and finds overlaps and overruns", "[script_lint]") {
     const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "lvar_blocks";
     fs::remove_all(root);
