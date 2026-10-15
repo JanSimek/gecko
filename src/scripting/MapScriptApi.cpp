@@ -503,9 +503,9 @@ int MapScriptApi::protoFid(int pid) const {
     return pro->header.FID;
 }
 
-std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
-    // Proto -> art FID -> FRM, the path placeProto and the renderer take, flattened to per-frame
-    // geometry. Hard-fail: a caller measuring footprints cannot recover from a silent wrong answer.
+const Frm& MapScriptApi::protoFrm(int pid) const {
+    // Proto -> art FID -> FRM, the path placeProto and the renderer take. Hard-fail: a caller
+    // measuring footprints cannot recover from a silent wrong answer.
     const int fid = protoFid(pid); // raises if the proto can't load
     const std::string artPath = resourcesRef().frmResolver().resolve(static_cast<uint32_t>(fid));
     if (artPath.empty()) {
@@ -522,8 +522,13 @@ std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
         throw ScriptError(std::format("proto 0x{:08x} art '{}' has no renderable frame",
             static_cast<uint32_t>(pid), artPath));
     }
+    return *frm;
+}
+
+std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
+    // The FRM flattened to per-frame geometry.
     std::vector<int> out;
-    const auto& directions = frm->directions();
+    const auto& directions = protoFrm(pid).directions();
     for (int d = 0; d < static_cast<int>(directions.size()); ++d) {
         const auto& frames = directions[d].frames();
         out.reserve(out.size() + frames.size() * 6);
@@ -538,6 +543,33 @@ std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
         }
     }
     return out;
+}
+
+std::vector<int> MapScriptApi::artRect(int pid, int hex) const {
+    if (!isValidHex(hex)) {
+        throw ScriptError("artRect: hex " + std::to_string(hex) + " is off the 200x200 hex grid");
+    }
+    const auto& direction = protoFrm(pid).directions().front();
+    if (direction.frames().empty()) {
+        throw ScriptError(std::format("artRect: proto 0x{:08x} art has no frame", static_cast<uint32_t>(pid)));
+    }
+    const Frame& frame = direction.frames().front();
+    // fallout2-ce tile.cc tileToScreenXY with the view origin at (0, 0): columns run right to left,
+    // and an odd column (counted from the right) sits half a hex lower.
+    const int col = HexagonGrid::GRID_WIDTH - 1 - hex % HexagonGrid::GRID_WIDTH;
+    const int row = hex / HexagonGrid::GRID_WIDTH;
+    int x = 48 * (col / 2) + 16 * row;
+    int y = -12 * (col / 2) + 12 * row;
+    if (col % 2 != 0) {
+        x += 32;
+    }
+    // object.cc objectGetRect: the art hangs from (tile + (16, 8) + the direction's shift), centred
+    // on x, bottom on y. Rotation 0, frame 0 and no per-object pixel offset, as the map objects
+    // scripts place.
+    const int anchorX = x + 16 + direction.shiftX();
+    const int anchorY = y + 8 + direction.shiftY();
+    const int left = anchorX - frame.width() / 2;
+    return { left, anchorY - frame.height() + 1, left + frame.width() - 1, anchorY };
 }
 
 void MapScriptApi::beginBatch(const std::string& description) {

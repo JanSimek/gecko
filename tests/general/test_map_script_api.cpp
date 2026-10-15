@@ -16,6 +16,8 @@
 #include "util/Constants.h"
 #include "writer/map/MapWriter.h"
 
+#include "writer/pro/ProWriter.h"
+#include "support/ByteWriter.h"
 #include "support/ControllerFixture.h"
 #include "support/QuiltReference.h"
 
@@ -905,6 +907,7 @@ TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[s
         CHECK_THROWS(api.protoFlat(0x02000066));
         CHECK_THROWS(api.protoFid(0x02000066));
         CHECK_THROWS(api.protoArtFrames(0x02000066));
+        CHECK_THROWS(api.artRect(0x02000066, 20100));
         CHECK_THROWS(api.mapScenery("maps/desert1.map"));
         CHECK_THROWS(api.mapScenery("no/such/map.map"));
         CHECK_THROWS(api.mapSceneryHistogram("maps/desert1.map"));
@@ -1084,4 +1087,57 @@ TEST_CASE("A detached MapScriptApi raises on every host-backed call", "[scriptin
 
     // Geometry needs no host at all.
     CHECK(api.isValidHex(0));
+}
+
+// artRect places a proto's art the way the engine draws it (fallout2-ce object.cc objectGetRect over
+// tile.cc tileToScreenXY): the frame hangs from the hex's point + (16, 8) + the FRM's direction shift,
+// centred on x with its bottom on y. Cave rims are laid by abutting these rects pixel-exactly, so the
+// geometry is pinned on three neighbouring hexes of one 16x120 strip with a (8, -4) shift.
+TEST_CASE("MapScriptApi artRect gives the screen rectangle the engine draws a proto's art in", "[scripting]") {
+    const auto root = std::filesystem::temp_directory_path() / "geck_artrect";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "proto" / "walls");
+    std::filesystem::create_directories(root / "art" / "walls");
+    std::ofstream(root / "proto" / "walls" / "walls.lst") << "piece.pro\n";
+    std::ofstream(root / "art" / "walls" / "walls.lst") << "piece.frm\n";
+    {
+        Pro pro{ root / "proto" / "walls" / "piece.pro" };
+        pro.header.PID = 0x03000001;
+        pro.header.FID = 0x03000000; // walls.lst entry 0
+        ProWriter writer;
+        writer.openFile(root / "proto" / "walls" / "piece.pro");
+        REQUIRE(writer.write(pro));
+    }
+    {
+        geck::test::ByteWriter frm;
+        frm.be32(4).be16(1).be16(0).be16(1); // version, fps, action frame, frames per direction
+        for (int i = 0; i < 6; ++i) {
+            frm.be16(8); // shiftX
+        }
+        for (int i = 0; i < 6; ++i) {
+            frm.be16(static_cast<uint16_t>(-4)); // shiftY
+        }
+        for (int i = 0; i < 6; ++i) {
+            frm.be32(0); // one shared direction
+        }
+        frm.be32(12 + 16 * 120);
+        frm.be16(16).be16(120).be32(16 * 120).be16(0).be16(0).fill(1, 16 * 120);
+        std::ofstream(root / "art" / "walls" / "piece.frm", std::ios::binary)
+            .write(reinterpret_cast<const char*>(frm.data().data()), static_cast<std::streamsize>(frm.size()));
+    }
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root.string());
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    // Row 10. Hex 2199 is the rightmost column (counted from the right: 0, even): its point is
+    // (16 * row, 12 * row) = (160, 120), so the anchor is (160 + 16 + 8, 120 + 8 - 4) = (184, 124).
+    CHECK(api.artRect(0x03000001, 2199) == std::vector<int>{ 176, 5, 191, 124 });
+    // One column left (odd): 32px further right, same height.
+    CHECK(api.artRect(0x03000001, 2198) == std::vector<int>{ 208, 5, 223, 124 });
+    // Two columns left (even again): 48px right and 12px up — and it starts on the pixel after 2198 ends.
+    CHECK(api.artRect(0x03000001, 2197) == std::vector<int>{ 224, -7, 239, 112 });
+    CHECK_THROWS(api.artRect(0x03000001, -1));
+
+    std::filesystem::remove_all(root);
 }

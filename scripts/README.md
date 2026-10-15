@@ -81,6 +81,7 @@ of a sealed room or a spawn placed inside solid terrain.
 | `api:protoBlocks(pid)` | bool | does the proto block movement (NO_BLOCK clear)? raises if the proto can't load |
 | `api:protoFlat(pid)` | bool | is the proto `OBJECT_FLAT` (ground-hugging fill/rubble, not a standing wall face)? tells a boundary wall from the flat rock texture that carpets solid ground; raises if the proto can't load |
 | `api:protoFid(pid)` | fid | the proto's art FID (what `placeProto` resolves and stores) — decode with `resolve_fid` / render it to identify a proto's art instead of guessing from the number; raises if the proto can't load |
+| `api:artRect(pid, hex)` | table | `{left, top, right, bottom}`: the screen rectangle the engine draws the proto's art in on that hex (`objectGetRect`: rotation 0, frame 0, the FRM's direction shift applied) — compare rects to find which pieces abut pixel-exactly; raises if the proto/FRM can't load |
 | `api:setElevation(e)` | nil | switch which elevation (0..2) subsequent queries/edits target — author multi-level maps in one run; raises if the map lacks it |
 | `api:fillFloorRect(col0,row0,col1,row1,id)` / `api:fillRoofRect(...)` | int | paint every tile in the rectangle; returns tiles painted |
 | `api:fillRegion(col,row,id)` | int | flood-fill (paint-bucket): repaint the 4-connected region of the tile id found at `(col,row)`; returns tiles painted |

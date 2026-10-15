@@ -14,6 +14,7 @@
 
 namespace geck {
 
+class Frm;
 class HexagonGrid;
 class Map;
 struct MapObject;
@@ -140,6 +141,10 @@ public:
     /// width to tile wall art gap-free) or its per-frame anchor offsets, without a one-off accessor
     /// per field. Raises when the proto or its FRM can't be resolved (like protoBlocks).
     std::vector<int> protoArtFrames(int pid) const;
+    /// The screen rectangle {left, top, right, bottom} the engine draws `pid`'s art in when it stands
+    /// on `hex` (fallout2-ce object.cc objectGetRect: rotation 0, frame 0, no pixel offset), in a
+    /// fixed screen frame — only differences between rects mean anything.
+    std::vector<int> artRect(int pid, int hex) const;
     /// Every map file in the mounted data (VFS paths, e.g. "maps/desert1.map"), sorted. Lets a
     /// generator pick a reference map at random when none was given.
     std::vector<std::string> listMaps() const;
@@ -353,6 +358,9 @@ public:
     bool mutated() const { return _placedObjects > 0 || _paintedTiles > 0 || _mutatedDirectly; }
 
 private:
+    /// The FRM of `pid`'s art; raises if the proto or its art can't load.
+    const Frm& protoFrm(int pid) const;
+
     // Where an exit grid sends the player (engine fields exit_map/exit_position/exit_elevation/
     // exit_orientation). Bundled so the exit-grid builders don't take a long parameter list.
     struct ExitDest {
