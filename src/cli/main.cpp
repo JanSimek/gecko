@@ -125,10 +125,12 @@ void printUsage(const char* program) {
               << "      grid (row-major, 100 wide; emptyTile marks empty) and every object's\n"
               << "      {pid,number,type,name,hex,col,row,dir,flat}. The per-cell data behind analyze's\n"
               << "      adjacency/clusters — for learning exact tile placement + scatter density.\n"
-              << "  " << program << " map graph [map ...] --data <dir-or-.dat> [--data <...>]\n"
+              << "  " << program << " map graph [map ...] [--no-scripts] --data <dir-or-.dat> [--data <...>]\n"
               << "      The exit-grid connectivity graph: how maps link via exit grids WITHIN a location\n"
               << "      (+ worldmap hand-off edges), named via maps.txt/map.msg. Not inter-city travel\n"
-              << "      (that's the world map / city.txt). No map arguments = every map.\n"
+              << "      (that's the world map / city.txt). No map arguments = every map. With an .ssl source\n"
+              << "      tree mounted it adds scriptEdges: load_map transitions (caravans, escorts, dialogue\n"
+              << "      outcomes) from the maps placing each script; --no-scripts skips them.\n"
               << "  " << program << " map world [--render <file.png>] [--no-markers]\n"
               << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      The worldmap layer from city.txt: every area (location) with its world position,\n"
@@ -557,6 +559,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         std::cerr << "error: unexpected argument: " << arg << "\n";
         printUsage(program);
         return 0;
+    }
+    if (out.graph && arg == "--no-scripts") {
+        out.graphOpts.scripts = false;
+        return 1;
     }
     if (out.graph) { // trailing positional args are the maps to include (empty = all)
         out.graphOpts.maps.push_back(arg);

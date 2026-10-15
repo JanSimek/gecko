@@ -11,6 +11,7 @@
 #include "editor/Reachability.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
+#include "format/map/MapScript.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
 #include "util/FileIo.h"
@@ -209,5 +210,70 @@ TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapg
         CHECK(findEdge(oneWay, "mapa.map", "mape.map") != nullptr);
     }
 
+    fs::remove_all(base);
+}
+
+// Script transitions: a load_map call becomes an edge from every map that places its script — the
+// map's own (header) script, 1-based, or a map_scripts entry, 0-based — whichever way the script
+// names the target. A script no map places keeps its call in unplacedScriptCalls.
+TEST_CASE("map_graph adds load_map transitions from the maps that place each script", "[cli][mapgraph]") {
+    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "mapgraph_scripts";
+    fs::remove_all(base);
+    fs::create_directories(base / "maps");
+    geck::io::writeFile(base / "data" / "maps.txt",
+        "[Map 0]\nlookup_name=A\nmap_name=mapa\n[Map 1]\nlookup_name=B\nmap_name=mapb\n[Map 2]\nlookup_name=C\nmap_name=mapc\n");
+    geck::io::writeFile(base / "scripts" / "scripts.lst", "town.int ; a's map script\nguard.int ; b's guard\nloner.int ; nowhere\n");
+    geck::io::writeFile(base / "scripts_src" / "town.ssl", "procedure map_enter_p_proc begin load_map(\"MapC.map\", 3); end\n");
+    geck::io::writeFile(base / "scripts_src" / "guard.ssl", "procedure talk_p_proc begin load_map(0, 555); end\n");
+    geck::io::writeFile(base / "scripts_src" / "loner.ssl", "procedure use_p_proc begin load_map(\"mapb.map\", 0); end\n");
+
+    auto a = Map::createEmptyMapFile();
+    a.header.script_id = 1; // town.int, 1-based in the header
+    a.map_objects[0].push_back(makeExitGrid(100, 1, kOpenHexB, 0));
+    writeMap(base / "maps" / "mapa.map", std::move(a));
+    auto b = Map::createEmptyMapFile();
+    b.map_scripts[static_cast<int>(MapScript::ScriptType::CRITTER)].push_back(
+        MapScript::makeObjectScript(MapScript::ScriptType::CRITTER, 0, 1, 7)); // guard.int, 0-based
+    writeMap(base / "maps" / "mapb.map", std::move(b));
+    writeMap(base / "maps" / "mapc.map", Map::createEmptyMapFile());
+
+    resource::GameResources resources;
+    resources.files().addDataPath(base.string());
+    cli::MapGraphOptions options;
+    for (const char* name : { "mapa.map", "mapb.map", "mapc.map" }) {
+        options.maps.push_back((base / "maps" / name).string());
+    }
+    std::ostringstream out;
+    REQUIRE(cli::buildMapGraph(resources, options, out) == 0);
+    const json root = json::parse(out.str());
+    const json& scriptEdges = root.at("scriptEdges");
+
+    const json* aToC = findEdge(scriptEdges, "mapa.map", "mapc.map");
+    REQUIRE(aToC != nullptr);
+    REQUIRE(aToC->at("calls").size() == 1);
+    CHECK(aToC->at("calls")[0].at("script") == "town.ssl");
+    CHECK(aToC->at("calls")[0].at("procedure") == "map_enter_p_proc");
+    CHECK(aToC->at("calls")[0].at("entrance") == 3);
+    const json* bToA = findEdge(scriptEdges, "mapb.map", "mapa.map"); // by maps.txt index
+    REQUIRE(bToA != nullptr);
+    CHECK(bToA->at("calls")[0].at("entrance") == 555);
+    CHECK(scriptEdges.size() == 2);
+
+    REQUIRE(root.at("unplacedScriptCalls").size() == 1);
+    CHECK(root.at("unplacedScriptCalls")[0].at("script") == "loner.ssl");
+    CHECK(root.at("unplacedScriptCalls")[0].at("to") == "mapb.map");
+
+    const json& stats = root.at("stats");
+    CHECK(stats.at("scriptsRead") == 3);
+    CHECK(stats.at("scriptEdges") == 2);
+    // mapb has an exit grid in from mapa; mapa and mapc are entered only by script.
+    CHECK(stats.at("noIncomingExceptScript") == json::array({ "mapa.map", "mapc.map" }));
+
+    // The exit-grid layer is untouched, and scripts=false leaves the script layer out.
+    CHECK(findEdge(root.at("edges"), "mapa.map", "mapb.map") != nullptr);
+    options.scripts = false;
+    std::ostringstream plain;
+    REQUIRE(cli::buildMapGraph(resources, options, plain) == 0);
+    CHECK_FALSE(json::parse(plain.str()).contains("scriptEdges"));
     fs::remove_all(base);
 }

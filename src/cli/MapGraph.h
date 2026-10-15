@@ -13,6 +13,8 @@ namespace geck::cli {
 struct MapGraphOptions {
     // Maps to include (VFS paths, e.g. "maps/arroyo.map"). Empty = every map in the mounted data.
     std::vector<std::string> maps;
+    // Add the script-driven transitions (load_map) when a script-source tree is mounted.
+    bool scripts = true;
 };
 
 /// The exit-grid connectivity graph: nodes are maps, edges are the exit-grid links between them
@@ -35,6 +37,18 @@ struct MapGraphOptions {
 /// NOT the inter-city travel graph: cities are reached across the world map, so this graph is
 /// connected only within a location. The world layer (areas, world positions, distances between
 /// places, which maps an area contains) is data/city.txt — a separate reader.
+///
+/// **Script transitions** (`options.scripts`, needs a mounted .ssl source tree): scripts move the
+/// player between maps with load_map — caravans, escorts, dialogue outcomes — which no exit grid
+/// shows. Each call is joined to the maps that place its script (the map's own script and its
+/// map_scripts entries, matched to scripts.lst by base name) and listed in `scriptEdges` per
+/// (from, to) with the calls behind it; a call whose script no analysed map places goes to
+/// `unplacedScriptCalls`. They are conditional (the code runs on some dialogue node or event), so
+/// each call carries script/procedure/line to read the condition, and `entrance` (the value the
+/// engine stores in GVAR_LOAD_MAP_INDEX for the target's map script to pick an arrival point). The
+/// exit-grid `edges`, `deadEnds`, `noIncoming` and one-way analysis are unchanged; `stats` adds
+/// `scriptsRead` (0 = no sources mounted, so no script edges) and `noIncomingExceptScript`: maps no
+/// other map's exit grid enters but a script transition does (a world-map entrance may too).
 ///
 /// A per-map exit pass (no full analyze), so it scales to every shipped map. Emits a JSON object to
 /// `out`; returns 0 on success, non-zero if no maps were found.

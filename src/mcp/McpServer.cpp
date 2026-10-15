@@ -419,6 +419,7 @@ namespace {
     json toolMapGraph(resource::GameResources& resources, const json& args) {
         cli::MapGraphOptions opts;
         opts.maps = optMaps(args);
+        opts.scripts = optBool(args, "scripts", true);
         std::ostringstream oss;
         int rc = 0;
         try {
@@ -1139,9 +1140,19 @@ namespace {
             "destination wasn't analysed, or a return might run through another elevation — "
             "stairs are not traced). 'stats' "
             "flags 'deadEnds' (no outgoing map edge), 'noIncoming' (no map exits to it — a "
-            "location's entry points or orphans) and 'oneWayEdges' ({from,to,reason}). Omit 'maps' "
-            "for every map, or pass it to scope (e.g. one town's maps).",
-            json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
+            "location's entry points or orphans) and 'oneWayEdges' ({from,to,reason}). SCRIPT "
+            "TRANSITIONS: with a script-source tree mounted (e.g. FRP scripts_src), 'scriptEdges' "
+            "({from,to,calls:[{script,file?,line,procedure,entrance,text}]}) adds the load_map calls "
+            "that move the player between maps — caravans, escorts, dialogue outcomes — which no "
+            "exit grid shows; 'from' is each map placing the script (its own script or a map_scripts "
+            "entry). They are conditional: read the procedure (describe_script) for when it runs; "
+            "'entrance' is the value stored in GVAR_LOAD_MAP_INDEX that the target's map script "
+            "reads to pick the arrival point. 'unplacedScriptCalls' lists calls whose script no map "
+            "places (attached at runtime or by proto). 'stats' adds 'scriptsRead' (0 = no sources, "
+            "so no script edges) and 'noIncomingExceptScript' (maps no exit grid enters but a "
+            "script does). Omit 'maps' for every map, or pass it to scope (e.g. one town's maps); "
+            "'scripts': false skips the script layer.",
+            json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } }, { "scripts", { { "type", "boolean" } } } } } }),
             [](resource::GameResources& r, const json& a) { return toolMapGraph(r, a); }, "" });
         t.push_back({ "world_map",
             "The WORLDMAP layer from city.txt — the inter-city travel layer that map_graph does not "

@@ -1,7 +1,11 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <iosfwd>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace geck::resource {
 class GameResources;
@@ -30,5 +34,21 @@ struct ScriptRefsOptions {
 /// branches on a constant are not reported. Emits a JSON object to `out`; returns 0 on success
 /// (including "not used"), nonzero for a bad kind or name or when no .ssl source is mounted.
 int findScriptRefs(resource::GameResources& resources, const ScriptRefsOptions& options, std::ostream& out);
+
+/// One load_map call in code a compiled script runs: a script-driven map transition.
+struct ScriptMapTransition {
+    std::string script; ///< the .ssl file name, e.g. "hcoutfit.ssl"
+    std::string file;   ///< the header or template it is written in, when not the script itself
+    uint32_t line = 0;
+    std::string procedure;
+    std::string text;                ///< the source line
+    std::optional<int> mapIndex;     ///< when the script names the map by maps.txt index
+    std::string mapFile;             ///< the target's .map file name, "" when maps.txt doesn't resolve it
+    std::optional<int64_t> entrance; ///< the value the engine stores in GVAR_LOAD_MAP_INDEX
+};
+
+/// Every load_map call in the mounted .ssl sources (see script_refs kind "map"), in script order;
+/// `scriptsRead` (optional) gets how many sources were read, 0 meaning no source tree is mounted.
+std::vector<ScriptMapTransition> scriptMapTransitions(resource::GameResources& resources, std::size_t* scriptsRead = nullptr);
 
 } // namespace geck::cli
