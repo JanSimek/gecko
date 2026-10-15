@@ -145,18 +145,28 @@ namespace {
         }
     }
 
+    /// The GVAR_* a global-variable read or write names, when its index is the literal pushed for it.
+    std::string globalVariableNote(const std::string& opcode, const std::vector<int32_t>& literalPushes,
+        const std::vector<std::string>* globalVarNames) {
+        // op_set_global_var pops the value, then the index (fallout2-ce interpreter_extra.cc).
+        std::optional<int32_t> index;
+        if (opcode == "op_get_global_var" && !literalPushes.empty()) {
+            index = literalPushes.back();
+        } else if (opcode == "op_set_global_var" && literalPushes.size() >= 2) {
+            index = literalPushes[literalPushes.size() - 2];
+        }
+        if (!index.has_value() || globalVarNames == nullptr || *index < 0 || static_cast<std::size_t>(*index) >= globalVarNames->size()) {
+            return {};
+        }
+        return (*globalVarNames)[static_cast<std::size_t>(*index)];
+    }
+
     void disassembleRange(const Bytes& bytes, std::size_t begin, std::size_t end, const NameTables& names,
         const std::vector<std::string>* globalVarNames, std::vector<IntInstruction>& code) {
         const auto& opcodes = opcodeTable();
         // Integer literals pushed immediately before the current instruction, oldest first. Only an
         // uninterrupted run of pushes is trusted to still be on top of the stack.
         std::vector<int32_t> literalPushes;
-        auto globalName = [globalVarNames](int32_t index) -> std::string {
-            if (globalVarNames == nullptr || index < 0 || static_cast<std::size_t>(index) >= globalVarNames->size()) {
-                return {};
-            }
-            return (*globalVarNames)[static_cast<std::size_t>(index)];
-        };
 
         std::size_t ip = begin;
         while (ip + 2 <= end) {
@@ -200,12 +210,7 @@ namespace {
                     literalPushes.clear();
                 }
             } else {
-                // op_set_global_var pops the value, then the index (fallout2-ce interpreter_extra.cc).
-                if (instruction.name == "op_get_global_var" && !literalPushes.empty()) {
-                    instruction.note = globalName(literalPushes.back());
-                } else if (instruction.name == "op_set_global_var" && literalPushes.size() >= 2) {
-                    instruction.note = globalName(literalPushes[literalPushes.size() - 2]);
-                }
+                instruction.note = globalVariableNote(instruction.name, literalPushes, globalVarNames);
                 literalPushes.clear();
             }
             code.push_back(std::move(instruction));
