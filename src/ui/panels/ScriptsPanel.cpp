@@ -214,8 +214,8 @@ void ScriptsPanel::markRows(int programIndex, const ScriptSourceService::ScriptS
         for (const resource::ScriptFinding& finding : status.findings) {
             error = error || finding.severity == resource::ScriptFinding::Severity::Error;
             if (problems.size() < MAX_TOOLTIP_FINDINGS) {
-                const QString file = QString::fromStdString(std::filesystem::path(finding.where.file).filename().string());
-                problems << QString("%1 line %2: %3").arg(file).arg(finding.where.line).arg(QString::fromStdString(finding.message));
+                const QString written = QString::fromStdString(std::filesystem::path(finding.where.file).filename().string());
+                problems << QString("%1 line %2: %3").arg(written).arg(finding.where.line).arg(QString::fromStdString(finding.message));
             }
         }
         if (status.findings.size() > static_cast<std::size_t>(MAX_TOOLTIP_FINDINGS)) {
