@@ -4,12 +4,13 @@
 --   * the whole area filled with the reference's dark solid-rock tile pattern,
 --   * a walkable cavern carved through it, painted with the reference's pervasive cav* FIELD tiles
 --     (rare border/transition tiles like cav4013 and the entrance sand are kept out of the mix),
---   * the floor/rock boundary lined with "Cave Wall" pieces chosen by LOCAL BOUNDARY GEOMETRY:
---     each walkable-side contour hex is keyed by the directions to its neighbouring rim hexes plus
---     the mask of which neighbours are rock, and the piece is sampled from what the shipped rims put
---     at that same geometry. The absolute directions pin the isometric orientation, so faces land on
---     the up-screen rim and filled lips on the near edge without hand tuning (~79% orientation match
---     on held-out cave4 vs 53% for the old compass bin),
+--   * the floor/rock boundary lined with "Cave Wall" PANELS: the wall art is a rock panorama cut into
+--     16/32px strips, and the shipped rims stand them in order, each starting on the pixel after the
+--     previous one ends. The rim is laid as chains left to right across the screen: a chain starts
+--     with a piece for the spot's geometry (the rock-neighbour mask that pins the isometric
+--     orientation, so faces land on the up-screen rim and filled lips on the near edge) and grows
+--     with the strips the shipped rims put next to it, wherever one lands on the rim — so the
+--     texture runs on across the seams the way the hand-made caves' does,
 --   * invisible blocking hexes sealing the rock side so the player can't walk off the floor,
 --   * floor decoration (rocks, stalagmites, dirt, weeds) at the density the shipped caves have at
 --     each distance from the walls — rocks heaped at their foot, the open floor nearly clear —
@@ -85,6 +86,23 @@ local geomModel = {} -- "faceDirs|rockmask" -> weighted { ... }: finer, used whe
 local geomDirpair = {} -- "faceDirs"          -> weighted { ... }: coarser fallback
 local wallPieces = {} -- compass class       -> weighted { ... }: final fallback (outward-normal bin)
 local wallPiecesAll = {} -- all pieces pooled: last resort
+
+-- Wall PANELS. A cave wall's art is a long rock panorama cut into 16/32px strips (ca059, ca060,
+-- ca061, ...): it reads as one seamless face only when each strip starts on the pixel after the
+-- previous one ends, in the order the artist cut them. Across cave1..4, 93% of faces have a right-hand
+-- neighbour starting on exactly the next pixel and 61% of those are the next strip of the same
+-- panorama, at a fixed pixel offset per pair. So the rim is laid as chains: learn, from the shipped
+-- rims, which strip follows which (`successors`, with the hex step that puts it there), then grow each
+-- chain left to right with a learned successor that lands on the rim. Placing a piece per hex picked
+-- by local geometry abutted fine but put the next strip of the same panorama beside only 6% of
+-- pieces — every seam broke the texture.
+local successors = {} -- pid -> weighted { {pid=, w=}, ... }: the strips seen starting right after it
+local faceUses = {} -- pid -> how many faces the references stand -- bridges and starts skip rare art
+-- A bridge or chain start picks by fit alone, so a rare oddity whose geometry happens to fit (ca078,
+-- a dark pillar the four references use twice) would win far more often than the mappers used it.
+-- Only art the references use this often is a candidate there; successors keep their learned odds.
+local MIN_BRIDGE_USES = 5
+local successorStep = {} -- "a>b:parity" -> { dc, dr }: hex step from a to b, by a's column parity
 
 -- Floor decoration: the standing (non-flat) scenery the shipped caves put on open floor, learned per
 -- DISTANCE BAND from the nearest wall piece or rock (1 = touches one, ..., DECOR_BANDS = that far or
@@ -167,6 +185,7 @@ do
     local cornerCounts = {} -- "faceDirs" -> { [pid] = count }: corner pieces by turn shape
     local cornerTotals = {} -- proto# -> count (for the per-map frequency cap)
     local decorCounts = {} -- band -> { [pid] = count }: standing scenery on walkable floor
+    local successorCounts = {} -- pid -> { [next pid] = count }: panel successors
     local decorHexes = {} -- band -> walkable hexes at that distance from the rock
     for refIndex, ref in ipairs(REFS) do
         local floor = api:mapFloorAt(ref, REF_ELEVATION)
@@ -224,6 +243,33 @@ do
             local pid, hex = walls[i], walls[i + 1]
             if not isFlatWall(pid) then
                 faceAt[hex] = pid
+            end
+        end
+
+        -- Which strip starts on the pixel after each face ends: the panel successors.
+        local byLeft = {} -- screen left edge -> { {pid=, hex=, rect=}, ... }
+        local faces = {}
+        for hex, pid in pairs(faceAt) do
+            faceUses[pid] = (faceUses[pid] or 0) + 1
+            local face = { pid = pid, hex = hex, rect = api:artRect(pid, hex) }
+            table.insert(faces, face)
+            byLeft[face.rect[1]] = byLeft[face.rect[1]] or {}
+            table.insert(byLeft[face.rect[1]], face)
+        end
+        for _, a in ipairs(faces) do
+            local best, bestDy = nil, math.huge
+            for _, b in ipairs(byLeft[a.rect[3] + 1] or {}) do
+                local overlap = math.min(a.rect[4], b.rect[4]) - math.max(a.rect[2], b.rect[2])
+                local dy = math.abs(b.rect[4] - a.rect[4])
+                if overlap > 20 and (dy < bestDy or (dy == bestDy and b.hex < best.hex)) then
+                    best, bestDy = b, dy
+                end
+            end
+            if best ~= nil then
+                successorCounts[a.pid] = successorCounts[a.pid] or {}
+                successorCounts[a.pid][best.pid] = (successorCounts[a.pid][best.pid] or 0) + 1
+                local key = string.format("%d>%d:%d", a.pid, best.pid, api:hexCol(a.hex) % 2)
+                successorStep[key] = { api:hexCol(best.hex) - api:hexCol(a.hex), api:hexRow(best.hex) - api:hexRow(a.hex) }
             end
         end
         -- Learn from EVERY face — on the walkable side AND the rock side of the rim, as the shipped
@@ -335,6 +381,17 @@ do
                 decorCounts[band][pid] = (decorCounts[band][pid] or 0) + 1
             end
         end
+    end
+
+    for pid, counts in pairs(successorCounts) do
+        local list = {}
+        for next, count in pairs(counts) do
+            table.insert(list, { pid = next, w = count })
+        end
+        table.sort(list, function(a, b)
+            return a.pid < b.pid
+        end)
+        successors[pid] = list
     end
 
     for band, hexes in pairs(decorHexes) do
@@ -707,21 +764,216 @@ local function tryCorner(dirpair)
     return last.pid
 end
 
+-- Screen position of a hex, as the engine projects it (tile.cc tileToScreenXY): only for ordering.
+local function hexScreenX(hex)
+    local col = 199 - api:hexCol(hex)
+    return 48 * (col // 2) + 16 * api:hexRow(hex) + (col % 2 == 1 and 32 or 0)
+end
+
+-- Lay the rim as panel chains. Walk the band left to right on screen; at the first hex no chain covers
+-- yet, start a chain with a piece for that spot's geometry (the learned per-geometry palettes), then
+-- keep appending a learned successor — the strip that starts on the next pixel — as long as one lands
+-- on the band. A placed strip claims its hex and the band hexes around it, so the 2-hex band gets one
+-- chain, not two side by side; where no successor fits, the chain ends and the walk moves on.
 local walls = 0
-local wallAt = {} -- hex -> true where a rim piece stands
+local wallAt = {} -- hex -> the rim piece standing there
+local claimedBy = {} -- band hex -> the chain that covers it
 local boundaryHexes = #rim
-for _, hex in ipairs(rim) do
-    local rm, geom, dirpair = geomKeyAt(hex)
-    local pid = tryCorner(dirpair)
-    if pid == nil then
-        pid = pickWall(geomRock[rm] or geomModel[geom] or geomDirpair[dirpair]
-            or wallListFor(compassFromVec(outwardNormal(hex))))
+local chains, links = 0, 0
+local order = table.clone(rim)
+table.sort(order, function(a, b)
+    local ax, bx = hexScreenX(a), hexScreenX(b)
+    if ax ~= bx then
+        return ax < bx
     end
-    if api:placeProto(pid, hex, 0) then
-        walls += 1
-        wallAt[hex] = true
+    return a < b
+end)
+
+local function place(pid, hex, chain)
+    if not api:placeProto(pid, hex, 0) then
+        return false
+    end
+    walls += 1
+    wallAt[hex] = pid
+    claimedBy[hex] = chain
+    for _, n in ipairs(api:hexNeighbors(hex)) do
+        if rimSet[n] and claimedBy[n] == nil then
+            claimedBy[n] = chain
+        end
+    end
+    return true
+end
+
+-- The successors of `pid` that, placed after it at `hex`, land on the band and aren't another
+-- chain's, each with its hex.
+local function fittingSuccessors(pid, hex, chain)
+    local fits, hexOf = {}, {}
+    local col, row = api:hexCol(hex), api:hexRow(hex)
+    for _, e in ipairs(successors[pid] or {}) do
+        local step = successorStep[string.format("%d>%d:%d", pid, e.pid, col % 2)]
+        local next = step and api:hexIndex(col + step[1], row + step[2]) or -1
+        if next >= 0 and rimSet[next] and not wallAt[next] and (claimedBy[next] == nil or claimedBy[next] == chain) then
+            table.insert(fits, e)
+            hexOf[e.pid] = next
+        end
+    end
+    return fits, hexOf
+end
+
+-- When no learned successor fits, keep the rim pixel-continuous anyway: any piece from a nearby band
+-- hex's geometry palette whose art starts on the next pixel, its base closest to this strip's. The
+-- texture seam there is like the shipped rims' own joins between panoramas.
+local function placeable(hex, chain)
+    return rimSet[hex] and not wallAt[hex] and (claimedBy[hex] == nil or claimedBy[hex] == chain)
+end
+
+-- Among fits {pid=, dy=, w=, ...}, those whose base is within a few pixels of the best, drawn by how
+-- often the references use them: the closest fit alone would repeat one piece all along a run.
+local FIT_SLACK = 3
+-- How far a bridge looks for the next strip, and how far apart two joined strips' bases may be (the
+-- shipped rims' own joins step by up to 16px).
+local BRIDGE_RINGS = tonumber(args.bridgeRings) or 2
+local MAX_JOIN_DY = tonumber(args.maxJoinDy) or 16
+-- Where no strip starts on the next pixel, one overlapping the last by up to this much still hides the
+-- rock behind; a gap would show it as a dark slit.
+local MAX_OVERLAP = tonumber(args.maxOverlap) or 16
+local function closeFit(fits)
+    local bestDy = math.huge
+    for _, f in ipairs(fits) do
+        bestDy = math.min(bestDy, f.dy)
+    end
+    local near = {}
+    for _, f in ipairs(fits) do
+        if f.dy <= bestDy + FIT_SLACK then
+            table.insert(near, f)
+        end
+    end
+    if #near == 0 then
+        return nil
+    end
+    local total = 0
+    for _, f in ipairs(near) do
+        total += f.w
+    end
+    local r = api:rng() * total
+    for _, f in ipairs(near) do
+        r -= f.w
+        if r <= 0 then
+            return f
+        end
+    end
+    return near[#near]
+end
+
+local function bridge(pid, hex, chain)
+    local rect = api:artRect(pid, hex)
+    local seen, nearby, frontier = { [hex] = true }, {}, { hex }
+    for _ = 1, BRIDGE_RINGS do
+        local nextFrontier = {}
+        for _, f in ipairs(frontier) do
+            for _, m in ipairs(api:hexNeighbors(f)) do
+                if not seen[m] then
+                    seen[m] = true
+                    table.insert(nearby, m)
+                    table.insert(nextFrontier, m)
+                end
+            end
+        end
+        frontier = nextFrontier
+    end
+    table.sort(nearby)
+    local fits = {} -- { pid=, hex=, dy=, w= }: common pieces starting on the next pixel, bases <= 16px apart
+    for _, n in ipairs(nearby) do
+        if placeable(n, chain) then
+            local rm, geom, dirpair = geomKeyAt(n)
+            for _, e in ipairs(geomRock[rm] or geomModel[geom] or geomDirpair[dirpair] or wallListFor(compassFromVec(outwardNormal(n)))) do
+                if (faceUses[e.pid] or 0) >= MIN_BRIDGE_USES then
+                    local r = api:artRect(e.pid, n)
+                    local dy = math.abs(r[4] - rect[4])
+                    local overlap = rect[3] + 1 - r[1] -- 0 = starts on the next pixel
+                    if overlap >= 0 and overlap <= MAX_OVERLAP and r[3] > rect[3] and dy <= MAX_JOIN_DY then
+                        -- An exact join beats any overlap; among overlaps, the smaller the better.
+                        table.insert(fits, { pid = e.pid, hex = n, dy = dy + overlap * 4, w = faceUses[e.pid], overlap = overlap })
+                    end
+                end
+            end
+        end
+    end
+    local choice = closeFit(fits)
+    if choice == nil then
+        return nil, nil
+    end
+    return choice.pid, choice.hex
+end
+
+-- A chain's first strip: where a strip already stands just left of `start`, a palette piece that
+-- starts on the pixel after it (closest base), so a new chain continues the rim instead of opening a
+-- slit; otherwise a piece for the spot's geometry.
+local function startPiece(start)
+    local rm, geom, dirpair = geomKeyAt(start)
+    local palette = geomRock[rm] or geomModel[geom] or geomDirpair[dirpair] or wallListFor(compassFromVec(outwardNormal(start)))
+    local seen, lefts = { [start] = true }, {}
+    for _, n in ipairs(api:hexNeighbors(start)) do
+        for _, m in ipairs({ n, table.unpack(api:hexNeighbors(n)) }) do
+            if not seen[m] and wallAt[m] ~= nil then
+                seen[m] = true
+                table.insert(lefts, api:artRect(wallAt[m], m))
+            end
+        end
+    end
+    local common = {}
+    for _, e in ipairs(palette) do
+        if (faceUses[e.pid] or 0) >= MIN_BRIDGE_USES then
+            table.insert(common, e)
+        end
+    end
+    local fits = {}
+    for _, e in ipairs(common) do
+        local r = api:artRect(e.pid, start)
+        for _, l in ipairs(lefts) do
+            local dy = math.abs(r[4] - l[4])
+            if r[1] == l[3] + 1 and dy <= 16 then
+                table.insert(fits, { pid = e.pid, dy = dy, w = faceUses[e.pid] })
+            end
+        end
+    end
+    local choice = closeFit(fits)
+    return choice and choice.pid or tryCorner(dirpair) or pickWall(#common > 0 and common or palette)
+end
+
+local bridges = 0
+for _, start in ipairs(order) do
+    if claimedBy[start] == nil then
+        chains += 1
+        local pid = startPiece(start)
+        local hex = start
+        if place(pid, hex, chains) then
+            for _ = 1, #rim do -- a chain can't be longer than the band
+                local fits, hexOf = fittingSuccessors(pid, hex, chains)
+                local next, nextHex
+                if #fits > 0 then
+                    next = pickWall(fits)
+                    nextHex = hexOf[next]
+                    links += 1
+                else
+                    next, nextHex = bridge(pid, hex, chains)
+                    if next == nil then
+                        break
+                    end
+                    bridges += 1
+                end
+                if not place(next, nextHex, chains) then
+                    break
+                end
+                pid, hex = next, nextHex
+            end
+        else
+            claimedBy[start] = chains
+        end
     end
 end
+print(string.format("Laid the rim as %d wall chains: %d of %d strips continue a panel from the strip before, %d more join it on the next pixel.",
+    chains, links, walls, bridges))
 
 -- Seal the rock side: every rock hex bordering a walkable hex gets an invisible blocker. The wall
 -- art stands on the walkable side and does not by itself stop the engine walking onto the rock —
@@ -884,7 +1136,7 @@ if DECOR_SCALE > 0 then
     local blocksCache = {}
     local placed = 0
     for _, hex in ipairs(floorHexes) do
-        local onWall = wallAt[hex] == true -- already blocked: decoration there can't cut a passage
+        local onWall = wallAt[hex] ~= nil -- already blocked: decoration there can't cut a passage
         local band = onWall and "0" .. compassFromVec(outwardNormal(hex)) or dist[hex] or DECOR_BANDS
         local palette = decorPalette[band] or {}
         if not reserved[hex] and (onWall or walkableNow(hex)) and #palette > 0

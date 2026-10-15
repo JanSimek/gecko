@@ -39,24 +39,29 @@
 - The Tier-2 scripting runtime is **Luau + LuaBridge3** (spike-validated over sol2/PUC-Lua on
   sandbox safety); decision record in git history.
 
-## Cave rim quality (improved, NOT hand-authored quality yet)
+## Cave rim quality
 
-`cave.luau` builds the cavern from a metaball field and lines the rim with pieces learned from the
-shipped caves, keyed by **rock-neighbour mask** (79% orientation-family accuracy cross-validated on
-cave4, vs 53% for a compass bin). Inspect regions with `map render --crop-hex`.
-*Superseded piece-selection models — do not retry:* outward-normal compass bin; edge-constraint
-(Wang) `follow[prev][dir]` sequence; hand-authored per-piece override table.
+`cave.luau` builds the cavern from a metaball field and lays the rim as **panel chains**: the wall
+art is a panorama cut into 16/32px strips, so strips are chained left to right with the successor the
+shipped rims put on the next pixel (`api:artRect` gives the engine's screen rect). Measured against
+the shipped caves: ~93% of strips abut exactly (shipped 93%), ~60% continue the same panorama
+(shipped 61%; the old per-hex picker managed 6%). Inspect at 1:1 with `map render --crop-hex H
+--crop-extent E --max-dim 2E`.
+*Superseded piece-selection models — do not retry:* per-hex placement by rock-neighbour mask (orients
+right but breaks the texture at every strip); outward-normal compass bin; edge-constraint (Wang)
+`follow[prev][dir]` by hex direction; hand-authored per-piece override table.
 
-**Known issues (screenshot review, 2026-07):**
+**Known issues:**
 
-- **Jagged edges** — the learned pieces still don't tile cleanly at the floor/rock boundary;
-  up close the run is messy vs a hand-authored rim (mismatched faces, imperfect corners/tops).
+- **Near-edge lip** — the near (down-screen) rim shows the floor tiles' stair-step edge in places;
+  shipped maps layer flat `Wall`/`Wall s.t.` fills over the tops of rock on the near edges (currently
+  excluded by `isFlatWall`).
+- **A few chain ends** (3-8 per cave, about the shipped rate) leave a narrow slit where no strip fits
+  on the band.
 - **Dead-straight bottom edge** — the shipped reference caves continue off the map edge, so
   their boundary there is a straight map-edge line the model mimics. Fix: detect and exclude
   off-map-edge boundary when learning from references, and don't carve generated chambers up
   to the map edge.
-- **Near-edge lip cover** — shipped maps layer flat `Wall`/`Wall s.t.` fills over the tops of
-  rock walls on the near (down-screen) edges; currently excluded by `isFlatWall`.
 
 **Remaining content (complementary):**
 
