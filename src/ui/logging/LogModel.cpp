@@ -67,7 +67,7 @@ void LogModel::appendBatchOnModelThread(QList<Record> batch) {
 
 void LogModel::clear() {
     {
-        const std::lock_guard<std::mutex> lock(_pendingMutex);
+        const std::scoped_lock lock(_pendingMutex);
         _pending.clear(); // a drain already queued then finds nothing to add
     }
     if (_records.isEmpty()) {
