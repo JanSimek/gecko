@@ -75,9 +75,10 @@ multi-object clusters as **prefabs** (place a rock formation as one unit).
   Fix: seed new objects' flags (and light radius/intensity) from the proto, as the
   engine's `objectCreateWithFrmIdProtoId` (obj_new) does. (`copyObjects` clones the shipped record.)
 
-- **The editor draws objects in map-file order** — the engine keeps a per-hex list sorted on insert
-  (fallout2-ce `_obj_insert`, `gObjectListHeadByTile`), so a rock a script appends after a wall draws
-  over the wall in gecko but not in the game. Fix: draw in the engine's order (`RenderingEngine`).
+- **The editor draws standing objects in map-file order** — flat ones already go first
+  (`forEachInDrawOrder`, the engine's `_obj_render_pre_roof` flat pass), but the engine then walks
+  hexes in screen order (`_orderTable`, `gObjectListHeadByTile`), so a rock a script appends after a
+  wall draws over the wall in gecko but not in the game. Fix: sort the standing pass the same way.
 
 ## Smarter exit placement
 

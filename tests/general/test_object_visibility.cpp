@@ -1,8 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <vector>
+
 #include "format/map/MapObject.h"
 #include "format/pro/Pro.h"
 #include "ui/core/VisibilitySettings.h"
+#include "rendering/ObjectDrawOrder.h"
 #include "rendering/ObjectVisibility.h"
 #include "util/Constants.h"
 
@@ -131,4 +134,26 @@ TEST_CASE("A scroll blocker is the engine's proto, not whatever uses scrblk art"
 
     CHECK(isObjectVisible(ammo, vis)); // stays drawn with the blocker layer off
     CHECK_FALSE(isObjectVisible(blocker, vis));
+}
+
+TEST_CASE("Flat objects draw under standing ones whatever the map-file order", "[rendering][visibility]") {
+    // fallout2-ce _obj_render_pre_roof draws every OBJECT_FLAT object before any standing one. An
+    // exit grid listed after a wall must still be covered by it, as in the shipped caves; drawing
+    // in file order put a generated cave's exits on top of the rock in front of them.
+    const auto flat = static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_FLAT);
+    std::vector<MapObject> objects(5);
+    objects[0].position = 0; // wall
+    objects[1].position = 1; // exit grid, after the wall
+    objects[1].flags = flat;
+    objects[2].position = 2; // scenery
+    objects[3].position = 3; // second flat marker
+    objects[3].flags = flat | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK);
+    objects[4].position = 4; // wall
+
+    std::vector<int> order;
+    forEachInDrawOrder(
+        objects, [](const MapObject& object) -> const MapObject& { return object; },
+        [&order](const MapObject& object) { order.push_back(object.position); });
+
+    CHECK(order == std::vector<int>{ 1, 3, 0, 2, 4 });
 }

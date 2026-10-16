@@ -8,6 +8,7 @@
 #include "format/map/MapScript.h"
 #include "util/BuiltTile.h"
 #include "rendering/MapEdgeOverlayGeometry.h"
+#include "rendering/ObjectDrawOrder.h"
 #include "rendering/ObjectVisibility.h"
 #include "rendering/ToolPreview.h"
 #include "resource/GameResources.h"
@@ -358,15 +359,16 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
         return;
     }
 
-    for (const auto& object : *renderData.objects) {
-        // Shared with picking (EditorWidget::getObjectsAtPosition) via isObjectVisible so a
-        // hidden object is never drawn nor selectable.
-        if (!isObjectVisible(object->getMapObject(), visibility)) {
-            continue;
-        }
-
-        target.draw(object->getSprite());
-    }
+    // Flat objects first, as the engine draws them, so a wall in front covers an exit grid.
+    // Shared with picking (ObjectPicker) via forEachInDrawOrder and isObjectVisible so a hidden
+    // object is never drawn nor selectable, and the topmost pick is the topmost sprite.
+    forEachInDrawOrder(
+        *renderData.objects, [](const auto& object) -> const MapObject& { return object->getMapObject(); },
+        [&](const auto& object) {
+            if (isObjectVisible(object->getMapObject(), visibility)) {
+                target.draw(object->getSprite());
+            }
+        });
 
     // Wall blocker overlays render on top of regular objects
     if (visibility.showWallBlockers && renderData.wallBlockerOverlays) {
