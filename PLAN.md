@@ -11,14 +11,13 @@
 
 ## What's next (priority order)
 
-1. **Cave rim quality** — the known-issues list below; highest-value generation work.
-2. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
-3. **SSL script editing** — open question: whether an in-app editor is still wanted now that
+1. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
+2. **SSL script editing** — open question: whether an in-app editor is still wanted now that
    compiling lives in VS Code + BGforge MLS (see the SSL section).
-4. **Minimap / overview panel** (feature-gap audit).
-5. **In-game preview mode** — idle animations first.
-6. **Analysis/MCP tail** — small, self-contained items.
-7. **Editor UX** — configurable keybindings + customizable toolbar (share one command/action
+3. **Minimap / overview panel** (feature-gap audit).
+4. **In-game preview mode** — idle animations first.
+5. **Analysis/MCP tail** — small, self-contained items.
+6. **Editor UX** — configurable keybindings + customizable toolbar (share one command/action
    table); undo residuals; log-panel follow-ups.
 
 ---
@@ -39,43 +38,26 @@
 - The Tier-2 scripting runtime is **Luau + LuaBridge3** (spike-validated over sol2/PUC-Lua on
   sandbox safety); decision record in git history.
 
-## Cave rim quality
+## Caves
 
-`cave.luau` builds the cavern from a metaball field and lays the rim as **panel chains**: the wall
-art is a panorama cut into 16/32px strips, so strips are chained left to right with the successor the
-shipped rims put on the next pixel (`api:artRect` gives the engine's screen rect). Measured against
-the shipped caves: ~93% of strips abut exactly (shipped 93%), ~60% continue the same panorama
-(shipped 61%; the old per-hex picker managed 6%). Inspect at 1:1 with `map render --crop-hex H
---crop-extent E --max-dim 2E`.
-*Superseded piece-selection models — do not retry:* per-hex placement by rock-neighbour mask (orients
-right but breaks the texture at every strip); outward-normal compass bin; edge-constraint (Wang)
-`follow[prev][dir]` by hex direction; hand-authored per-piece override table.
+`cave.luau` copies a whole shipped cave interior (19 found at run time) — floor, walls, scenery
+verbatim via `api:copyObjects` — and adds worldmap exits and a player start.
+*Synthesised cave rims — do not retry:* metaball, tile and grid-axis-room cavern shapes with
+learned panel chains (`api:artRect`), per-hex rock-mask placement, compass bins, Wang edges, a
+hand override table. The wall art is a panorama of strips that only reads right where the mappers
+laid it: every synthesised rim showed slabs or cut edges at steps and corners. Stitching shipped
+fragments at corridor cuts is data-starved: shipped floor edges are jagged, so a corridor keeps one
+width for 5 tiles only ~14 times in cave1..4.
 
-**Known issues:**
-
-- **Near-edge lip** — the near (down-screen) rim shows the floor tiles' stair-step edge in places;
-  shipped maps layer flat `Wall`/`Wall s.t.` fills over the tops of rock on the near edges (currently
-  excluded by `isFlatWall`).
-- **A few chain ends** (3-8 per cave, about the shipped rate) leave a narrow slit where no strip fits
-  on the band.
-- **Dead-straight bottom edge** — the shipped reference caves continue off the map edge, so
-  their boundary there is a straight map-edge line the model mimics. Fix: detect and exclude
-  off-map-edge boundary when learning from references, and don't carve generated chambers up
-  to the map edge.
-
-**Remaining content (complementary):**
-
-- **Cave lighting** — shipped caves carry ~8 Light Source objects each; the generator places none.
-- **Stamped rock formations** — extract real multi-hex formations from `cave1..4`
-  (`extract_pattern`/`placeStamp`) to reuse authored composition.
-- **Town/building walls** — straight `Wall s.t.` runs + door openings differ from organic rims.
-- **Roof layer** for enclosed areas.
+- **Variety** — every generated cave is one of the 19 shipped layouts. More would need joining
+  shipped pieces with a pixel-exact re-walled seam, or more source maps (mods).
 
 ## Biome script library
 
 Expand the `scripts/README.md` table as new generators land.
 
-- **`town.luau`** — needs the straight-wall-run + door-opening model above.
+- **`town.luau`** — needs a straight `Wall s.t.` run + door-opening model, and a roof layer for
+  enclosed areas.
 - **`coast.luau`** — newly practical: quilting reproduces a shoreline's authored blend tiles
   from a reference map.
 - **Ergonomics (minor):** normalized `[0,1]` coordinate helpers (`hexAt(fx, fy)`) and document
