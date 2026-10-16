@@ -18,6 +18,7 @@
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
 #include "editor/Reachability.h"
+#include "editor/helper/ObjectQueries.h"
 #include "scripting/EditArea.h"
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
@@ -687,6 +688,7 @@ bool MapScriptApi::placeObject(uint32_t proPid, uint32_t frmPid, int hex, uint32
     mapObject->y = 0;
     mapObject->pro_pid = proPid;
     mapObject->frm_pid = frmPid;
+    object_query::applyProtoDefaults(*mapObject, resourcesRef());
 
     return registerObject(mapObject, hex, frmPid, direction);
 }
@@ -1051,8 +1053,8 @@ int MapScriptApi::copyObjects(const std::string& mapPath, int refElevation, cons
     if (it == objectsByElevation.end()) {
         return 0; // the reference elevation holds no objects — a valid empty copy
     }
-    // One pass in the reference's own order: the editor draws objects in map order, so copying one
-    // type after another stacked e.g. every rock over every wall.
+    // One pass in the reference's own order: objects sharing a hex draw in list order, so copying
+    // one type after another would stack e.g. a rock over the wall on its hex.
     int placed = 0;
     for (const auto& object : it->second) {
         if (!object || object->position < 0 || std::ranges::find(wanted, ProtoId(object->pro_pid).objectType()) == wanted.end()) {
@@ -1316,6 +1318,7 @@ bool MapScriptApi::placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid
     mapObject->y = 0;
     mapObject->pro_pid = proPid;
     mapObject->frm_pid = frmPid;
+    object_query::applyProtoDefaults(*mapObject, resourcesRef());
     mapObject->exit_map = dest.map;
     mapObject->exit_position = static_cast<uint32_t>(dest.hex);
     mapObject->exit_elevation = static_cast<uint32_t>(dest.elevation);
