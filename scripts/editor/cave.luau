@@ -3,16 +3,16 @@
 -- Cave walls only look right as the mappers laid them: the art is a rock panorama cut into strips
 -- that must abut pixel-exactly in order, run along the two iso axes, and turn corners with pieces
 -- drawn for it. So instead of synthesising a layout, this picks one of the shipped cave interiors
--- (every map elevation lined mostly with "Cave Wall" art on cav* floor, with a way in: cave1..7,
--- the raider and Klamath caves, Broken Hills' mine, ...) and copies it verbatim:
+-- (every map elevation lined mostly with "Cave Wall" art on cav* floor, entered through an exit
+-- grid: cave1..7, the raider and Klamath caves, ...) and copies it verbatim:
 --   * the floor grid,
 --   * every wall (faces, rock tops and flat fills) with its art and direction,
 --   * the generic scenery: invisible blockers sealing the rock, rocks, stalagmites, debris,
 --   * the scroll blockers that bound the camera,
 -- all in the source's own order, leaving out what leads somewhere the copy doesn't have — doors,
 -- stairs, ladders, elevators — and every critter and item. The source's exit grids lead to the world
--- map instead, keeping their shape; the spots its ladders/stairs/elevators stood become exits too.
--- Only exits the player can walk to are kept, and the player starts inside the cave beside one.
+-- map instead, keeping their shape; only those the player can walk to are kept, and the player
+-- starts inside the cave beside one.
 --
 --   gecko-cli map generate --script scripts/editor/cave.luau --out cave.map \
 --       --arg seed=42 --data <master.dat> [--data <critter.dat>]
@@ -77,8 +77,9 @@ local function cavFloorShare(floor)
     return cav / math.max(used, 1)
 end
 
--- Somewhere the player comes in: an exit grid, or a ladder/stairs/elevator. Elevations with
--- neither are set dressing nobody visits (unsealed, no way out).
+-- A way in: an exit line, where the mappers put the cave's mouth. An elevation reached only by
+-- ladder, stairs or elevator would need an exit standing in the middle of a tunnel, and one with
+-- no way in at all is set dressing nobody visits.
 local sceneryTypes = {}
 local function sceneryType(pid)
     if sceneryTypes[pid] == nil then
@@ -89,23 +90,49 @@ local function sceneryType(pid)
     end
     return sceneryTypes[pid]
 end
-local function isWayOut(kind)
-    return kind == "Stairs" or kind == "Elevator" or kind == "LadderUp" or kind == "LadderDown"
+-- The exit lines of a map elevation: its exit-grid hexes, grouped where they touch (within two
+-- hexes), keeping the groups of MIN_EXIT_LINE or more. A lone marker or a pair is a scripted spot
+-- or a stray, not a cave mouth.
+local MIN_EXIT_LINE = 3
+local function exitLines(path, elev)
+    local misc = api:mapObjectsAt(path, elev, "misc")
+    local isExit, all = {}, {}
+    for i = 1, #misc, 3 do
+        if isExitGrid(misc[i]) and not isExit[misc[i + 1]] then
+            isExit[misc[i + 1]] = true
+            table.insert(all, misc[i + 1])
+        end
+    end
+    table.sort(all)
+    local seen, kept = {}, {}
+    for _, first in ipairs(all) do
+        if not seen[first] then
+            local group, stack = {}, { first }
+            seen[first] = true
+            while #stack > 0 do
+                local hex = table.remove(stack)
+                table.insert(group, hex)
+                for _, n in ipairs(api:hexNeighbors(hex)) do
+                    for _, m in ipairs({ n, table.unpack(api:hexNeighbors(n)) }) do
+                        if isExit[m] and not seen[m] then
+                            seen[m] = true
+                            table.insert(stack, m)
+                        end
+                    end
+                end
+            end
+            if #group >= MIN_EXIT_LINE then
+                for _, hex in ipairs(group) do
+                    table.insert(kept, hex)
+                end
+            end
+        end
+    end
+    table.sort(kept)
+    return kept
 end
 local function hasWayIn(path, elev)
-    local misc = api:mapObjectsAt(path, elev, "misc")
-    for i = 1, #misc, 3 do
-        if isExitGrid(misc[i]) then
-            return true
-        end
-    end
-    local scenery = api:mapObjectsAt(path, elev, "scenery")
-    for i = 1, #scenery, 3 do
-        if isWayOut(sceneryType(scenery[i])) then
-            return true
-        end
-    end
-    return false
+    return #exitLines(path, elev) > 0
 end
 
 local sources = {}
@@ -167,29 +194,21 @@ end
 -- Objects, in one pass so they keep the source's order (the editor draws in map order):
 -- * walls, all of them;
 -- * scenery, everything generic. Doors, stairs, ladders and elevators lead to maps and elevations
---   the copy doesn't have; their spots are where the way out was;
+--   the copy doesn't have;
 -- * misc, only the scroll blockers. The exit grids are copied below, retargeted to the world map.
-local exitSpots = {}
 local skip, leftOut = {}, 0
 local scenery = api:mapObjectsAt(source.path, source.elev, "scenery")
 for i = 1, #scenery, 3 do
-    local pid, hex = scenery[i], scenery[i + 1]
-    local kind = sceneryType(pid)
-    if kind ~= "Generic" then
+    local pid = scenery[i]
+    if sceneryType(pid) ~= "Generic" then
         skip[pid] = true
         leftOut += 1
-        if isWayOut(kind) then
-            table.insert(exitSpots, hex)
-        end
     end
 end
 local misc = api:mapObjectsAt(source.path, source.elev, "misc")
-local exitGrids = {}
+local exitGrids = exitLines(source.path, source.elev)
 for i = 1, #misc, 3 do
-    local pid, hex = misc[i], misc[i + 1]
-    if isExitGrid(pid) then
-        table.insert(exitGrids, hex)
-    end
+    local pid = misc[i]
     if pid ~= SCROLL_BLOCKER then
         skip[pid] = true
     end
@@ -235,10 +254,8 @@ local function floorHex(hex)
     return t >= 0 and floor[t + 1] ~= EMPTY and not rock[floor[t + 1]] and not blocked[hex]
 end
 
--- Every way out of the source becomes a worldmap exit: its exit grids, and the spots its ladders,
--- stairs and elevators stood (on an open floor neighbour where the spot itself is blocked). Exit
--- grids the shipped maps put under a blocker are dropped: the player can't step there, and the rest
--- of the line is still there.
+-- The source's exit grids lead to the world map instead. Ones the shipped maps put under a blocker
+-- are dropped: the player can't step there, and the rest of the line is still there.
 local candidates, isCandidate = {}, {}
 local function addCandidate(hex)
     if hex ~= nil and not blocked[hex] and not isCandidate[hex] then
@@ -248,15 +265,6 @@ local function addCandidate(hex)
 end
 for _, hex in ipairs(exitGrids) do
     addCandidate(hex)
-end
-for _, hex in ipairs(exitSpots) do
-    local spot = not blocked[hex] and hex or nil
-    for _, n in ipairs(api:hexNeighbors(hex)) do
-        if spot == nil and floorHex(n) then
-            spot = n -- a ladder stands against the rock: its way out is on the floor side
-        end
-    end
-    addCandidate(spot)
 end
 local function openFloor(hex)
     return floorHex(hex) and not isCandidate[hex]
@@ -326,22 +334,14 @@ while #stack > 0 do
         end
     end
 end
--- The source's own exit grids keep their markers (each one's direction and offset, so the exit line
--- keeps its shape); a ladder's spot gets a plain one.
-local fromGrids, isGrid = {}, {}
-for _, hex in ipairs(exitGrids) do
-    isGrid[hex] = true
-end
-local exits = 0
+-- The exit grids keep their own markers (each one's direction and offset), so the exit line keeps
+-- the mappers' shape.
+local reachable = {}
 for _, hex in ipairs(candidates) do
     if reach[hex] then
-        if isGrid[hex] then
-            table.insert(fromGrids, hex)
-        elseif api:placeExitGrid(hex, -2, 0, 0, 0) then
-            exits += 1
-        end
+        table.insert(reachable, hex)
     end
 end
-exits += api:copyExitGrids(source.path, source.elev, fromGrids, -2, 0, 0, 0)
+local exits = api:copyExitGrids(source.path, source.elev, reachable, -2, 0, 0, 0)
 print(string.format("%d worldmap exit grids (%d cut off from the start left out); player start at hex %d.",
     exits, #candidates - exits, start))
