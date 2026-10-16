@@ -56,8 +56,13 @@ right but breaks the texture at every strip); outward-normal compass bin; edge-c
 - **Near-edge lip** — the near (down-screen) rim shows the floor tiles' stair-step edge in places;
   shipped maps layer flat `Wall`/`Wall s.t.` fills over the tops of rock on the near edges (currently
   excluded by `isFlatWall`).
-- **A few chain ends** (3-8 per cave, about the shipped rate) leave a narrow slit where no strip fits
-  on the band.
+- **Staircase where the edge leaves the grid axes** — wherever the carved edge runs off both iso
+  axes (rounded chamber corners, the noise wiggle), the tile edge jogs one tile at a time; no strip
+  spans a jog, so a chain ends there and the next starts a tile away, showing a slab end (a vertical
+  rock edge, worst on the near side). Shipped rims cap their ends with run-end/run-start pieces
+  (ca071/ca032, ca064/ca036/ca072); the generator only uses them when a successor happens to be one.
+  Tried: `--arg rough=0` + near-rectangular rooms (`gridNorm` 40) joined by max instead of sum looks
+  like the shipped corridor networks, but left a far wall unlaid and boxy slabs at every corner.
 - **Dead-straight bottom edge** — the shipped reference caves continue off the map edge, so
   their boundary there is a straight map-edge line the model mimics. Fix: detect and exclude
   off-map-edge boundary when learning from references, and don't carve generated chambers up

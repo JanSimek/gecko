@@ -68,17 +68,8 @@ local floorWeights = {} -- walkable floor: { {id=..., w=...}, ... } sorted for d
 -- key predicts the shipped piece's orientation family 79% of the time (vs 53% for the old
 -- outward-normal compass bin), so the generated rim "does the same thing" the shipped rims do,
 -- without per-piece hand tuning.
--- A few pieces are true CORNERS (art-reviewed): they belong only where the rim turns, not on a run.
--- The rock-mask can't confine them (they share a mask with straight pieces), so we key them by their
--- distinctive bent face-direction pair instead, pull them out of the straight pools, and cap them at
--- their shipped per-map frequency. Keyed by proto number (ca-name in the comment).
-local CORNER = {
-    [234] = true, -- ca063 NE<->SE corner
-    [204] = true, -- ca032 filled-diagonal <-> rock-wall corner
-    [653] = true, -- ca080 SW-SE corner
-}
-local cornerByDirpair = {} -- "faceDirs" -> weighted { {pid=, w=}, ... }: corner pieces at a turn shape
-local cornerCap = {} -- proto# -> max placements (its shipped per-map average)
+-- Corner pieces (ca063, ca032, ca071, ...) are told apart by how the shipped rims join them, not by
+-- a hand list: see leftJoins/rightJoins below.
 local geomRock = {} -- rock-neighbour mask -> weighted { {pid=, w=}, ... }: the PRIMARY key. Density-
 --                     independent (rock is rock however the rim is spaced), so it transfers from the
 --                     shipped rims to the generated band; learned from faces on BOTH sides of the rim.
@@ -102,6 +93,21 @@ local faceUses = {} -- pid -> how many faces the references stand -- bridges and
 -- a dark pillar the four references use twice) would win far more often than the mappers used it.
 -- Only art the references use this often is a candidate there; successors keep their learned odds.
 local MIN_BRIDGE_USES = 5
+-- How often a piece has a strip abutting on its left / right in the shipped rims. Some are run ENDS
+-- (ca071, ca032: always a strip on the left, never one on the right — they cap a wall where the rim
+-- turns), some run STARTS (ca064, ca036, ca072: the mirror), ca063 stands alone. Placed mid-run they
+-- read as a corner standing in the middle of a wall, so they only go where the shipped rims put them.
+local leftJoins, rightJoins = {}, {} -- pid -> count
+local JOIN_RATE = 0.2 -- below this share of uses, a side counts as never joined
+local function joinRate(counts, pid)
+    return (counts[pid] or 0) / math.max(faceUses[pid] or 0, 1)
+end
+local function isRunEnd(pid)
+    return joinRate(rightJoins, pid) < JOIN_RATE
+end
+local function isRunStart(pid)
+    return joinRate(leftJoins, pid) < JOIN_RATE
+end
 local successorStep = {} -- "a>b:parity" -> { dc, dr }: hex step from a to b, by a's column parity
 
 -- Floor decoration: the standing (non-flat) scenery the shipped caves put on open floor, learned per
@@ -182,8 +188,6 @@ do
     local dirpairCounts = {} -- "faceDirs" -> { [pid] = count }: coarser fallback key
     local normalCounts = {} -- compass class -> { [pid] = count }: final-fallback bin
     local pidTotals = {} -- pid -> total count, for the last-resort pool
-    local cornerCounts = {} -- "faceDirs" -> { [pid] = count }: corner pieces by turn shape
-    local cornerTotals = {} -- proto# -> count (for the per-map frequency cap)
     local decorCounts = {} -- band -> { [pid] = count }: standing scenery on walkable floor
     local successorCounts = {} -- pid -> { [next pid] = count }: panel successors
     local decorHexes = {} -- band -> walkable hexes at that distance from the rock
@@ -266,6 +270,8 @@ do
                 end
             end
             if best ~= nil then
+                rightJoins[a.pid] = (rightJoins[a.pid] or 0) + 1
+                leftJoins[best.pid] = (leftJoins[best.pid] or 0) + 1
                 successorCounts[a.pid] = successorCounts[a.pid] or {}
                 successorCounts[a.pid][best.pid] = (successorCounts[a.pid][best.pid] or 0) + 1
                 local key = string.format("%d>%d:%d", a.pid, best.pid, api:hexCol(a.hex) % 2)
@@ -292,25 +298,18 @@ do
             if #rockDirs > 0 and #rockDirs < 6 then
                 table.sort(faceDirs)
                 local dirpair = table.concat(faceDirs, ",")
-                if CORNER[pid % 16777216] then
-                    -- A corner: learn it by its turn shape only, kept out of the straight pools.
-                    cornerCounts[dirpair] = cornerCounts[dirpair] or {}
-                    cornerCounts[dirpair][pid] = (cornerCounts[dirpair][pid] or 0) + 1
-                    cornerTotals[pid % 16777216] = (cornerTotals[pid % 16777216] or 0) + 1
-                else
-                    local rm = tostring(rockmask)
-                    geomRockCounts[rm] = geomRockCounts[rm] or {}
-                    geomRockCounts[rm][pid] = (geomRockCounts[rm][pid] or 0) + 1
-                    local geom = dirpair .. "|" .. rm
-                    geomCounts[geom] = geomCounts[geom] or {}
-                    geomCounts[geom][pid] = (geomCounts[geom][pid] or 0) + 1
-                    dirpairCounts[dirpair] = dirpairCounts[dirpair] or {}
-                    dirpairCounts[dirpair][pid] = (dirpairCounts[dirpair][pid] or 0) + 1
-                    local comp = compassOf(rockDirs)
-                    normalCounts[comp] = normalCounts[comp] or {}
-                    normalCounts[comp][pid] = (normalCounts[comp][pid] or 0) + 1
-                    pidTotals[pid] = (pidTotals[pid] or 0) + 1
-                end
+                local rm = tostring(rockmask)
+                geomRockCounts[rm] = geomRockCounts[rm] or {}
+                geomRockCounts[rm][pid] = (geomRockCounts[rm][pid] or 0) + 1
+                local geom = dirpair .. "|" .. rm
+                geomCounts[geom] = geomCounts[geom] or {}
+                geomCounts[geom][pid] = (geomCounts[geom][pid] or 0) + 1
+                dirpairCounts[dirpair] = dirpairCounts[dirpair] or {}
+                dirpairCounts[dirpair][pid] = (dirpairCounts[dirpair][pid] or 0) + 1
+                local comp = compassOf(rockDirs)
+                normalCounts[comp] = normalCounts[comp] or {}
+                normalCounts[comp][pid] = (normalCounts[comp][pid] or 0) + 1
+                pidTotals[pid] = (pidTotals[pid] or 0) + 1
             end
         end
 
@@ -446,10 +445,6 @@ do
     foldModel(geomCounts, geomModel)
     foldModel(dirpairCounts, geomDirpair)
     foldModel(normalCounts, wallPieces)
-    foldModel(cornerCounts, cornerByDirpair)
-    for pn, total in pairs(cornerTotals) do
-        cornerCap[pn] = math.max(1, math.floor(total / #REFS + 0.5)) -- shipped per-map average
-    end
     wallPiecesAll = weightedList(pidTotals) -- last-resort pool
     assert(#wallPiecesAll > 0, "no walls found on the reference maps")
 
@@ -583,9 +578,10 @@ local function segDist2(pc, pr, s)
     return gridDist2(ex, ey)
 end
 
--- The field at a hex-space point, warped by low-frequency noise so the isocontour erodes organically.
+-- The field at a hex-space point, warped by low-frequency noise so the isocontour erodes organically
+-- (--arg rough=0 for straight grid-axis sides).
 local fnx, fny = api:rng() * 1000.0, api:rng() * 1000.0
-local ROUGH, NF = 0.28, 0.05
+local ROUGH, NF = tonumber(args.rough) or 0.28, 0.05
 local function field(c, r)
     local f = 0.0
     for _, s in ipairs(sources) do
@@ -674,17 +670,6 @@ local function compassFromVec(nx, ny)
     return COMPASS[math.floor((ang + 22.5) / 45) % 8 + 1]
 end
 
--- Inside-ness straight from the smooth field (not the tile grid), cached per hex.
-local insideCache = {}
-local function inside(hex)
-    local v = insideCache[hex]
-    if v == nil then
-        v = field(api:hexCol(hex), api:hexRow(hex)) >= 1.0
-        insideCache[hex] = v
-    end
-    return v
-end
-
 -- Outward screen normal at a hex = -grad(field) mapped through the hex->pixel Jacobian (columns
 -- d/dcol = (-24, 6), d/drow = (16, 12)). Central differences a couple of hexes wide ride over the
 -- noise wiggle so the class follows the chamber curve, not local grain.
@@ -722,15 +707,16 @@ for hex in pairs(candSet) do
 end
 table.sort(candidates)
 
--- The rim: the 2-cell band straddling the isocontour — every hex with a neighbour on the other side,
--- so BOTH the walkable-side and rock-side contour get a face, the dense both-sided structure the
--- shipped maps use (which is what makes the run gap-free, the wide sprites overlapping).
+-- The rim: the 2-cell band straddling the floor's edge — every hex whose floor tile is carved while a
+-- neighbour's isn't, or the other way round. It follows the carved TILES, not the smooth field: walls
+-- laid along the field's curve stood off the tile edge in places, leaving a strip of rock floor (the
+-- cav4009 fill) between the wall's foot and the floor.
 local rimSet = {}
 local rim = {}
 for _, hex in ipairs(candidates) do
-    local me = inside(hex)
+    local me = carvedHex(hex)
     for _, n in ipairs(api:hexNeighbors(hex)) do
-        if inside(n) ~= me then
+        if carvedHex(n) ~= me then
             rimSet[hex] = true
             table.insert(rim, hex)
             break
@@ -745,7 +731,7 @@ local function geomKeyAt(hex)
     local rockmask, faceDirs = 0, {}
     for _, n in ipairs(api:hexNeighbors(hex)) do
         local d = api:hexDir(hex, n)
-        if not inside(n) then
+        if not carvedHex(n) then
             rockmask += 2 ^ d
         end
         if rimSet[n] then
@@ -758,48 +744,14 @@ local function geomKeyAt(hex)
     return rm, dirpair .. "|" .. rm, dirpair
 end
 
--- Place a wall on every rim hex, choosing the piece by local geometry: the rock-mask key first (the
--- orientation rule that transfers regardless of spacing), then the finer face-direction keys, then
--- the compass bin, then the global pool. Sampling the learned distribution keeps the mappers' texture
--- variety while the rock-mask keeps the orientation right. A per-hex function, so a single sorted
--- pass is deterministic under the seeded draw.
--- A corner piece for this hex's turn shape, if one was learned there and still under its cap. Only
--- the distinctive bent shapes carry corners, so this fires at real turns, not along a run. Consumes
--- rng only when it returns a piece, so the straight path's draw stays reproducible.
-local cornerPlaced = {} -- proto# -> count
-local function tryCorner(dirpair)
-    local list = cornerByDirpair[dirpair]
-    if list == nil then
-        return nil
-    end
-    local avail, total = {}, 0
-    for _, e in ipairs(list) do
-        local pn = e.pid % 16777216
-        if (cornerPlaced[pn] or 0) < (cornerCap[pn] or 1) then
-            avail[#avail + 1] = e
-            total += e.w
-        end
-    end
-    if #avail == 0 then
-        return nil
-    end
-    local r = api:rng() * total
-    for _, e in ipairs(avail) do
-        r -= e.w
-        if r <= 0 then
-            cornerPlaced[e.pid % 16777216] = (cornerPlaced[e.pid % 16777216] or 0) + 1
-            return e.pid
-        end
-    end
-    local last = avail[#avail]
-    cornerPlaced[last.pid % 16777216] = (cornerPlaced[last.pid % 16777216] or 0) + 1
-    return last.pid
-end
-
--- Screen position of a hex, as the engine projects it (tile.cc tileToScreenXY): only for ordering.
+-- Screen position of a hex, as the engine projects it (tile.cc tileToScreenXY), the origin of the
+-- frame api:artRect measures in.
 local function hexScreenX(hex)
     local col = 199 - api:hexCol(hex)
     return 48 * (col // 2) + 16 * api:hexRow(hex) + (col % 2 == 1 and 32 or 0)
+end
+local function hexScreenY(hex)
+    return 12 * api:hexRow(hex) - 12 * ((199 - api:hexCol(hex)) // 2)
 end
 
 -- Lay the rim as panel chains. Walk the band left to right on screen; at the first hex no chain covers
@@ -809,6 +761,16 @@ end
 -- chain, not two side by side; where no successor fits, the chain ends and the walk moves on.
 local walls = 0
 local wallAt = {} -- hex -> the rim piece standing there
+local wallRects = {} -- { rect = engine art rect, near = faces the viewer } per placed piece
+-- Does the rock at a rim hex lie down-screen of the floor (the near side, drawn as the rock's top)?
+local function nearSide(hex)
+    local vy = 0
+    for _, n in ipairs(api:hexNeighbors(hex)) do
+        local dy = DIR_VEC[api:hexDir(hex, n)][2]
+        vy += carvedHex(n) and -dy or dy
+    end
+    return vy > 0
+end
 local claimedBy = {} -- band hex -> the chain that covers it
 local boundaryHexes = #rim
 local chains, links = 0, 0
@@ -828,6 +790,7 @@ local function place(pid, hex, chain)
     walls += 1
     wallAt[hex] = pid
     claimedBy[hex] = chain
+    table.insert(wallRects, { rect = api:artRect(pid, hex), near = nearSide(hex) })
     for _, n in ipairs(api:hexNeighbors(hex)) do
         if rimSet[n] and claimedBy[n] == nil then
             claimedBy[n] = chain
@@ -849,7 +812,19 @@ local function fittingSuccessors(pid, hex, chain)
             hexOf[e.pid] = next
         end
     end
-    return fits, hexOf
+    -- A run-end piece caps the wall only where nothing else can carry it on (where the rim turns).
+    local carryOn = {}
+    for _, e in ipairs(fits) do
+        if not isRunEnd(e.pid) then
+            table.insert(carryOn, e)
+        end
+    end
+    return #carryOn > 0 and carryOn or fits, hexOf
+end
+
+-- Pieces fit to join a run in its middle: common enough, and neither a run end nor a run start.
+local function midRun(pid)
+    return (faceUses[pid] or 0) >= MIN_BRIDGE_USES and not isRunEnd(pid) and not isRunStart(pid)
 end
 
 -- When no learned successor fits, keep the rim pixel-continuous anyway: any piece from a nearby band
@@ -857,6 +832,19 @@ end
 -- texture seam there is like the shipped rims' own joins between panoramas.
 local function placeable(hex, chain)
     return rimSet[hex] and not wallAt[hex] and (claimedBy[hex] == nil or claimedBy[hex] == chain)
+end
+
+-- Drop candidates repeating one of the chain's last two pieces, when anything else fits: on a slope
+-- only a few pieces follow, and drawing among them by usage alone settled into a comb (one piece after
+-- itself, or two alternating) that the shipped rims never show (4 of 1238 joins repeat a piece).
+local function freshFits(fits, recent)
+    local fresh = {}
+    for _, f in ipairs(fits) do
+        if not recent[f.pid] then
+            table.insert(fresh, f)
+        end
+    end
+    return #fresh > 0 and fresh or fits
 end
 
 -- Among fits {pid=, dy=, w=, ...}, those whose base is within a few pixels of the best, drawn by how
@@ -897,7 +885,7 @@ local function closeFit(fits)
     return near[#near]
 end
 
-local function bridge(pid, hex, chain)
+local function bridge(pid, hex, chain, recent)
     local rect = api:artRect(pid, hex)
     local seen, nearby, frontier = { [hex] = true }, {}, { hex }
     for _ = 1, BRIDGE_RINGS do
@@ -919,7 +907,7 @@ local function bridge(pid, hex, chain)
         if placeable(n, chain) then
             local rm, geom, dirpair = geomKeyAt(n)
             for _, e in ipairs(geomRock[rm] or geomModel[geom] or geomDirpair[dirpair] or wallListFor(compassFromVec(outwardNormal(n)))) do
-                if (faceUses[e.pid] or 0) >= MIN_BRIDGE_USES then
+                if midRun(e.pid) then
                     local r = api:artRect(e.pid, n)
                     local dy = math.abs(r[4] - rect[4])
                     local overlap = rect[3] + 1 - r[1] -- 0 = starts on the next pixel
@@ -931,7 +919,7 @@ local function bridge(pid, hex, chain)
             end
         end
     end
-    local choice = closeFit(fits)
+    local choice = closeFit(freshFits(fits, recent or {}))
     if choice == nil then
         return nil, nil
     end
@@ -953,14 +941,19 @@ local function startPiece(start)
             end
         end
     end
-    local common = {}
+    -- Continuing a strip to the left takes a mid-run piece; a chain with nothing to its left may open
+    -- with a run-start piece, never with a run end.
+    local continuing, opening = {}, {}
     for _, e in ipairs(palette) do
-        if (faceUses[e.pid] or 0) >= MIN_BRIDGE_USES then
-            table.insert(common, e)
+        if midRun(e.pid) then
+            table.insert(continuing, e)
+        end
+        if (faceUses[e.pid] or 0) >= MIN_BRIDGE_USES and not isRunEnd(e.pid) then
+            table.insert(opening, e)
         end
     end
     local fits = {}
-    for _, e in ipairs(common) do
+    for _, e in ipairs(continuing) do
         local r = api:artRect(e.pid, start)
         for _, l in ipairs(lefts) do
             local dy = math.abs(r[4] - l[4])
@@ -970,7 +963,10 @@ local function startPiece(start)
         end
     end
     local choice = closeFit(fits)
-    return choice and choice.pid or tryCorner(dirpair) or pickWall(#common > 0 and common or palette)
+    if choice ~= nil then
+        return choice.pid
+    end
+    return pickWall(#opening > 0 and opening or palette)
 end
 
 local bridges = 0
@@ -979,16 +975,21 @@ for _, start in ipairs(order) do
         chains += 1
         local pid = startPiece(start)
         local hex = start
+        local before = nil -- the piece before `pid` in this chain
         if place(pid, hex, chains) then
             for _ = 1, #rim do -- a chain can't be longer than the band
+                local recent = { [pid] = true }
+                if before ~= nil then
+                    recent[before] = true
+                end
                 local fits, hexOf = fittingSuccessors(pid, hex, chains)
                 local next, nextHex
                 if #fits > 0 then
-                    next = pickWall(fits)
+                    next = pickWall(freshFits(fits, recent))
                     nextHex = hexOf[next]
                     links += 1
                 else
-                    next, nextHex = bridge(pid, hex, chains)
+                    next, nextHex = bridge(pid, hex, chains, recent)
                     if next == nil then
                         break
                     end
@@ -997,7 +998,10 @@ for _, start in ipairs(order) do
                 if not place(next, nextHex, chains) then
                     break
                 end
-                pid, hex = next, nextHex
+                before, pid, hex = pid, next, nextHex
+                if isRunEnd(pid) then
+                    break -- it caps the wall: nothing joins on its right
+                end
             end
         else
             claimedBy[start] = chains
@@ -1107,6 +1111,21 @@ if DECOR_SCALE > 0 then
     reserve(api:tileIndex(chambers[#chambers].x, chambers[#chambers].y))
     reserve(api:tileIndex(chambers[#chambers].x + 1, chambers[#chambers].y))
 
+    -- A near-side rim piece is rock seen from above, drawn up over the floor behind its foot: a piece
+    -- standing under that art, or just in front of its foot, reads as a rock lying on the rock. A far
+    -- wall only hides what stands well behind its foot; rocks at its foot are what the references have.
+    local FOOT_MARGIN = 12 -- one hex row
+    local function underWallArt(hex)
+        local fx, fy = hexScreenX(hex) + 16, hexScreenY(hex) + 8 -- the hex's centre
+        for _, w in ipairs(wallRects) do
+            local r = w.rect
+            if fx >= r[1] and fx <= r[3] and fy >= r[2] and fy <= r[4] + (w.near and FOOT_MARGIN or -FOOT_MARGIN) then
+                return true
+            end
+        end
+        return false
+    end
+
     local blocked = {} -- hex -> true once a blocking decoration stands there
     local function walkableNow(hex)
         return carvedHex(hex) and not wallAt[hex] and not blocked[hex]
@@ -1172,7 +1191,7 @@ if DECOR_SCALE > 0 then
         local band = onWall and "0" .. compassFromVec(outwardNormal(hex)) or dist[hex] or DECOR_BANDS
         local palette = decorPalette[band] or {}
         if not reserved[hex] and (onWall or walkableNow(hex)) and #palette > 0
-            and api:rng() < decorDensity[band] * DECOR_SCALE then
+            and api:rng() < decorDensity[band] * DECOR_SCALE and not underWallArt(hex) then
             local pid = pickWall(palette)
             if blocksCache[pid] == nil then
                 blocksCache[pid] = api:protoBlocks(pid)
