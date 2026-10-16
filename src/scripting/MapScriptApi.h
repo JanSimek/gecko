@@ -313,12 +313,21 @@ public:
     /// mask `map reachability` floods, over the objects placed so far (a fill's planned objects
     /// included). Sorted. Lets a generator put the player start and exits where they can be walked.
     std::vector<int> blockedHexes() const;
-    /// Copy a reference elevation's objects of one type onto the same hexes of the bound map —
-    /// the whole object record (art, direction, instance flags, light, pixel offset), untranslated
-    /// and for the whole elevation: how a generator reuses a shipped layout's hand-placed walls
-    /// exactly. Scripts and inventories stay behind. `excludePids` skips protos the copy must
-    /// not carry over. Returns objects placed; raises on an unknown type or an unreadable map.
-    int copyObjects(const std::string& mapPath, int refElevation, const std::string& typeName, const std::vector<int>& excludePids);
+    /// Copy a reference elevation's objects of the given types onto the same hexes of the bound
+    /// map — the whole object record (art, direction, instance flags, light, pixel offset),
+    /// untranslated, in the reference's own order (the editor draws in map order): how a generator
+    /// reuses a shipped layout's hand-placed walls exactly. Scripts and inventories stay behind.
+    /// `excludePids` skips protos the copy must not carry over. Returns objects placed; raises on
+    /// an unknown type or an unreadable map.
+    int copyObjects(const std::string& mapPath, int refElevation, const std::vector<std::string>& typeNames,
+        const std::vector<int>& excludePids);
+    /// Copy the reference elevation's exit-grid markers standing on `hexes`, retargeted to a new
+    /// destination (same arguments as placeExitGrid). Each keeps its own direction proto and pixel
+    /// offset, so an exit line keeps the mappers' shape; its art switches to the destination's
+    /// family (brown to the world map, green to a map). Returns markers placed; raises on an
+    /// invalid destination or an unreadable map.
+    int copyExitGrids(const std::string& mapPath, int refElevation, const std::vector<int>& hexes, int destMapId,
+        int destHex, int destElevation, int orientation);
     /// The previous quiltFloor* run's fidelity stats, flattened as (painted, blocks,
     /// perfectBlocks, mismatchedCells, repairedCells, unresolvedSeams). Repaired cells are normal
     /// in small numbers; unresolved seams are borders the reference never showed. Script-visible

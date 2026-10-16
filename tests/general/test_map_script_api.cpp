@@ -862,7 +862,7 @@ TEST_CASE("MapScriptApi copyObjects copies a reference elevation's objects onto 
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, /*buildSprites*/ false);
 
     SECTION("every object lands on its own hex, proto and art verbatim") {
-        CHECK(api.copyObjects("maps/ref.map", ELEV, "misc", {}) == 3);
+        CHECK(api.copyObjects("maps/ref.map", ELEV, { "misc" }, {}) == 3);
         std::vector<int> copied;
         for (const auto& object : fx.mapFile().map_objects.at(ELEV)) {
             CHECK(object->pro_pid == markerPid);
@@ -874,14 +874,31 @@ TEST_CASE("MapScriptApi copyObjects copies a reference elevation's objects onto 
     }
 
     SECTION("excludePids, another type or an empty elevation copy nothing") {
-        CHECK(api.copyObjects("maps/ref.map", ELEV, "misc", { static_cast<int>(markerPid) }) == 0);
-        CHECK(api.copyObjects("maps/ref.map", ELEV, "wall", {}) == 0);
-        CHECK(api.copyObjects("maps/ref.map", ELEV + 1, "misc", {}) == 0);
+        CHECK(api.copyObjects("maps/ref.map", ELEV, { "misc" }, { static_cast<int>(markerPid) }) == 0);
+        CHECK(api.copyObjects("maps/ref.map", ELEV, { "wall", "scenery" }, {}) == 0);
+        CHECK(api.copyObjects("maps/ref.map", ELEV + 1, { "misc" }, {}) == 0);
+    }
+
+    SECTION("copyExitGrids retargets the markers on the listed hexes, keeping their direction") {
+        // The authored markers lead to the world map (brown art); retarget two of them to map 5.
+        const std::vector<int> picked = { markerHexes[0], markerHexes[2] };
+        CHECK(api.copyExitGrids("maps/ref.map", ELEV, picked, 5, 1234, 0, 0) == 2);
+        const auto& objects = fx.mapFile().map_objects.at(ELEV);
+        REQUIRE(objects.size() == 2);
+        const int dir = static_cast<int>(markerPid - ExitGrid::FIRST_EXIT_GRID_PID);
+        for (const auto& object : objects) {
+            CHECK(std::ranges::find(picked, object->position) != picked.end());
+            CHECK(object->pro_pid == markerPid);
+            CHECK(object->frm_pid == ExitGrid::greenFrm(dir));
+            CHECK(object->exit_map == 5);
+            CHECK(object->exit_position == 1234);
+        }
+        CHECK_THROWS(api.copyExitGrids("maps/ref.map", ELEV, picked, 5, 40000, 0, 0)); // off-grid destination
     }
 
     SECTION("genuine failures raise") {
-        CHECK_THROWS(api.copyObjects("maps/ref.map", ELEV, "gizmo", {})); // unknown type name
-        CHECK_THROWS(api.copyObjects("maps/nope.map", ELEV, "misc", {})); // unreadable map
+        CHECK_THROWS(api.copyObjects("maps/ref.map", ELEV, { "misc", "gizmo" }, {})); // unknown type name
+        CHECK_THROWS(api.copyObjects("maps/nope.map", ELEV, { "misc" }, {})); // unreadable map
     }
 
     std::filesystem::remove_all(root, ec);

@@ -1039,18 +1039,23 @@ std::vector<int> MapScriptApi::blockedHexes() const {
     return hexes;
 }
 
-int MapScriptApi::copyObjects(const std::string& mapPath, int refElevation, const std::string& typeName,
+int MapScriptApi::copyObjects(const std::string& mapPath, int refElevation, const std::vector<std::string>& typeNames,
     const std::vector<int>& excludePids) {
-    const ObjectType wanted = objectTypeFromName(typeName); // throws on an unknown type
-    const Map& reference = referenceMap(mapPath);           // throws if unreadable
+    std::vector<ObjectType> wanted;
+    for (const auto& typeName : typeNames) {
+        wanted.push_back(objectTypeFromName(typeName)); // throws on an unknown type
+    }
+    const Map& reference = referenceMap(mapPath); // throws if unreadable
     const auto& objectsByElevation = reference.getMapFile().map_objects;
     const auto it = objectsByElevation.find(refElevation);
     if (it == objectsByElevation.end()) {
         return 0; // the reference elevation holds no objects — a valid empty copy
     }
+    // One pass in the reference's own order: the editor draws objects in map order, so copying one
+    // type after another stacked e.g. every rock over every wall.
     int placed = 0;
     for (const auto& object : it->second) {
-        if (!object || object->position < 0 || ProtoId(object->pro_pid).objectType() != wanted) {
+        if (!object || object->position < 0 || std::ranges::find(wanted, ProtoId(object->pro_pid).objectType()) == wanted.end()) {
             continue;
         }
         if (std::ranges::find(excludePids, static_cast<int>(object->pro_pid)) != excludePids.end()) {
@@ -1329,6 +1334,41 @@ bool MapScriptApi::placeExitGrid(int hex, int destMapId, int destHex, int destEl
     // family the destination implies (green inter-map / brown world-town).
     const ExitGridArt art = exitGridArtForDirection(ExitGrid::DIR_BOTTOM, destinationKindFor(dest));
     return placeExitGridMarker(hex, art.proPid, art.frmPid, { dest, destHex, destElevation, orientation });
+}
+
+int MapScriptApi::copyExitGrids(const std::string& mapPath, int refElevation, const std::vector<int>& hexes,
+    int destMapId, int destHex, int destElevation, int orientation) {
+    validateExitGridDest(destMapId, destHex, destElevation, orientation);
+    const Map& reference = referenceMap(mapPath); // throws if unreadable
+    const auto& objectsByElevation = reference.getMapFile().map_objects;
+    const auto it = objectsByElevation.find(refElevation);
+    if (it == objectsByElevation.end()) {
+        return 0;
+    }
+    const auto dest = static_cast<uint32_t>(destMapId);
+    const ExitGridDestinationKind kind = destinationKindFor(dest);
+    int placed = 0;
+    for (const auto& object : it->second) {
+        if (!object || !object->isExitGridMarker() || std::ranges::find(hexes, object->position) == hexes.end()) {
+            continue;
+        }
+        // Keep the marker's own direction (its proto: which bar, which way it faces), so the exit
+        // line reads as the mappers drew it; only the art family follows the new destination.
+        const int dir = static_cast<int>(object->pro_pid - ExitGrid::FIRST_EXIT_GRID_PID);
+        std::shared_ptr<MapObject> copy = object->cloneDeep();
+        copy->elevation = static_cast<uint32_t>(_elevation);
+        copy->script_id = -1;
+        copy->map_scripts_pid = -1;
+        copy->frm_pid = exitGridArtForDirection(dir, kind).frmPid;
+        copy->exit_map = dest;
+        copy->exit_position = static_cast<uint32_t>(destHex);
+        copy->exit_elevation = static_cast<uint32_t>(destElevation);
+        copy->exit_orientation = static_cast<uint32_t>(orientation);
+        if (registerObject(copy, copy->position, copy->frm_pid, copy->direction)) {
+            ++placed;
+        }
+    }
+    return placed;
 }
 
 int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int screenHalfHeight,

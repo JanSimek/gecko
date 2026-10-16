@@ -9,10 +9,10 @@
 --   * every wall (faces, rock tops and flat fills) with its art and direction,
 --   * the generic scenery: invisible blockers sealing the rock, rocks, stalagmites, debris,
 --   * the scroll blockers that bound the camera,
--- leaving out what leads somewhere the copy doesn't have — doors, stairs, ladders, elevators, the
--- original exit grids — and every critter and item. The original exit grids become worldmap exits
--- on the same hexes (where the source has none, the spots its ladders/stairs/elevators stood), and
--- the player starts beside the first of them.
+-- all in the source's own order, leaving out what leads somewhere the copy doesn't have — doors,
+-- stairs, ladders, elevators — and every critter and item. The source's exit grids lead to the world
+-- map instead, keeping their shape; the spots its ladders/stairs/elevators stood become exits too.
+-- Only exits the player can walk to are kept, and the player starts inside the cave beside one.
 --
 --   gecko-cli map generate --script scripts/editor/cave.luau --out cave.map \
 --       --arg seed=42 --data <master.dat> [--data <critter.dat>]
@@ -164,51 +164,44 @@ for t = 0, #floor - 1 do
     end
 end
 
-local walls = api:copyObjects(source.path, source.elev, "wall", {})
-
--- Scenery: everything generic. Doors, stairs, ladders and elevators lead to maps and elevations the
--- copy doesn't have; their spots are where the way out was.
+-- Objects, in one pass so they keep the source's order (the editor draws in map order):
+-- * walls, all of them;
+-- * scenery, everything generic. Doors, stairs, ladders and elevators lead to maps and elevations
+--   the copy doesn't have; their spots are where the way out was;
+-- * misc, only the scroll blockers. The exit grids are copied below, retargeted to the world map.
 local exitSpots = {}
-local skipScenery, leftOut = {}, 0
+local skip, leftOut = {}, 0
 local scenery = api:mapObjectsAt(source.path, source.elev, "scenery")
 for i = 1, #scenery, 3 do
     local pid, hex = scenery[i], scenery[i + 1]
     local kind = sceneryType(pid)
     if kind ~= "Generic" then
-        skipScenery[pid] = true
+        skip[pid] = true
         leftOut += 1
         if isWayOut(kind) then
             table.insert(exitSpots, hex)
         end
     end
 end
-local skipList = {}
-for pid in pairs(skipScenery) do
-    table.insert(skipList, pid)
-end
-table.sort(skipList)
-local copiedScenery = api:copyObjects(source.path, source.elev, "scenery", skipList)
-
--- Misc: only the scroll blockers. The exit grids are rebuilt below as worldmap exits.
 local misc = api:mapObjectsAt(source.path, source.elev, "misc")
-local skipMisc, exitGrids = {}, {}
+local exitGrids = {}
 for i = 1, #misc, 3 do
     local pid, hex = misc[i], misc[i + 1]
     if isExitGrid(pid) then
         table.insert(exitGrids, hex)
     end
     if pid ~= SCROLL_BLOCKER then
-        skipMisc[pid] = true
+        skip[pid] = true
     end
 end
-local skipMiscList = {}
-for pid in pairs(skipMisc) do
-    table.insert(skipMiscList, pid)
+local skipList = {}
+for pid in pairs(skip) do
+    table.insert(skipList, pid)
 end
-table.sort(skipMiscList)
-local scrollBlockers = api:copyObjects(source.path, source.elev, "misc", skipMiscList)
-print(string.format("Copied %d walls, %d scenery pieces and %d scroll blockers; left out %d doors/ladders/stairs/elevators.",
-    walls, copiedScenery, scrollBlockers, leftOut))
+table.sort(skipList)
+local copied = api:copyObjects(source.path, source.elev, { "wall", "scenery", "misc" }, skipList)
+print(string.format("Copied %d walls, scenery pieces and scroll blockers; left out %d doors/ladders/stairs/elevators.",
+    copied, leftOut))
 
 -- ============================ exits + player start =================================
 -- What blocks movement in the copy, by the engine's own rule (each object's instance flags).
@@ -333,11 +326,22 @@ while #stack > 0 do
         end
     end
 end
+-- The source's own exit grids keep their markers (each one's direction and offset, so the exit line
+-- keeps its shape); a ladder's spot gets a plain one.
+local fromGrids, isGrid = {}, {}
+for _, hex in ipairs(exitGrids) do
+    isGrid[hex] = true
+end
 local exits = 0
 for _, hex in ipairs(candidates) do
-    if reach[hex] and api:placeExitGrid(hex, -2, 0, 0, 0) then
-        exits += 1
+    if reach[hex] then
+        if isGrid[hex] then
+            table.insert(fromGrids, hex)
+        elseif api:placeExitGrid(hex, -2, 0, 0, 0) then
+            exits += 1
+        end
     end
 end
+exits += api:copyExitGrids(source.path, source.elev, fromGrids, -2, 0, 0, 0)
 print(string.format("%d worldmap exit grids (%d cut off from the start left out); player start at hex %d.",
     exits, #candidates - exits, start))
