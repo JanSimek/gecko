@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <vector>
 
 #include "format/map/MapObject.h"
@@ -139,8 +140,8 @@ TEST_CASE("A scroll blocker is the engine's proto, not whatever uses scrblk art"
 namespace {
 
 // The list indices of @p objects in the order forEachInDrawOrder visits them.
-std::vector<long> drawOrder(const std::vector<MapObject>& objects) {
-    std::vector<long> order;
+std::vector<std::ptrdiff_t> drawOrder(const std::vector<MapObject>& objects) {
+    std::vector<std::ptrdiff_t> order;
     forEachInDrawOrder(
         objects, [](const MapObject& object) -> const MapObject& { return object; },
         [&order, &objects](const MapObject& object) { order.push_back(&object - objects.data()); });
@@ -162,7 +163,7 @@ TEST_CASE("Flat objects draw under standing ones whatever the map-file order", "
     objects[2].flags = flat | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK);
     objects[3].position = 100; // wall
 
-    CHECK(drawOrder(objects) == std::vector<long>{ 1, 2, 3, 0 });
+    CHECK(drawOrder(objects) == std::vector<std::ptrdiff_t>{ 1, 2, 3, 0 });
 }
 
 TEST_CASE("Standing objects draw by ascending hex, a hex's objects in list order", "[rendering][visibility]") {
@@ -176,5 +177,5 @@ TEST_CASE("Standing objects draw by ascending hex, a hex's objects in list order
     objects[3].position = 10001;
     objects[4].position = 10000; // second object on the rock's hex
 
-    CHECK(drawOrder(objects) == std::vector<long>{ 1, 4, 3, 0, 2 });
+    CHECK(drawOrder(objects) == std::vector<std::ptrdiff_t>{ 1, 4, 3, 0, 2 });
 }
