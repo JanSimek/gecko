@@ -812,14 +812,17 @@ local function fittingSuccessors(pid, hex, chain)
             hexOf[e.pid] = next
         end
     end
-    -- A run-end piece caps the wall only where nothing else can carry it on (where the rim turns).
-    local carryOn = {}
+    -- A run-end piece caps the wall only where nothing else can carry it on (where the rim turns); a
+    -- run-start piece opens a wall, so it never continues one.
+    local carryOn, caps = {}, {}
     for _, e in ipairs(fits) do
-        if not isRunEnd(e.pid) then
+        if isRunEnd(e.pid) then
+            table.insert(caps, e)
+        elseif not isRunStart(e.pid) then
             table.insert(carryOn, e)
         end
     end
-    return #carryOn > 0 and carryOn or fits, hexOf
+    return #carryOn > 0 and carryOn or caps, hexOf
 end
 
 -- Pieces fit to join a run in its middle: common enough, and neither a run end nor a run start.
@@ -966,7 +969,21 @@ local function startPiece(start)
     if choice ~= nil then
         return choice.pid
     end
-    return pickWall(#opening > 0 and opening or palette)
+    -- An opening piece butting against a strip on its left would show its start edge mid-wall.
+    local clear = {}
+    for _, e in ipairs(opening) do
+        local butts = false
+        if isRunStart(e.pid) then
+            local r = api:artRect(e.pid, start)
+            for _, l in ipairs(lefts) do
+                butts = butts or (r[1] == l[3] + 1 and math.abs(r[4] - l[4]) <= 16)
+            end
+        end
+        if not butts then
+            table.insert(clear, e)
+        end
+    end
+    return pickWall(#clear > 0 and clear or #opening > 0 and opening or palette)
 end
 
 local bridges = 0
@@ -1115,8 +1132,9 @@ if DECOR_SCALE > 0 then
     -- standing under that art, or just in front of its foot, reads as a rock lying on the rock. A far
     -- wall only hides what stands well behind its foot; rocks at its foot are what the references have.
     local FOOT_MARGIN = 12 -- one hex row
-    local function underWallArt(hex)
-        local fx, fy = hexScreenX(hex) + 16, hexScreenY(hex) + 8 -- the hex's centre
+    local function underWallArt(pid, hex)
+        local art = api:artRect(pid, hex)
+        local fx, fy = (art[1] + art[3]) // 2, art[4] -- where the piece's art meets the ground
         for _, w in ipairs(wallRects) do
             local r = w.rect
             if fx >= r[1] and fx <= r[3] and fy >= r[2] and fy <= r[4] + (w.near and FOOT_MARGIN or -FOOT_MARGIN) then
@@ -1191,12 +1209,12 @@ if DECOR_SCALE > 0 then
         local band = onWall and "0" .. compassFromVec(outwardNormal(hex)) or dist[hex] or DECOR_BANDS
         local palette = decorPalette[band] or {}
         if not reserved[hex] and (onWall or walkableNow(hex)) and #palette > 0
-            and api:rng() < decorDensity[band] * DECOR_SCALE and not underWallArt(hex) then
+            and api:rng() < decorDensity[band] * DECOR_SCALE then
             local pid = pickWall(palette)
             if blocksCache[pid] == nil then
                 blocksCache[pid] = api:protoBlocks(pid)
             end
-            if onWall or not blocksCache[pid] or keepsPassage(hex) then
+            if (onWall or not blocksCache[pid] or keepsPassage(hex)) and not underWallArt(pid, hex) then
                 if api:placeProto(pid, hex, 0) then
                     placed += 1
                     if blocksCache[pid] then
