@@ -191,7 +191,7 @@ for t = 0, #floor - 1 do
     end
 end
 
--- Objects, in one pass so they keep the source's order (the editor draws in map order):
+-- Objects, in one pass so they keep the source's order (objects sharing a hex draw in list order):
 -- * walls, all of them;
 -- * scenery, everything generic. Doors, stairs, ladders and elevators lead to maps and elevations
 --   the copy doesn't have;

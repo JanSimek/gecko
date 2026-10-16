@@ -136,24 +136,45 @@ TEST_CASE("A scroll blocker is the engine's proto, not whatever uses scrblk art"
     CHECK_FALSE(isObjectVisible(blocker, vis));
 }
 
+namespace {
+
+// The list indices of @p objects in the order forEachInDrawOrder visits them.
+std::vector<long> drawOrder(const std::vector<MapObject>& objects) {
+    std::vector<long> order;
+    forEachInDrawOrder(
+        objects, [](const MapObject& object) -> const MapObject& { return object; },
+        [&order, &objects](const MapObject& object) { order.push_back(&object - objects.data()); });
+    return order;
+}
+
+} // namespace
+
 TEST_CASE("Flat objects draw under standing ones whatever the map-file order", "[rendering][visibility]") {
     // fallout2-ce _obj_render_pre_roof draws every OBJECT_FLAT object before any standing one. An
     // exit grid listed after a wall must still be covered by it, as in the shipped caves; drawing
     // in file order put a generated cave's exits on top of the rock in front of them.
     const auto flat = static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_FLAT);
-    std::vector<MapObject> objects(5);
-    objects[0].position = 0; // wall
-    objects[1].position = 1; // exit grid, after the wall
+    std::vector<MapObject> objects(4);
+    objects[0].position = 500; // wall
+    objects[1].position = 500; // exit grid on the wall's hex, after it
     objects[1].flags = flat;
-    objects[2].position = 2; // scenery
-    objects[3].position = 3; // second flat marker
-    objects[3].flags = flat | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK);
-    objects[4].position = 4; // wall
+    objects[2].position = 900; // exit grid
+    objects[2].flags = flat | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK);
+    objects[3].position = 100; // wall
 
-    std::vector<int> order;
-    forEachInDrawOrder(
-        objects, [](const MapObject& object) -> const MapObject& { return object; },
-        [&order](const MapObject& object) { order.push_back(object.position); });
+    CHECK(drawOrder(objects) == std::vector<long>{ 1, 2, 3, 0 });
+}
 
-    CHECK(order == std::vector<int>{ 1, 3, 0, 2, 4 });
+TEST_CASE("Standing objects draw by ascending hex, a hex's objects in list order", "[rendering][visibility]") {
+    // Each engine pass walks hexes in _orderTable order, sorted by tile number, and a hex's object
+    // list keeps insertion order (_obj_insert). A rock a script appends after the wall in front of
+    // it must still be drawn under that wall.
+    std::vector<MapObject> objects(5);
+    objects[0].position = 10200; // wall in front (later hex row)
+    objects[1].position = 10000; // rock behind it, appended after the wall
+    objects[2].position = 10200; // second object on the wall's hex
+    objects[3].position = 10001;
+    objects[4].position = 10000; // second object on the rock's hex
+
+    CHECK(drawOrder(objects) == std::vector<long>{ 1, 4, 3, 0, 2 });
 }
