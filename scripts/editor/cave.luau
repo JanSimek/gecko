@@ -503,11 +503,16 @@ end
 -- (field == 1) is a smooth organic curve — no ovals, no stair-steps. A low-frequency noise term warps
 -- the field so the edge erodes like rock. The floor is the field sampled per tile; the wall run later
 -- samples the SAME field at HEX resolution, so the walls trace the true curve instead of the blocky
--- tile edge. Distances are SCREEN distances (the iso projection) so chambers read round on screen, not
--- squished. Hex coords are 2x the tile grid; the field lives in hex space.
+-- tile edge. Distances run along the hex grid's screen axes (see gridDist2), so chambers are rounded
+-- parallelograms whose rims the wall art can follow. Hex coords are 2x the tile grid; the field lives in
+-- hex space.
 local carved = {} -- [tileIndex] = true
 local chambers = {}
 local MARGIN = 22
+-- Field radii (screen px): chambers are rooms a few hexes across and corridors narrower, as in the
+-- shipped caves' corridor networks.
+local CHAMBER_RADIUS = { tonumber(args.chamberMin) or 150, tonumber(args.chamberMax) or 230 }
+local CORRIDOR_RADIUS = tonumber(args.corridor) or 110
 
 local function clampCoord(v)
     return math.max(MARGIN, math.min(TILE_W - 1 - MARGIN, v))
@@ -520,22 +525,49 @@ end
 
 -- Chamber centres random-walk from the middle so they cluster into one cavern system. Each becomes a
 -- point source (a zero-length segment); consecutive chambers are joined by a corridor line source so
--- the blobs merge into one connected cavern.
+-- the blobs merge into one connected cavern. Each step runs along ONE grid axis, the way the shipped
+-- caves are networks of straight corridors along the two iso directions: a diagonal step offsets the
+-- next chamber on both axes, and the union's side becomes a staircase of corners no wall art follows.
 local cx, cy = 50, 50
 local sources = {} -- {ac, ar, bc, br, num}; num = screen-radius^2, field term = num / screenDist^2
 for _ = 1, CHAMBERS do
     table.insert(chambers, { x = cx, y = cy })
-    local rad = api:rngInt(230, 330)
+    local rad = api:rngInt(CHAMBER_RADIUS[1], CHAMBER_RADIUS[2])
     table.insert(sources, { ac = 2 * cx, ar = 2 * cy, bc = 2 * cx, br = 2 * cy, num = rad * rad })
-    cx = clampCoord(cx + api:rngInt(-14, 14))
-    cy = clampCoord(cy + api:rngInt(-14, 14))
+    local step = api:rngInt(9, 16) * (api:rng() < 0.5 and -1 or 1)
+    if api:rng() < 0.5 then
+        cx = clampCoord(cx + step)
+    else
+        cy = clampCoord(cy + step)
+    end
 end
 for i = 2, #chambers do
     local a, b = chambers[i - 1], chambers[i]
-    table.insert(sources, { ac = 2 * a.x, ar = 2 * a.y, bc = 2 * b.x, br = 2 * b.y, num = 150 * 150 })
+    table.insert(sources, { ac = 2 * a.x, ar = 2 * a.y, bc = 2 * b.x, br = 2 * b.y, num = CORRIDOR_RADIUS * CORRIDOR_RADIUS })
 end
 
--- Squared screen distance from a hex-space point to a hex-space segment (a point source is a=b).
+-- The distance a source's field falls off with, measured along the hex grid's two screen axes rather
+-- than round on screen. The wall art only follows the grid: shipped panels climb at most ~0.5px per px
+-- going right (almost all 0.25, the column axis) and fall ~0.75px per px (the row axis), so the shipped
+-- caves run their rims along those two directions. A round chamber's upper-left climbs as steeply as
+-- vertical, where no panel fits and the rim breaks into a staircase. A rounded square in grid-axis
+-- coordinates (superellipse, exponent GRID_NORM) gives rounded parallelograms whose edges follow the
+-- two axes; 2 would be the old round blobs.
+local GRID_NORM = tonumber(args.gridNorm) or 4
+local AXIS_C = { -24, 6 } -- screen vector of one step along the hex column axis
+local AXIS_R = { 16, 12 } -- ... and along the row axis
+local AXIS_C_LEN = math.sqrt(AXIS_C[1] ^ 2 + AXIS_C[2] ^ 2)
+local AXIS_R_LEN = math.sqrt(AXIS_R[1] ^ 2 + AXIS_R[2] ^ 2)
+local AXIS_DET = AXIS_C[1] * AXIS_R[2] - AXIS_C[2] * AXIS_R[1]
+local function gridDist2(ex, ey)
+    -- ex, ey = u * AXIS_C + v * AXIS_R; measure u and v in pixels along their axes.
+    local u = (ex * AXIS_R[2] - ey * AXIS_R[1]) / AXIS_DET * AXIS_C_LEN
+    local v = (ey * AXIS_C[1] - ex * AXIS_C[2]) / AXIS_DET * AXIS_R_LEN
+    local d = (math.abs(u) ^ GRID_NORM + math.abs(v) ^ GRID_NORM) ^ (1 / GRID_NORM)
+    return d * d
+end
+
+-- Squared distance (see gridDist2) from a hex-space point to a hex-space segment (a point source is a=b).
 local function segDist2(pc, pr, s)
     local px, py = hexS(pc, pr)
     local ax, ay = hexS(s.ac, s.ar)
@@ -548,7 +580,7 @@ local function segDist2(pc, pr, s)
         tt = math.max(0.0, math.min(1.0, tt))
     end
     local ex, ey = px - (ax + tt * dx), py - (ay + tt * dy)
-    return ex * ex + ey * ey
+    return gridDist2(ex, ey)
 end
 
 -- The field at a hex-space point, warped by low-frequency noise so the isocontour erodes organically.
