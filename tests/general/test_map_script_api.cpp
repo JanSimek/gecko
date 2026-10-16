@@ -835,6 +835,58 @@ TEST_CASE("MapScriptApi quiltObjects transplants the reference objects on copied
     std::filesystem::remove_all(root, ec);
 }
 
+TEST_CASE("MapScriptApi copyObjects copies a reference elevation's objects onto the same hexes", "[scripting]") {
+    // A reference with misc exit-grid markers (MISC needs no proto to author or copy headlessly).
+    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_copy_obj"; // NOSONAR: throwaway test dir
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "maps");
+    uint32_t markerPid = 0;
+    std::vector<int> markerHexes;
+    {
+        ControllerFixture author;
+        MapScriptApi authorApi(author.resources, author.hexgrid, author.controller, *author.map, ELEV,
+            /*buildSprites*/ false);
+        markerHexes = { authorApi.hexIndex(8, 8), authorApi.hexIndex(12, 10), authorApi.hexIndex(31, 57) };
+        for (const int hex : markerHexes) {
+            REQUIRE(authorApi.placeExitGrid(hex, -2, 0, 0, 0));
+        }
+        markerPid = author.mapFile().map_objects.at(ELEV).front()->pro_pid;
+        MapWriter writer{ [](int32_t) -> Pro* { return nullptr; } };
+        writer.openFile(root / "maps/ref.map");
+        REQUIRE(writer.write(author.map->getMapFile()));
+    }
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root);
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, /*buildSprites*/ false);
+
+    SECTION("every object lands on its own hex, proto and art verbatim") {
+        CHECK(api.copyObjects("maps/ref.map", ELEV, "misc", {}) == 3);
+        std::vector<int> copied;
+        for (const auto& object : fx.mapFile().map_objects.at(ELEV)) {
+            CHECK(object->pro_pid == markerPid);
+            copied.push_back(object->position);
+        }
+        std::ranges::sort(copied);
+        std::ranges::sort(markerHexes);
+        CHECK(copied == markerHexes);
+    }
+
+    SECTION("excludePids, another type or an empty elevation copy nothing") {
+        CHECK(api.copyObjects("maps/ref.map", ELEV, "misc", { static_cast<int>(markerPid) }) == 0);
+        CHECK(api.copyObjects("maps/ref.map", ELEV, "wall", {}) == 0);
+        CHECK(api.copyObjects("maps/ref.map", ELEV + 1, "misc", {}) == 0);
+    }
+
+    SECTION("genuine failures raise") {
+        CHECK_THROWS(api.copyObjects("maps/ref.map", ELEV, "gizmo", {})); // unknown type name
+        CHECK_THROWS(api.copyObjects("maps/nope.map", ELEV, "misc", {})); // unreadable map
+    }
+
+    std::filesystem::remove_all(root, ec);
+}
+
 TEST_CASE("MapScriptApi quiltSource learns only from the reference sub-rectangle", "[scripting][quilt]") {
     // Two vocabularies side by side: left half checkerboard 271/272, right half 273/274.
     const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_quilt_src"; // NOSONAR: throwaway test dir
@@ -905,6 +957,7 @@ TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[s
         CHECK_THROWS(api.mapObjectsAt("maps/desert1.map", 0, "wall"));
         CHECK_THROWS(api.protoBlocks(0x02000066));
         CHECK_THROWS(api.protoFlat(0x02000066));
+        CHECK_THROWS(api.protoSceneryType(0x02000066));
         CHECK_THROWS(api.protoFid(0x02000066));
         CHECK_THROWS(api.protoArtFrames(0x02000066));
         CHECK_THROWS(api.artRect(0x02000066, 20100));

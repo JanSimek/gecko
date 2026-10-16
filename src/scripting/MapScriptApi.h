@@ -132,6 +132,11 @@ public:
     /// objects, as opposed to a wall face. Lets a generator tell boundary walls from the flat rock
     /// texture that carpets solid ground. Raises when the proto can't be loaded (like protoBlocks).
     bool protoFlat(int pid) const;
+    /// The scenery proto's engine subtype (SCENERY_TYPE_* without the prefix): "Door", "Stairs",
+    /// "Elevator", "LadderUp", "LadderDown" or "Generic". Lets a generator copying a shipped map
+    /// leave out the doors, ladders and elevators that lead to places the copy doesn't have. Raises
+    /// when the proto can't be loaded or isn't scenery.
+    std::string protoSceneryType(int pid) const;
     /// The proto's art FID (what placeProto resolves and stores) — lets a generator identify a
     /// proto's art via resolve_fid. Raises when the proto can't be loaded (like protoBlocks).
     int protoFid(int pid) const;
@@ -303,6 +308,17 @@ public:
     /// markers). Cells the repair ladder re-drew bring nothing (their floor no longer matches the
     /// source). Returns objects placed; raises on an unknown type or when no quilt has run.
     int quiltObjects(const std::string& typeName, const std::vector<int>& excludePids);
+    /// The hexes of the bound elevation that block movement, by the engine's instance-flag rule
+    /// (a critter/scenery/wall neither hidden nor no-block; doors count as passable) — the same
+    /// mask `map reachability` floods, over the objects placed so far (a fill's planned objects
+    /// included). Sorted. Lets a generator put the player start and exits where they can be walked.
+    std::vector<int> blockedHexes() const;
+    /// Copy a reference elevation's objects of one type onto the same hexes of the bound map —
+    /// the whole object record (art, direction, instance flags, light, pixel offset), untranslated
+    /// and for the whole elevation: how a generator reuses a shipped layout's hand-placed walls
+    /// exactly. Scripts and inventories stay behind. `excludePids` skips protos the copy must
+    /// not carry over. Returns objects placed; raises on an unknown type or an unreadable map.
+    int copyObjects(const std::string& mapPath, int refElevation, const std::string& typeName, const std::vector<int>& excludePids);
     /// The previous quiltFloor* run's fidelity stats, flattened as (painted, blocks,
     /// perfectBlocks, mismatchedCells, repairedCells, unresolvedSeams). Repaired cells are normal
     /// in small numbers; unresolved seams are borders the reference never showed. Script-visible

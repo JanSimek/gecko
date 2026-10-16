@@ -17,6 +17,7 @@
 #include "editor/Hex.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
+#include "editor/Reachability.h"
 #include "scripting/EditArea.h"
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
@@ -386,6 +387,40 @@ bool MapScriptApi::protoFlat(int pid) const {
             static_cast<uint32_t>(pid)));
     }
     return Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
+}
+
+std::string MapScriptApi::protoSceneryType(int pid) const {
+    const Pro* pro = nullptr;
+    try {
+        pro = resourcesRef().loadPro(static_cast<uint32_t>(pid));
+    } catch (const std::exception&) {
+        pro = nullptr;
+    }
+    if (pro == nullptr) {
+        throw ScriptError(std::format(
+            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
+            static_cast<uint32_t>(pid)));
+    }
+    if (ProtoId(static_cast<uint32_t>(pid)).objectType() != ObjectType::Scenery) {
+        throw ScriptError(std::format("protoSceneryType: proto 0x{:08x} is not scenery", static_cast<uint32_t>(pid)));
+    }
+    switch (static_cast<SceneryType>(pro->objectSubtypeId())) {
+        case SceneryType::Door:
+            return "Door";
+        case SceneryType::Stairs:
+            return "Stairs";
+        case SceneryType::Elevator:
+            return "Elevator";
+        case SceneryType::LadderUp:
+            return "LadderUp";
+        case SceneryType::LadderDown:
+            return "LadderDown";
+        case SceneryType::Generic:
+            return "Generic";
+        default:
+            throw ScriptError(std::format("protoSceneryType: proto 0x{:08x} has unknown scenery type {}",
+                static_cast<uint32_t>(pid), pro->objectSubtypeId()));
+    }
 }
 
 std::vector<std::string> MapScriptApi::listMaps() const {
@@ -976,6 +1011,63 @@ int MapScriptApi::quiltObjects(const std::string& typeName, const std::vector<in
             if (hex >= 0 && placeObject(source->pro_pid, source->frm_pid, hex, source->direction)) {
                 ++placed;
             }
+        }
+    }
+    return placed;
+}
+
+std::vector<int> MapScriptApi::blockedHexes() const {
+    std::vector<std::shared_ptr<MapObject>> objects;
+    const auto& objectsByElevation = mapRef().getMapFile().map_objects;
+    if (const auto it = objectsByElevation.find(_elevation); it != objectsByElevation.end()) {
+        objects = it->second;
+    }
+    if (_planSink != nullptr) {
+        for (const auto& entry : _planSink->objects) {
+            if (entry.mapObject && static_cast<int>(entry.mapObject->elevation) == _elevation) {
+                objects.push_back(entry.mapObject);
+            }
+        }
+    }
+    const std::vector<char> mask = reachability::blockedMask(resourcesRef(), objects);
+    std::vector<int> hexes;
+    for (int hex = 0; hex < static_cast<int>(mask.size()); ++hex) {
+        if (mask[hex] != 0) {
+            hexes.push_back(hex);
+        }
+    }
+    return hexes;
+}
+
+int MapScriptApi::copyObjects(const std::string& mapPath, int refElevation, const std::string& typeName,
+    const std::vector<int>& excludePids) {
+    const ObjectType wanted = objectTypeFromName(typeName); // throws on an unknown type
+    const Map& reference = referenceMap(mapPath);           // throws if unreadable
+    const auto& objectsByElevation = reference.getMapFile().map_objects;
+    const auto it = objectsByElevation.find(refElevation);
+    if (it == objectsByElevation.end()) {
+        return 0; // the reference elevation holds no objects — a valid empty copy
+    }
+    int placed = 0;
+    for (const auto& object : it->second) {
+        if (!object || object->position < 0 || ProtoId(object->pro_pid).objectType() != wanted) {
+            continue;
+        }
+        if (std::ranges::find(excludePids, static_cast<int>(object->pro_pid)) != excludePids.end()) {
+            continue;
+        }
+        // The whole record — instance flags (flat, no-block, hidden), light, pixel offset, frame —
+        // not just pid/art/direction: the engine reads those from the map, not the proto. What
+        // ties it to the source map stays behind: its script and its inventory.
+        std::shared_ptr<MapObject> copy = object->cloneDeep();
+        copy->elevation = static_cast<uint32_t>(_elevation);
+        copy->script_id = -1;
+        copy->map_scripts_pid = -1;
+        copy->critter_index = -1;
+        copy->inventory.clear();
+        copy->objects_in_inventory = 0;
+        if (registerObject(copy, copy->position, copy->frm_pid, copy->direction)) {
+            ++placed;
         }
     }
     return placed;

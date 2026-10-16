@@ -86,6 +86,13 @@ Expand the `scripts/README.md` table as new generators land.
 Footprint-aware, iso-diamond-masked placement for the curated scripts/tools; extract recurring
 multi-object clusters as **prefabs** (place a rock formation as one unit).
 
+- **Script-placed objects lose their proto flags** — `MapScriptApi::placeObject`/`placeProto` write
+  instance `flags = 0`, but the engine reads an object's flags from the map, not its proto: a placed
+  `OBJECT_FLAT` fill is drawn standing, a `NO_BLOCK` weed blocks movement, and transparency,
+  light-through and shoot-through are lost.
+  Fix: seed new objects' flags (and light radius/intensity) from the proto, as the
+  engine's `objectCreateWithFrmIdProtoId` (obj_new) does. (`copyObjects` clones the shipped record.)
+
 ## Smarter exit placement
 
 Exits should sit where the map actually *leads out*, not on a blind rectangle. The primitive
