@@ -41,9 +41,13 @@
 
 ## Cave rim quality
 
-`cave.luau` builds the cavern from a metaball field and lays the rim as **panel chains**: the wall
-art is a panorama cut into 16/32px strips, so strips are chained left to right with the successor the
-shipped rims put on the next pixel (`api:artRect` gives the engine's screen rect). Measured against
+`cave.luau` builds the cavern from rooms and straight corridors on a 3-tile lattice, so every edge
+runs along one of the two iso axes (the only directions the wall art follows; rounded or noisy
+edges broke into a staircase of one-tile jogs no strip spans), and lays the rim as **panel
+chains**: the wall art is a panorama cut into 16/32px strips, so strips are chained left to right
+with the successor the shipped rims put on the next pixel (`api:artRect` gives the engine's screen
+rect), opened and closed with the shipped run caps (ca063/ca064 rock tops, ca072/ca036 and
+ca032/ca071 faces). Measured against
 the shipped caves: ~93% of strips abut exactly (shipped 93%), ~60% continue the same panorama
 (shipped 61%; the old per-hex picker managed 6%). Inspect at 1:1 with `map render --crop-hex H
 --crop-extent E --max-dim 2E`.
@@ -53,16 +57,13 @@ right but breaks the texture at every strip); outward-normal compass bin; edge-c
 
 **Known issues:**
 
-- **Near-edge lip** — the near (down-screen) rim shows the floor tiles' stair-step edge in places;
-  shipped maps layer flat `Wall`/`Wall s.t.` fills over the tops of rock on the near edges (currently
-  excluded by `isFlatWall`).
-- **Staircase where the edge leaves the grid axes** — wherever the carved edge runs off both iso
-  axes (rounded chamber corners, the noise wiggle), the tile edge jogs one tile at a time; no strip
-  spans a jog, so a chain ends there and the next starts a tile away, showing a slab end (a vertical
-  rock edge, worst on the near side). Shipped rims cap their ends with run-end/run-start pieces
-  (ca071/ca032, ca064/ca036/ca072); the generator only uses them when a successor happens to be one.
-  Tried: `--arg rough=0` + near-rectangular rooms (`gridNorm` 40) joined by max instead of sum looks
-  like the shipped corridor networks, but left a far wall unlaid and boxy slabs at every corner.
+- **Exposed strip ends at corners** — a strip whose straight cut edge shows, measured as edges no
+  other strip covers over their lower half (faces unless a run cap; rock tops only against
+  walkable floor): ~3.4 per 100 strips, shipped cave1..4 ~1.3, #173's rounded rooms ~5.3. Most
+  are near-side steps, where a short face run or a rock top's edge stands over the floor. Shipped
+  rims hide them by running the near lip's rock tops straight past the corner, over the face end.
+  *Tried, no gain:* refusing rock tops that overlap a face (fragments the lip), extending rock-top
+  runs onto the rock past their end, a wider band claim, two cross-boundary neighbours per rim hex.
 - **Dead-straight bottom edge** — the shipped reference caves continue off the map edge, so
   their boundary there is a straight map-edge line the model mimics. Fix: detect and exclude
   off-map-edge boundary when learning from references, and don't carve generated chambers up

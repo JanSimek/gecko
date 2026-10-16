@@ -2,7 +2,8 @@
 --
 -- Builds a real Fallout 2 cavern the way maps/cave1..4.map elevation 1 are built:
 --   * the whole area filled with the reference's dark solid-rock tile pattern,
---   * a walkable cavern carved through it, painted with the reference's pervasive cav* FIELD tiles
+--   * a walkable cavern of rooms and straight corridors along the two iso axes (the only directions
+--     the wall art runs) carved through it, painted with the reference's pervasive cav* FIELD tiles
 --     (rare border/transition tiles like cav4013 and the entrance sand are kept out of the mix),
 --   * the floor/rock boundary lined with "Cave Wall" PANELS: the wall art is a rock panorama cut into
 --     16/32px strips, and the shipped rims stand them in order, each starting on the pixel after the
@@ -10,7 +11,8 @@
 --     with a piece for the spot's geometry (the rock-neighbour mask that pins the isometric
 --     orientation, so faces land on the up-screen rim and filled lips on the near edge) and grows
 --     with the strips the shipped rims put next to it, wherever one lands on the rim — so the
---     texture runs on across the seams the way the hand-made caves' does,
+--     texture runs on across the seams the way the hand-made caves' does — and opens and closes
+--     with the pieces the shipped rims draw as a run's ends,
 --   * invisible blocking hexes sealing the rock side so the player can't walk off the floor,
 --   * floor decoration (rocks, stalagmites, dirt, weeds) at the density the shipped caves have at
 --     each distance from the walls — rocks heaped at their foot, the open floor nearly clear —
@@ -21,7 +23,9 @@
 --   gecko-cli map generate --script scripts/editor/cave.luau --out cave.map \
 --       --arg seed=42 --data <master.dat> [--data <critter.dat>]
 --
--- Tunables: --arg chambers=N (default 5), --arg refs=maps/cave1.map,maps/cave2.map,...
+-- Tunables: --arg chambers=N (default 5), --arg bays=N (per chamber, default 1),
+-- --arg roomMin=/roomMax= (chamber half-size in 3-tile cells, default 1/2),
+-- --arg refs=maps/cave1.map,maps/cave2.map,...
 -- (the learning corpus, elevation 1), --arg exit=worldmap|none, --arg decor=<density scale: 1 = the references', default 0.5, 0 = none>.
 -- Batch with --count N.
 -- generate warns after writing if any exit grid is unreachable from the player start.
@@ -89,6 +93,13 @@ local wallPiecesAll = {} -- all pieces pooled: last resort
 -- pieces — every seam broke the texture.
 local successors = {} -- pid -> weighted { {pid=, w=}, ... }: the strips seen starting right after it
 local faceUses = {} -- pid -> how many faces the references stand -- bridges and starts skip rare art
+-- How many of those stand on the near side (rock down-screen): there the art is the rock's top seen
+-- over its lip, elsewhere a lit face.
+local nearUses = {}
+local topArt = {} -- pid -> true for rock-top art, decided after learning (see isTopArt)
+local function isTopArt(pid)
+    return topArt[pid] == true
+end
 -- A bridge or chain start picks by fit alone, so a rare oddity whose geometry happens to fit (ca078,
 -- a dark pillar the four references use twice) would win far more often than the mappers used it.
 -- Only art the references use this often is a candidate there; successors keep their learned odds.
@@ -255,6 +266,18 @@ do
         local faces = {}
         for hex, pid in pairs(faceAt) do
             faceUses[pid] = (faceUses[pid] or 0) + 1
+            -- Two rings out: the shipped floor edge is jagged, and one ring misreads a lip's corners.
+            local vy = 0
+            for _, n in ipairs(api:hexNeighbors(hex)) do
+                local d = api:hexDir(hex, n)
+                for _, m in ipairs(api:hexNeighbors(n)) do
+                    local dy = DIR_VEC[d][2] + DIR_VEC[api:hexDir(n, m)][2]
+                    vy += walkableHex(m) and -dy or dy
+                end
+            end
+            if vy > 0 then
+                nearUses[pid] = (nearUses[pid] or 0) + 1
+            end
             local face = { pid = pid, hex = hex, rect = api:artRect(pid, hex) }
             table.insert(faces, face)
             byLeft[face.rect[1]] = byLeft[face.rect[1]] or {}
@@ -393,6 +416,24 @@ do
         successors[pid] = list
     end
 
+    -- Rock-top art is what the references stand on the near side. A run's opening piece stands
+    -- where the rim turns, so its own spots say little: it takes the family of the strips it opens.
+    local function nearRate(pid)
+        return (nearUses[pid] or 0) / math.max(faceUses[pid] or 0, 1)
+    end
+    for pid in pairs(faceUses) do
+        local rate = nearRate(pid)
+        if joinRate(leftJoins, pid) < JOIN_RATE and (rightJoins[pid] or 0) > 0 then
+            local sum, n = 0, 0
+            for next, count in pairs(successorCounts[pid] or {}) do
+                sum += nearRate(next) * count
+                n += count
+            end
+            rate = sum / n
+        end
+        topArt[pid] = rate > 0.5
+    end
+
     for band, hexes in pairs(decorHexes) do
         local pieces, list = 0, {}
         for pid, count in pairs(decorCounts[band] or {}) do
@@ -492,138 +533,106 @@ local function pickFloor()
     return floorWeights[#floorWeights].id
 end
 
--- ============================ carve the cavern (metaball field) ===============
--- The cavern is a smooth SCALAR FIELD, not a tile stamp. Each chamber is a radial source and each
--- corridor a line source; where the summed field clears 1 is the walkable interior and its edge
--- (field == 1) is a smooth organic curve — no ovals, no stair-steps. A low-frequency noise term warps
--- the field so the edge erodes like rock. The floor is the field sampled per tile; the wall run later
--- samples the SAME field at HEX resolution, so the walls trace the true curve instead of the blocky
--- tile edge. Distances run along the hex grid's screen axes (see gridDist2), so chambers are rounded
--- parallelograms whose rims the wall art can follow. Hex coords are 2x the tile grid; the field lives in
--- hex space.
+-- ============================ carve the cavern (grid-axis rooms) ==============
+-- The cavern is a union of rectangles in TILE space: each chamber a room a dozen tiles across with a
+-- bay stepping its outline, consecutive chambers joined by a straight corridor. A tile
+-- rectangle's sides run along the two iso axes on screen, the only directions the wall art follows:
+-- shipped panels climb at most ~0.5px per px going right (the column axis) and fall ~0.75px per px
+-- (the row axis), and the shipped caves are networks of straight corridors along those two axes. An
+-- edge running any other way (a rounded corner, a noisy wiggle) is a staircase of one-tile jogs that
+-- no strip spans, so the rim broke into loose slabs there, faced with art the shipped caves only use
+-- on corner tips.
 local carved = {} -- [tileIndex] = true
-local chambers = {}
+local chambers = {} -- centres, in tiles
 local MARGIN = 22
--- Field radii (screen px): chambers are rooms a few hexes across and corridors narrower, as in the
--- shipped caves' corridor networks.
-local CHAMBER_RADIUS = { tonumber(args.chamberMin) or 150, tonumber(args.chamberMax) or 230 }
-local CORRIDOR_RADIUS = tonumber(args.corridor) or 110
+-- The layout is drawn on a lattice of CELL x CELL tiles, so every stretch of edge between two corners
+-- is at least a cell long: a one- or two-tile jog is two corners closer together than any wall run
+-- can turn, and showed as a dark notch or a loose slab.
+local CELL = 3
+local ROOM = { tonumber(args.roomMin) or 1, tonumber(args.roomMax) or 2 } -- chamber half-size, cells
+local BAYS = tonumber(args.bays) or 1 -- bays per chamber
+local CELL_MIN, CELL_MAX = MARGIN // CELL + 1, (TILE_W - MARGIN) // CELL - 1
 
-local function clampCoord(v)
-    return math.max(MARGIN, math.min(TILE_W - 1 - MARGIN, v))
+local cells = {} -- [cy * TILE_W + cx] = true
+local function cellKey(x, y)
+    return y * TILE_W + x
+end
+local function clampCell(v)
+    return math.max(CELL_MIN, math.min(CELL_MAX, v))
+end
+local function carveCells(x0, y0, x1, y1)
+    for y = clampCell(math.min(y0, y1)), clampCell(math.max(y0, y1)) do
+        for x = clampCell(math.min(x0, x1)), clampCell(math.max(x0, x1)) do
+            cells[cellKey(x, y)] = true
+        end
+    end
 end
 
--- Screen position (engine hex->pixel linear part) of a hex-space point.
-local function hexS(c, r)
-    return 16 * r - 24 * c, 12 * r + 6 * c
-end
-
--- Chamber centres random-walk from the middle so they cluster into one cavern system. Each becomes a
--- point source (a zero-length segment); consecutive chambers are joined by a corridor line source so
--- the blobs merge into one connected cavern. Each step runs along ONE grid axis, the way the shipped
--- caves are networks of straight corridors along the two iso directions: a diagonal step offsets the
--- next chamber on both axes, and the union's side becomes a staircase of corners no wall art follows.
-local cx, cy = 50, 50
-local sources = {} -- {ac, ar, bc, br, num}; num = screen-radius^2, field term = num / screenDist^2
+-- Chamber centres random-walk from the middle along ONE axis per step, so each corridor is straight.
+local cx, cy = 50 // CELL, 50 // CELL
+local centres = {}
 for _ = 1, CHAMBERS do
-    table.insert(chambers, { x = cx, y = cy })
-    local rad = api:rngInt(CHAMBER_RADIUS[1], CHAMBER_RADIUS[2])
-    table.insert(sources, { ac = 2 * cx, ar = 2 * cy, bc = 2 * cx, br = 2 * cy, num = rad * rad })
-    local step = api:rngInt(9, 16) * (api:rng() < 0.5 and -1 or 1)
+    table.insert(centres, { x = cx, y = cy })
+    local hx, hy = api:rngInt(ROOM[1], ROOM[2]), api:rngInt(ROOM[1], ROOM[2])
+    carveCells(cx - hx, cy - hy, cx + hx, cy + hy)
+    -- A bay: a smaller room pushed out across one side, so the outline steps.
+    for _ = 1, BAYS do
+        local bx, by = api:rngInt(0, 1), api:rngInt(0, 1)
+        local ox, oy = api:rngInt(-hx, hx), api:rngInt(-hy, hy)
+        local side = api:rng() < 0.5 and -1 or 1
+        if api:rng() < 0.5 then
+            ox = side * (hx + 1)
+        else
+            oy = side * (hy + 1)
+        end
+        carveCells(cx + ox - bx, cy + oy - by, cx + ox + bx, cy + oy + by)
+    end
+    local step = api:rngInt(3, 5) * (api:rng() < 0.5 and -1 or 1)
     if api:rng() < 0.5 then
-        cx = clampCoord(cx + step)
+        cx = clampCell(cx + step)
     else
-        cy = clampCoord(cy + step)
+        cy = clampCell(cy + step)
     end
 end
-for i = 2, #chambers do
-    local a, b = chambers[i - 1], chambers[i]
-    table.insert(sources, { ac = 2 * a.x, ar = 2 * a.y, bc = 2 * b.x, br = 2 * b.y, num = CORRIDOR_RADIUS * CORRIDOR_RADIUS })
+for i = 2, #centres do -- one-cell corridors between consecutive chambers
+    local a, b = centres[i - 1], centres[i]
+    carveCells(a.x, a.y, b.x, b.y)
 end
-
--- The distance a source's field falls off with, measured along the hex grid's two screen axes rather
--- than round on screen. The wall art only follows the grid: shipped panels climb at most ~0.5px per px
--- going right (almost all 0.25, the column axis) and fall ~0.75px per px (the row axis), so the shipped
--- caves run their rims along those two directions. A round chamber's upper-left climbs as steeply as
--- vertical, where no panel fits and the rim breaks into a staircase. A rounded square in grid-axis
--- coordinates (superellipse, exponent GRID_NORM) gives rounded parallelograms whose edges follow the
--- two axes; 2 would be the old round blobs.
-local GRID_NORM = tonumber(args.gridNorm) or 4
-local AXIS_C = { -24, 6 } -- screen vector of one step along the hex column axis
-local AXIS_R = { 16, 12 } -- ... and along the row axis
-local AXIS_C_LEN = math.sqrt(AXIS_C[1] ^ 2 + AXIS_C[2] ^ 2)
-local AXIS_R_LEN = math.sqrt(AXIS_R[1] ^ 2 + AXIS_R[2] ^ 2)
-local AXIS_DET = AXIS_C[1] * AXIS_R[2] - AXIS_C[2] * AXIS_R[1]
-local function gridDist2(ex, ey)
-    -- ex, ey = u * AXIS_C + v * AXIS_R; measure u and v in pixels along their axes.
-    local u = (ex * AXIS_R[2] - ey * AXIS_R[1]) / AXIS_DET * AXIS_C_LEN
-    local v = (ey * AXIS_C[1] - ex * AXIS_C[2]) / AXIS_DET * AXIS_R_LEN
-    local d = (math.abs(u) ^ GRID_NORM + math.abs(v) ^ GRID_NORM) ^ (1 / GRID_NORM)
-    return d * d
-end
-
--- Squared distance (see gridDist2) from a hex-space point to a hex-space segment (a point source is a=b).
-local function segDist2(pc, pr, s)
-    local px, py = hexS(pc, pr)
-    local ax, ay = hexS(s.ac, s.ar)
-    local bx, by = hexS(s.bc, s.br)
-    local dx, dy = bx - ax, by - ay
-    local len2 = dx * dx + dy * dy
-    local tt = 0.0
-    if len2 > 0.0 then
-        tt = ((px - ax) * dx + (py - ay) * dy) / len2
-        tt = math.max(0.0, math.min(1.0, tt))
-    end
-    local ex, ey = px - (ax + tt * dx), py - (ay + tt * dy)
-    return gridDist2(ex, ey)
-end
-
--- The field at a hex-space point, warped by low-frequency noise so the isocontour erodes organically
--- (--arg rough=0 for straight grid-axis sides).
-local fnx, fny = api:rng() * 1000.0, api:rng() * 1000.0
-local ROUGH, NF = tonumber(args.rough) or 0.28, 0.05
-local function field(c, r)
-    local f = 0.0
-    for _, s in ipairs(sources) do
-        local d2 = segDist2(c, r, s)
-        f += s.num / (d2 > 1.0 and d2 or 1.0)
-    end
-    return f * (1.0 + ROUGH * (api:noise2d(c * NF + fnx, r * NF + fny) - 0.5) * 2.0)
-end
-
--- Floor: a tile is walkable where the field clears 1 at the tile's centre (hex coords 2x the tile
--- grid). MARGIN keeps the cavern off the map edge.
-for row = MARGIN, TILE_H - 1 - MARGIN do
-    for col = MARGIN, TILE_W - 1 - MARGIN do
-        if field(2 * col + 1, 2 * row + 1) >= 1.0 then
-            local t = api:tileIndex(col, row)
-            if t >= 0 then
-                carved[t] = true
+-- A one-cell sliver of rock between two stretches of floor reads as a box standing in the cavern,
+-- faced on one side and topped on the other; the shipped caves keep their rock thick. Open it.
+local opened = true
+while opened do
+    opened = false
+    for y = CELL_MIN, CELL_MAX do
+        for x = CELL_MIN, CELL_MAX do
+            local k = cellKey(x, y)
+            if not cells[k] and ((cells[cellKey(x - 1, y)] and cells[cellKey(x + 1, y)]) or (cells[cellKey(x, y - 1)] and cells[cellKey(x, y + 1)])) then
+                cells[k] = true
+                opened = true
             end
         end
     end
 end
-
--- Keep only the floor connected to the first chamber, so a noise-spawned outlier blob cannot leave a
--- detached pocket (or strand an exit in unreachable rock).
-do
-    local startT = api:tileIndex(chambers[1].x, chambers[1].y)
-    if carved[startT] then
-        local keep = { [startT] = true }
-        local stack = { startT }
-        while #stack > 0 do
-            local t = table.remove(stack)
-            local col, row = t % TILE_W, t // TILE_W
-            for _, dxy in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
-                local nt = api:tileIndex(col + dxy[1], row + dxy[2])
-                if nt >= 0 and carved[nt] and not keep[nt] then
-                    keep[nt] = true
-                    table.insert(stack, nt)
-                end
-            end
+-- Two cells meeting only at a corner pinch the floor to a point; open one of the other two.
+for y = CELL_MIN, CELL_MAX - 1 do
+    for x = CELL_MIN, CELL_MAX - 1 do
+        local a, b = cells[cellKey(x, y)], cells[cellKey(x + 1, y + 1)]
+        local c, d = cells[cellKey(x + 1, y)], cells[cellKey(x, y + 1)]
+        if (a and b and not c and not d) or (c and d and not a and not b) then
+            cells[cellKey(x + 1, y)] = true
         end
-        carved = keep
     end
+end
+for key in pairs(cells) do
+    local x, y = key % TILE_W, key // TILE_W
+    for row = y * CELL, y * CELL + CELL - 1 do
+        for col = x * CELL, x * CELL + CELL - 1 do
+            carved[api:tileIndex(col, row)] = true
+        end
+    end
+end
+for _, c in ipairs(centres) do
+    table.insert(chambers, { x = c.x * CELL + 1, y = c.y * CELL + 1 })
 end
 
 -- Paint: rock pattern everywhere, then the weighted walkable mix over the carved set.
@@ -641,13 +650,8 @@ for _ in pairs(carved) do
 end
 print(string.format("Carved %d chambers (%d walkable tiles) into the rock.", #chambers, carvedCount))
 
--- ============================ wall band (field isocontour) ====================
--- The rim is every hex that STRADDLES the field's isocontour — a hex whose inside/outside flips
--- against any neighbour — so the band is a smooth ~2-cell ribbon tracing the TRUE curve at hex
--- resolution: dense, gap-free, and unquantised by the tile grid. Each piece is classed by the field
--- GRADIENT there: the outward normal is -grad(field) (pointing down the field, into the rock), mapped
--- through the hex->pixel Jacobian to a screen vector and binned to a compass class. Because the field
--- is smooth the class turns only as the curve turns — no per-hex flicker, no stair-steps.
+-- ============================ wall band ======================================
+-- The rim is the 2-hex band straddling the floor's edge, where walls stand.
 local hexTileCache = {}
 local function carvedHex(hex)
     local t = hexTileCache[hex]
@@ -670,19 +674,25 @@ local function compassFromVec(nx, ny)
     return COMPASS[math.floor((ang + 22.5) / 45) % 8 + 1]
 end
 
--- Outward screen normal at a hex = -grad(field) mapped through the hex->pixel Jacobian (columns
--- d/dcol = (-24, 6), d/drow = (16, 12)). Central differences a couple of hexes wide ride over the
--- noise wiggle so the class follows the chamber curve, not local grain.
-local GH = 2.0
+-- Outward screen normal at a hex: the way the rock lies around it, summed over two rings of
+-- neighbours so it follows the side of the room rather than one hex's corner.
 local function outwardNormal(hex)
-    local c, r = api:hexCol(hex), api:hexRow(hex)
-    local fc = field(c + GH, r) - field(c - GH, r)
-    local fr = field(c, r + GH) - field(c, r - GH)
-    return 24 * fc - 16 * fr, -6 * fc - 12 * fr
+    local nx, ny = 0, 0
+    for _, n in ipairs(api:hexNeighbors(hex)) do
+        local d = DIR_VEC[api:hexDir(hex, n)]
+        for _, m in ipairs(api:hexNeighbors(n)) do
+            if not carvedHex(m) then
+                local e = DIR_VEC[api:hexDir(n, m)]
+                nx += d[1] + e[1]
+                ny += d[2] + e[2]
+            end
+        end
+    end
+    return nx, ny
 end
 
 -- Candidate hexes: everything on the carved tiles and their immediate rock neighbours — the strip the
--- isocontour runs through — collected into a sorted list so placement order (hence the saved map) is
+-- edge runs through — collected into a sorted list so placement order (hence the saved map) is
 -- deterministic.
 local candSet = {}
 for t in pairs(carved) do
@@ -707,10 +717,9 @@ for hex in pairs(candSet) do
 end
 table.sort(candidates)
 
--- The rim: the 2-cell band straddling the floor's edge — every hex whose floor tile is carved while a
--- neighbour's isn't, or the other way round. It follows the carved TILES, not the smooth field: walls
--- laid along the field's curve stood off the tile edge in places, leaving a strip of rock floor (the
--- cav4009 fill) between the wall's foot and the floor.
+-- The rim: every hex whose floor tile is carved while a neighbour's isn't, or the other way round.
+-- It follows the carved TILES: walls laid off the tile edge left a strip of rock floor (the cav4009
+-- fill) between the wall's foot and the floor.
 local rimSet = {}
 local rim = {}
 for _, hex in ipairs(candidates) do
@@ -782,6 +791,12 @@ table.sort(order, function(a, b)
     end
     return a < b
 end)
+
+-- The learned palette for a rim hex's geometry, most specific key first.
+local function paletteAt(hex)
+    local rm, geom, dirpair = geomKeyAt(hex)
+    return geomRock[rm] or geomModel[geom] or geomDirpair[dirpair] or wallListFor(compassFromVec(outwardNormal(hex)))
+end
 
 local function place(pid, hex, chain)
     if not api:placeProto(pid, hex, 0) then
@@ -908,8 +923,7 @@ local function bridge(pid, hex, chain, recent)
     local fits = {} -- { pid=, hex=, dy=, w= }: common pieces starting on the next pixel, bases <= 16px apart
     for _, n in ipairs(nearby) do
         if placeable(n, chain) then
-            local rm, geom, dirpair = geomKeyAt(n)
-            for _, e in ipairs(geomRock[rm] or geomModel[geom] or geomDirpair[dirpair] or wallListFor(compassFromVec(outwardNormal(n)))) do
+            for _, e in ipairs(paletteAt(n)) do
                 if midRun(e.pid) then
                     local r = api:artRect(e.pid, n)
                     local dy = math.abs(r[4] - rect[4])
@@ -933,8 +947,7 @@ end
 -- starts on the pixel after it (closest base), so a new chain continues the rim instead of opening a
 -- slit; otherwise a piece for the spot's geometry.
 local function startPiece(start)
-    local rm, geom, dirpair = geomKeyAt(start)
-    local palette = geomRock[rm] or geomModel[geom] or geomDirpair[dirpair] or wallListFor(compassFromVec(outwardNormal(start)))
+    local palette = paletteAt(start)
     local seen, lefts = { [start] = true }, {}
     for _, n in ipairs(api:hexNeighbors(start)) do
         for _, m in ipairs({ n, table.unpack(api:hexNeighbors(n)) }) do
@@ -967,7 +980,7 @@ local function startPiece(start)
     end
     local choice = closeFit(fits)
     if choice ~= nil then
-        return choice.pid
+        return choice.pid, true
     end
     -- An opening piece butting against a strip on its left would show its start edge mid-wall.
     local clear = {}
@@ -983,17 +996,85 @@ local function startPiece(start)
             table.insert(clear, e)
         end
     end
-    return pickWall(#clear > 0 and clear or #opening > 0 and opening or palette)
+    return pickWall(#clear > 0 and clear or #opening > 0 and opening or palette), false
 end
 
-local bridges = 0
+-- The cap candidates: common pieces the shipped rims use only to open or close a run.
+local capPieces = {}
+for pid, uses in pairs(faceUses) do
+    if uses >= MIN_BRIDGE_USES and (isRunEnd(pid) or isRunStart(pid)) then
+        table.insert(capPieces, { pid = pid, w = uses })
+    end
+end
+table.sort(capPieces, function(a, b)
+    return a.pid < b.pid
+end)
+
+-- A free spot for a run's opening or closing strip: on the rim band, or for a rock top's rounded end
+-- (ca063, ca064) on the rock beyond it, where it blends in. A face cap out there stood as a post.
+local function capSpot(hex, chain, top)
+    return hex >= 0 and not wallAt[hex] and (claimedBy[hex] == nil or claimedBy[hex] == chain) and (rimSet[hex] or top and not carvedHex(hex))
+end
+
+-- Run caps: the shipped rims close about half their runs with a piece drawn as an end (ca063, ca032,
+-- ca071: never a strip on their right) and open them with one drawn as a start (ca063, ca064,
+-- ca072, ca036), and use those pieces nowhere else. A run that stops on a mid-run strip shows that
+-- strip's straight cut edge instead. A cap goes on a nearby band or rock hex where its art meets
+-- the run's end strip on the next pixel or overlaps it a little, the same art family (rock top or
+-- face), base closest.
+local function capRun(pid, hex, chain, closing)
+    local rect = api:artRect(pid, hex)
+    local top = isTopArt(pid)
+    local seen, nearby, frontier = { [hex] = true }, {}, { hex }
+    for _ = 1, BRIDGE_RINGS do
+        local nextFrontier = {}
+        for _, f in ipairs(frontier) do
+            for _, m in ipairs(api:hexNeighbors(f)) do
+                if not seen[m] then
+                    seen[m] = true
+                    table.insert(nearby, m)
+                    table.insert(nextFrontier, m)
+                end
+            end
+        end
+        frontier = nextFrontier
+    end
+    table.sort(nearby)
+    local fits = {}
+    for _, n in ipairs(nearby) do
+        if capSpot(n, chain, top) then
+            for _, e in ipairs(capPieces) do
+                if (closing and isRunEnd(e.pid) or not closing and isRunStart(e.pid)) and isTopArt(e.pid) == top then
+                    local r = api:artRect(e.pid, n)
+                    -- 0 = meets the run on the next pixel; a cap may also overlap its end strip.
+                    local overlap = closing and rect[3] + 1 - r[1] or r[3] + 1 - rect[1]
+                    local beyond = closing and r[3] > rect[3] or not closing and r[1] < rect[1]
+                    local dy = math.abs(r[4] - rect[4])
+                    if overlap >= 0 and overlap <= MAX_OVERLAP and beyond and dy <= MAX_JOIN_DY then
+                        table.insert(fits, { pid = e.pid, hex = n, dy = dy + overlap * 4, w = e.w })
+                    end
+                end
+            end
+        end
+    end
+    local choice = closeFit(fits)
+    if choice == nil then
+        return false
+    end
+    return place(choice.pid, choice.hex, chain)
+end
+
+local bridges, caps = 0, 0
 for _, start in ipairs(order) do
     if claimedBy[start] == nil then
         chains += 1
-        local pid = startPiece(start)
+        local pid, continuing = startPiece(start)
         local hex = start
         local before = nil -- the piece before `pid` in this chain
         if place(pid, hex, chains) then
+            if not continuing and not isRunStart(pid) and capRun(pid, hex, chains, false) then
+                caps += 1
+            end
             for _ = 1, #rim do -- a chain can't be longer than the band
                 local recent = { [pid] = true }
                 if before ~= nil then
@@ -1020,13 +1101,16 @@ for _, start in ipairs(order) do
                     break -- it caps the wall: nothing joins on its right
                 end
             end
+            if not isRunEnd(pid) and capRun(pid, hex, chains, true) then
+                caps += 1
+            end
         else
             claimedBy[start] = chains
         end
     end
 end
-print(string.format("Laid the rim as %d wall chains: %d of %d strips continue a panel from the strip before, %d more join it on the next pixel.",
-    chains, links, walls, bridges))
+print(string.format("Laid the rim as %d wall chains: %d of %d strips continue a panel from the strip before, %d more join it on the next pixel, %d open or close a run.",
+    chains, links, walls, bridges, caps))
 
 -- Seal the rock side: every rock hex bordering a walkable hex gets an invisible blocker. The wall
 -- art stands on the walkable side and does not by itself stop the engine walking onto the rock —
