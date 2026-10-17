@@ -574,10 +574,11 @@ TEST_CASE("Move and rotate undo edit the map data even after the wrappers were r
     // A refresh replaces every wrapper; the commands must not depend on the one they were given.
     shown.reset();
 
+    const auto& stored = fx.mapFile().map_objects[0].front(); // the map's object, read after each step
     REQUIRE(fx.undoStack.undo());
-    CHECK(mapObject->direction == 0);
+    CHECK(stored->direction == 0);
     REQUIRE(fx.undoStack.undo());
-    CHECK(mapObject->position == 100);
+    CHECK(stored->position == 100);
     REQUIRE(fx.undoStack.redo());
-    CHECK(mapObject->position == 200);
+    CHECK(stored->position == 200);
 }

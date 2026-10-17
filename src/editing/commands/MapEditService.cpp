@@ -213,55 +213,66 @@ void MapEditService::applyElevationState(int elevation, const ElevationState& st
     }
 }
 
-bool MapEditService::setElevationPresent(int elevation, bool present) {
+bool MapEditService::canToggleElevation(int elevation, bool present) const {
     if (!_map || elevation < 0 || elevation >= Map::ELEVATION_COUNT) {
         return false;
     }
-    auto& mapFile = _map->getMapFile();
-    const uint32_t flag = Map::elevationFlag(elevation);
-    if (Map::elevationIsPresent(mapFile.header.flags, elevation) == present) {
+    const uint32_t flags = _map->getMapFile().header.flags;
+    if (Map::elevationIsPresent(flags, elevation) == present) {
         return false;
     }
-    if (!present) {
-        int presentCount = 0;
-        for (int e = 0; e < Map::ELEVATION_COUNT; ++e) {
-            presentCount += Map::elevationIsPresent(mapFile.header.flags, e) ? 1 : 0;
+    if (present) {
+        return true;
+    }
+    int presentCount = 0;
+    for (int e = 0; e < Map::ELEVATION_COUNT; ++e) {
+        presentCount += Map::elevationIsPresent(flags, e) ? 1 : 0;
+    }
+    return presentCount > 1; // a map needs at least one elevation
+}
+
+void MapEditService::addElevation(int elevation) {
+    auto& mapFile = _map->getMapFile();
+    mapFile.header.flags &= ~Map::elevationFlag(elevation); // the bit is clear when the elevation is present
+    if (!mapFile.tiles.contains(elevation)) {
+        mapFile.tiles[elevation] = Map::createEmptyElevation();
+    }
+    mapFile.map_objects.try_emplace(elevation);
+}
+
+void MapEditService::removeElevation(int elevation, const std::optional<std::vector<std::shared_ptr<MapObject>>>& objects) {
+    auto& mapFile = _map->getMapFile();
+    mapFile.header.flags |= Map::elevationFlag(elevation);
+    for (const auto& obj : objects.value_or(std::vector<std::shared_ptr<MapObject>>{})) {
+        if (obj && obj->map_scripts_pid != -1) {
+            _scriptService.eraseScript(static_cast<uint32_t>(obj->map_scripts_pid));
         }
-        if (presentCount <= 1) {
-            return false; // a map needs at least one elevation
+    }
+    const auto& spatial = mapFile.map_scripts[static_cast<int>(MapScript::ScriptType::SPATIAL)];
+    std::vector<uint32_t> spatialOnElevation;
+    for (const MapScript& script : spatial) {
+        if (static_cast<int>(built_tile::elevationOf(script.timer)) == elevation) {
+            spatialOnElevation.push_back(script.pid);
         }
+    }
+    for (uint32_t sid : spatialOnElevation) {
+        _scriptService.eraseScript(sid);
+    }
+    mapFile.tiles.erase(elevation);
+    mapFile.map_objects.erase(elevation);
+}
+
+bool MapEditService::setElevationPresent(int elevation, bool present) {
+    if (!canToggleElevation(elevation, present)) {
+        return false;
     }
 
     const ElevationState before = captureElevation(elevation);
     const ScriptEditService::ScriptSections beforeScripts = _scriptService.snapshotScripts();
-
     if (present) {
-        mapFile.header.flags &= ~flag; // the bit is clear when the elevation is present
-        if (!mapFile.tiles.contains(elevation)) {
-            mapFile.tiles[elevation] = Map::createEmptyElevation();
-        }
-        mapFile.map_objects.try_emplace(elevation);
+        addElevation(elevation);
     } else {
-        mapFile.header.flags |= flag;
-        if (before.objects) {
-            for (const auto& obj : *before.objects) {
-                if (obj && obj->map_scripts_pid != -1) {
-                    _scriptService.eraseScript(static_cast<uint32_t>(obj->map_scripts_pid));
-                }
-            }
-        }
-        auto& spatial = mapFile.map_scripts[static_cast<int>(MapScript::ScriptType::SPATIAL)];
-        std::vector<uint32_t> spatialOnElevation;
-        for (const MapScript& script : spatial) {
-            if (static_cast<int>(built_tile::elevationOf(script.timer)) == elevation) {
-                spatialOnElevation.push_back(script.pid);
-            }
-        }
-        for (uint32_t sid : spatialOnElevation) {
-            _scriptService.eraseScript(sid);
-        }
-        mapFile.tiles.erase(elevation);
-        mapFile.map_objects.erase(elevation);
+        removeElevation(elevation, before.objects);
     }
 
     const ElevationState after = captureElevation(elevation);

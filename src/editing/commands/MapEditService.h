@@ -71,6 +71,10 @@ private:
     };
     ElevationState captureElevation(int elevation) const;
     void applyElevationState(int elevation, const ElevationState& state);
+    // setElevationPresent's steps: whether the change is allowed, and the edit in each direction.
+    bool canToggleElevation(int elevation, bool present) const;
+    void addElevation(int elevation);
+    void removeElevation(int elevation, const std::optional<std::vector<std::shared_ptr<MapObject>>>& objects);
 
     // Deep-clones an elevation's objects, retargeted to toElevation with their
     // script linkage detached (scripts are not copied).

@@ -1015,48 +1015,41 @@ int runProtoCommand(const std::vector<std::string>& args, const char* program) {
     return geck::cli::exportProtos(resources, opts, std::cout);
 }
 
-int runCli(int argc, char** argv) {
-    const std::vector<std::string> args(argv + 1, argv + argc);
-
+// The command families that parse their own arguments; nullopt when `args` names none of them.
+std::optional<int> runCommandFamily(const std::vector<std::string>& args, const char* program) {
+    if (args.size() < 2) {
+        return std::nullopt;
+    }
     // The `frm` family is parsed and run on its own path (its own positional + flags), separate from
-    // the `map` subcommands below.
-    if (args.size() >= 2 && args[0] == "frm" && isFrmAction(args[1])) {
-        return runFrmCommand(args, argv[0]);
+    // the `map` subcommands below; so is the `resource` family (data inspection).
+    if (args[0] == "frm" && isFrmAction(args[1])) {
+        return runFrmCommand(args, program);
     }
-
-    // The `resource` family (data-inspection) is likewise parsed and run on its own path.
-    if (args.size() >= 2 && args[0] == "resource" && isResourceAction(args[1])) {
-        return runResourceCommand(args, argv[0]);
+    if (args[0] == "resource" && isResourceAction(args[1])) {
+        return runResourceCommand(args, program);
     }
-
-    if (args.size() >= 2 && args[0] == "proto" && args[1] == "export") {
-        return runProtoCommand(args, argv[0]);
+    if (args[0] == "proto" && args[1] == "export") {
+        return runProtoCommand(args, program);
     }
-
-    if (args.size() >= 2 && args[0] == "script" && args[1] == "lint") {
-        return runScriptCommand(args, argv[0]);
+    if (args[0] == "script" && args[1] == "lint") {
+        return runScriptCommand(args, program);
     }
+    return std::nullopt;
+}
 
-    CliArgs cli;
-    if (const auto exitCode = parseArgs(args, argv[0], cli); exitCode.has_value()) {
-        return *exitCode;
-    }
-
-    // Keep stdout clean: the resource/reader layers log to the default (stderr) sink, including
-    // an [error] for every unknown script PID encountered while parsing maps — expected noise
-    // here, so silence all levels.
-    spdlog::set_level(spdlog::level::off);
-
-    geck::resource::GameResources resources;
+void mountCliData(geck::resource::GameResources& resources, const CliArgs& cli, const char* program) {
     for (const auto& path : cli.dataPaths) {
         resources.files().addDataPath(path);
     }
     // Mount the bundled resources (blank.frm, scripts, …) the way the editor does, so e.g. the
     // natural map render finds art/tiles/blank.frm even though it isn't in master.dat.
-    if (const auto bundled = geck::cli::findBundledResources(argv[0]); !bundled.empty()) {
+    if (const auto bundled = geck::cli::findBundledResources(program); !bundled.empty()) {
         resources.files().addDataPath(bundled);
     }
+}
 
+// The map subcommands that write files or read scripts; nullopt for the analysis ones.
+std::optional<int> runProducingCommand(geck::resource::GameResources& resources, const CliArgs& cli) {
     if (cli.generate) {
         return geck::cli::generateMap(resources, cli.gen, std::cout);
     }
@@ -1075,6 +1068,11 @@ int runCli(int argc, char** argv) {
     if (cli.scriptRefs) {
         return geck::cli::findScriptRefs(resources, cli.refs, std::cout);
     }
+    return std::nullopt;
+}
+
+// The map and world analysis subcommands; analyze is the default.
+int runAnalysisCommand(geck::resource::GameResources& resources, const CliArgs& cli) {
     if (cli.reachability) {
         return geck::cli::analyzeReachability(resources, cli.reach, std::cout);
     }
@@ -1113,6 +1111,30 @@ int runCli(int argc, char** argv) {
         return geck::cli::dumpMapGrid(resources, cli.dumpOpts, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
+}
+
+int runCli(int argc, char** argv) {
+    const std::vector<std::string> args(argv + 1, argv + argc);
+    if (const auto exitCode = runCommandFamily(args, argv[0])) {
+        return *exitCode;
+    }
+
+    CliArgs cli;
+    if (const auto exitCode = parseArgs(args, argv[0], cli); exitCode.has_value()) {
+        return *exitCode;
+    }
+
+    // Keep stdout clean: the resource/reader layers log to the default (stderr) sink, including
+    // an [error] for every unknown script PID encountered while parsing maps — expected noise
+    // here, so silence all levels.
+    spdlog::set_level(spdlog::level::off);
+
+    geck::resource::GameResources resources;
+    mountCliData(resources, cli, argv[0]);
+    if (const auto exitCode = runProducingCommand(resources, cli)) {
+        return *exitCode;
+    }
+    return runAnalysisCommand(resources, cli);
 }
 
 } // namespace
