@@ -1,6 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "format/endgame/EndgameTxt.h"
+#include "format/endgame/EndDeathTxt.h"
+#include "reader/endgame/EndDeathTxtReader.h"
 #include "reader/endgame/EndgameTxtReader.h"
 
 using namespace geck;
@@ -33,4 +35,32 @@ TEST_CASE("parseEndgameTxt reads ending slides, skipping comments and short line
 
 TEST_CASE("parseEndgameTxt tolerates empty input", "[endgame]") {
     CHECK(parseEndgameTxt(std::string{}).endings.empty());
+}
+
+TEST_CASE("parseEndDeathTxt reads death endings as the engine tokenises them", "[endgame]") {
+    // Spaces, tabs and commas all separate fields; a '#' line is a comment; a short line is skipped.
+    const EndDeathTxt endDeath = parseEndDeathTxt(std::string{ "# gvar, value, known, notKnown, level, %, narrator\n"
+                                                               "-1, 0, -1, 16, 0, 40, nar_dth3\n"
+                                                               "491\t1 3,-1, 150, 0, nar_mo1\n"
+                                                               "-1, 0, -1\n" });
+
+    REQUIRE(endDeath.endings.size() == 2);
+    CHECK(endDeath.endings[0].gvar == -1);
+    CHECK(endDeath.endings[0].areaKnown == -1);
+    CHECK(endDeath.endings[0].areaNotKnown == 16);
+    CHECK(endDeath.endings[0].percentage == 40);
+    CHECK(endDeath.endings[0].narrator == "nar_dth3");
+    CHECK(endDeath.endings[1].gvar == 491);
+    CHECK(endDeath.endings[1].value == 1);
+    CHECK(endDeath.endings[1].areaKnown == 3);
+    CHECK(endDeath.endings[1].minLevel == 150);
+    CHECK(endDeath.endings[1].narrator == "nar_mo1");
+}
+
+TEST_CASE("parseEndingSubtitles keeps the text after each line's first colon", "[endgame]") {
+    const auto lines = parseEndingSubtitles("1:The darkness awaits.\r\n2:Peace: at last.\nno separator\n");
+
+    REQUIRE(lines.size() == 2);
+    CHECK(lines[0] == "The darkness awaits.");
+    CHECK(lines[1] == "Peace: at last.");
 }

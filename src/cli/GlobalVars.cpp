@@ -1,5 +1,6 @@
 #include "cli/GlobalVars.h"
 
+#include "cli/GvarRoles.h"
 #include "resource/GameVarsLoader.h"
 
 #include "format/gam/Gam.h"
@@ -27,9 +28,14 @@ int buildGlobalVars(resource::GameResources& resources, std::ostream& out) {
         return 1;
     }
 
+    const auto roles = buildGvarRoles(resources);
     auto gvars = ordered_json::array();
     for (std::size_t i = 0; i < gam->gvarCount(); ++i) {
-        gvars.push_back({ { "index", i }, { "name", gam->gvarKey(i) }, { "default", gam->gvarValue(i) } });
+        ordered_json gvar = { { "index", i }, { "name", gam->gvarKey(i) }, { "default", gam->gvarValue(i) } };
+        if (const auto it = roles.find(static_cast<int>(i)); it != roles.end()) {
+            gvar["roles"] = it->second;
+        }
+        gvars.push_back(std::move(gvar));
     }
 
     ordered_json root;
