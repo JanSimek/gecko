@@ -188,7 +188,22 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     _centralStack->setCurrentWidget(_currentEditorWidget);
     clearWorldMapAction(); // the map replaced whatever page was showing, world map included
 
-    _currentEditorWidget->setMainWindow(this);
+    // The editor reaches the palettes through these hooks and signals rather than a pointer back here.
+    _currentEditorWidget->setObjectPaletteHooks({
+        .objectInfo = [this](int objectIndex, ObjectCategory category) -> const ObjectInfo* {
+            return _objectPalettePanel ? _objectPalettePanel->getObjectInfo(objectIndex, category) : nullptr;
+        },
+        .revealProto = [this](uint32_t pid) -> std::optional<std::pair<int, ObjectCategory>> {
+            if (!_objectPalettePanel) {
+                return std::nullopt;
+            }
+            auto found = _objectPalettePanel->revealProto(pid);
+            if (found) {
+                raiseObjectPalette();
+            }
+            return found;
+        },
+    });
     {
         const auto initStart = std::chrono::steady_clock::now();
         _currentEditorWidget->init();
@@ -2271,6 +2286,21 @@ void MainWindow::connectToEditorWidget() {
     }
 
     connect(_currentEditorWidget, &EditorWidget::mapHeaderChanged, this, &MainWindow::onMapHeaderChanged);
+    connect(_currentEditorWidget, &EditorWidget::mapInfoRefreshRequested, this, [this]() {
+        updateMapInfo(_currentEditorWidget->getMap());
+    });
+    connect(_currentEditorWidget, &EditorWidget::tilePaletteDeselectRequested, this, [this]() {
+        if (_tilePalettePanel) {
+            _tilePalettePanel->deselectTile();
+        }
+    });
+    connect(_currentEditorWidget, &EditorWidget::markExitsModeCancelled, this, &MainWindow::deselectMarkExitsMode);
+    connect(_currentEditorWidget, &EditorWidget::tilePicked, this, [this](int tileId, bool isRoof) {
+        if (_tilePalettePanel) {
+            _tilePalettePanel->pickTile(tileId, isRoof);
+            raiseTilePalette();
+        }
+    });
     connect(_currentEditorWidget, &EditorWidget::statusMessageRequested, this, &MainWindow::showStatusMessage);
     connect(_currentEditorWidget, &EditorWidget::statusMessageClearRequested, this, &MainWindow::clearStatusMessage);
     // Keep the checkable tool-mode toolbar actions in sync with the active mode

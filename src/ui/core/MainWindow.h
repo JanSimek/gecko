@@ -89,11 +89,6 @@ public:
     void closeCurrentMap();
     bool hasActiveMap() const;
 
-    // Access to palette panels for drag and drop and tile deselection
-    ObjectPalettePanel* getObjectPalettePanel() const { return _objectPalettePanel; }
-    TilePalettePanel* getTilePalettePanel() const { return _tilePalettePanel; }
-    FileBrowserPanel* getFileBrowserPanel() const { return _fileBrowserPanel; }
-
     // Bring a palette dock to the front of its tab group (used by the eyedropper so the picked
     // object/tile's palette is visible). No-op if the dock is hidden or floating on its own.
     void raiseObjectPalette();

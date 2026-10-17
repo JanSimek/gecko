@@ -31,8 +31,6 @@
 #include "viewport/EdgeScroll.h"
 #include "viewport/ViewportController.h"
 #include "ui/panels/ObjectPalettePanel.h"
-#include "ui/panels/TilePalettePanel.h"
-#include "MainWindow.h"
 
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
@@ -156,7 +154,6 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
     : QWidget(parent)
     , _layout(nullptr)
     , _sfmlWidget(nullptr)
-    , _mainWindow(nullptr)
     , _resources(resources) {
     _session.setMap(std::move(map));
     _session.floorSprites().reserve(Map::TILES_PER_ELEVATION);
@@ -180,18 +177,13 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
     _dragDropManager = std::make_unique<DragDropManager>(
         *this,
         [this](int idx, ObjectCategory cat) -> const ObjectInfo* {
-            auto* mw = getMainWindow();
-            auto* p = mw ? mw->getObjectPalettePanel() : nullptr;
-            return p ? p->getObjectInfo(idx, cat) : nullptr;
+            return _objectPalette.objectInfo ? _objectPalette.objectInfo(idx, cat) : nullptr;
         });
     _tilePlacementManager = std::make_unique<TilePlacementManager>(*this);
     _exitGridPlacementManager = std::make_unique<ExitGridPlacementManager>(
         *this,
         _resources,
-        [this](const QString& m) {
-            if (auto* mw = getMainWindow())
-                mw->showStatusMessage(m);
-        });
+        [this](const QString& m) { Q_EMIT statusMessageRequested(m); });
     _toolRegistry = std::make_unique<ToolRegistry>();
     registerNativeTools();
     setupInputCallbacks();
@@ -834,9 +826,7 @@ ScriptResult EditorWidget::runScript(const std::string& source) {
             _session.selectionManager()->clearSelection();
         }
         _controller.visualizer().clearHexPositions();
-        if (_mainWindow) {
-            _mainWindow->updateMapInfo(_session.map());
-        }
+        Q_EMIT mapInfoRefreshRequested();
         Q_EMIT mapModifiedByScript();
     }
     return result;
@@ -949,9 +939,7 @@ void EditorWidget::createNewMap() {
     _controller.viewport().centerViewOnMap();
     Q_EMIT undoStackChanged();
 
-    if (_mainWindow) {
-        _mainWindow->updateMapInfo(_session.map());
-    }
+    Q_EMIT mapInfoRefreshRequested();
 
     spdlog::debug("Created new empty map with {} tiles per elevation", Map::TILES_PER_ELEVATION);
 }
@@ -1389,9 +1377,7 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
 
     callbacks.onTilePlacementCancel = [this]() {
         _tilePlacementManager->resetState();
-        if (_mainWindow && _mainWindow->getTilePalettePanel()) {
-            _mainWindow->getTilePalettePanel()->deselectTile();
-        }
+        Q_EMIT tilePaletteDeselectRequested();
         // Sync the editor mode deterministically rather than leaning on deselectTile()'s signal (see
         // the onEscape tile branch for the same rationale).
         setMode(EditorMode::Select);
@@ -1460,9 +1446,7 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
             setMode(EditorMode::Select);
             Q_EMIT statusMessageClearRequested();
         } else if (_tilePlacementManager->isTilePlacementMode()) {
-            if (_mainWindow && _mainWindow->getTilePalettePanel()) {
-                _mainWindow->getTilePalettePanel()->deselectTile();
-            }
+            Q_EMIT tilePaletteDeselectRequested();
             _tilePlacementManager->resetState(); // also clears the area-fill / replace sub-options
             // setMode() resets both the tile manager and the input handler. Relying on deselectTile()'s
             // signal was a no-op when no palette tile was highlighted, which stranded the mode.
@@ -1490,10 +1474,7 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
 
     callbacks.onMarkExitsModeCancelled = [this]() {
         clearMarkExitsLinePreview();
-        // Notify MainWindow to deselect the toolbar button
-        if (_mainWindow) {
-            _mainWindow->deselectMarkExitsMode();
-        }
+        Q_EMIT markExitsModeCancelled();
     };
 
     callbacks.onToolMousePressed = [this](sf::Vector2f worldPos, sf::Mouse::Button button) {
@@ -2254,9 +2235,7 @@ void EditorWidget::applyFillPreview(const QString& description) {
         _session.selectionManager()->clearSelection();
     }
     _controller.visualizer().clearHexPositions();
-    if (_mainWindow) {
-        _mainWindow->updateMapInfo(_session.map());
-    }
+    Q_EMIT mapInfoRefreshRequested();
     Q_EMIT mapModifiedByScript();
     Q_EMIT undoStackChanged();
 
@@ -2603,9 +2582,8 @@ void EditorWidget::pickAtCursor(sf::Vector2f worldPos) {
         return; // nothing pickable under the cursor
     }
 
-    auto* tilePalette = _mainWindow ? _mainWindow->getTilePalettePanel() : nullptr;
     Map* map = _session.map();
-    if (!tilePalette || !map) {
+    if (!map) {
         return;
     }
 
@@ -2616,28 +2594,21 @@ void EditorWidget::pickAtCursor(sf::Vector2f worldPos) {
         tileId = isRoof ? it->second[*tilePosition].getRoof() : it->second[*tilePosition].getFloor();
     }
 
-    tilePalette->pickTile(static_cast<int>(tileId), isRoof);
-    if (_mainWindow) {
-        _mainWindow->raiseTilePalette();
-    }
+    Q_EMIT tilePicked(static_cast<int>(tileId), isRoof);
     Q_EMIT statusMessageRequested(QString("Picked %1 tile %2 — left-click or drag to paint, Esc to stop")
             .arg(isRoof ? "roof" : "floor")
             .arg(tileId));
 }
 
 void EditorWidget::beginObjectPlacement(uint32_t pid, sf::Vector2f worldPos) {
-    auto* palette = _mainWindow ? _mainWindow->getObjectPalettePanel() : nullptr;
-    if (!palette) {
+    if (!_objectPalette.revealProto) {
         return;
     }
     // Reveal + select the proto in the object palette and learn its {list index, category}.
-    const auto found = palette->revealProto(pid);
+    const auto found = _objectPalette.revealProto(pid);
     if (!found) {
         Q_EMIT statusMessageRequested("Pick (P): no palette entry for this object");
         return;
-    }
-    if (_mainWindow) {
-        _mainWindow->raiseObjectPalette();
     }
 
     // Picking a second object while already placing stays in PluginTool, and setMode() only clears
@@ -2741,11 +2712,8 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
 }
 
 void EditorWidget::startDragPreview(int objectIndex, int categoryInt, sf::Vector2f worldPos) {
-    if (_mainWindow) {
-        auto palette = _mainWindow->getObjectPalettePanel();
-        if (palette) {
-            _previewObjectInfo = palette->getObjectInfo(objectIndex, static_cast<ObjectCategory>(categoryInt));
-        }
+    if (_objectPalette.objectInfo) {
+        _previewObjectInfo = _objectPalette.objectInfo(objectIndex, static_cast<ObjectCategory>(categoryInt));
     }
 
     if (_dragDropManager) {

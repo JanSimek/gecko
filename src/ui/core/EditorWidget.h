@@ -62,6 +62,7 @@ class ViewportController;
 class SFMLWidget;
 struct ToolMouseEvent;
 struct ObjectInfo;
+enum class ObjectCategory;
 
 class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext, public ExitGridContext, public DragDropContext, public PluginToolHost {
     Q_OBJECT
@@ -270,9 +271,13 @@ public:
     // Access to SFML widget for main window
     SFMLWidget* getSFMLWidget() const override { return _sfmlWidget; }
 
-    // Set main window reference for accessing palette panels
-    void setMainWindow(class MainWindow* mainWindow) { _mainWindow = mainWindow; }
-    class MainWindow* getMainWindow() const { return _mainWindow; }
+    /// How the editor reaches the object palette, which its host owns: look an entry up (drag-and-drop),
+    /// and reveal a proto for Pick (P), selecting it, showing the palette and returning the entry.
+    struct ObjectPaletteHooks {
+        std::function<const ObjectInfo*(int objectIndex, ObjectCategory category)> objectInfo;
+        std::function<std::optional<std::pair<int, ObjectCategory>>(uint32_t pid)> revealProto;
+    };
+    void setObjectPaletteHooks(ObjectPaletteHooks hooks) { _objectPalette = std::move(hooks); }
 
     // Access to internal components for extracted managers
     selection::SelectionManager* getSelectionManager() const override { return _session.selectionManager(); }
@@ -410,6 +415,15 @@ signals:
     void statusMessageRequested(const QString& message);
     void statusMessageClearRequested();
     void undoStackChanged();
+    /// A change the undo stack doesn't record (a Console script, an applied fill) altered the map, so
+    /// the host refreshes Map Info and the other per-map panels.
+    void mapInfoRefreshRequested();
+    /// Tile placement was cancelled; the host clears the tile palette's selection.
+    void tilePaletteDeselectRequested();
+    /// Mark Exits mode was left from the canvas; the host unchecks its toolbar action.
+    void markExitsModeCancelled();
+    /// Pick (P) on a tile: the host selects this tile in the tile palette and shows the palette.
+    void tilePicked(int tileId, bool isRoof);
     /// The map header changed, including which elevations are present: an edit or its undo/redo.
     void mapHeaderChanged();
     /// A Console script changed the map through a path that records no undo command (e.g.
@@ -554,7 +568,7 @@ private:
     // UI Components
     QVBoxLayout* _layout;
     SFMLWidget* _sfmlWidget;
-    class MainWindow* _mainWindow;
+    ObjectPaletteHooks _objectPalette;
 
     // Owns the editor's per-map state and the Qt-free helpers acting on it. Declared before the
     // managers below so it outlives them - several hold references into it.
