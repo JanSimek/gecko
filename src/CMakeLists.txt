@@ -55,7 +55,6 @@ set(GECK_APP_SOURCES
     # Qt6 UI Core
     ui/core/MainWindow.h
     ui/core/MainWindow.cpp
-    editor/TileChange.h
     ui/core/VisibilitySettings.h
     ui/core/EditorWidget.h
     ui/core/EditorWidget.cpp
@@ -238,8 +237,6 @@ set(GECK_APP_SOURCES
     state/GameLauncher.h
 
     # Map save service (Qt-free MapWriter + proto-resolver core)
-    state/MapSaveService.cpp
-    state/MapSaveService.h
 
     # Qt Resource files
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
@@ -490,6 +487,9 @@ add_library(vault STATIC
 
     util/PaletteBlend.h
     util/PaletteBlend.cpp
+
+    util/Inflate.h
+    util/Inflate.cpp
 )
 
 target_include_directories(vault PUBLIC
@@ -497,10 +497,10 @@ target_include_directories(vault PUBLIC
 )
 
 find_package(Threads REQUIRED) # ssl/Corpus loads scripts on worker threads
+# spdlog is PUBLIC: the reader/writer base headers (FileParser.h, BinaryUtils.h, FileWriter.h, ...) include it.
 target_link_libraries(vault PUBLIC
     ZLIB::ZLIB
     Threads::Threads
-PRIVATE
     gecko::spdlog
 )
 
@@ -550,6 +550,8 @@ add_library(gecko_resource STATIC
     resource/GameVarsLoader.h
     resource/ScriptLint.h
     resource/ScriptLint.cpp
+    resource/MapFileIO.h
+    resource/MapFileIO.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 
@@ -593,6 +595,7 @@ add_library(gecko_core STATIC
     editor/Object.h
     editor/Object.cpp
     editor/HexagonGrid.h
+    editor/TileChange.h
     editor/HexagonGrid.cpp
     editor/HexGeometry.h
     editor/FloorSynth.h
@@ -676,6 +679,8 @@ add_library(gecko_editing STATIC
     scripting/MapScriptApi.cpp
     scripting/ScriptApiReference.h
     scripting/ScriptApiReference.cpp
+    scripting/ScriptSeed.h
+    scripting/ScriptSeed.cpp
 )
 add_library(gecko::editing ALIAS gecko_editing)
 

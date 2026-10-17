@@ -1960,6 +1960,71 @@ TEST_CASE("MapInfoPanel removes the last map global variable after confirmation"
     CHECK(out.find("MVAR_last") == std::string::npos);
 }
 
+TEST_CASE("MapInfoPanel global-variable edits can be undone through the state it emits", "[qt][mapinfo][undo]") {
+    GlobalVarFixture fixture("MAP_GLOBAL_VARS:\nMVAR_first := 10;\n");
+    fixture.map->getMapFile().map_global_vars = { 10 };
+    fixture.map->getMapFile().header.num_global_vars = 1;
+
+    geck::MapInfoPanel panel(fixture.data.resources(), fixture.settings);
+    panel.setMap(fixture.map.get());
+    auto* tree = panel.findChild<QTreeWidget*>();
+    REQUIRE(tree != nullptr);
+
+    std::optional<geck::MapInfoPanel::GlobalVarsState> before;
+    QObject::connect(&panel, &geck::MapInfoPanel::globalVarsEdited, &panel,
+        [&before](const geck::MapInfoPanel::GlobalVarsState& b, const geck::MapInfoPanel::GlobalVarsState&, const QString&) {
+            before = b;
+        });
+
+    tree->topLevelItem(0)->setText(1, QStringLiteral("7"));
+    REQUIRE(before.has_value());
+    CHECK(fixture.map->getMapFile().map_global_vars[0] == 7);
+
+    // The host's undo applies the captured state: the .map block, the rows and the .gam come back.
+    panel.applyGlobalVarsState(*before);
+    CHECK(fixture.map->getMapFile().map_global_vars[0] == 10);
+    CHECK(tree->topLevelItem(0)->text(1) == QStringLiteral("10"));
+    panel.persistMapVars();
+    const std::filesystem::path savedGam = std::filesystem::path(fixture.writableDir.path().toStdString()) / "maps" / "testmap.gam";
+    CHECK(geck::io::readFile(savedGam).find("MVAR_first := 10;") != std::string::npos);
+}
+
+TEST_CASE("MapInfoPanel requests header and elevation edits instead of writing the map", "[qt][mapinfo][undo]") {
+    ResourceDataScope data;
+    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\n");
+    data.mount();
+    auto settings = std::make_shared<geck::Settings>();
+    auto map = makeMap("testmap.map");
+    const uint32_t originalPosition = map->getMapFile().header.player_default_position;
+
+    geck::MapInfoPanel panel(data.resources(), settings);
+    panel.setMap(map.get());
+    auto* positionSpin = panel.findChild<QSpinBox*>("playerPosition");
+    auto* elevation2 = panel.findChild<QCheckBox*>("elevation2");
+    REQUIRE(positionSpin != nullptr);
+    REQUIRE(elevation2 != nullptr);
+    REQUIRE(elevation2->isChecked());
+
+    QSignalSpy headerSpy(&panel, &geck::MapInfoPanel::headerEditRequested);
+    QSignalSpy elevationSpy(&panel, &geck::MapInfoPanel::elevationPresenceRequested);
+
+    positionSpin->setValue(static_cast<int>(originalPosition) + 1);
+    REQUIRE(headerSpy.count() == 1);
+    CHECK(headerSpy.at(0).at(0).value<geck::Map::MapHeader>().player_default_position == originalPosition + 1);
+    CHECK(headerSpy.at(0).at(2).toString() == QStringLiteral("playerPosition"));
+    // Nothing applied the request, so the map and the widget still hold the original value.
+    CHECK(map->getMapFile().header.player_default_position == originalPosition);
+    CHECK(positionSpin->value() == static_cast<int>(originalPosition));
+
+    answerNextDialog(QMessageBox::Yes);
+    elevation2->setChecked(false);
+    REQUIRE(elevationSpy.count() == 1);
+    CHECK(elevationSpy.at(0).at(0).toInt() == 1);
+    CHECK_FALSE(elevationSpy.at(0).at(1).toBool());
+    CHECK(geck::Map::elevationIsPresent(map->getMapFile().header.flags, 1));
+    CHECK(elevation2->isChecked());
+}
+
 // Regression: a Draw-edge stroke that only PARTIALLY overlaps existing exit grids must still place on
 // the empty hexes (a single overlapping hex used to send the whole stroke to bulk-edit, so the
 // placement vanished — "Enter + OK, nothing appears"). freshHexesForLine = line hexes minus occupied.

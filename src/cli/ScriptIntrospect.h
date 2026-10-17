@@ -28,9 +28,9 @@ namespace cli {
     /// (fallout2-ce `scripts.cc`, `scriptsGetFileName`). This is deliberate, and required by the
     /// engine-fidelity rule: stored ids are preserved exactly as the engine stores them rather than
     /// re-based for convenience. The 1-based forms are the engine's own inputs, and the engine
-    /// itself decrements them — so gecko normalises on the way in, in the same two places:
+    /// itself decrements them — so gecko normalises on the way in, where the engine does:
     ///
-    ///  - map header: `MapAnalyzer` resolves `script_id - 1` (fallout2-ce `map.cc`,
+    ///  - map header: `Map::MapHeader::programIndex()` (fallout2-ce `map.cc`,
     ///    `script->index = gMapHeader.scriptIndex - 1`);
     ///  - sfall `set_script()`: the opcode decrements before validating (fallout2-ce
     ///    `sfall_opcodes.cc`).

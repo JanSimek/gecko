@@ -389,7 +389,7 @@ QString ObjectScriptSection::localVariableBlockText(const MapScript* script, con
         return {};
     }
     try {
-        const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
+        const Lst* lst = _resources.repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
         if (lst == nullptr) {
             return {};
         }

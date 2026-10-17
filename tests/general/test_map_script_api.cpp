@@ -294,6 +294,40 @@ TEST_CASE("MapScriptApi headless mode records objects as map data without GL", "
     CHECK(fx.mapFile().map_objects[ELEV].empty());
 }
 
+// A placed object carries the flags its proto prescribes, as the engine's obj_new seeds them: the
+// engine reads them from the map, so flags = 0 made a flat proto stand and a NoBlock one block.
+TEST_CASE("MapScriptApi placement seeds the object's flags from its proto", "[scripting]") {
+    const auto root = std::filesystem::path{ GECK_TEST_TMP_DIR } / "geck_place_flags"; // inside the build tree
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "proto" / "walls");
+    std::ofstream(root / "proto" / "walls" / "walls.lst") << "flat.pro\n";
+    constexpr uint32_t PRO = 0x03000001;
+    constexpr auto FLAGS = static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_FLAT)
+        | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK);
+    {
+        Pro pro{ root / "proto" / "walls" / "flat.pro" };
+        pro.header.PID = static_cast<int32_t>(PRO);
+        pro.header.FID = 0x03000000;
+        pro.header.flags = FLAGS;
+        ProWriter writer;
+        writer.openFile(root / "proto" / "walls" / "flat.pro");
+        REQUIRE(writer.write(pro));
+    }
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root.string());
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    REQUIRE(api.placeProto(PRO, 20100, 0));
+    REQUIRE(api.placeObject(PRO, 0x03000000, 20101, 0));
+    const auto& objs = fx.mapFile().map_objects[ELEV];
+    REQUIRE(objs.size() == 2);
+    CHECK(objs[0]->flags == FLAGS);
+    CHECK(objs[1]->flags == FLAGS);
+
+    std::filesystem::remove_all(root);
+}
+
 TEST_CASE("MapScriptApi newMap resets the bound map to empty", "[scripting]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);

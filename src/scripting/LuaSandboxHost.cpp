@@ -1,10 +1,8 @@
 #include "scripting/LuaSandboxHost.h"
 
-#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
-#include <random>
 
 #include <lua.h>
 #include <lualib.h>
@@ -16,6 +14,7 @@
 
 #include "scripting/MapScriptApi.h"
 #include "scripting/ScriptApiReference.h"
+#include "scripting/ScriptSeed.h"
 
 namespace geck {
 
@@ -33,7 +32,7 @@ bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::
     close();
     error.clear();
     _output = &output;
-    _state = luaL_newstate();
+    _state = lua_newstate(&LuaSandboxHost::allocate, this);
     if (_state == nullptr) {
         error = "failed to create Luau state";
         return false;
@@ -57,26 +56,12 @@ bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::
 #undef GECK_SCRIPT_API_BIND
     luabridge::setGlobal(_state, &api, "api");
 
-    // --arg seed=N when it parses, else a fresh one per host. Luau's math.randomseed truncates to a
-    // 32-bit signed int, so keep the seed in range; the counter avoids random_device repeats.
-    int seed = 0;
-    {
-        static std::atomic<uint32_t> runCounter{ 0 };
-        const auto it = args.find("seed");
-        bool fromArg = false;
-        if (it != args.end()) {
-            try {
-                seed = static_cast<int>(std::stol(it->second));
-                fromArg = true;
-            } catch (const std::exception&) {
-                fromArg = false;
-            }
-        }
-        if (!fromArg) {
-            std::random_device rd;
-            seed = static_cast<int>((rd() ^ runCounter.fetch_add(1)) & 0x7FFFFFFF);
-        }
+    // --arg seed=N when it parses, else a fresh one per host.
+    std::optional<uint32_t> argSeed;
+    if (const auto it = args.find("seed"); it != args.end()) {
+        argSeed = parseScriptSeed(it->second);
     }
+    const auto seed = static_cast<int>(argSeed.value_or(randomScriptSeed()));
 
     // Seed the api's stream from the same resolved seed, so both RNGs reproduce from --arg seed=N in
     // every host. A caller that pre-seeds (the fill preview) passes the same seed, so this is idempotent.
@@ -110,6 +95,27 @@ bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::
 
 void LuaSandboxHost::setPrintOutput(std::string& output) {
     _output = &output;
+    _printTruncated = false;
+}
+
+// Luau's default allocator (linit.cpp l_alloc), plus a running total so one script can't exhaust
+// the process. Refusing a block makes Luau raise a catchable memory error; frees always succeed.
+void* LuaSandboxHost::allocate(void* ud, void* ptr, std::size_t oldSize, std::size_t newSize) {
+    auto* host = static_cast<LuaSandboxHost*>(ud);
+    const std::size_t held = ptr != nullptr ? oldSize : 0; // Luau passes 0 for a new block (lmem.cpp)
+    if (newSize == 0) {
+        std::free(ptr);
+        host->_heapBytes -= held;
+        return nullptr;
+    }
+    if (newSize > held && host->_heapBytes - held + newSize > HEAP_LIMIT_BYTES) {
+        return nullptr;
+    }
+    void* block = std::realloc(ptr, newSize);
+    if (block != nullptr) {
+        host->_heapBytes = host->_heapBytes - held + newSize;
+    }
+    return block;
 }
 
 bool LuaSandboxHost::loadSource(const std::string& source, std::string& error) {
@@ -196,6 +202,15 @@ int LuaSandboxHost::capturePrint(lua_State* L) {
         return 0;
     }
 
+    if (host->_printTruncated) {
+        return 0;
+    }
+    if (host->_output->size() >= PRINT_LIMIT_BYTES) {
+        host->_printTruncated = true;
+        host->_output->append("[print output truncated: over 4 MiB]\n");
+        return 0;
+    }
+
     const int count = lua_gettop(L);
     for (int i = 1; i <= count; ++i) {
         if (i > 1) {
@@ -246,6 +261,7 @@ void LuaSandboxHost::close() noexcept {
         _state = nullptr;
     }
     _output = nullptr;
+    _printTruncated = false;
     _hasLoadedChunk = false;
     _timedOut = false;
 }

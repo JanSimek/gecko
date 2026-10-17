@@ -266,7 +266,7 @@ std::unique_ptr<Map> MapReader::read() {
             uint32_t check = 0;
             for (unsigned j = 0; j < loop; j++) {
 
-                MapScript map_script;
+                MapScript map_script{}; // fields a script type does not store (timer, radius) read as 0
 
                 int32_t pid = read_be_i32();
 

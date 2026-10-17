@@ -193,9 +193,16 @@ void MapWriter::writeObject(const MapObject& object) {
     auto& utils = getBinaryUtils();
 
     // Write the common-field block (layout shared with MapReader via the visitor).
-    // Every field is emitted as a big-endian 32-bit word.
-    visitMapObjectCommonFields(object, [&utils](const auto& field) {
-        utils.writeBE32(static_cast<uint32_t>(field));
+    // Every field is emitted as a big-endian 32-bit word. The inventory count is the number of
+    // records written after this object, so it comes from the inventory itself: a stale stored
+    // count would make the reader take the wrong number and misread every object after this one.
+    const auto inventoryCount = static_cast<uint32_t>(object.inventory.size());
+    visitMapObjectCommonFields(object, [&utils, &object, inventoryCount](const auto& field) {
+        if (static_cast<const void*>(&field) == static_cast<const void*>(&object.objects_in_inventory)) {
+            utils.writeBE32(inventoryCount);
+        } else {
+            utils.writeBE32(static_cast<uint32_t>(field));
+        }
     });
 
     const ObjectType objectType = object.objectType();
@@ -296,15 +303,12 @@ void MapWriter::writeObject(const MapObject& object) {
             break;
     }
 
-    // Write inventory objects if any
-    if (object.objects_in_inventory > 0) {
-        for (const auto& invobj : object.inventory) {
-            if (!invobj) {
-                throw CorruptDataException("Null inventory object", getPath(), "inventory");
-            }
-            utils.writeBE32(invobj->amount);
-            writeObject(*invobj); // Recursive call for inventory objects
+    for (const auto& invobj : object.inventory) {
+        if (!invobj) {
+            throw CorruptDataException("Null inventory object", getPath(), "inventory");
         }
+        utils.writeBE32(invobj->amount);
+        writeObject(*invobj); // Recursive call for inventory objects
     }
 }
 

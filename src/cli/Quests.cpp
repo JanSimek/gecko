@@ -28,7 +28,7 @@ namespace {
             return {};
         }
         try {
-            if (Msg* msg = resources.repository().load<Msg>(path); msg != nullptr) {
+            if (Msg* msg = resources.repository().tryLoad<Msg>(path); msg != nullptr) {
                 return msg->message(index).text;
             }
         } catch (const std::exception& e) {

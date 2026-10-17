@@ -46,13 +46,25 @@ jobs:
         echo "OK: no relative '..' includes in src/"
 
   build-linux:
-    name: Linux - ${{ matrix.build_type }}
+    # The suffixes appear only on the extra builds, so the required check names stay as they are.
+    name: Linux - ${{ matrix.build_type }}${{ matrix.scripting == 'OFF' && ' (scripting off)' || '' }}${{ matrix.sanitizers == 'ON' && ' (sanitizers)' || '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         build_type: [Release, Debug]
+        scripting: ['ON']
+        sanitizers: ['OFF']
+        include:
+          # Builds the #ifndef GECK_SCRIPTING_ENABLED paths, which no other job compiles.
+          - build_type: Release
+            scripting: 'OFF'
+            sanitizers: 'OFF'
+          # AddressSanitizer + UndefinedBehaviorSanitizer over the test suites.
+          - build_type: Debug
+            scripting: 'ON'
+            sanitizers: 'ON'
 
     steps:
     - name: Checkout repository
@@ -87,12 +99,13 @@ jobs:
           zlib1g-dev \
           libxinerama-dev \
           libxi-dev \
-          ninja-build
+          ninja-build \
+          xvfb
 
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
       with:
-        key: ${{ runner.os }}-${{ matrix.build_type }}
+        key: ${{ runner.os }}-${{ matrix.build_type }}${{ matrix.scripting == 'OFF' && '-noscripting' || '' }}${{ matrix.sanitizers == 'ON' && '-sanitizers' || '' }}
 
     - name: Cache SFML
       id: cache-sfml
@@ -122,7 +135,8 @@ jobs:
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DGECK_BUILD_TESTS=ON \
           -DGECK_USE_SYSTEM_LIBS=ON \
-          -DGECK_ENABLE_SCRIPTING=ON \
+          -DGECK_ENABLE_SCRIPTING=${{ matrix.scripting }} \
+          -DGECK_ENABLE_SANITIZERS=${{ matrix.sanitizers }} \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DQt6_DIR=$Qt6_DIR \
@@ -134,7 +148,16 @@ jobs:
     - name: Run tests
       run: |
         export LD_LIBRARY_PATH=${{ runner.temp }}/sfml-install/lib:$LD_LIBRARY_PATH
-        ctest --test-dir build --output-on-failure --parallel --timeout 600
+        # Xvfb gives SFML a display (Mesa GL), so the render tests run instead of skipping;
+        # Qt keeps the offscreen platform rather than needing the xcb plugin's libraries.
+        export QT_QPA_PLATFORM=offscreen
+        # Under the sanitizers: fail on the first UB report, skip LeakSanitizer (Qt and the GL driver
+        # hold process-lifetime allocations), and leave out the timing-based performance suite.
+        export ASAN_OPTIONS=detect_leaks=0
+        export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
+        exclude=""
+        if [ "${{ matrix.sanitizers }}" = "ON" ]; then exclude="-E performance_tests"; fi
+        xvfb-run -a -s "-screen 0 1280x1024x24" ctest --test-dir build --output-on-failure --parallel --timeout 600 $exclude
 
   build-macos:
     name: macOS - ${{ matrix.build_type }}

@@ -48,7 +48,7 @@ namespace {
             if (artPath.empty()) {
                 return nullptr;
             }
-            const Frm* frm = resources.repository().load<Frm>(artPath);
+            const Frm* frm = resources.repository().tryLoad<Frm>(artPath);
             if (frm == nullptr || frm->directions().empty()) {
                 return nullptr;
             }

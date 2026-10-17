@@ -115,9 +115,9 @@ gecko speaks the engine's internal 0-based index everywhere, because that is wha
 store and what the engine indexes `scripts.lst` with (fallout2-ce `scripts.cc`,
 `scriptsGetFileName`). This is deliberate, and follows the engine-fidelity rule below. The 1-based
 forms are the engine's own *inputs*, and the engine itself decrements them, so gecko normalises on
-the way in at the same two places: `MapAnalyzer` resolves the header's `script_id - 1` (fallout2-ce
-`map.cc`, `script->index = gMapHeader.scriptIndex - 1`), and sfall's `set_script()` opcode
-decrements before validating (fallout2-ce `sfall_opcodes.cc`).
+the way in where the engine does: the map header through `Map::MapHeader::programIndex()` (fallout2-ce
+`map.cc`, `script->index = gMapHeader.scriptIndex - 1`), and sfall's `set_script()` opcode, which
+decrements before validating (fallout2-ce `sfall_opcodes.cc`). Don't write `script_id - 1` by hand.
 
 ##### Common Mistake
 - `SCRIPT_EPAC17 (1413)` from `headers/scripts.h` is `programIndex` **1412**. Passing the constant

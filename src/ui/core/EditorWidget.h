@@ -62,6 +62,7 @@ class ViewportController;
 class SFMLWidget;
 struct ToolMouseEvent;
 struct ObjectInfo;
+enum class ObjectCategory;
 
 class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext, public ExitGridContext, public DragDropContext, public PluginToolHost {
     Q_OBJECT
@@ -270,9 +271,13 @@ public:
     // Access to SFML widget for main window
     SFMLWidget* getSFMLWidget() const override { return _sfmlWidget; }
 
-    // Set main window reference for accessing palette panels
-    void setMainWindow(class MainWindow* mainWindow) { _mainWindow = mainWindow; }
-    class MainWindow* getMainWindow() const { return _mainWindow; }
+    /// How the editor reaches the object palette, which its host owns: look an entry up (drag-and-drop),
+    /// and reveal a proto for Pick (P), selecting it, showing the palette and returning the entry.
+    struct ObjectPaletteHooks {
+        std::function<const ObjectInfo*(int objectIndex, ObjectCategory category)> objectInfo;
+        std::function<std::optional<std::pair<int, ObjectCategory>>(uint32_t pid)> revealProto;
+    };
+    void setObjectPaletteHooks(ObjectPaletteHooks hooks) { _objectPalette = std::move(hooks); }
 
     // Access to internal components for extracted managers
     selection::SelectionManager* getSelectionManager() const override { return _session.selectionManager(); }
@@ -325,7 +330,7 @@ public:
     // Ensure tile storage exists for an elevation
     std::vector<Tile>& ensureElevationTiles(int elevation) override;
     void registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
-    void registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath);
+    void registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, uint32_t newFrmPid, const std::string& newFrmPath);
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
 
     // Exit grid undo support
@@ -345,6 +350,10 @@ public:
     // Map-wide operations (undoable). The confirmation dialog lives in MapInfoPanel.
     void clearElevationObjects(int elevation);
     void copyElevation(int fromElevation, int toElevation);
+    void editMapHeader(const Map::MapHeader& after, const std::string& description, const std::string& mergeKey);
+    void setElevationPresent(int elevation, bool present);
+    /// Records an edit whose state lives outside the map (e.g. the Map Info panel's .gam document).
+    void pushUndoCommand(UndoCommand command);
 
     // Inventory edit (undoable). Snapshots come from SelectionPanel.
     void registerInventoryEdit(const std::shared_ptr<MapObject>& container,
@@ -406,6 +415,17 @@ signals:
     void statusMessageRequested(const QString& message);
     void statusMessageClearRequested();
     void undoStackChanged();
+    /// A change the undo stack doesn't record (a Console script, an applied fill) altered the map, so
+    /// the host refreshes Map Info and the other per-map panels.
+    void mapInfoRefreshRequested();
+    /// Tile placement was cancelled; the host clears the tile palette's selection.
+    void tilePaletteDeselectRequested();
+    /// Mark Exits mode was left from the canvas; the host unchecks its toolbar action.
+    void markExitsModeCancelled();
+    /// Pick (P) on a tile: the host selects this tile in the tile palette and shows the palette.
+    void tilePicked(int tileId, bool isRoof);
+    /// The map header changed, including which elevations are present: an edit or its undo/redo.
+    void mapHeaderChanged();
     /// A Console script changed the map through a path that records no undo command (e.g.
     /// setPlayerStart/newMap), so the host must flag the map modified explicitly.
     void mapModifiedByScript();
@@ -442,12 +462,11 @@ private:
     // saveMap (direct write) and saveMapAs (after the dialog). Reports errors and returns success.
     bool writeMapTo(const std::string& destination);
 
-    // One item's new selection entry after a drag-move: objects re-pointed to their refreshed
-    // wrapper (by MapObject identity), tiles shifted by the whole-tile delta; nullopt to drop it.
-    std::optional<selection::SelectedItem> remapSelectedItemAfterMove(
-        const selection::SelectedItem& item,
-        const std::unordered_map<const MapObject*, std::shared_ptr<Object>>& objectsByMapObject,
-        const std::optional<std::pair<int, int>>& tileDelta) const;
+    // The current elevation's object wrappers, keyed by the MapObject each one draws.
+    [[nodiscard]] selection::ObjectsByMapObject objectsByMapObjectIdentity() const;
+    // After an undo/redo: re-point selected objects at their rebuilt wrappers and drop the ones the
+    // map no longer holds on this elevation.
+    void reconcileSelectionWithMap();
 
     // If a spatial marker sits on the clicked hex, select that script and return true; a second quick
     // click also fires spatialScriptEditActivated. A miss clears the selection and returns false.
@@ -549,7 +568,7 @@ private:
     // UI Components
     QVBoxLayout* _layout;
     SFMLWidget* _sfmlWidget;
-    class MainWindow* _mainWindow;
+    ObjectPaletteHooks _objectPalette;
 
     // Owns the editor's per-map state and the Qt-free helpers acting on it. Declared before the
     // managers below so it outlives them - several hold references into it.

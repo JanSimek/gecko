@@ -15,7 +15,7 @@ QPixmap FrmThumbnailGenerator::fromFrmPath(resource::GameResources& resources, c
     thumbnail.fill(Qt::transparent);
 
     try {
-        const auto* frm = resources.repository().load<Frm>(frmPath);
+        const auto* frm = resources.repository().tryLoad<Frm>(frmPath);
         if (!frm) {
             return thumbnail;
         }
@@ -33,7 +33,7 @@ QPixmap FrmThumbnailGenerator::fromFrmPath(resource::GameResources& resources, c
         }
 
         // Load default palette for color conversion
-        const Pal* palette = resources.repository().load<Pal>("color.pal");
+        const Pal* palette = resources.repository().tryLoad<Pal>("color.pal");
         if (!palette) {
             spdlog::warn("FrmThumbnailGenerator: Could not load color.pal for {}", frmPath);
             return thumbnail;

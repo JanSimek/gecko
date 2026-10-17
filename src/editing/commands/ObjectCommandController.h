@@ -92,7 +92,7 @@ public:
     bool registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
     bool registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
-    bool registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath);
+    bool registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, uint32_t newFrmPid, const std::string& newFrmPath);
     bool registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation);
     bool registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
         const std::vector<ExitGridCommandState>& beforeStates,
@@ -134,11 +134,16 @@ public:
     /// undoable command, overwriting the destination. Scripts are not copied; the
     /// cloned objects are detached from any source scripts.
     bool copyElevation(int fromElevation, int toElevation);
+    /// Undoable header edit; see MapEditService::setHeader.
+    bool setMapHeader(const Map::MapHeader& after, const std::string& description, const std::string& mergeKey = {});
+    /// Undoable elevation add/remove; see MapEditService::setElevationPresent.
+    bool setElevationPresent(int elevation, bool present);
 
     /// Replaces the bound map with a fresh empty Fallout 2 map (default header, three
     /// empty elevations, no objects/scripts) and refreshes the view. This is a
-    /// destructive reset — like File > New, it is NOT recorded on the undo stack — so a
-    /// generation script can start from a blank slate regardless of what was loaded.
+    /// destructive reset — like File > New, it is NOT recorded on the undo stack and it clears
+    /// the history recorded against the old map — so a generation script can start from a
+    /// blank slate regardless of what was loaded.
     void newEmptyMap();
 
     // Script attachment (undoable). `scriptType` is the MapScript section/type
@@ -174,12 +179,6 @@ public:
     bool commitEdgeEdit(const std::string& description, std::optional<MapEdge> before);
 
 private:
-    resource::GameResources& _resources;
-    std::unique_ptr<Map>& _map;
-    const HexagonGrid& _hexgrid;
-    MapSpriteLoader& _mapSpriteLoader;
-    std::vector<std::shared_ptr<Object>>& _objects;
-    std::vector<sf::Sprite>& _wallBlockerOverlays;
     CommandHost& _host;
     UndoBatcher _batcher;
     TileEditService _tileService;

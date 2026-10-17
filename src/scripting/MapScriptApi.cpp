@@ -18,6 +18,7 @@
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
 #include "editor/Reachability.h"
+#include "editor/helper/ObjectQueries.h"
 #include "scripting/EditArea.h"
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
@@ -138,7 +139,7 @@ uint16_t MapScriptApi::getRoof(int tileIndex) const {
 int MapScriptApi::tileId(const std::string& name) const {
     // A failure to load tiles.lst is a real error (no data mounted) and is raised so the caller
     // sees it; an unknown name in a *loaded* list is a legitimate "not found" -> -1.
-    const Lst* lst = resourcesRef().repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
+    const Lst* lst = resourcesRef().repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::TILES));
     if (lst == nullptr) {
         throw ScriptError("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
     }
@@ -162,7 +163,7 @@ int MapScriptApi::tileId(const std::string& name) const {
 std::map<std::string, int> MapScriptApi::tilesByPrefix(const std::string& prefix) const {
     // Same availability contract as tileId(): a missing tiles.lst is a real error, an
     // unmatched prefix is a legitimate empty result.
-    const Lst* lst = resourcesRef().repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
+    const Lst* lst = resourcesRef().repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::TILES));
     if (lst == nullptr) {
         throw ScriptError("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
     }
@@ -511,7 +512,7 @@ uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
 std::string MapScriptApi::protoName(int pid) const {
     // A proto that can't be loaded (no data / bad pid) is a real error and is raised. A proto that
     // loads but has no name string is a legitimate empty result.
-    const Pro* pro = resourcesRef().loadPro(static_cast<uint32_t>(pid));
+    const Pro* pro = resourcesRef().tryLoadPro(static_cast<uint32_t>(pid));
     if (pro == nullptr) {
         throw ScriptError(std::format("proto could not be loaded for pid {}", pid));
     }
@@ -687,6 +688,7 @@ bool MapScriptApi::placeObject(uint32_t proPid, uint32_t frmPid, int hex, uint32
     mapObject->y = 0;
     mapObject->pro_pid = proPid;
     mapObject->frm_pid = frmPid;
+    object_query::applyProtoDefaults(*mapObject, resourcesRef());
 
     return registerObject(mapObject, hex, frmPid, direction);
 }
@@ -699,7 +701,7 @@ bool MapScriptApi::placeProto(uint32_t proPid, int hex, uint32_t direction) {
     // so callers place by PID alone. A proto we can't load has no art to place.
     uint32_t frmPid = 0;
     try {
-        if (const Pro* pro = resourcesRef().loadPro(proPid);
+        if (const Pro* pro = resourcesRef().tryLoadPro(proPid);
             pro != nullptr) {
             frmPid = static_cast<uint32_t>(pro->header.FID);
         }
@@ -1051,8 +1053,8 @@ int MapScriptApi::copyObjects(const std::string& mapPath, int refElevation, cons
     if (it == objectsByElevation.end()) {
         return 0; // the reference elevation holds no objects — a valid empty copy
     }
-    // One pass in the reference's own order: the editor draws objects in map order, so copying one
-    // type after another stacked e.g. every rock over every wall.
+    // One pass in the reference's own order: objects sharing a hex draw in list order, so copying
+    // one type after another would stack e.g. a rock over the wall on its hex.
     int placed = 0;
     for (const auto& object : it->second) {
         if (!object || object->position < 0 || std::ranges::find(wanted, ProtoId(object->pro_pid).objectType()) == wanted.end()) {
@@ -1316,6 +1318,7 @@ bool MapScriptApi::placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid
     mapObject->y = 0;
     mapObject->pro_pid = proPid;
     mapObject->frm_pid = frmPid;
+    object_query::applyProtoDefaults(*mapObject, resourcesRef());
     mapObject->exit_map = dest.map;
     mapObject->exit_position = static_cast<uint32_t>(dest.hex);
     mapObject->exit_elevation = static_cast<uint32_t>(dest.elevation);

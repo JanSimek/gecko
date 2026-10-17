@@ -45,6 +45,7 @@ public:
         std::function<int()> currentElevation;
         std::function<void(int hexIndex, bool isRoof, int elevation)> updateTileSprite;
         std::function<void()> loadTileSprites;
+        std::function<void()> mapHeaderChanged;
     };
 
     EditorController();

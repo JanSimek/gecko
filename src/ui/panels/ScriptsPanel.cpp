@@ -161,7 +161,7 @@ void ScriptsPanel::populate() {
 
     // scripts.lst maps a 0-based program index (MapScript.script_id) to a filename. Loaded once; degrades
     // to empty filenames when game data isn't mounted (e.g. a freshly generated map).
-    const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
+    const Lst* lst = _resources.repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
 
     const auto& mapFile = _map->getMapFile();
     const auto blockProblems = lst != nullptr ? resource::localVarBlockProblems(*_map, *lst) : std::map<uint32_t, std::string>{};
@@ -192,8 +192,8 @@ void ScriptsPanel::populate() {
     // is listed as one extra "Map" row. Its id is 1-based (unlike section scripts' 0-based script_id), so
     // subtract 1 to resolve it — mirroring the Map Info panel. It has no owning object, so the NONE
     // sentinel makes a double-click here do nothing. <=0 means no map script.
-    if (mapFile.header.script_id > 0) {
-        addRow(QStringLiteral("Map"), mapFile.header.script_id - 1, static_cast<qulonglong>(MapScript::NONE),
+    if (const auto programIndex = mapFile.header.programIndex(); programIndex.has_value()) {
+        addRow(QStringLiteral("Map"), *programIndex, static_cast<qulonglong>(MapScript::NONE),
             static_cast<qulonglong>(MapScript::NONE), QStringLiteral("(map script)"), lst);
         _table->item(_table->rowCount() - 1, COL_FILENAME)->setData(PLACEMENT_ROLE, static_cast<int>(resource::ScriptPlacement::Map));
     }

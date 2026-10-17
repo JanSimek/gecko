@@ -68,17 +68,11 @@ Expand the `scripts/README.md` table as new generators land.
 Footprint-aware, iso-diamond-masked placement for the curated scripts/tools; extract recurring
 multi-object clusters as **prefabs** (place a rock formation as one unit).
 
-- **Script-placed objects lose their proto flags** — `MapScriptApi::placeObject`/`placeProto` write
-  instance `flags = 0`, but the engine reads an object's flags from the map, not its proto: a placed
-  `OBJECT_FLAT` fill is drawn standing, a `NO_BLOCK` weed blocks movement, and transparency,
-  light-through and shoot-through are lost.
-  Fix: seed new objects' flags (and light radius/intensity) from the proto, as the
-  engine's `objectCreateWithFrmIdProtoId` (obj_new) does. (`copyObjects` clones the shipped record.)
-
-- **The editor draws standing objects in map-file order** — flat ones already go first
-  (`forEachInDrawOrder`, the engine's `_obj_render_pre_roof` flat pass), but the engine then walks
-  hexes in screen order (`_orderTable`, `gObjectListHeadByTile`), so a rock a script appends after a
-  wall draws over the wall in gecko but not in the game. Fix: sort the standing pass the same way.
+- **Placed objects don't get their proto's script** — the engine's obj_new also attaches the proto's
+  script (`objectSetScriptFromProto`); gecko's placement seeds flags, light and type data from the
+  proto (`MapObject::applyProtoDefaults`) but writes no script record.
+- **A stamp object without `"flags"` is placed with flags 0** — captured stamps carry the record's
+  flags; a hand-written one should fall back to the proto's (`applyProtoDefaults`).
 
 ## Smarter exit placement
 
@@ -116,10 +110,10 @@ terrain-derived locations:
 
 # Editor: known limitations & follow-ups
 
-1. **Undo coverage.** *Remaining:* the pre-existing elevation add/remove
-   (`MapInfoPanel` checkboxes) is still a direct mutation; a cascading script-delete when an
-   object is deleted; and the command-controller actions themselves aren't integration-tested
-   (they need GameResources/Qt — a `qt_tests` follow-up).
+1. **Undo coverage.** *Remaining:* a cascading script-delete when an object is deleted, and the
+   command-controller actions themselves aren't integration-tested (they need GameResources/Qt —
+   a `qt_tests` follow-up). Map Info header, elevation and map-variable edits are undoable
+   (`MapEditService::setHeader` / `setElevationPresent`, the panel's `globalVarsEdited`).
 2. **Newly created scripts get `local_var_count=0` / `offset=-1`** — exactly what the engine's
    `scriptAdd` writes; locals are allocated at runtime from the `.int`. The editor does not
    parse `.int` headers, and the local-var *count* lives in `scripts.lst`, not the binary.

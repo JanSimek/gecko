@@ -12,7 +12,7 @@ namespace geck::resource {
 inline Gam* loadVault13Gam(GameResources& resources) {
     for (const char* path : { "data/vault13.gam", "vault13.gam" }) {
         try {
-            if (Gam* gam = resources.repository().load<Gam>(path); gam != nullptr) {
+            if (Gam* gam = resources.repository().tryLoad<Gam>(path); gam != nullptr) {
                 return gam;
             }
         } catch (const std::exception& e) {

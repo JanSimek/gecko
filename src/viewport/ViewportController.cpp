@@ -130,6 +130,12 @@ int ViewportController::worldPosToHexIndex(sf::Vector2f worldPos) const {
         return -1;
     }
 
+    // Left of or above the grid's origin is off the map, and converting a negative float to unsigned
+    // is undefined, so stop here (the comparisons are also false for NaN).
+    if (constexpr float MAX_COORDINATE = 4.0e9f; // below UINT32_MAX
+        !(worldPos.x >= 0.0f && worldPos.y >= 0.0f && worldPos.x < MAX_COORDINATE && worldPos.y < MAX_COORDINATE)) {
+        return -1;
+    }
     uint32_t hexPosition = _hexGrid->positionAt(static_cast<uint32_t>(worldPos.x), static_cast<uint32_t>(worldPos.y));
 
     if (hexPosition == Hex::HEX_OUT_OF_MAP) {

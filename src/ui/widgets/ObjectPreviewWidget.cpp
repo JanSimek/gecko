@@ -323,13 +323,13 @@ void ObjectPreviewWidget::loadAnimationFrames() {
     }
 
     try {
-        auto frm = _resources.repository().load<Frm>(_currentFrmPath.toStdString());
+        auto frm = _resources.repository().tryLoad<Frm>(_currentFrmPath.toStdString());
         if (!frm) {
             spdlog::error("Failed to load FRM for animation: {}", _currentFrmPath.toStdString());
             return;
         }
 
-        auto pal = _resources.repository().load<Pal>("color.pal");
+        auto pal = _resources.repository().tryLoad<Pal>("color.pal");
         if (!pal) {
             spdlog::error("Failed to load palette for animation");
             return;

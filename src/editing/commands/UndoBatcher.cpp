@@ -74,4 +74,12 @@ bool UndoBatcher::endBatch() {
     return push(std::move(combined));
 }
 
+void UndoBatcher::clearHistory() {
+    _batchedCommands.clear();
+    _undoStack.clear();
+    if (_onStackChanged) {
+        _onStackChanged();
+    }
+}
+
 } // namespace geck

@@ -133,7 +133,7 @@ QString FileLoaderWorker::resolveProName(const std::string& vfsPath) const {
             path = path.substr(1);
         }
 
-        const auto* pro = _resources->repository().load<Pro>(path);
+        const auto* pro = _resources->repository().tryLoad<Pro>(path);
         if (!pro) {
             return QStringLiteral("Failed to load");
         }
@@ -595,12 +595,12 @@ void FileBrowserPanel::updateFileTypeComboBox() {
     }
 }
 
-void FileBrowserPanel::insertFileRow(FileTreeItem* rootItem, const FileBrowserEntry& entry) {
+void FileBrowserPanel::insertFileRow(QStandardItem* rootItem, const FileBrowserEntry& entry) {
     QStringList pathComponents = entry.normalizedPath.split('/', Qt::SkipEmptyParts);
     if (pathComponents.isEmpty())
         return;
 
-    FileTreeItem* currentParent = rootItem;
+    QStandardItem* currentParent = rootItem;
     for (int i = 0; i < pathComponents.size() - 1; ++i) {
         currentParent = findOrCreateDirectory(currentParent, pathComponents[i]);
     }
@@ -644,7 +644,8 @@ void FileBrowserPanel::buildFileTree(const std::vector<FileBrowserEntry>& entrie
 
     applyDefaultColumnVisibility();
 
-    FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
+    // The model's invisible root is a plain QStandardItem; every row under it is a FileTreeItem.
+    QStandardItem* rootItem = _treeModel->invisibleRootItem();
 
     for (const auto& entry : entries) {
         if (!_currentSearchFilter.isEmpty() && !entry.path.contains(_currentSearchFilter, Qt::CaseInsensitive)) {
@@ -668,7 +669,7 @@ void FileBrowserPanel::buildFileTree(const std::vector<FileBrowserEntry>& entrie
     resizeNameColumnToContent();
 }
 
-FileTreeItem* FileBrowserPanel::findOrCreateDirectory(FileTreeItem* parent, const QString& dirName) {
+FileTreeItem* FileBrowserPanel::findOrCreateDirectory(QStandardItem* parent, const QString& dirName) {
     for (int i = 0; i < parent->rowCount(); ++i) {
         QStandardItem* child = parent->child(i, 0);
         FileTreeItem* treeItem = static_cast<FileTreeItem*>(child);
@@ -931,7 +932,8 @@ void FileBrowserPanel::processNextChunk() {
         return;
     }
 
-    FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
+    // The model's invisible root is a plain QStandardItem; every row under it is a FileTreeItem.
+    QStandardItem* rootItem = _treeModel->invisibleRootItem();
 
     // No nested processEvents here. Re-entrant pumping let other timers - notably the SFML render
     // loop - run long work re-entrantly, freezing a map load's progress bar until the load finished,

@@ -21,6 +21,11 @@ namespace object_query {
     /// True when the object's PRO carries the ShootThrough flag.
     bool isShootThroughWallBlocker(const MapObject& object, resource::GameResources& resources);
 
+    /// Seed a new object's flags and light from its PRO (MapObject::applyProtoDefaults), as the
+    /// engine does on creation. An unloadable PRO leaves them untouched, as the engine's obj_new
+    /// does; returns whether the PRO loaded.
+    bool applyProtoDefaults(MapObject& object, resource::GameResources& resources);
+
 } // namespace object_query
 
 } // namespace geck

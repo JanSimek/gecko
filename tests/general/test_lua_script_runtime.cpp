@@ -17,6 +17,7 @@
 #include "scripting/LuaScriptRuntime.h"
 #include "scripting/MapScriptApi.h"
 #include "scripting/ScriptApiReference.h"
+#include "scripting/ScriptSeed.h"
 #include "writer/map/MapWriter.h"
 
 #include "support/ControllerFixture.h"
@@ -579,7 +580,7 @@ TEST_CASE("The shipped terrain.luau fails clearly when data is missing", "[scrip
     // that the error surfaces; the live fill/scatter runs against real data (GUI / gecko-cli).
     const auto r = rt.run(source, api, fx.controller, "terrain");
     CHECK_FALSE(r.ok);
-    CHECK(r.error.find("tiles.lst") != std::string::npos);
+    CHECK(r.error.find("tiles.lst is unavailable") != std::string::npos); // the API's own message, not the IO error
     CHECK(api.paintedTiles() == 0);
     CHECK(api.placedObjects() == 0);
 }
@@ -769,4 +770,59 @@ TEST_CASE("every documented script_api function is bound", "[scripting][lua]") {
     REQUIRE(r.ok);
     INFO("documented but not bound: " << r.output);
     CHECK(r.output == "\n"); // print() of an empty join is just a newline — nothing missing
+}
+
+TEST_CASE("A script cannot grow the Luau heap past the host's limit", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // Each string is 64 MiB; keeping them alive passes the 1 GiB cap long before the OS limit.
+    const auto r = rt.run(R"(
+        local keep = {}
+        local chunk = string.rep("x", 64 * 1024 * 1024)
+        for i = 1, 64 do keep[i] = chunk .. tostring(i) end
+    )",
+        api, fx.controller, "heap");
+    REQUIRE_FALSE(r.ok);
+    CHECK(r.error.find("memory") != std::string::npos);
+}
+
+TEST_CASE("Captured print output is capped", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    const auto r = rt.run(R"(
+        local line = string.rep("y", 1024)
+        for i = 1, 8 * 1024 do print(line) end
+    )",
+        api, fx.controller, "print");
+    REQUIRE(r.ok);
+    CHECK(r.output.size() < LuaSandboxHost::PRINT_LIMIT_BYTES + 2048);
+    CHECK(r.output.find("print output truncated") != std::string::npos);
+}
+
+TEST_CASE("Script seeds parse the same for single runs and batches", "[scripting][lua]") {
+    CHECK(parseScriptSeed("1234") == 1234u);
+    // Past 32 bits (std::stol threw there on Windows, where long is 32-bit) and negative values are
+    // masked to the 31 bits Luau's math.randomseed keeps.
+    CHECK(parseScriptSeed("4294967297") == 1u);
+    CHECK(parseScriptSeed("-1") == SCRIPT_SEED_MASK);
+    CHECK_FALSE(parseScriptSeed("abc").has_value());
+    CHECK_FALSE(parseScriptSeed("12abc").has_value());
+    CHECK(randomScriptSeed() <= SCRIPT_SEED_MASK);
+}
+
+TEST_CASE("scripts/README.md documents every bound script_api function", "[scripting][lua]") {
+    // The README's API table is written by hand; this keeps it in step with the bound surface.
+    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/README.md");
+    REQUIRE(file.is_open());
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    const std::string readme = buffer.str();
+    for (const ScriptApiEntry& entry : scriptApiEntries()) {
+        INFO("api:" << entry.name);
+        CHECK(readme.find("api:" + std::string(entry.name) + "(") != std::string::npos);
+    }
 }

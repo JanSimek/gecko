@@ -74,7 +74,7 @@ void printUsage(const char* program) {
               << "      --json emits machine-readable output (for the MCP) instead of the human report;\n"
               << "      --palette emits just the weighted floor + scenery palette a generator script needs.\n"
               << "  " << program << " map generate --script <file.luau> --out <file.map>\n"
-              << "      [--in <file.map>] [--elevation 0|1|2] [--count N]\n"
+              << "      [--in <file.map>] [--elevation 0|1|2] [--count N] [--time-budget SECONDS]\n"
               << "      [--arg key=value ...] [--stamp name=file.json ...]\n"
               << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      Runs a Luau generation script against a map and writes the result — a fresh\n"
@@ -84,6 +84,7 @@ void printUsage(const char* program) {
               << "      base (--arg seed=N, or a random base reported so the batch can reproduce).\n"
               << "      --arg passes parameters to the script (read as args.key); --stamp pre-loads a\n"
               << "      pattern stamp the script places with api:placeStamp(name, anchorHex, variant).\n"
+              << "      --time-budget stops a script that runs longer than SECONDS per map (default: none).\n"
               << "  " << program << " map render --map <file.map> --out <file.png>\n"
               << "      [--elevation 0|1|2] [--max-dim N] [--roof] [--schematic|--objects|--semantic]\n"
               << "      [--show-blockers] [--show-unreachable] [--full] [--crop-hex H [--crop-extent PX]]\n"
@@ -331,7 +332,7 @@ int consumeLintArg(const std::vector<std::string>& args, std::size_t i, CliArgs&
 int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out, const char* program) {
     const std::string& arg = args[i];
     const bool valueFlag = arg == "--data"
-        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--in" || arg == "--elevation" || arg == "--count" || arg == "--arg" || arg == "--stamp"))
+        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--in" || arg == "--elevation" || arg == "--count" || arg == "--time-budget" || arg == "--arg" || arg == "--stamp"))
         || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim" || arg == "--crop-hex" || arg == "--crop-extent"))
         || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"))
         || (out.describeScript && (arg == "--index" || arg == "--locale"))
@@ -368,6 +369,19 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     }
     if (out.generate && arg == "--count") {
         return parseIntFlag(arg, args[i + 1], out.gen.count, program) ? 2 : 0;
+    }
+    if (out.generate && arg == "--time-budget") {
+        int seconds = 0;
+        if (!parseIntFlag(arg, args[i + 1], seconds, program)) {
+            return 0;
+        }
+        if (seconds < 0 || seconds > 24 * 60 * 60) {
+            std::cerr << "error: --time-budget expects 0..86400 seconds, got: " << args[i + 1] << "\n";
+            printUsage(program);
+            return 0;
+        }
+        out.gen.timeBudgetMs = static_cast<unsigned>(seconds) * 1000U;
+        return 2;
     }
     if (out.generate && arg == "--arg") {
         // key=value -> exposed to the script as args.key
@@ -1001,50 +1015,41 @@ int runProtoCommand(const std::vector<std::string>& args, const char* program) {
     return geck::cli::exportProtos(resources, opts, std::cout);
 }
 
-} // namespace
-
-int main(int argc, char** argv) {
-    const std::vector<std::string> args(argv + 1, argv + argc);
-
+// The command families that parse their own arguments; nullopt when `args` names none of them.
+std::optional<int> runCommandFamily(const std::vector<std::string>& args, const char* program) {
+    if (args.size() < 2) {
+        return std::nullopt;
+    }
     // The `frm` family is parsed and run on its own path (its own positional + flags), separate from
-    // the `map` subcommands below.
-    if (args.size() >= 2 && args[0] == "frm" && isFrmAction(args[1])) {
-        return runFrmCommand(args, argv[0]);
+    // the `map` subcommands below; so is the `resource` family (data inspection).
+    if (args[0] == "frm" && isFrmAction(args[1])) {
+        return runFrmCommand(args, program);
     }
-
-    // The `resource` family (data-inspection) is likewise parsed and run on its own path.
-    if (args.size() >= 2 && args[0] == "resource" && isResourceAction(args[1])) {
-        return runResourceCommand(args, argv[0]);
+    if (args[0] == "resource" && isResourceAction(args[1])) {
+        return runResourceCommand(args, program);
     }
-
-    if (args.size() >= 2 && args[0] == "proto" && args[1] == "export") {
-        return runProtoCommand(args, argv[0]);
+    if (args[0] == "proto" && args[1] == "export") {
+        return runProtoCommand(args, program);
     }
-
-    if (args.size() >= 2 && args[0] == "script" && args[1] == "lint") {
-        return runScriptCommand(args, argv[0]);
+    if (args[0] == "script" && args[1] == "lint") {
+        return runScriptCommand(args, program);
     }
+    return std::nullopt;
+}
 
-    CliArgs cli;
-    if (const auto exitCode = parseArgs(args, argv[0], cli); exitCode.has_value()) {
-        return *exitCode;
-    }
-
-    // Keep stdout clean: the resource/reader layers log to the default (stderr) sink, including
-    // an [error] for every unknown script PID encountered while parsing maps — expected noise
-    // here, so silence all levels.
-    spdlog::set_level(spdlog::level::off);
-
-    geck::resource::GameResources resources;
+void mountCliData(geck::resource::GameResources& resources, const CliArgs& cli, const char* program) {
     for (const auto& path : cli.dataPaths) {
         resources.files().addDataPath(path);
     }
     // Mount the bundled resources (blank.frm, scripts, …) the way the editor does, so e.g. the
     // natural map render finds art/tiles/blank.frm even though it isn't in master.dat.
-    if (const auto bundled = geck::cli::findBundledResources(argv[0]); !bundled.empty()) {
+    if (const auto bundled = geck::cli::findBundledResources(program); !bundled.empty()) {
         resources.files().addDataPath(bundled);
     }
+}
 
+// The map subcommands that write files or read scripts; nullopt for the analysis ones.
+std::optional<int> runProducingCommand(geck::resource::GameResources& resources, const CliArgs& cli) {
     if (cli.generate) {
         return geck::cli::generateMap(resources, cli.gen, std::cout);
     }
@@ -1063,6 +1068,11 @@ int main(int argc, char** argv) {
     if (cli.scriptRefs) {
         return geck::cli::findScriptRefs(resources, cli.refs, std::cout);
     }
+    return std::nullopt;
+}
+
+// The map and world analysis subcommands; analyze is the default.
+int runAnalysisCommand(geck::resource::GameResources& resources, const CliArgs& cli) {
     if (cli.reachability) {
         return geck::cli::analyzeReachability(resources, cli.reach, std::cout);
     }
@@ -1101,4 +1111,41 @@ int main(int argc, char** argv) {
         return geck::cli::dumpMapGrid(resources, cli.dumpOpts, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
+}
+
+int runCli(int argc, char** argv) {
+    const std::vector<std::string> args(argv + 1, argv + argc);
+    if (const auto exitCode = runCommandFamily(args, argv[0]); exitCode.has_value()) {
+        return *exitCode;
+    }
+
+    CliArgs cli;
+    if (const auto exitCode = parseArgs(args, argv[0], cli); exitCode.has_value()) {
+        return *exitCode;
+    }
+
+    // Keep stdout clean: the resource/reader layers log to the default (stderr) sink, including
+    // an [error] for every unknown script PID encountered while parsing maps — expected noise
+    // here, so silence all levels.
+    spdlog::set_level(spdlog::level::off);
+
+    geck::resource::GameResources resources;
+    mountCliData(resources, cli, argv[0]);
+    if (const auto exitCode = runProducingCommand(resources, cli); exitCode.has_value()) {
+        return *exitCode;
+    }
+    return runAnalysisCommand(resources, cli);
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    // A bad --data path or an unreadable map raises from deep in the resource layer; report it
+    // instead of letting it reach std::terminate.
+    try {
+        return runCli(argc, argv);
+    } catch (const std::exception& e) {
+        std::cerr << "error: " << e.what() << "\n";
+        return 1;
+    }
 }

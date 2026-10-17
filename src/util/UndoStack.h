@@ -10,6 +10,9 @@ struct UndoCommand {
     std::string description;
     std::function<void()> undo;
     std::function<void()> redo;
+    /// Non-empty: a push with the same key as the newest entry folds into it, keeping that entry's
+    /// undo and taking this redo, so stepping a spin box through values is one undo step.
+    std::string mergeKey;
 };
 
 class UndoStack {
@@ -24,6 +27,10 @@ public:
 
     void push(UndoCommand cmd) {
         if (!cmd.undo || !cmd.redo) {
+            return;
+        }
+        if (!cmd.mergeKey.empty() && _redo.empty() && !_undo.empty() && _undo.back().mergeKey == cmd.mergeKey) {
+            _undo.back().redo = std::move(cmd.redo);
             return;
         }
         _undo.push_back(std::move(cmd));

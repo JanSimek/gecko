@@ -73,8 +73,6 @@ public:
     void setItemFieldsVisible(bool isItem);
 
     // UI Constants (Data Type Limits and Documented Game Limits Only)
-    static constexpr int MAX_PID_VALUE = 0x5FFFFFF;    // 24-bit object ID
-    static constexpr int MAX_FID_VALUE = 0xFFFFFF;     // 24-bit frame ID
     static constexpr int MAX_LIGHT_RADIUS = 8;         // Wiki: "0..8 (hexes)"
     static constexpr int MAX_LIGHT_INTENSITY = 65536;  // Wiki: "0..65536 (0x0000FFFF)"
     static constexpr int MAX_FLAGS_VALUE = 0xFFFFFFFF; // 32-bit flags

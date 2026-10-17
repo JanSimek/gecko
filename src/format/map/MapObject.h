@@ -4,9 +4,7 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include "util/Constants.h"
 #include "format/pro/Pro.h"
-#include <spdlog/spdlog.h>
 
 namespace geck {
 
@@ -103,6 +101,14 @@ struct MapObject {
     /// Deep copy of this object, recursively cloning inventory. Needed because
     /// MapObject is otherwise non-copyable (the inventory holds unique_ptrs).
     std::unique_ptr<MapObject> cloneDeep() const;
+
+    /// Give a new object what its proto prescribes, as the engine does on creation: flags and light
+    /// (fallout2-ce object.cc objectCreateWithFrmIdProtoId, obj_new) and the type's data
+    /// (proto.cc _proto_update_init: a critter's HP, AP, AI packet and team; a weapon's ammo; a
+    /// key's code; a door's state; stairs' and ladders' targets). The engine then reads all of it
+    /// from the map, never again from the proto: written as zeros, a critter starts dead, a flat
+    /// object stands, a NoBlock one blocks and a lamp gives no light.
+    void applyProtoDefaults(const Pro& pro);
 
     bool isLightSource() const {
         bool hasLight = light_radius > 0 || light_intensity > 0;

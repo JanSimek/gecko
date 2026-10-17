@@ -89,11 +89,6 @@ public:
     void closeCurrentMap();
     bool hasActiveMap() const;
 
-    // Access to palette panels for drag and drop and tile deselection
-    ObjectPalettePanel* getObjectPalettePanel() const { return _objectPalettePanel; }
-    TilePalettePanel* getTilePalettePanel() const { return _tilePalettePanel; }
-    FileBrowserPanel* getFileBrowserPanel() const { return _fileBrowserPanel; }
-
     // Bring a palette dock to the front of its tab group (used by the eyedropper so the picked
     // object/tile's palette is visible). No-op if the dock is hidden or floating on its own.
     void raiseObjectPalette();
@@ -171,6 +166,9 @@ private slots:
     void showMapBrowserDialog();
     /// Switches the central area between the world map and whatever was showing before it.
     void toggleWorldMap(bool show);
+    /// An undoable header edit, or its undo/redo, may have added or removed an elevation: refresh the
+    /// Map Info panel and the elevation menu, and leave an elevation that is gone.
+    void onMapHeaderChanged();
 
 public slots:
     void showStatusMessage(const QString& message);

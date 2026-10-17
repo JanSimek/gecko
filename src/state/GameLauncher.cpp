@@ -1,7 +1,7 @@
 #include "GameLauncher.h"
 
 #include "resource/GameResources.h"
-#include "state/MapSaveService.h"
+#include "resource/MapFileIO.h"
 #include "ui/Settings.h"
 #include "ui/QtDialogs.h"
 #include "util/GameDataPathResolver.h"
@@ -370,7 +370,7 @@ GameLauncher::~GameLauncher() {
     restoreModsOrder();
 }
 
-void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapFilename) {
+void GameLauncher::playGame(const Map* map, const std::string& mapFilename) {
     auto& settings = *_settings;
 
     if (!settings.isGameLocationValid()) {
@@ -380,7 +380,7 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
         return;
     }
 
-    if (!mapFile) {
+    if (!map) {
         QtDialogs::showWarning(_dialogParent, "No Map Loaded",
             "No map is currently loaded. Please open or create a map before playing.");
         return;
@@ -437,7 +437,7 @@ void GameLauncher::playGame(const Map::MapFile* mapFile, const std::string& mapF
             std::filesystem::create_directories(mapsDir);
         }
 
-        const auto bytesWritten = saveMapToFile(_resources, *mapFile, mapDestination);
+        const auto bytesWritten = resource::writeMap(_resources, *map, mapDestination);
         if (!bytesWritten.has_value()) {
             QtDialogs::showError(_dialogParent, "Save Failed",
                 QString("Failed to save map to game directory: %1").arg(QString::fromStdString(mapDestination.string())));

@@ -30,7 +30,10 @@ std::string scriptApiReference() {
         << "- **Errors raise.** A genuine failure (no data mounted, a bad map path, an unknown proto\n"
         << "  type) raises a Lua error that stops the run; \"not applicable\" stays a value (e.g.\n"
         << "  `placeProto` -> false, `tileId` -> -1).\n"
-        << "- **`args`** holds the `--arg key=value` parameters as strings (use `tonumber` as needed).\n";
+        << "- **`args`** holds the `--arg key=value` parameters as strings (use `tonumber` as needed).\n"
+        << "- **Limits.** A run may hold up to 1 GiB of Luau heap and keeps 4 MiB of `print` output.\n"
+        << "  The MCP `generate` stops a script still running after `timeBudgetSeconds` (default 60)\n"
+        << "  per map, the editor's console after 30 s; `gecko-cli` is untimed unless `--time-budget`.\n";
     return out.str();
 }
 

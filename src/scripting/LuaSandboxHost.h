@@ -3,6 +3,7 @@
 #include "scripting/ScriptTypes.h"
 
 #include <chrono>
+#include <cstddef>
 #include <string>
 
 struct lua_State;
@@ -21,6 +22,12 @@ class MapScriptApi;
 /// runLoaded() calls it collects, or be replaced first via setPrintOutput().
 class LuaSandboxHost {
 public:
+    /// The Luau heap a script may hold. A larger request fails with Luau's "not enough memory" error
+    /// instead of taking the host (gecko-mcp, the editor) down with it.
+    static constexpr std::size_t HEAP_LIMIT_BYTES = std::size_t{ 1024 } * 1024 * 1024;
+    /// print() output kept per run; the rest is dropped behind a one-line note.
+    static constexpr std::size_t PRINT_LIMIT_BYTES = std::size_t{ 4 } * 1024 * 1024;
+
     LuaSandboxHost() = default;
     ~LuaSandboxHost();
 
@@ -48,6 +55,7 @@ public:
     bool runLoaded(std::string& error, unsigned timeBudgetMs = 0);
 
 private:
+    static void* allocate(void* ud, void* ptr, std::size_t oldSize, std::size_t newSize);
     static int capturePrint(lua_State* L);
     static void timeBudgetInterrupt(lua_State* L, int gc);
 
@@ -57,6 +65,8 @@ private:
 
     lua_State* _state = nullptr;
     std::string* _output = nullptr;
+    bool _printTruncated = false;
+    std::size_t _heapBytes = 0;
     bool _hasLoadedChunk = false;
 
     // Watchdog state for the in-flight runLoaded(). `_timedOut` is sticky for the whole run: see

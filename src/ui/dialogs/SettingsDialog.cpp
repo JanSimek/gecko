@@ -5,6 +5,7 @@
 #include "ui/widgets/TextEditorWidget.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/Settings.h"
+#include "rendering/RenderingEngine.h"
 
 #include <QApplication>
 #include <QScrollArea>
@@ -288,12 +289,14 @@ void SettingsDialog::loadSettings() {
     _gameLocationWidget->setExecutableLocation(settings.getExecutableGameLocation());
     _gameLocationWidget->setDataDirectory(settings.getGameDataDirectory());
 
-    // Selection colours. Defaults mirror RenderingEngine::SelectionPalette — keep in sync.
+    // Selection colours, defaulting to the renderer's own.
+    const RenderingEngine::SelectionPalette palette;
+    const auto toQColor = [](const sf::Color& c) { return QColor(c.r, c.g, c.b); };
     const QMap<QString, QColor> defaults{
-        { "object", QColor(140, 110, 220) },
-        { "wall", QColor(74, 206, 168) },
-        { "critter", QColor(224, 180, 96) },
-        { "tile", QColor(74, 144, 226) },
+        { "object", toQColor(palette.object) },
+        { "wall", toQColor(palette.wall) },
+        { "critter", toQColor(palette.critter) },
+        { "tile", toQColor(palette.tile) },
     };
     for (auto it = defaults.constBegin(); it != defaults.constEnd(); ++it) {
         _selectionColors[it.key()] = settings.getSelectionColor(it.key(), it.value());

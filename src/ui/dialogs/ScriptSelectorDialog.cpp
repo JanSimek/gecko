@@ -24,7 +24,7 @@ namespace {
 
 std::vector<ScriptSelectorDialog::Entry> ScriptSelectorDialog::buildEntries(resource::GameResources& resources) {
     std::vector<Entry> entries;
-    const Lst* lst = resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
+    const Lst* lst = resources.repository().tryLoad<Lst>(ResourcePaths::Lst::SCRIPTS);
     if (lst == nullptr) {
         return entries;
     }

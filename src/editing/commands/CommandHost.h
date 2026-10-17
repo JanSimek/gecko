@@ -34,6 +34,8 @@ public:
     virtual void updateTileSprite(int hexIndex, bool isRoof, int elevation) = 0;
     /// Reload every tile sprite (after a bulk tile change such as a cleared/copied elevation).
     virtual void reloadTiles() = 0;
+    /// The map header changed (an edit, or its undo/redo), including which elevations are present.
+    virtual void mapHeaderChanged() { /* a headless host shows no header */ }
 };
 
 /**
@@ -50,13 +52,15 @@ public:
         std::function<std::vector<Tile>&(int)> ensureElevationTiles,
         std::function<int()> getCurrentElevation,
         std::function<void(int, bool, int)> updateTileSprite,
-        std::function<void()> reloadTiles)
+        std::function<void()> reloadTiles,
+        std::function<void()> mapHeaderChanged = {})
         : _refreshObjects(std::move(refreshObjects))
         , _undoStackChanged(std::move(undoStackChanged))
         , _ensureElevationTiles(std::move(ensureElevationTiles))
         , _getCurrentElevation(std::move(getCurrentElevation))
         , _updateTileSprite(std::move(updateTileSprite))
-        , _reloadTiles(std::move(reloadTiles)) {
+        , _reloadTiles(std::move(reloadTiles))
+        , _mapHeaderChanged(std::move(mapHeaderChanged)) {
     }
 
     void refreshObjects() override { _refreshObjects(); }
@@ -65,6 +69,11 @@ public:
     int getCurrentElevation() const override { return _getCurrentElevation(); }
     void updateTileSprite(int hexIndex, bool isRoof, int elevation) override { _updateTileSprite(hexIndex, isRoof, elevation); }
     void reloadTiles() override { _reloadTiles(); }
+    void mapHeaderChanged() override {
+        if (_mapHeaderChanged) {
+            _mapHeaderChanged();
+        }
+    }
 
 private:
     std::function<void()> _refreshObjects;
@@ -73,6 +82,7 @@ private:
     std::function<int()> _getCurrentElevation;
     std::function<void(int, bool, int)> _updateTileSprite;
     std::function<void()> _reloadTiles;
+    std::function<void()> _mapHeaderChanged;
 };
 
 } // namespace geck

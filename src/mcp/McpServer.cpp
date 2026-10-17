@@ -244,12 +244,7 @@ namespace {
         opts.palette = paletteOnly;
         opts.maps = optMaps(args);
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::analyzeMaps(resources, opts, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("analyze failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::analyzeMaps(resources, opts, oss);
         return toolText(oss.str(), rc != 0); // rc != 0 e.g. when no maps are found
     }
 
@@ -368,12 +363,7 @@ namespace {
         cli::ReachabilityOptions opts;
         opts.mapPath = requireString(args, "map");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::analyzeReachability(resources, opts, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("reachability failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::analyzeReachability(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -381,38 +371,20 @@ namespace {
         cli::DescribeMapOptions opts;
         opts.mapPath = requireString(args, "map");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::describeMap(resources, opts, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("describe_map failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::describeMap(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolDumpGrid(resource::GameResources& resources, const json& args) {
         cli::DumpGridOptions opts;
         opts.map = requireString(args, "map");
-        if (args.contains("elevation") && args.at("elevation").is_number_integer()) {
-            opts.elevation = args.at("elevation").get<int>();
-        }
-        if (args.contains("roof") && args.at("roof").is_boolean()) {
-            opts.roof = args.at("roof").get<bool>();
-        }
-        if (args.contains("floor") && args.at("floor").is_boolean()) {
-            opts.floor = args.at("floor").get<bool>();
-        }
-        if (args.contains("objects") && args.at("objects").is_boolean()) {
-            opts.objects = args.at("objects").get<bool>();
-        }
+        opts.elevation = static_cast<int>(optInt(args, "elevation", opts.elevation, -1, 2)); // -1 = every elevation
+        opts.roof = optBool(args, "roof", opts.roof);
+        opts.floor = optBool(args, "floor", opts.floor);
+        opts.objects = optBool(args, "objects", opts.objects);
         opts.nameFilter = optString(args, "name");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::dumpMapGrid(resources, opts, oss);
-        } catch (const std::exception& e) { // NOSONAR: tool boundary — any failure is returned to the caller as an error result
-            return toolText(std::string("dump_grid failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::dumpMapGrid(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -421,67 +393,37 @@ namespace {
         opts.maps = optMaps(args);
         opts.scripts = optBool(args, "scripts", true);
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::buildMapGraph(resources, opts, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("map_graph failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::buildMapGraph(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolWorldMap(resource::GameResources& resources, const json& /*args*/) {
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::buildWorldMap(resources, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("world_map failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::buildWorldMap(resources, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolWorldEncounters(resource::GameResources& resources, const json& /*args*/) {
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::buildWorldEncounters(resources, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("world_encounters failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::buildWorldEncounters(resources, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolGlobalVars(resource::GameResources& resources, const json& /*args*/) {
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::buildGlobalVars(resources, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("gvars failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::buildGlobalVars(resources, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolQuests(resource::GameResources& resources, const json& /*args*/) {
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::buildQuests(resources, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("quests failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::buildQuests(resources, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolEndings(resource::GameResources& resources, const json& /*args*/) {
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::buildEndings(resources, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("endings failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::buildEndings(resources, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -522,12 +464,7 @@ namespace {
     json toolFindGvar(resource::GameResources& resources, const json& args) {
         const std::string gvarName = requireString(args, "gvar");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::findGvarRefs(resources, gvarName, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("find_gvar failed: ") + e.what(), true);
-        }
+        const int rc = cli::findGvarRefs(resources, gvarName, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -561,7 +498,7 @@ namespace {
         try {
             std::string name;
             bool flat = false;
-            if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
+            if (const Pro* pro = resources.tryLoadPro(pid); pro != nullptr) {
                 flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
                 if (Msg* msg = ProHelper::msgFile(resources, pro->type()); msg != nullptr) {
                     name = msg->message(pro->header.message_id).text;
@@ -575,7 +512,7 @@ namespace {
             // parser has to re-derive the pid-to-file mapping that loadPro() already does --
             // which is not the identity: 00000010.pro holds pid 11 and 00000011.pro holds pid 10,
             // and 14 item protos are transposed that way.
-            if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
+            if (const Pro* pro = resources.tryLoadPro(pid); pro != nullptr) {
                 static const char* kDamage[] = { "normal", "laser", "fire", "plasma",
                     "electrical", "emp", "explosion", "radiation", "poison" };
                 static const char* kSpecial[] = { "strength", "perception", "endurance",
@@ -666,6 +603,8 @@ namespace {
         opts.inPath = optString(args, "in");
         opts.elevation = static_cast<int>(optInt(args, "elevation", 0, 0, 2));
         opts.count = static_cast<int>(optInt(args, "count", 1, 1, 1000));
+        // The server handles one request at a time, so a runaway script must not stall it for good.
+        opts.timeBudgetMs = static_cast<unsigned>(optInt(args, "timeBudgetSeconds", 60, 1, 3600)) * 1000U;
         if (const auto it = args.find("args"); it != args.end() && it->is_object()) {
             for (const auto& [key, value] : it->items()) {
                 opts.args[key] = value.is_string() ? value.get<std::string>() : value.dump();
@@ -735,12 +674,7 @@ namespace {
     json toolFrmInfo(resource::GameResources& resources, const json& args) {
         const std::string target = requireString(args, "frm");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::frmInfo(resources, target, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("frm_info failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::frmInfo(resources, target, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -763,24 +697,14 @@ namespace {
     json toolResolveFid(resource::GameResources& resources, const json& args) {
         const std::string fid = requireString(args, "fid");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::resolveFidCommand(resources, fid, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("resolve_fid failed: ") + e.what(), true);
-        }
+        const int rc = cli::resolveFidCommand(resources, fid, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolListFrms(resource::GameResources& resources, const json& args) {
         const std::string glob = requireString(args, "glob");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::listFrms(resources, glob, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("list_frms failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::listFrms(resources, glob, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -868,36 +792,21 @@ namespace {
     json toolResourceFind(resource::GameResources& resources, const json& args) {
         const std::string path = requireString(args, "path");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::resourceFind(resources, path, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("resource_find failed: ") + e.what(), true);
-        }
+        const int rc = cli::resourceFind(resources, path, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolResourceList(resource::GameResources& resources, const json& args) {
         const std::string glob = requireString(args, "glob");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::resourceList(resources, glob, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("resource_list failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::resourceList(resources, glob, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolResourceMissing(resource::GameResources& resources, const json& args) {
         const std::string map = requireString(args, "map");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::resourceMissing(resources, map, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("resource_missing failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::resourceMissing(resources, map, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -1334,8 +1243,10 @@ namespace {
             "batches: the script runs once per map against a fresh copy, writing <out>_1.map .. "
             "<out>_N.map with consecutive seeds so the maps differ yet reproduce from one args.seed), "
             "optional args (string map), optional stamps (name -> stamp .json path, placed by the "
-            "script with api:placeStamp(name, anchorHex, variant)). Scripting build required.",
-            json({ { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "in", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "count", { { "type", "integer" } } }, { "args", { { "type", "object" } } }, { "stamps", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } }),
+            "script with api:placeStamp(name, anchorHex, variant)), optional timeBudgetSeconds (1..3600, "
+            "default 60: a script still running after that per map is stopped with an error). "
+            "Scripting build required.",
+            json({ { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "in", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "count", { { "type", "integer" } } }, { "timeBudgetSeconds", { { "type", "integer" } } }, { "args", { { "type", "object" } } }, { "stamps", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } }),
             [](resource::GameResources& r, const json& a) { return toolGenerate(r, a); } });
         t.push_back({ "render_map",
             "Render a map to a PNG so it can be seen, not just measured. Args: map (.map path), out "
@@ -1414,6 +1325,14 @@ namespace {
             // Bad arguments are a tool-result error (the call was well-formed; the input wasn't),
             // not a JSON-RPC protocol error.
             return toolText(e.message, /*isError*/ true);
+        } catch (const std::exception& e) { // NOSONAR: tool boundary — any failure is returned to the caller as an error result
+            // Anything else the tool raised (missing data, an unwritable path) is a result the model can
+            // read and act on, not an internal error of the server.
+            std::string message = name + " failed: " + e.what();
+            if (resources.files().mounts().empty()) {
+                message += " (no Fallout 2 data is mounted)";
+            }
+            return toolText(message, /*isError*/ true);
         }
     }
 

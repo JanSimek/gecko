@@ -824,7 +824,7 @@ void SelectionPanel::onChangeFrmClicked() {
         if (!newFrmPath.empty()) {
             // Validate that the FRM file actually exists before attempting the change
             try {
-                auto testLoad = _resources.repository().load<Frm>(newFrmPath);
+                auto testLoad = _resources.repository().tryLoad<Frm>(newFrmPath);
                 if (!testLoad) {
                     spdlog::error("SelectionPanel: FRM file not found or invalid: {} - aborting change", newFrmPath);
                     return;
@@ -1033,7 +1033,7 @@ void SelectionPanel::onEditDestinationClicked() {
 
     SceneryType sceneryType = SceneryType::Generic;
     try {
-        auto pro = _resources.loadPro(mapObject->pro_pid);
+        auto pro = _resources.tryLoadPro(mapObject->pro_pid);
         if (!pro || pro->type() != ObjectType::Scenery) {
             return;
         }
@@ -1074,7 +1074,7 @@ void SelectionPanel::onEditInteractionClicked() {
 
     bool isDoor = false;
     try {
-        auto pro = _resources.loadPro(mapObject->pro_pid);
+        auto pro = _resources.tryLoadPro(mapObject->pro_pid);
         if (!pro) {
             return;
         }
@@ -1248,6 +1248,7 @@ void SelectionPanel::onAddInventoryClicked() {
     auto item = std::make_unique<MapObject>();
     item->pro_pid = *itemPid;
     item->frm_pid = pro->header.FID;
+    item->applyProtoDefaults(*pro);
     item->amount = static_cast<uint32_t>(dialog.selectedAmount());
     item->elevation = holder->elevation;
     item->position = holder->position;
@@ -1371,7 +1372,7 @@ void SelectionPanel::updateInventorySection() {
     bool hasInventory = false;
     if (holder) {
         try {
-            if (const Pro* pro = _resources.loadPro(holder->pro_pid)) {
+            if (const Pro* pro = _resources.tryLoadPro(holder->pro_pid)) {
                 hasInventory = (pro->type() == ObjectType::Item && pro->itemType() == ItemType::Container)
                     || pro->type() == ObjectType::Critter;
             }

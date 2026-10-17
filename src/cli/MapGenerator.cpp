@@ -13,7 +13,6 @@
 #include <format>
 #include <functional>
 #include <memory>
-#include <random>
 #include <ranges>
 #include <vector>
 
@@ -30,11 +29,12 @@
 #include "format/pro/Pro.h"
 #include "scripting/LuaScriptRuntime.h"
 #include "scripting/MapScriptApi.h"
+#include "scripting/ScriptSeed.h"
 #include "editing/commands/CommandHost.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "rendering/MapSpriteLoader.h"
 #include "util/UndoStack.h"
-#include "writer/map/MapWriter.h"
+#include "resource/MapFileIO.h"
 #endif
 
 namespace geck::cli {
@@ -156,7 +156,7 @@ namespace {
         }
 
         LuaScriptRuntime runtime;
-        const ScriptResult result = runtime.run(source, api, controller, "generate", args);
+        const ScriptResult result = runtime.run(source, api, controller, "generate", args, options.timeBudgetMs);
         if (!result.output.empty()) {
             out << result.output;
             if (result.output.back() != '\n') {
@@ -169,18 +169,8 @@ namespace {
         }
         out << "painted " << api.paintedTiles() << " tiles, placed " << api.placedObjects() << " objects.\n";
 
-        // Serialize. Scenery/item objects read their subtype from the proto during writing, so the
-        // writer needs the same proto provider the reader uses.
-        const std::function<Pro*(int32_t)> proLoad = [&resources](int32_t pid) -> Pro* {
-            try {
-                return resources.loadPro(static_cast<uint32_t>(pid));
-            } catch (const std::exception&) {
-                return nullptr;
-            }
-        };
-        MapWriter writer{ proLoad };
-        writer.openFile(outPath);
-        if (!writer.write(map->getMapFile())) {
+        // Writes the .EDG sidecar too, so `--in` keeps the map edge of the map it decorated.
+        if (!resource::writeMap(resources, *map, outPath).has_value()) {
             out << "error: failed to write map: " << outPath << "\n";
             return 1;
         }
@@ -219,27 +209,19 @@ int generateMap(resource::GameResources& resources, const GenerateOptions& optio
 
     // Batch: run the script once per map, each against a fresh copy, with consecutive seeds from
     // a base — so the maps differ from each other, yet the whole batch reproduces from one
-    // `--arg seed=N` (mirroring LuaScriptRuntime's per-run resolution: parseable arg, else random,
-    // masked to the 31-bit range Luau's math.randomseed keeps).
-    uint32_t baseSeed = 0;
-    bool haveArgSeed = false;
+    // `--arg seed=N`, read the way a single run reads it.
+    std::optional<uint32_t> argSeed;
     if (const auto it = options.args.find("seed"); it != options.args.end()) {
-        try {
-            baseSeed = static_cast<uint32_t>(std::stol(it->second)) & 0x7FFFFFFF;
-            haveArgSeed = true;
-        } catch (const std::logic_error&) { // stol's invalid_argument / out_of_range
-            haveArgSeed = false;            // not a number -> a random base, like a single run
-        }
+        argSeed = parseScriptSeed(it->second);
     }
-    if (!haveArgSeed) {
-        std::random_device rd;
-        baseSeed = rd() & 0x7FFFFFFF;
+    const uint32_t baseSeed = argSeed.value_or(randomScriptSeed());
+    if (!argSeed.has_value()) {
         out << "batch seed base " << baseSeed << " (re-run with --arg seed=" << baseSeed << " to reproduce)\n";
     }
 
     for (int i = 1; i <= options.count; ++i) {
         auto runArgs = options.args;
-        const uint32_t seed = (baseSeed + static_cast<uint32_t>(i) - 1) & 0x7FFFFFFF;
+        const uint32_t seed = (baseSeed + static_cast<uint32_t>(i) - 1) & SCRIPT_SEED_MASK;
         runArgs["seed"] = std::to_string(seed);
         out << "-- map " << i << "/" << options.count << " (seed " << seed << ")\n";
         if (const int rc = generateOne(resources, options, source, numberedOutPath(options.outPath, i), runArgs, out); rc != 0) {

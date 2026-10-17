@@ -1,6 +1,7 @@
 #include "ProInfoPanelWidget.h"
 
 #include "format/msg/Msg.h"
+#include "format/pro/ProtoTypes.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
 #include "util/ProHelper.h"
@@ -116,7 +117,8 @@ void ProInfoPanelWidget::setupUI() {
     pidLayout->addWidget(new QLabel("PID (hex):", this));
 
     _pidEdit = new QSpinBox(this);
-    _pidEdit->setRange(0, 0x5FFFFFF);
+    // The highest PID: the last proto type (misc) with the largest 24-bit proto index.
+    _pidEdit->setRange(0, static_cast<int>(ProtoId(ObjectType::Misc, ProtoId::MAX_PROTO_ID).pid()));
     _pidEdit->setDisplayIntegerBase(16);
     _pidEdit->setToolTip("Object ID and Type (combined 32-bit value)");
     _pidEdit->setButtonSymbols(QAbstractSpinBox::NoButtons);

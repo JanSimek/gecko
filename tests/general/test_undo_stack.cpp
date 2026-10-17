@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "ui/core/EditorSession.h"
 #include "util/UndoStack.h"
 
 using namespace geck;
@@ -104,4 +105,53 @@ TEST_CASE("UndoStack clear empties both stacks", "[undo]") {
 
     CHECK_FALSE(stack.canUndo());
     CHECK_FALSE(stack.canRedo());
+}
+
+TEST_CASE("EditorSession::resetToEmptyMap drops the old map's undo history", "[undo]") {
+    geck::EditorSession session;
+    session.resetToEmptyMap();
+    int undone = 0;
+    session.undoStack().push({ .description = "Place", .undo = [&undone] { ++undone; }, .redo = [] { /* never redone */ } });
+    REQUIRE(session.undoStack().canUndo());
+
+    // File > New: replaying a command recorded against the previous map would write its
+    // objects and tiles onto the blank one.
+    session.resetToEmptyMap();
+
+    CHECK_FALSE(session.undoStack().canUndo());
+    CHECK_FALSE(session.undoStack().undo());
+    CHECK(undone == 0);
+}
+
+TEST_CASE("UndoStack folds a push into the newest entry with the same merge key", "[undo]") {
+    UndoStack stack;
+    int value = 0;
+    auto setTo = [&value](int from, int to, std::string key) {
+        return UndoCommand{ .description = "Set",
+            .undo = [&value, from] { value = from; },
+            .redo = [&value, to] { value = to; },
+            .mergeKey = std::move(key) };
+    };
+
+    value = 1;
+    stack.push(setTo(0, 1, "field"));
+    value = 2;
+    stack.push(setTo(1, 2, "field"));
+    value = 3;
+    stack.push(setTo(2, 3, "other"));
+
+    REQUIRE(stack.undo()); // "other"
+    CHECK(value == 2);
+    REQUIRE(stack.undo()); // both "field" pushes in one step
+    CHECK(value == 0);
+    CHECK_FALSE(stack.canUndo());
+    REQUIRE(stack.redo());
+    CHECK(value == 2);
+
+    // With a redo entry pending ("other"), the push starts a new step instead of folding.
+    REQUIRE(stack.canRedo());
+    value = 5;
+    stack.push(setTo(2, 5, "field"));
+    REQUIRE(stack.undo());
+    CHECK(value == 2);
 }

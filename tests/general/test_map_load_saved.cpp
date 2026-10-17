@@ -16,6 +16,7 @@
 #include "format/pro/Pro.h"
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
+#include "resource/MapFileIO.h"
 #include "writer/map/MapWriter.h"
 
 #include "support/GzipBytes.h"
@@ -89,6 +90,9 @@ TEST_CASE("a save slot's gzip map loads and reports live critter combat state", 
     auto loaded = cli::loadMap(resources, gz.path().string(), &error);
     REQUIRE(loaded != nullptr);
     CHECK(loaded->getMapFile().map_objects.at(0).size() == 2);
+    // The editor opens files from disk through the same reader, so it opens a save slot's map too.
+    const auto opened = resource::readMap(resources, gz.path(), resource::MapSource::Disk);
+    CHECK(opened->getMapFile().map_objects.at(0).size() == 2);
 
     const json root = analyze(gz.path());
     const auto& critters = root.at("maps").at(0).at("critters");
