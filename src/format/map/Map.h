@@ -74,6 +74,13 @@ public:
         uint32_t timestamp;
 
         bool operator==(const MapHeader&) const = default;
+
+        /// The 0-based scripts.lst program index the 1-based script_id names, or nullopt when the map
+        /// has no script. The engine does the same conversion (fallout2-ce map.cc,
+        /// `script->index = gMapHeader.scriptIndex - 1`); see CLAUDE.md "Script Index Bases".
+        [[nodiscard]] std::optional<int> programIndex() const {
+            return script_id > 0 ? std::optional<int>(script_id - 1) : std::nullopt;
+        }
     };
 
     struct MapFile {

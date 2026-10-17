@@ -79,8 +79,8 @@ namespace {
     std::set<int> placedScripts(const Map& map) {
         const Map::MapFile& file = map.getMapFile();
         std::set<int> out;
-        if (file.header.script_id > 0) {
-            out.insert(file.header.script_id - 1);
+        if (const auto programIndex = file.header.programIndex()) {
+            out.insert(*programIndex);
         }
         for (const auto& section : file.map_scripts) {
             for (const MapScript& script : section) {

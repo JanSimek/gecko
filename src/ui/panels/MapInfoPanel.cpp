@@ -589,20 +589,20 @@ void MapInfoPanel::resolveMapScriptName() {
     try {
         // header.script_id is 1-based into scripts.lst. Resolved independently of the .gam so the name
         // shows even for a map that has none.
-        if (const int map_script_id = _map ? _map->getMapFile().header.script_id : -1; map_script_id > 0) {
+        if (const auto programIndex = _map ? _map->getMapFile().header.programIndex() : std::nullopt) {
             auto scripts = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
             const auto& scriptList = scripts->list();
-            if (map_script_id <= static_cast<int>(scriptList.size()) && map_script_id >= 1) {
-                _mapScriptName = scripts->at(map_script_id - 1); // script id starts at 1
-                // Append the friendly description for the same script (its 0-based index is id - 1):
-                // the scrname.msg name, or the scripts.lst comment when scrname.msg doesn't name it.
-                const std::string desc = resource::scriptDescription(_resources, map_script_id - 1);
+            if (*programIndex < static_cast<int>(scriptList.size())) {
+                _mapScriptName = scripts->at(*programIndex);
+                // Append the friendly description for the same script: the scrname.msg name, or the
+                // scripts.lst comment when scrname.msg doesn't name it.
+                const std::string desc = resource::scriptDescription(_resources, *programIndex);
                 if (!desc.empty()) {
                     _mapScriptName += " — " + desc;
                 }
             } else {
                 _mapScriptName = "invalid script index";
-                spdlog::warn("Map script ID {} out of bounds for scripts.lst size {}", map_script_id, scriptList.size());
+                spdlog::warn("Map script ID {} out of bounds for scripts.lst size {}", *programIndex + 1, scriptList.size());
             }
         }
     } catch (const std::exception& e) {

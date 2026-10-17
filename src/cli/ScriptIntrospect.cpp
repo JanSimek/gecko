@@ -106,8 +106,7 @@ namespace {
         const auto& mapFile = map.getMapFile();
         // The header's script_id is 1-based (the engine runs scripts.lst[script_id - 1], fallout2-ce
         // map.cc), unlike MapScript::script_id below, which is already the 0-based program index.
-        const bool asMapScript = mapFile.header.script_id > 0
-            && mapFile.header.script_id - 1 == programIndex;
+        const bool asMapScript = mapFile.header.programIndex() == programIndex;
 
         auto sections = ordered_json::array();
         int total = 0;
