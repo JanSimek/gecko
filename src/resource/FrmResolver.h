@@ -41,6 +41,10 @@ public:
     [[nodiscard]] std::optional<uint32_t> resolveFid(const std::string& artPath);
 
 private:
+    // The critter file for `fid`'s weapon and animation codes, or the standing art when that file is
+    // not in the data.
+    std::string critterFrmName(const std::string& baseName, uint32_t fid);
+
     ResourceRepository& _repository;
 };
 

@@ -9,6 +9,8 @@
 #include "resource/CritterFrmResolver.h"
 #include "resource/ResourcePaths.h"
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <cctype>
 #include <stdexcept>
@@ -99,12 +101,33 @@ std::string FrmResolver::resolve(uint32_t fid) {
             + " <= frmID: " + std::to_string(baseId) + ", frmType: " + std::to_string(static_cast<unsigned>(type)));
     }
 
+    // The engine's art lists name a file by the text before the first " ,;\r\t\n" (art.cc artReadList);
+    // critters.lst carries an alias after the comma.
     std::string frmName = lst->list().at(baseId);
+    frmName.erase(std::min(frmName.find_first_of(" ,;\r\t\n"), frmName.size()));
+    const std::string prefix(typeDescription.prefixPath);
     if (type == ObjectType::Critter) {
-        return std::string(typeDescription.prefixPath) + frmName.substr(0, 6) + Frm::STANDING_ANIMATION_SUFFIX;
+        return prefix + critterFrmName(frmName, fid);
     }
 
-    return std::string(typeDescription.prefixPath) + frmName;
+    return prefix + frmName;
+}
+
+std::string FrmResolver::critterFrmName(const std::string& baseName, uint32_t fid) {
+    // The FID's weapon and animation codes pick the file (engine art.cc FrmId::buildPath): a critter
+    // placed holding a knife is "...da.frm" and a body placed dead "...ra.frm", not the standing art.
+    const std::string standing = baseName + Frm::STANDING_ANIMATION_SUFFIX;
+    const std::string named = CritterFrmResolver::generateCritterFrmName(baseName, fid);
+    if (named.empty() || named == standing) {
+        return standing;
+    }
+    const std::string prefix(frmTypeDescriptions[static_cast<size_t>(ObjectType::Critter)].prefixPath);
+    if (_repository.tryLoad<Frm>(prefix + named) != nullptr) {
+        return named;
+    }
+    // The engine draws nothing for missing art; showing the standing pose keeps the critter findable.
+    spdlog::debug("FrmResolver: {} is not in the data, drawing {} instead", named, standing);
+    return standing;
 }
 
 std::optional<uint32_t> FrmResolver::resolveFid(const std::string& artPath) {

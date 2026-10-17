@@ -6,8 +6,11 @@
 #include <string>
 
 #include "format/frm/Frm.h"
+#include "format/frm/FrmId.h"
 #include "resource/FrmResolver.h"
 #include "resource/GameResources.h"
+
+#include "support/Fixtures.h"
 
 namespace fs = std::filesystem;
 using geck::Frm;
@@ -180,4 +183,24 @@ TEST_CASE("resolve draws wall art 620 from walls.lst like any other wall", "[res
     }
 
     fs::remove_all(root, ec);
+}
+
+TEST_CASE("resolve picks a critter's art from the FID's weapon and animation codes", "[resource][frm]") {
+    FixtureResources fixture;
+    // Any parseable FRM stands in for the art; resolve only needs the file to be there.
+    const auto art = fixture.root / "art/critters";
+    fs::copy_file(geck::test::dataPath("flower.frm"), art / "hmwarrda.frm"); // standing, holding a knife
+    fs::copy_file(geck::test::dataPath("flower.frm"), art / "hmwarrra.frm"); // dead, single frame
+    fixture.resources.files().refresh(); // the mount lists what existed when it was made
+    auto& resolver = fixture.resources.frmResolver();
+    const auto critter = [](uint32_t animation, uint32_t weapon) {
+        return geck::FrmId(geck::ObjectType::Critter, 0, animation, weapon, geck::Rotation::NE).fid();
+    };
+
+    // The name stops at the comma, as the engine reads critters.lst.
+    CHECK(resolver.resolve(critter(0, 0)) == "art/critters/hmwarraa.frm");
+    CHECK(resolver.resolve(critter(0, 1)) == "art/critters/hmwarrda.frm");
+    CHECK(resolver.resolve(critter(48, 0)) == "art/critters/hmwarrra.frm"); // ANIM_FALL_BACK_SF
+    // No club art in the data: the standing art keeps the critter visible.
+    CHECK(resolver.resolve(critter(0, 2)) == "art/critters/hmwarraa.frm");
 }
