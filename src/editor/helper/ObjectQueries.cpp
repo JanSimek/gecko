@@ -49,4 +49,13 @@ bool isShootThroughWallBlocker(const MapObject& object, resource::GameResources&
     return (pro->header.flags & static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_SHOOT_THRU)) != 0;
 }
 
+bool applyProtoDefaults(MapObject& object, resource::GameResources& resources) {
+    const Pro* pro = getProData(object, resources);
+    if (!pro) {
+        return false;
+    }
+    object.applyProtoDefaults(*pro);
+    return true;
+}
+
 } // namespace geck::object_query

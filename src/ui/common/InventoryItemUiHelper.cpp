@@ -212,13 +212,16 @@ std::unique_ptr<MapObject> createMapInventoryItem(resource::GameResources& resou
         throw std::invalid_argument("Inventory item amount must be positive");
     }
 
-    if (!loadPro(resources, pid)) {
+    const Pro* pro = loadPro(resources, pid);
+    if (!pro) {
         throw std::runtime_error("Inventory item PRO does not exist");
     }
 
+    // Art, flags and item data as the engine creates an item from its proto (obj_pid_new).
     auto item = std::make_unique<MapObject>();
     item->pro_pid = pid;
-    item->frm_pid = 0;
+    item->frm_pid = static_cast<uint32_t>(pro->header.FID);
+    item->applyProtoDefaults(*pro);
     item->position = 0;
     item->elevation = 0;
     item->direction = 0;

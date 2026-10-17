@@ -315,7 +315,7 @@ public:
     std::vector<int> blockedHexes() const;
     /// Copy a reference elevation's objects of the given types onto the same hexes of the bound
     /// map — the whole object record (art, direction, instance flags, light, pixel offset),
-    /// untranslated, in the reference's own order (the editor draws in map order): how a generator
+    /// untranslated, in the reference's own order (objects sharing a hex draw in list order): how a generator
     /// reuses a shipped layout's hand-placed walls exactly. Scripts and inventories stay behind.
     /// `excludePids` skips protos the copy must not carry over. Returns objects placed; raises on
     /// an unknown type or an unreadable map.
