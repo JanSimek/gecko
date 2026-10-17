@@ -28,8 +28,9 @@ inline std::optional<std::string> environmentVariable(const char* name) {
 
 /// True when running under a headless CI environment (CI or GITHUB_ACTIONS set),
 /// where tests that need a graphics context (texture/sprite creation, spatial
-/// index builds) cannot run. Replaces the per-file CI-detection block that was
-/// copy-pasted across the graphics-dependent test suites.
+/// index builds) cannot run. A Linux CI job that runs the tests under Xvfb sets
+/// DISPLAY and has Mesa GL, so it is not headless. Replaces the per-file
+/// CI-detection block that was copy-pasted across the graphics-dependent suites.
 inline bool headlessCiEnvironment() {
 #ifdef _WIN32
     char* ci = nullptr;
@@ -42,7 +43,12 @@ inline bool headlessCiEnvironment() {
     free(githubActions);
     return present;
 #else
-    return std::getenv("CI") != nullptr || std::getenv("GITHUB_ACTIONS") != nullptr;
+    const bool ci = std::getenv("CI") != nullptr || std::getenv("GITHUB_ACTIONS") != nullptr;
+#if defined(__linux__)
+    return ci && std::getenv("DISPLAY") == nullptr;
+#else
+    return ci;
+#endif
 #endif
 }
 
