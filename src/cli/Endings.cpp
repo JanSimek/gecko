@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 
 #include <cstddef>
+#include <format>
 #include <ostream>
 #include <string>
 
@@ -39,7 +40,7 @@ namespace {
     // The gvar's name, or "gvar N" without a dictionary.
     std::string gvarLabel(Gam* gam, int gvar) {
         const std::string name = gvarNameOf(gam, gvar);
-        return name.empty() ? ("gvar " + std::to_string(gvar)) : name;
+        return name.empty() ? std::format("gvar {}", gvar) : name;
     }
 
     ordered_json orNull(const std::string& s) {
@@ -58,7 +59,7 @@ namespace {
         auto array = ordered_json::array();
         for (const Ending& ending : endgame.endings) {
             array.push_back({ { "gvar", ending.gvar }, { "gvarName", orNull(gvarNameOf(gam, ending.gvar)) },
-                { "value", ending.value }, { "condition", gvarLabel(gam, ending.gvar) + " == " + std::to_string(ending.value) },
+                { "value", ending.value }, { "condition", std::format("{} == {}", gvarLabel(gam, ending.gvar), ending.value) },
                 { "art", ending.art }, { "narrator", ending.narrator }, { "direction", ending.direction },
                 { "subtitles", endingSubtitles(resources, ending.narrator) } });
         }
@@ -75,12 +76,12 @@ namespace {
                 // The engine drops the line once the gvar reaches the value, whatever enddeath.txt's
                 // header says (endgameDeathEndingValidate).
                 { "condition", ending.gvar < 0 ? ordered_json(nullptr)
-                                               : ordered_json(gvarLabel(gam, ending.gvar) + " < " + std::to_string(ending.value)) },
+                                               : ordered_json(std::format("{} < {}", gvarLabel(gam, ending.gvar), ending.value)) },
                 { "areaKnown", areaJson(names, ending.areaKnown) }, { "areaNotKnown", areaJson(names, ending.areaNotKnown) },
                 { "minLevel", ending.minLevel }, { "percentage", ending.percentage }, { "narrator", ending.narrator },
                 { "subtitles", endingSubtitles(resources, ending.narrator) } };
             if (i == MODOC_DEATH_ENDING) {
-                entry["forcedWhen"] = gvarLabel(gam, GVAR_MODOC_SHITTY_DEATH) + " != 0";
+                entry["forcedWhen"] = std::format("{} != 0", gvarLabel(gam, GVAR_MODOC_SHITTY_DEATH));
             }
             array.push_back(std::move(entry));
         }

@@ -46,7 +46,7 @@ inline std::vector<std::string> splitCsv(const std::string& s) {
 }
 
 /// Split on any run of space, tab or comma, dropping empty tokens — the engine's strtok(" \t,") over
-/// the flat data/*.txt tables (quests.txt, holodisk.txt, karmavar.txt, enddeath.txt).
+/// the flat tables under data/ (quests.txt, holodisk.txt, karmavar.txt, enddeath.txt).
 inline std::vector<std::string> splitTokens(const std::string& s) {
     std::vector<std::string> out;
     std::string current;

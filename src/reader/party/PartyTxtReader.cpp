@@ -3,6 +3,7 @@
 #include "reader/IniParser.h"
 #include "reader/TextParsing.h"
 
+#include <functional>
 #include <map>
 #include <sstream>
 #include <string>
@@ -21,7 +22,7 @@ namespace {
 
     // The raw keys of one [Party Member N] section; resolved after the whole file is read because
     // the engine only reads the level fields when level_up_every is present.
-    using Section = std::map<std::string, std::string>;
+    using Section = std::map<std::string, std::string, std::less<>>;
 
     std::vector<std::string> optionList(const Section& section, const std::string& key) {
         std::vector<std::string> out;
@@ -33,6 +34,17 @@ namespace {
             }
         }
         return out;
+    }
+
+    std::vector<int> levelPids(const std::string& value) {
+        std::vector<int> pids;
+        for (const auto& pid : splitCsv(value)) {
+            if (static_cast<int>(pids.size()) == MAX_LEVEL_PIDS) {
+                break;
+            }
+            pids.push_back(intOr(pid, 0));
+        }
+        return pids;
     }
 
     PartyMember toMember(int index, const Section& section) {
@@ -52,12 +64,7 @@ namespace {
                 member.levelMinimum = intOr(minimum->second, 0);
             }
             if (const auto pids = section.find("level_pids"); pids != section.end()) {
-                for (const auto& pid : splitCsv(pids->second)) {
-                    if (static_cast<int>(member.levelPids.size()) == MAX_LEVEL_PIDS) {
-                        break;
-                    }
-                    member.levelPids.push_back(intOr(pid, 0));
-                }
+                member.levelPids = levelPids(pids->second);
             }
         }
         return member;
@@ -70,12 +77,12 @@ PartyTxt parsePartyTxt(std::istream& in) {
     Section* current = nullptr;
     ini::parse(
         in,
-        [&](const std::string& section) {
+        [&sections, &current](const std::string& section) {
             const std::string prefix = "party member ";
             const std::string lower = toLower(section);
             current = lower.rfind(prefix, 0) == 0 ? &sections[intOr(trim(lower.substr(prefix.size())), -1)] : nullptr;
         },
-        [&](const std::string& key, const std::string& value) {
+        [&current](const std::string& key, const std::string& value) {
             if (current != nullptr) {
                 (*current)[key] = value;
             }
