@@ -92,7 +92,7 @@ public:
     bool registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
     bool registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
-    bool registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath);
+    bool registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, uint32_t newFrmPid, const std::string& newFrmPath);
     bool registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation);
     bool registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
         const std::vector<ExitGridCommandState>& beforeStates,

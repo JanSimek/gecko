@@ -170,28 +170,22 @@ bool ObjectEditService::registerObjectDeletion(
     return _batcher.push(std::move(cmd));
 }
 
-void ObjectEditService::applyObjectPositions(const std::vector<std::shared_ptr<Object>>& objects,
+void ObjectEditService::applyObjectPositions(const std::vector<std::shared_ptr<MapObject>>& objects,
     const std::vector<int>& positions) {
-    if (_hexgrid.empty()) {
-        spdlog::error("applyObjectPositions: hex grid not available");
-        return;
-    }
     for (size_t i = 0; i < objects.size() && i < positions.size(); ++i) {
-        auto object = objects[i];
-        if (!object || !object->hasMapObject()) {
+        if (!objects[i]) {
             continue;
         }
-        object->getMapObject().position = positions[i];
-        if (auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(positions[i])); hex.has_value()) {
-            object->setHexPosition(hex->get());
-        } else {
+        if (!_hexgrid.empty() && !_hexgrid.getHexByPosition(static_cast<uint32_t>(positions[i])).has_value()) {
             spdlog::warn("applyObjectPositions: Invalid hex position {}", positions[i]);
+            continue;
         }
+        objects[i]->position = positions[i];
     }
     _refreshObjects();
 }
 
-void ObjectEditService::applyObjectDirections(const std::vector<std::shared_ptr<Object>>& objects,
+void ObjectEditService::applyObjectDirections(const std::vector<std::shared_ptr<MapObject>>& objects,
     const std::vector<int>& directions) {
     for (size_t i = 0; i < objects.size() && i < directions.size(); ++i) {
         if (!objects[i]) {
@@ -201,9 +195,23 @@ void ObjectEditService::applyObjectDirections(const std::vector<std::shared_ptr<
             spdlog::warn("applyObjectDirections: Invalid direction {}", directions[i]);
             continue;
         }
-        objects[i]->setDirection(static_cast<Rotation>(directions[i]));
+        objects[i]->direction = directions[i];
     }
+    _refreshObjects();
 }
+
+namespace {
+    // Commands hold the map data, not the visual wrappers: every refresh replaces the wrappers, so a
+    // command holding one would edit an Object nothing draws any more.
+    std::vector<std::shared_ptr<MapObject>> mapObjectsOf(const std::vector<std::shared_ptr<Object>>& objects) {
+        std::vector<std::shared_ptr<MapObject>> mapObjects;
+        mapObjects.reserve(objects.size());
+        for (const auto& object : objects) {
+            mapObjects.push_back(object ? object->getMapObjectPtr() : nullptr);
+        }
+        return mapObjects;
+    }
+} // namespace
 
 bool ObjectEditService::registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects,
     const std::vector<std::pair<int, int>>& moves) {
@@ -223,8 +231,8 @@ bool ObjectEditService::registerObjectMove(const std::vector<std::shared_ptr<Obj
 
     UndoCommand cmd;
     cmd.description = "Move Objects";
-    cmd.undo = [this, objects, beforePositions]() { applyObjectPositions(objects, beforePositions); };
-    cmd.redo = [this, objects, afterPositions]() { applyObjectPositions(objects, afterPositions); };
+    cmd.undo = [this, mapObjects = mapObjectsOf(objects), beforePositions]() { applyObjectPositions(mapObjects, beforePositions); };
+    cmd.redo = [this, mapObjects = mapObjectsOf(objects), afterPositions]() { applyObjectPositions(mapObjects, afterPositions); };
 
     cmd.redo();
     return _batcher.push(std::move(cmd));
@@ -241,8 +249,8 @@ bool ObjectEditService::registerObjectRotation(const std::vector<std::shared_ptr
 
     UndoCommand cmd;
     cmd.description = "Rotate Objects";
-    cmd.undo = [objects, beforeDirs]() { applyObjectDirections(objects, beforeDirs); };
-    cmd.redo = [objects, afterDirs]() { applyObjectDirections(objects, afterDirs); };
+    cmd.undo = [this, mapObjects = mapObjectsOf(objects), beforeDirs]() { applyObjectDirections(mapObjects, beforeDirs); };
+    cmd.redo = [this, mapObjects = mapObjectsOf(objects), afterDirs]() { applyObjectDirections(mapObjects, afterDirs); };
 
     return _batcher.push(std::move(cmd));
 }
@@ -273,7 +281,6 @@ void ObjectEditService::applyFrmToObject(const std::shared_ptr<Object>& object, 
 
 bool ObjectEditService::registerObjectFrmChange(const std::shared_ptr<Object>& object,
     uint32_t oldFrmPid,
-    const std::string& oldFrmPath,
     uint32_t newFrmPid,
     const std::string& newFrmPath) {
     if (!object) {
@@ -284,16 +291,22 @@ bool ObjectEditService::registerObjectFrmChange(const std::shared_ptr<Object>& o
         return false;
     }
 
+    // Applied to the shown wrapper now, so the current selection keeps pointing at it. Undo/redo
+    // set the map data and rebuild the visuals: by then the wrapper may have been replaced.
+    applyFrmToObject(object, newFrmPid, newFrmPath);
+    if (oldFrmPid == newFrmPid || !object->hasMapObject()) {
+        return false; // a different picture for the same FRM id changes nothing that is saved
+    }
     UndoCommand cmd;
     cmd.description = "Change Object FRM";
-    cmd.undo = [this, object, oldFrmPid, oldFrmPath]() {
-        applyFrmToObject(object, oldFrmPid, oldFrmPath);
+    cmd.undo = [this, mapObject = object->getMapObjectPtr(), oldFrmPid]() {
+        mapObject->frm_pid = oldFrmPid;
+        _refreshObjects();
     };
-    cmd.redo = [this, object, newFrmPid, newFrmPath]() {
-        applyFrmToObject(object, newFrmPid, newFrmPath);
+    cmd.redo = [this, mapObject = object->getMapObjectPtr(), newFrmPid]() {
+        mapObject->frm_pid = newFrmPid;
+        _refreshObjects();
     };
-
-    cmd.redo();
     return _batcher.push(std::move(cmd));
 }
 

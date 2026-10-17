@@ -3,8 +3,13 @@
 #include <string_view>
 #include <vector>
 
+#include "editor/Object.h"
+#include "format/frm/Frm.h"
+#include "format/map/MapObject.h"
 #include "selection/SelectionState.h"
 #include "util/Types.h"
+
+#include "support/GraphicsTestEnv.h"
 
 using namespace geck;
 using namespace geck::selection;
@@ -231,4 +236,33 @@ TEST_CASE("SelectedItem functionality", "[selection_state]") {
         // Different type, same data should not be equal
         REQUIRE_FALSE(tile1 == roof1);
     }
+}
+
+TEST_CASE("remapSelectedItem carries objects across a wrapper rebuild and drops removed ones", "[selection]") {
+    GECK_SKIP_IF_HEADLESS_CI(); // an Object owns an sf::Texture
+    geck::Frm frm("test.frm");
+    geck::Direction direction;
+    direction.setFrames({ geck::Frame(1, 1) });
+    frm.setDirections({ direction });
+
+    auto kept = std::make_shared<geck::MapObject>();
+    auto removed = std::make_shared<geck::MapObject>();
+    auto oldKept = std::make_shared<geck::Object>(&frm);
+    oldKept->setMapObject(kept);
+    auto oldRemoved = std::make_shared<geck::Object>(&frm);
+    oldRemoved->setMapObject(removed);
+
+    // After an undo the map still draws `kept`, through a new wrapper, and no longer holds `removed`.
+    auto newKept = std::make_shared<geck::Object>(&frm);
+    newKept->setMapObject(kept);
+    const ObjectsByMapObject current{ { kept.get(), newKept } };
+
+    const auto remappedKept = remapSelectedItem(SelectedItem{ SelectionType::OBJECT, oldKept }, current, std::nullopt);
+    REQUIRE(remappedKept.has_value());
+    CHECK(remappedKept->getObject() == newKept);
+    CHECK_FALSE(remapSelectedItem(SelectedItem{ SelectionType::OBJECT, oldRemoved }, current, std::nullopt).has_value());
+
+    // Tiles stay put without a delta and shift with one.
+    CHECK(remapSelectedItem(SelectedItem{ SelectionType::FLOOR_TILE, 5 }, current, std::nullopt)->getTileIndex() == 5);
+    CHECK(remapSelectedItem(SelectedItem{ SelectionType::FLOOR_TILE, 5 }, current, std::pair{ 0, 1 })->getTileIndex() != 5);
 }

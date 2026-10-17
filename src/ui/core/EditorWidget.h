@@ -325,7 +325,7 @@ public:
     // Ensure tile storage exists for an elevation
     std::vector<Tile>& ensureElevationTiles(int elevation) override;
     void registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
-    void registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath);
+    void registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, uint32_t newFrmPid, const std::string& newFrmPath);
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
 
     // Exit grid undo support
@@ -448,12 +448,11 @@ private:
     // saveMap (direct write) and saveMapAs (after the dialog). Reports errors and returns success.
     bool writeMapTo(const std::string& destination);
 
-    // One item's new selection entry after a drag-move: objects re-pointed to their refreshed
-    // wrapper (by MapObject identity), tiles shifted by the whole-tile delta; nullopt to drop it.
-    std::optional<selection::SelectedItem> remapSelectedItemAfterMove(
-        const selection::SelectedItem& item,
-        const std::unordered_map<const MapObject*, std::shared_ptr<Object>>& objectsByMapObject,
-        const std::optional<std::pair<int, int>>& tileDelta) const;
+    // The current elevation's object wrappers, keyed by the MapObject each one draws.
+    [[nodiscard]] selection::ObjectsByMapObject objectsByMapObjectIdentity() const;
+    // After an undo/redo: re-point selected objects at their rebuilt wrappers and drop the ones the
+    // map no longer holds on this elevation.
+    void reconcileSelectionWithMap();
 
     // If a spatial marker sits on the clicked hex, select that script and return true; a second quick
     // click also fires spatialScriptEditActivated. A miss clears the selection and returns false.

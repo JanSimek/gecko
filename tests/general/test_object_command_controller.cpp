@@ -7,12 +7,15 @@
 #include <stdexcept>
 #include <vector>
 
+#include "editor/Object.h"
+#include "format/frm/Frm.h"
 #include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "util/BuiltTile.h"
 
 #include "support/ControllerFixture.h"
+#include "support/GraphicsTestEnv.h"
 
 using namespace geck;
 using geck::test::ControllerFixture;
@@ -546,4 +549,35 @@ TEST_CASE("Loading the objects of an absent elevation leaves the view empty", "[
 
     REQUIRE_NOTHROW(fx.spriteLoader.loadObjectSprites(*fx.map, 1, fx.objects, fx.overlays));
     CHECK(fx.objects.empty());
+}
+
+TEST_CASE("Move and rotate undo edit the map data even after the wrappers were rebuilt", "[undo][controller]") {
+    GECK_SKIP_IF_HEADLESS_CI(); // an Object owns an sf::Texture
+    ControllerFixture fx;
+    Frm frm("test.frm");
+    Direction direction;
+    direction.setFrames({ Frame(1, 1) });
+    frm.setDirections({ direction, direction, direction, direction, direction, direction });
+
+    auto mapObject = std::make_shared<MapObject>();
+    mapObject->position = 100;
+    mapObject->direction = 0;
+    fx.mapFile().map_objects[0].push_back(mapObject);
+    auto shown = std::make_shared<Object>(&frm);
+    shown->setMapObject(mapObject);
+
+    REQUIRE(fx.controller.registerObjectMove({ shown }, { { 100, 200 } }));
+    REQUIRE(fx.controller.registerObjectRotation({ shown }, { 0 }, { 3 }));
+    mapObject->direction = 3; // the caller rotates the shown wrapper before recording
+    CHECK(mapObject->position == 200);
+
+    // A refresh replaces every wrapper; the commands must not depend on the one they were given.
+    shown.reset();
+
+    REQUIRE(fx.undoStack.undo());
+    CHECK(mapObject->direction == 0);
+    REQUIRE(fx.undoStack.undo());
+    CHECK(mapObject->position == 100);
+    REQUIRE(fx.undoStack.redo());
+    CHECK(mapObject->position == 200);
 }

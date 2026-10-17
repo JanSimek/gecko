@@ -4,6 +4,8 @@
 #include <memory>
 #include <vector>
 #include <optional>
+#include <unordered_map>
+#include <utility>
 #include <variant>
 
 #include "util/Types.h"
@@ -149,5 +151,15 @@ public:
     // State queries
     bool isAreaSelecting() const { return selectionArea.has_value(); }
 };
+
+/// The object wrappers of one elevation, keyed by the MapObject each draws. A refresh rebuilds every
+/// wrapper, so a selection is carried across one by MapObject identity.
+using ObjectsByMapObject = std::unordered_map<const MapObject*, std::shared_ptr<Object>>;
+
+/// One item's selection entry after the object wrappers were rebuilt: an object re-pointed at its new
+/// wrapper, a tile shifted by `tileDelta` (rows, columns) when one is given, a hex kept as is.
+/// nullopt drops the item: its object is no longer drawn on this elevation, or the tile left the grid.
+std::optional<SelectedItem> remapSelectedItem(const SelectedItem& item, const ObjectsByMapObject& objectsByMapObject,
+    const std::optional<std::pair<int, int>>& tileDelta);
 
 } // namespace geck::selection

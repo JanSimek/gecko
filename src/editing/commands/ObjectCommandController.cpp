@@ -94,10 +94,9 @@ void ObjectCommandController::applyFrmToObject(const std::shared_ptr<Object>& ob
 
 bool ObjectCommandController::registerObjectFrmChange(const std::shared_ptr<Object>& object,
     uint32_t oldFrmPid,
-    const std::string& oldFrmPath,
     uint32_t newFrmPid,
     const std::string& newFrmPath) {
-    return _objectService.registerObjectFrmChange(object, oldFrmPid, oldFrmPath, newFrmPid, newFrmPath);
+    return _objectService.registerObjectFrmChange(object, oldFrmPid, newFrmPid, newFrmPath);
 }
 
 bool ObjectCommandController::registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation) {
