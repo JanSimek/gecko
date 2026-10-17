@@ -14,7 +14,8 @@ std::filesystem::path findBundledResources(const std::string& argv0) {
     if (exe.has_parent_path()) {
         const std::filesystem::path dir = std::filesystem::absolute(exe, ec).parent_path();
         candidates.push_back(dir / "resources");               // alongside the binary (build/, install/)
-        candidates.push_back(dir.parent_path() / "resources"); // one level up (e.g. .app/Contents/MacOS)
+        candidates.push_back(dir.parent_path() / "resources"); // one level up
+        candidates.push_back(dir.parent_path() / "Resources" / "resources"); // gecko.app/Contents/MacOS
     }
     const std::filesystem::path cwd = std::filesystem::current_path(ec);
     candidates.push_back(cwd / "resources");
