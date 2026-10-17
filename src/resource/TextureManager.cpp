@@ -68,7 +68,7 @@ const sf::Texture& TextureManager::createFrmTexture(const std::filesystem::path&
         throw ResourceException("Texture does not exist", key);
     }
 
-    Pal* palette = _repository.load<Pal>(ResourcePaths::Pal::COLOR);
+    Pal* palette = _repository.tryLoad<Pal>(ResourcePaths::Pal::COLOR);
     if (!palette) {
         throw ResourceException("Failed to load color palette for texture", key);
     }

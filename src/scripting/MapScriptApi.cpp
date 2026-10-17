@@ -139,7 +139,7 @@ uint16_t MapScriptApi::getRoof(int tileIndex) const {
 int MapScriptApi::tileId(const std::string& name) const {
     // A failure to load tiles.lst is a real error (no data mounted) and is raised so the caller
     // sees it; an unknown name in a *loaded* list is a legitimate "not found" -> -1.
-    const Lst* lst = resourcesRef().repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
+    const Lst* lst = resourcesRef().repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::TILES));
     if (lst == nullptr) {
         throw ScriptError("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
     }
@@ -163,7 +163,7 @@ int MapScriptApi::tileId(const std::string& name) const {
 std::map<std::string, int> MapScriptApi::tilesByPrefix(const std::string& prefix) const {
     // Same availability contract as tileId(): a missing tiles.lst is a real error, an
     // unmatched prefix is a legitimate empty result.
-    const Lst* lst = resourcesRef().repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
+    const Lst* lst = resourcesRef().repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::TILES));
     if (lst == nullptr) {
         throw ScriptError("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
     }
@@ -512,7 +512,7 @@ uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
 std::string MapScriptApi::protoName(int pid) const {
     // A proto that can't be loaded (no data / bad pid) is a real error and is raised. A proto that
     // loads but has no name string is a legitimate empty result.
-    const Pro* pro = resourcesRef().loadPro(static_cast<uint32_t>(pid));
+    const Pro* pro = resourcesRef().tryLoadPro(static_cast<uint32_t>(pid));
     if (pro == nullptr) {
         throw ScriptError(std::format("proto could not be loaded for pid {}", pid));
     }
@@ -701,7 +701,7 @@ bool MapScriptApi::placeProto(uint32_t proPid, int hex, uint32_t direction) {
     // so callers place by PID alone. A proto we can't load has no art to place.
     uint32_t frmPid = 0;
     try {
-        if (const Pro* pro = resourcesRef().loadPro(proPid);
+        if (const Pro* pro = resourcesRef().tryLoadPro(proPid);
             pro != nullptr) {
             frmPid = static_cast<uint32_t>(pro->header.FID);
         }

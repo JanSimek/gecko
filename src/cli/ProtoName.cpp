@@ -13,7 +13,7 @@ namespace geck::cli {
 
 std::string protoDisplayName(resource::GameResources& resources, uint32_t pid) {
     try {
-        if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
+        if (const Pro* pro = resources.tryLoadPro(pid); pro != nullptr) {
             if (Msg* msg = ProHelper::msgFile(resources, pro->type()); msg != nullptr) {
                 return msg->message(pro->header.message_id).text;
             }

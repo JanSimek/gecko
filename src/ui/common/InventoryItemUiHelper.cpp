@@ -84,7 +84,7 @@ namespace {
     }
 
     QPixmap renderFramePixmap(resource::GameResources& resources, const std::string& frmPath, int iconSize, bool fixedCanvas) {
-        Frm* frm = resources.repository().load<Frm>(frmPath);
+        Frm* frm = resources.repository().tryLoad<Frm>(frmPath);
         if (!frm) {
             return QPixmap();
         }

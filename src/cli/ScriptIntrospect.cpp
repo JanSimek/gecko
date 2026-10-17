@@ -87,7 +87,7 @@ namespace {
         auto dialog = ordered_json::array();
         const std::string path = "text/" + locale + "/dialog/" + basename + ".msg";
         try {
-            if (const Msg* msg = resources.repository().load<Msg>(path); msg != nullptr) {
+            if (const Msg* msg = resources.repository().tryLoad<Msg>(path); msg != nullptr) {
                 for (const auto& [id, message] : msg->getMessages()) {
                     dialog.push_back({ { "id", id }, { "text", message.text } });
                 }

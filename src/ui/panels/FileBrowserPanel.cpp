@@ -133,7 +133,7 @@ QString FileLoaderWorker::resolveProName(const std::string& vfsPath) const {
             path = path.substr(1);
         }
 
-        const auto* pro = _resources->repository().load<Pro>(path);
+        const auto* pro = _resources->repository().tryLoad<Pro>(path);
         if (!pro) {
             return QStringLiteral("Failed to load");
         }

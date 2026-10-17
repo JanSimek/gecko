@@ -94,6 +94,20 @@ TEST_CASE("ResourceRepository load throws on a missing file", "[resource]") {
     CHECK_THROWS_AS(fx.repo().load<Lst>("art/tiles/nonexistent.lst"), geck::IOException);
 }
 
+TEST_CASE("ResourceRepository tryLoad returns null for a missing file and caches a present one", "[resource]") {
+    RepoFixture fx;
+    CHECK(fx.repo().tryLoad<Lst>("art/tiles/nonexistent.lst") == nullptr);
+    const Lst* lst = fx.repo().tryLoad<Lst>(LST_PATH);
+    REQUIRE(lst != nullptr);
+    CHECK(fx.repo().load<Lst>(LST_PATH) == lst);
+}
+
+TEST_CASE("GameResources::tryLoadPro returns null for a PID with no proto", "[resource]") {
+    GameResources resources; // nothing mounted: no proto list for any type
+    CHECK(resources.tryLoadPro(0x02000001) == nullptr);
+    CHECK_THROWS(resources.loadPro(0x02000001));
+}
+
 // Background loaders (MapLoader, DataPathLoader) call load()/find() concurrently
 // with the main thread. The cache must therefore tolerate concurrent access and
 // still deduplicate: racing loads of one key must converge on a single object.

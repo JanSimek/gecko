@@ -579,7 +579,7 @@ TEST_CASE("The shipped terrain.luau fails clearly when data is missing", "[scrip
     // that the error surfaces; the live fill/scatter runs against real data (GUI / gecko-cli).
     const auto r = rt.run(source, api, fx.controller, "terrain");
     CHECK_FALSE(r.ok);
-    CHECK(r.error.find("tiles.lst") != std::string::npos);
+    CHECK(r.error.find("tiles.lst is unavailable") != std::string::npos); // the API's own message, not the IO error
     CHECK(api.paintedTiles() == 0);
     CHECK(api.placedObjects() == 0);
 }

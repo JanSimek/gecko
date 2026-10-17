@@ -29,7 +29,7 @@ ScriptSourceService::ScriptSourceService(resource::GameResources& resources,
 
 std::string ScriptSourceService::baseNameOf(int programIndex) const {
     try {
-        const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
+        const Lst* lst = _resources.repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
         if (lst != nullptr && programIndex >= 0
             && static_cast<size_t>(programIndex) < lst->list().size()) {
             return resource::scriptBaseName(lst->list().at(static_cast<size_t>(programIndex)));
@@ -96,7 +96,7 @@ ScriptSourceService::ScriptStatus ScriptSourceService::scriptStatus(int programI
 
 void ScriptSourceService::lint(int programIndex, ScriptStatus& status) {
     try {
-        const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
+        const Lst* lst = _resources.repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
         if (lst == nullptr) {
             return;
         }

@@ -54,7 +54,7 @@ namespace {
             }
             ProtoInfo info;
             try {
-                if (const Pro* pro = _resources.loadPro(pid); pro != nullptr) {
+                if (const Pro* pro = _resources.tryLoadPro(pid); pro != nullptr) {
                     // Prefer an item's inventory icon, and fall back to its world sprite. Containers
                     // — lockers, footlockers, bookcases, desks — are items by proto type but are never
                     // carried, so their inventoryFID is -1 and only header.FID has art. That is 108 of

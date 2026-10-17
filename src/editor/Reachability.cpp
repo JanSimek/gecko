@@ -17,7 +17,7 @@ namespace {
     // A door blocks only until opened; for reachability the player can open it, so doors are passable.
     bool isDoor(resource::GameResources& resources, const MapObject& object) {
         try {
-            if (const Pro* pro = resources.loadPro(object.pro_pid); pro != nullptr) {
+            if (const Pro* pro = resources.tryLoadPro(object.pro_pid); pro != nullptr) {
                 return pro->type() == ObjectType::Scenery
                     && static_cast<SceneryType>(pro->objectSubtypeId()) == SceneryType::Door;
             }

@@ -270,7 +270,7 @@ namespace {
         }
         bool flat = false;
         try {
-            if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
+            if (const Pro* pro = resources.tryLoadPro(pid); pro != nullptr) {
                 flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
             }
         } catch (const std::exception&) {

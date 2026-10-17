@@ -498,7 +498,7 @@ namespace {
         try {
             std::string name;
             bool flat = false;
-            if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
+            if (const Pro* pro = resources.tryLoadPro(pid); pro != nullptr) {
                 flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
                 if (Msg* msg = ProHelper::msgFile(resources, pro->type()); msg != nullptr) {
                     name = msg->message(pro->header.message_id).text;
@@ -512,7 +512,7 @@ namespace {
             // parser has to re-derive the pid-to-file mapping that loadPro() already does --
             // which is not the identity: 00000010.pro holds pid 11 and 00000011.pro holds pid 10,
             // and 14 item protos are transposed that way.
-            if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
+            if (const Pro* pro = resources.tryLoadPro(pid); pro != nullptr) {
                 static const char* kDamage[] = { "normal", "laser", "fire", "plasma",
                     "electrical", "emp", "explosion", "radiation", "poison" };
                 static const char* kSpecial[] = { "strength", "perception", "endurance",

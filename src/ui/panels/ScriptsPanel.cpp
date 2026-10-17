@@ -161,7 +161,7 @@ void ScriptsPanel::populate() {
 
     // scripts.lst maps a 0-based program index (MapScript.script_id) to a filename. Loaded once; degrades
     // to empty filenames when game data isn't mounted (e.g. a freshly generated map).
-    const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
+    const Lst* lst = _resources.repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
 
     const auto& mapFile = _map->getMapFile();
     const auto blockProblems = lst != nullptr ? resource::localVarBlockProblems(*_map, *lst) : std::map<uint32_t, std::string>{};

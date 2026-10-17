@@ -51,10 +51,7 @@ void ResourceInitializer::loadEssentialLstFiles(resource::GameResources& resourc
         }
 
         const auto loadLst = [&](std::string_view path) {
-            [[maybe_unused]] auto* lst = resources.repository().load<Lst>(path);
-            if (!lst) {
-                throw std::runtime_error("Failed to load essential LST: " + std::string(path));
-            }
+            (void)resources.repository().load<Lst>(path); // throws when absent: these lists are essential
         };
 
         for (const auto& path : EssentialLstFiles) {

@@ -91,10 +91,7 @@ std::string FrmResolver::resolve(uint32_t fid) {
     }
 
     const auto& typeDescription = frmTypeDescriptions[static_cast<size_t>(type)];
-    auto* lst = _repository.load<Lst>(typeDescription.lstFilePath);
-    if (!lst) {
-        throw std::runtime_error(std::string("Failed to load LST resource: ") + std::string(typeDescription.lstFilePath));
-    }
+    const auto* lst = _repository.load<Lst>(typeDescription.lstFilePath);
 
     if (baseId >= lst->list().size()) {
         throw std::runtime_error(
@@ -134,7 +131,7 @@ std::optional<uint32_t> FrmResolver::resolveFid(const std::string& artPath) {
             continue;
         }
 
-        auto* lst = _repository.load<Lst>(std::string(description.lstFilePath));
+        auto* lst = _repository.tryLoad<Lst>(std::string(description.lstFilePath));
         if (!lst) {
             return std::nullopt;
         }

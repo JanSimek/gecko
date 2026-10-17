@@ -143,7 +143,7 @@ namespace {
             }
             uint32_t packet = 0;
             try {
-                const Pro* pro = _resources.loadPro(pid);
+                const Pro* pro = _resources.tryLoadPro(pid);
                 if (pro != nullptr && pro->type() == ObjectType::Critter) {
                     packet = pro->critterData.aiPacket;
                 }
@@ -174,7 +174,7 @@ namespace {
             bool loaded = false;
             bool flat = false;
             try {
-                if (const Pro* pro = _resources.loadPro(pid); pro != nullptr) {
+                if (const Pro* pro = _resources.tryLoadPro(pid); pro != nullptr) {
                     loaded = true;
                     flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
                 }
@@ -191,7 +191,7 @@ namespace {
             try {
                 const std::string proPath = ProHelper::basePath(_resources, pid);
                 file = baseName(proPath);
-                if (const Pro* pro = _resources.repository().load<Pro>(proPath); pro != nullptr) {
+                if (const Pro* pro = _resources.repository().tryLoad<Pro>(proPath); pro != nullptr) {
                     if (Msg* msg = ProHelper::msgFile(_resources, pro->type()); msg != nullptr) {
                         engineName = msg->message(pro->header.message_id).text;
                     }
