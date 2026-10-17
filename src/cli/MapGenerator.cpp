@@ -34,7 +34,7 @@
 #include "editing/commands/ObjectCommandController.h"
 #include "rendering/MapSpriteLoader.h"
 #include "util/UndoStack.h"
-#include "writer/map/MapWriter.h"
+#include "resource/MapFileIO.h"
 #endif
 
 namespace geck::cli {
@@ -169,18 +169,8 @@ namespace {
         }
         out << "painted " << api.paintedTiles() << " tiles, placed " << api.placedObjects() << " objects.\n";
 
-        // Serialize. Scenery/item objects read their subtype from the proto during writing, so the
-        // writer needs the same proto provider the reader uses.
-        const std::function<Pro*(int32_t)> proLoad = [&resources](int32_t pid) -> Pro* {
-            try {
-                return resources.loadPro(static_cast<uint32_t>(pid));
-            } catch (const std::exception&) {
-                return nullptr;
-            }
-        };
-        MapWriter writer{ proLoad };
-        writer.openFile(outPath);
-        if (!writer.write(map->getMapFile())) {
+        // Writes the .EDG sidecar too, so `--in` keeps the map edge of the map it decorated.
+        if (!resource::writeMap(resources, *map, outPath)) {
             out << "error: failed to write map: " << outPath << "\n";
             return 1;
         }

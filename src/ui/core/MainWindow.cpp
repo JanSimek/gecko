@@ -2920,14 +2920,14 @@ void MainWindow::showAbout() {
 void MainWindow::onPlayGame() {
     // No save prompt: playGame writes the in-memory map into the game folder, so the file on disk
     // has no bearing on what is played.
-    const Map::MapFile* mapFile = _currentEditorWidget ? &_currentEditorWidget->getMapFile() : nullptr;
-    std::string mapFilename = _currentEditorWidget ? _currentEditorWidget->getMap()->filename() : "";
+    const Map* map = _currentEditorWidget ? _currentEditorWidget->getMap() : nullptr;
+    std::string mapFilename = map ? map->filename() : "";
 
     if (!mapFilename.ends_with(".map")) {
         mapFilename += ".map";
     }
 
-    _gameLauncher->playGame(mapFile, mapFilename);
+    _gameLauncher->playGame(map, mapFilename);
 }
 
 void MainWindow::showSavePatternDialog() {

@@ -238,8 +238,6 @@ set(GECK_APP_SOURCES
     state/GameLauncher.h
 
     # Map save service (Qt-free MapWriter + proto-resolver core)
-    state/MapSaveService.cpp
-    state/MapSaveService.h
 
     # Qt Resource files
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
@@ -490,6 +488,9 @@ add_library(vault STATIC
 
     util/PaletteBlend.h
     util/PaletteBlend.cpp
+
+    util/Inflate.h
+    util/Inflate.cpp
 )
 
 target_include_directories(vault PUBLIC
@@ -550,6 +551,8 @@ add_library(gecko_resource STATIC
     resource/GameVarsLoader.h
     resource/ScriptLint.h
     resource/ScriptLint.cpp
+    resource/MapFileIO.h
+    resource/MapFileIO.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 

@@ -12,6 +12,7 @@
 #include "reader/ReaderExceptions.h"
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
+#include "resource/MapFileIO.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -278,7 +279,7 @@ namespace {
     // CritterProtoData).
     PlayerRecord readPlayer(SaveReader& r, resource::GameResources& resources, int32_t cid) {
         PlayerRecord player;
-        MapReader objectReader(makeProtoLoader(resources));
+        MapReader objectReader(resource::protoLoader(resources));
         std::size_t afterObject = 0;
         player.object = objectReader.readObjectAt(r.data(), r.position(), afterObject);
         if (player.object->pid() != DUDE_PID) {

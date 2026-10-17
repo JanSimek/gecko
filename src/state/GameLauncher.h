@@ -138,7 +138,8 @@ public:
     /// Restores mods_order.txt if the game is still running when the editor shuts down.
     ~GameLauncher() override;
 
-    void playGame(const Map::MapFile* mapFile, const std::string& mapFilename);
+    /// Writes `map`, with its .EDG map-edge sidecar, into the game's data/maps and starts the game on it.
+    void playGame(const Map* map, const std::string& mapFilename);
 
 private:
     bool confirmLaunchConfiguration(const std::filesystem::path& gameDataDirectory,

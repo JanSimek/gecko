@@ -67,7 +67,7 @@
 #include "format/map/MapObject.h"
 #include "resource/GameResources.h"
 
-#include "state/MapSaveService.h"
+#include "resource/MapFileIO.h"
 #include "writer/map/MapWriter.h"
 
 namespace geck {
@@ -879,14 +879,14 @@ bool EditorWidget::saveMapAs(const std::filesystem::path& defaultDir) {
 
 bool EditorWidget::writeMapTo(const std::string& destination) {
     try {
-        if (const auto bytesWritten = saveMapToFile(_resources, _session.map()->getMapFile(), destination);
+        if (const auto bytesWritten = resource::writeMapFile(_resources, _session.map()->getMapFile(), destination);
             bytesWritten.has_value()) {
             spdlog::info("Saved map {} ({} bytes)", destination, *bytesWritten);
 
             // Preserve the map's ".EDG" map-edge sidecar beside the saved map (if it had one).
             // A write failure here must not fail the already-saved map, so it is only logged.
             try {
-                if (const auto edgeBytes = saveMapEdgeBeside(_session.map()->edge(), destination)) {
+                if (const auto edgeBytes = resource::writeMapEdgeBeside(_session.map()->edge(), destination)) {
                     spdlog::info("Saved map-edge sidecar for {} ({} bytes)", destination, *edgeBytes);
                 }
             } catch (const std::exception& e) {
