@@ -156,7 +156,7 @@ namespace {
         }
 
         LuaScriptRuntime runtime;
-        const ScriptResult result = runtime.run(source, api, controller, "generate", args);
+        const ScriptResult result = runtime.run(source, api, controller, "generate", args, options.timeBudgetMs);
         if (!result.output.empty()) {
             out << result.output;
             if (result.output.back() != '\n') {

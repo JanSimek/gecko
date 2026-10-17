@@ -666,6 +666,8 @@ namespace {
         opts.inPath = optString(args, "in");
         opts.elevation = static_cast<int>(optInt(args, "elevation", 0, 0, 2));
         opts.count = static_cast<int>(optInt(args, "count", 1, 1, 1000));
+        // The server handles one request at a time, so a runaway script must not stall it for good.
+        opts.timeBudgetMs = static_cast<unsigned>(optInt(args, "timeBudgetSeconds", 60, 1, 3600)) * 1000U;
         if (const auto it = args.find("args"); it != args.end() && it->is_object()) {
             for (const auto& [key, value] : it->items()) {
                 opts.args[key] = value.is_string() ? value.get<std::string>() : value.dump();
@@ -1334,8 +1336,10 @@ namespace {
             "batches: the script runs once per map against a fresh copy, writing <out>_1.map .. "
             "<out>_N.map with consecutive seeds so the maps differ yet reproduce from one args.seed), "
             "optional args (string map), optional stamps (name -> stamp .json path, placed by the "
-            "script with api:placeStamp(name, anchorHex, variant)). Scripting build required.",
-            json({ { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "in", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "count", { { "type", "integer" } } }, { "args", { { "type", "object" } } }, { "stamps", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } }),
+            "script with api:placeStamp(name, anchorHex, variant)), optional timeBudgetSeconds (1..3600, "
+            "default 60: a script still running after that per map is stopped with an error). "
+            "Scripting build required.",
+            json({ { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "in", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "count", { { "type", "integer" } } }, { "timeBudgetSeconds", { { "type", "integer" } } }, { "args", { { "type", "object" } } }, { "stamps", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } }),
             [](resource::GameResources& r, const json& a) { return toolGenerate(r, a); } });
         t.push_back({ "render_map",
             "Render a map to a PNG so it can be seen, not just measured. Args: map (.map path), out "

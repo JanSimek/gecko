@@ -770,3 +770,34 @@ TEST_CASE("every documented script_api function is bound", "[scripting][lua]") {
     INFO("documented but not bound: " << r.output);
     CHECK(r.output == "\n"); // print() of an empty join is just a newline — nothing missing
 }
+
+TEST_CASE("A script cannot grow the Luau heap past the host's limit", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    // Each string is 64 MiB; keeping them alive passes the 1 GiB cap long before the OS limit.
+    const auto r = rt.run(R"(
+        local keep = {}
+        local chunk = string.rep("x", 64 * 1024 * 1024)
+        for i = 1, 64 do keep[i] = chunk .. tostring(i) end
+    )",
+        api, fx.controller, "heap");
+    REQUIRE_FALSE(r.ok);
+    CHECK(r.error.find("memory") != std::string::npos);
+}
+
+TEST_CASE("Captured print output is capped", "[scripting][lua]") {
+    ControllerFixture fx;
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+    LuaScriptRuntime rt;
+
+    const auto r = rt.run(R"(
+        local line = string.rep("y", 1024)
+        for i = 1, 8 * 1024 do print(line) end
+    )",
+        api, fx.controller, "print");
+    REQUIRE(r.ok);
+    CHECK(r.output.size() < LuaSandboxHost::PRINT_LIMIT_BYTES + 2048);
+    CHECK(r.output.find("print output truncated") != std::string::npos);
+}

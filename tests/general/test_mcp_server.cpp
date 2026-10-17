@@ -11,6 +11,8 @@
 #include "mcp/McpServer.h"
 #include "resource/GameResources.h"
 
+#include "support/TempFile.h"
+
 using nlohmann::json;
 using namespace geck;
 
@@ -332,6 +334,28 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         CHECK(resp["error"]["code"] == -32600);
     }
 }
+
+#ifdef GECK_SCRIPTING_ENABLED
+TEST_CASE("McpServer generate stops a runaway script and stays responsive", "[mcp][generate]") {
+    resource::GameResources resources;
+    mcp::McpServer server(resources);
+    geck::test::TempFile script{ "geck_mcp_loop", ".luau" };
+    geck::test::TempFile out{ "geck_mcp_loop_out", ".map" };
+    {
+        std::ofstream file(script.path(), std::ios::binary);
+        file << "while true do end";
+    }
+
+    const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 40 }, { "method", "tools/call" },
+        { "params", { { "name", "generate" },
+                        { "arguments", { { "script", script.path().string() }, { "out", out.path().string() }, { "timeBudgetSeconds", 1 } } } } } });
+    REQUIRE(resp["result"]["isError"] == true);
+    CHECK(resp["result"]["content"][0]["text"].get<std::string>().find("time budget") != std::string::npos);
+
+    const json ping = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 41 }, { "method", "ping" } });
+    CHECK(ping["id"] == 41);
+}
+#endif
 
 // The base64 encoder feeds MCP image content blocks; padding and binary bytes must match RFC 4648.
 TEST_CASE("encodeBase64 produces RFC 4648 output with padding", "[mcp]") {

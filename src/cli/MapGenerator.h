@@ -18,6 +18,7 @@ struct GenerateOptions {
     int count = 1;                             // batch size: > 1 writes out_1.map .. out_N.map with consecutive seeds
     std::map<std::string, std::string> args;   // parameters exposed to the script as `args`
     std::map<std::string, std::string> stamps; // name -> stamp .json path, for api:placeStamp(name, ...)
+    unsigned timeBudgetMs = 0;                 // wall-clock limit per map; 0 = none (the MCP always sets one)
 };
 
 // Run a Luau generation script headlessly and write the result to `outPath`. The script edits a

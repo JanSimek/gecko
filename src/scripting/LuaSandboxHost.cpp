@@ -33,7 +33,7 @@ bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::
     close();
     error.clear();
     _output = &output;
-    _state = luaL_newstate();
+    _state = lua_newstate(&LuaSandboxHost::allocate, this);
     if (_state == nullptr) {
         error = "failed to create Luau state";
         return false;
@@ -110,6 +110,27 @@ bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::
 
 void LuaSandboxHost::setPrintOutput(std::string& output) {
     _output = &output;
+    _printTruncated = false;
+}
+
+// Luau's default allocator (linit.cpp l_alloc), plus a running total so one script can't exhaust
+// the process. Refusing a block makes Luau raise a catchable memory error; frees always succeed.
+void* LuaSandboxHost::allocate(void* ud, void* ptr, std::size_t oldSize, std::size_t newSize) {
+    auto* host = static_cast<LuaSandboxHost*>(ud);
+    const std::size_t held = ptr != nullptr ? oldSize : 0; // Luau passes 0 for a new block (lmem.cpp)
+    if (newSize == 0) {
+        std::free(ptr);
+        host->_heapBytes -= held;
+        return nullptr;
+    }
+    if (newSize > held && host->_heapBytes - held + newSize > HEAP_LIMIT_BYTES) {
+        return nullptr;
+    }
+    void* block = std::realloc(ptr, newSize);
+    if (block != nullptr) {
+        host->_heapBytes = host->_heapBytes - held + newSize;
+    }
+    return block;
 }
 
 bool LuaSandboxHost::loadSource(const std::string& source, std::string& error) {
@@ -196,6 +217,15 @@ int LuaSandboxHost::capturePrint(lua_State* L) {
         return 0;
     }
 
+    if (host->_printTruncated) {
+        return 0;
+    }
+    if (host->_output->size() >= PRINT_LIMIT_BYTES) {
+        host->_printTruncated = true;
+        host->_output->append("[print output truncated: over 4 MiB]\n");
+        return 0;
+    }
+
     const int count = lua_gettop(L);
     for (int i = 1; i <= count; ++i) {
         if (i > 1) {
@@ -246,6 +276,7 @@ void LuaSandboxHost::close() noexcept {
         _state = nullptr;
     }
     _output = nullptr;
+    _printTruncated = false;
     _hasLoadedChunk = false;
     _timedOut = false;
 }

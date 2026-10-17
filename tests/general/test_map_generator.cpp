@@ -172,3 +172,19 @@ TEST_CASE("gecko-cli generate validates its inputs", "[cli][generate]") {
         CHECK(geck::cli::generateMap(resources, options, log) == 2);
     }
 }
+
+TEST_CASE("gecko-cli generate stops a script that outruns its time budget", "[cli][generate]") {
+    geck::test::TempFile scriptFile{ "geck_gen_loop", ".luau" };
+    geck::test::TempFile mapFile{ "geck_gen_loop_out", ".map" };
+    writeScript(scriptFile, "while true do end");
+
+    geck::resource::GameResources resources;
+    geck::cli::GenerateOptions options;
+    options.scriptPath = scriptFile.path().string();
+    options.outPath = mapFile.path().string();
+    options.timeBudgetMs = 200;
+
+    std::ostringstream log;
+    CHECK(geck::cli::generateMap(resources, options, log) == 1);
+    CHECK(log.str().find("time budget") != std::string::npos);
+}

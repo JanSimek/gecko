@@ -74,7 +74,7 @@ void printUsage(const char* program) {
               << "      --json emits machine-readable output (for the MCP) instead of the human report;\n"
               << "      --palette emits just the weighted floor + scenery palette a generator script needs.\n"
               << "  " << program << " map generate --script <file.luau> --out <file.map>\n"
-              << "      [--in <file.map>] [--elevation 0|1|2] [--count N]\n"
+              << "      [--in <file.map>] [--elevation 0|1|2] [--count N] [--time-budget SECONDS]\n"
               << "      [--arg key=value ...] [--stamp name=file.json ...]\n"
               << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      Runs a Luau generation script against a map and writes the result — a fresh\n"
@@ -84,6 +84,7 @@ void printUsage(const char* program) {
               << "      base (--arg seed=N, or a random base reported so the batch can reproduce).\n"
               << "      --arg passes parameters to the script (read as args.key); --stamp pre-loads a\n"
               << "      pattern stamp the script places with api:placeStamp(name, anchorHex, variant).\n"
+              << "      --time-budget stops a script that runs longer than SECONDS per map (default: none).\n"
               << "  " << program << " map render --map <file.map> --out <file.png>\n"
               << "      [--elevation 0|1|2] [--max-dim N] [--roof] [--schematic|--objects|--semantic]\n"
               << "      [--show-blockers] [--show-unreachable] [--full] [--crop-hex H [--crop-extent PX]]\n"
@@ -331,7 +332,7 @@ int consumeLintArg(const std::vector<std::string>& args, std::size_t i, CliArgs&
 int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out, const char* program) {
     const std::string& arg = args[i];
     const bool valueFlag = arg == "--data"
-        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--in" || arg == "--elevation" || arg == "--count" || arg == "--arg" || arg == "--stamp"))
+        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--in" || arg == "--elevation" || arg == "--count" || arg == "--time-budget" || arg == "--arg" || arg == "--stamp"))
         || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim" || arg == "--crop-hex" || arg == "--crop-extent"))
         || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"))
         || (out.describeScript && (arg == "--index" || arg == "--locale"))
@@ -368,6 +369,19 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     }
     if (out.generate && arg == "--count") {
         return parseIntFlag(arg, args[i + 1], out.gen.count, program) ? 2 : 0;
+    }
+    if (out.generate && arg == "--time-budget") {
+        int seconds = 0;
+        if (!parseIntFlag(arg, args[i + 1], seconds, program)) {
+            return 0;
+        }
+        if (seconds < 0 || seconds > 24 * 60 * 60) {
+            std::cerr << "error: --time-budget expects 0..86400 seconds, got: " << args[i + 1] << "\n";
+            printUsage(program);
+            return 0;
+        }
+        out.gen.timeBudgetMs = static_cast<unsigned>(seconds) * 1000U;
+        return 2;
     }
     if (out.generate && arg == "--arg") {
         // key=value -> exposed to the script as args.key
