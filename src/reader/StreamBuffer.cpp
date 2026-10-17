@@ -10,7 +10,9 @@ StreamBuffer::StreamBuffer(std::vector<uint8_t> data, ENDIANNESS endianness)
     : _endianness(endianness) {
     _buffer.resize(data.size());
     auto cBuf = _buffer.data();
-    memcpy(cBuf, data.data(), static_cast<size_t>(data.size()));
+    if (!data.empty()) { // an empty vector's data() may be null, which memcpy must not get
+        memcpy(cBuf, data.data(), data.size());
+    }
     setg(cBuf, cBuf, cBuf + data.size());
 }
 
