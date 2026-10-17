@@ -1,14 +1,20 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <optional>
 #include <vector>
 
 #include "editor/HexGeometry.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
+#include "format/pro/Pro.h"
 #include "pattern/Pattern.h"
 #include "pattern/PatternStamper.h"
+
+#include "writer/pro/ProWriter.h"
 
 #include "support/ControllerFixture.h"
 
@@ -159,4 +165,59 @@ TEST_CASE("PatternStamper records objects as data when buildSprites is false", "
     CHECK(objects[0]->pro_pid == 33555201u);
     CHECK(objects[1]->flags == 0x10u);
     CHECK(objects[1]->direction == 2u);
+}
+
+// A stamp places NEW objects, so they start from their proto like any obj_new: its flags (unless the
+// stamp captured its own), its light and its script. A hand-written stamp without "flags" used to
+// land with flags 0, so a flat proto stood and a NoBlock one blocked.
+TEST_CASE("PatternStamper seeds stamped objects from their proto", "[pattern][stamper]") {
+    const auto root = std::filesystem::path{ GECK_TEST_TMP_DIR } / "geck_stamp_proto_defaults";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "proto" / "walls");
+    std::ofstream(root / "proto" / "walls" / "walls.lst") << "lamp.pro\n";
+    constexpr uint32_t PRO = 0x03000001;
+    constexpr auto PROTO_FLAGS = static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_FLAT)
+        | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK);
+    {
+        Pro pro{ root / "proto" / "walls" / "lamp.pro" };
+        pro.header.PID = static_cast<int32_t>(PRO);
+        pro.header.FID = 0x03000000;
+        pro.header.flags = PROTO_FLAGS;
+        pro.header.light_distance = 4;
+        pro.header.light_intensity = 0x8000;
+        pro.commonItemData.SID = 0x03000044;
+        ProWriter writer;
+        writer.openFile(root / "proto" / "walls" / "lamp.pro");
+        REQUIRE(writer.write(pro));
+    }
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root.string());
+    PatternVariant v;
+    v.anchorHex = ANCHOR;
+    v.objects.push_back(PatternObject{ 0, 0, PRO, 0x03000000u, 0u, std::nullopt }); // no "flags"
+    v.objects.push_back(PatternObject{ 1, 0, PRO, 0x03000000u, 0u, 0x10u });        // captured flags
+
+    PatternStamper stamper(fx.resources, fx.hexgrid, fx.controller, *fx.map, /*buildSprites*/ false);
+    REQUIRE(stamper.stamp(v, TARGET, 0).objectsPlaced == 2);
+
+    const auto& objects = fx.mapFile().map_objects.at(0);
+    REQUIRE(objects.size() == 2);
+    // objectSetLight adds OBJECT_LIGHTING to a lit object's proto flags.
+    CHECK(objects[0]->flags == (PROTO_FLAGS | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_LIGHTING)));
+    CHECK(objects[1]->flags == 0x10u);
+    CHECK(objects[0]->light_radius == 4);
+    CHECK(objects[0]->light_intensity == 0x8000);
+    const auto& scripts = fx.mapFile().map_scripts[static_cast<int>(MapScript::ScriptType::ITEM)];
+    REQUIRE(scripts.size() == 2);
+    CHECK(objects[0]->map_scripts_pid == static_cast<int32_t>(scripts[0].pid));
+    CHECK(scripts[0].script_id == 0x44);
+
+    // The objects and their scripts are still the stamp's one undo entry.
+    REQUIRE(fx.undoStack.undo());
+    CHECK(fx.mapFile().map_objects.at(0).empty());
+    CHECK(fx.mapFile().map_scripts[static_cast<int>(MapScript::ScriptType::ITEM)].empty());
+    CHECK_FALSE(fx.undoStack.canUndo());
+
+    std::filesystem::remove_all(root);
 }

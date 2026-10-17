@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "pattern/Pattern.h"
@@ -34,7 +35,7 @@ public:
         uint32_t proPid = 0;
         uint32_t frmPid = 0;
         uint32_t direction = 0;
-        uint32_t flags = 0;
+        std::optional<uint32_t> flags; ///< none: the proto's (PatternObject::flags)
     };
     struct TilePlacement {
         int tileIndex = 0;
@@ -88,7 +89,8 @@ public:
 
 private:
     std::shared_ptr<Object> buildObject(const std::shared_ptr<MapObject>& mapObject, uint32_t frmPid) const;
-    // Build the MapObject for a resolved placement (position/flags/ids verbatim) on `elevation`.
+    // Build the MapObject for a resolved placement on `elevation`: position and ids verbatim, the rest
+    // seeded from its proto as for any new object, then the captured flags if the stamp has them.
     std::shared_ptr<MapObject> makeMapObject(const ObjectPlacement& placement, int elevation) const;
     // Resolve the plan's tiles into TileChanges (before-value read from the current map) and append
     // them to `out`; builds nothing on the map (PlacementBatch applies them later).

@@ -7,6 +7,7 @@
 
 #include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
+#include "editor/helper/ObjectQueries.h"
 #include "editor/Object.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
@@ -104,7 +105,10 @@ std::shared_ptr<MapObject> PatternStamper::makeMapObject(const ObjectPlacement& 
     mapObject->y = 0;
     mapObject->pro_pid = placement.proPid;
     mapObject->frm_pid = placement.frmPid;
-    mapObject->flags = placement.flags;
+    object_query::applyProtoDefaults(*mapObject, _resources);
+    if (placement.flags.has_value()) {
+        mapObject->flags = *placement.flags;
+    }
     mapObject->critter_index = -1;
     mapObject->map_scripts_pid = -1;
     mapObject->script_id = -1;
@@ -139,7 +143,7 @@ void PatternStamper::planInto(FillPlan& out, const PatternVariant& variant, int 
         // the entry and PlacementBatch counts it failed). Headless: no sprite — replay records the
         // MapObject as data, so a stamp's objects land even with no art or GL.
         std::shared_ptr<Object> object = _buildSprites ? buildObject(mapObject, op.frmPid) : nullptr;
-        out.objects.push_back({ std::move(mapObject), std::move(object) }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
+        out.objects.push_back({ std::move(mapObject), std::move(object), true }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
     }
 
     appendTiles(out, p.tiles, elevation);

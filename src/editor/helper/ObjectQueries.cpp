@@ -58,4 +58,9 @@ bool applyProtoDefaults(MapObject& object, resource::GameResources& resources) {
     return true;
 }
 
+int32_t protoSid(const MapObject& object, resource::GameResources& resources) {
+    const Pro* pro = getProData(object, resources);
+    return pro ? pro->sid() : -1;
+}
+
 } // namespace geck::object_query

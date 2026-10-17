@@ -91,8 +91,12 @@ void ScriptEditService::removeObjectScript(MapObject& object) {
     object.map_scripts_pid = -1;
 }
 
+ScriptEditService::OwnerState ScriptEditService::ownerState(const MapObject* object) {
+    return object ? OwnerState{ object->unknown0, object->map_scripts_pid, object->script_id } : OwnerState{};
+}
+
 void ScriptEditService::applyScriptSnapshot(int section, const std::shared_ptr<MapObject>& object,
-    const std::vector<MapScript>& sectionScripts, uint32_t oid, int32_t sid) {
+    const std::vector<MapScript>& sectionScripts, const OwnerState& owner) {
     if (!_map || section < 0 || section >= Map::SCRIPT_SECTIONS) {
         return;
     }
@@ -100,58 +104,80 @@ void ScriptEditService::applyScriptSnapshot(int section, const std::shared_ptr<M
     mapFile.map_scripts[section] = sectionScripts;
     mapFile.scripts_in_section[section] = static_cast<int>(sectionScripts.size());
     if (object) {
-        object->unknown0 = oid;
-        object->map_scripts_pid = sid;
+        object->unknown0 = owner.oid;
+        object->map_scripts_pid = owner.sid;
+        object->script_id = owner.scriptIndex;
     }
 }
 
 bool ScriptEditService::recordScriptEdit(const std::string& description, int section,
     const std::shared_ptr<MapObject>& object,
-    std::vector<MapScript> beforeSection, uint32_t beforeOid, int32_t beforeSid) {
+    std::vector<MapScript> beforeSection, const OwnerState& before) {
     if (!_map) {
         return false;
     }
     // The caller already applied the edit; capture the resulting "after" state.
     std::vector<MapScript> afterSection = _map->getMapFile().map_scripts[section];
-    uint32_t afterOid = object ? object->unknown0 : 0;
-    int32_t afterSid = object ? object->map_scripts_pid : -1;
+    const OwnerState after = ownerState(object.get());
 
     UndoCommand cmd;
     cmd.description = description;
-    cmd.undo = [this, section, object, beforeSection = std::move(beforeSection), beforeOid, beforeSid]() {
-        applyScriptSnapshot(section, object, beforeSection, beforeOid, beforeSid);
+    cmd.undo = [this, section, object, beforeSection = std::move(beforeSection), before]() {
+        applyScriptSnapshot(section, object, beforeSection, before);
     };
-    cmd.redo = [this, section, object, afterSection = std::move(afterSection), afterOid, afterSid]() {
-        applyScriptSnapshot(section, object, afterSection, afterOid, afterSid);
+    cmd.redo = [this, section, object, afterSection = std::move(afterSection), after]() {
+        applyScriptSnapshot(section, object, afterSection, after);
     };
     return _batcher.push(std::move(cmd));
 }
 
 bool ScriptEditService::attachScript(const std::shared_ptr<MapObject>& object,
     int scriptType, uint32_t programIndex) {
-    if (!_map || !object || scriptType < 0 || scriptType >= Map::SCRIPT_SECTIONS) {
+    if (scriptType < 0 || scriptType >= Map::SCRIPT_SECTIONS) {
         return false;
     }
-    const int section = scriptType;
+    return attach(object, static_cast<MapScript::ScriptType>(scriptType), programIndex, "Attach Script");
+}
+
+bool ScriptEditService::attachProtoScript(const std::shared_ptr<MapObject>& object, uint32_t protoSid) {
+    const int section = MapScript::sidSection(protoSid);
+    if (protoSid == MapScript::NONE || section >= Map::SCRIPT_SECTIONS) {
+        return false;
+    }
+    return attach(object, static_cast<MapScript::ScriptType>(section), MapScript::sidIndex(protoSid), "Attach Proto Script");
+}
+
+bool ScriptEditService::attach(const std::shared_ptr<MapObject>& object, MapScript::ScriptType type,
+    uint32_t programIndex, const std::string& description) {
+    if (!_map || !object) {
+        return false;
+    }
+    const auto section = static_cast<int>(type);
     auto& mapFile = _map->getMapFile();
 
     std::vector<MapScript> beforeSection = mapFile.map_scripts[section];
-    const uint32_t beforeOid = object->unknown0;
-    const int32_t beforeSid = object->map_scripts_pid;
+    const OwnerState before = ownerState(object.get());
 
     // Replace any existing script (same object type -> same section).
     removeObjectScript(*object);
 
     const uint32_t scriptId = allocateScriptId(section);
     const uint32_t oid = allocateObjectId();
-    MapScript script = MapScript::makeObjectScript(static_cast<MapScript::ScriptType>(scriptType),
-        scriptId, programIndex, oid);
+    MapScript script = MapScript::makeObjectScript(type, scriptId, programIndex, oid);
+    if (type == MapScript::ScriptType::SPATIAL) {
+        // fallout2-ce objectSetScript / objectSetScriptFromProto: a spatial script sits on its owner's hex.
+        script.timer = built_tile::create(static_cast<uint32_t>(object->position), object->elevation);
+        script.spatial_radius = 3;
+    }
     mapFile.map_scripts[section].push_back(script);
     mapFile.scripts_in_section[section] = static_cast<int>(mapFile.map_scripts[section].size());
     object->unknown0 = oid;
     object->map_scripts_pid = static_cast<int32_t>(script.pid);
+    if (object->objectType() == ObjectType::Critter) {
+        object->script_id = static_cast<int32_t>(programIndex); // the engine's obj->scriptIndex
+    }
 
-    return recordScriptEdit("Attach Script", section, object, std::move(beforeSection), beforeOid, beforeSid);
+    return recordScriptEdit(description, section, object, std::move(beforeSection), before);
 }
 
 bool ScriptEditService::detachScript(const std::shared_ptr<MapObject>& object) {
@@ -164,12 +190,11 @@ bool ScriptEditService::detachScript(const std::shared_ptr<MapObject>& object) {
     }
 
     std::vector<MapScript> beforeSection = _map->getMapFile().map_scripts[section];
-    const uint32_t beforeOid = object->unknown0;
-    const int32_t beforeSid = object->map_scripts_pid;
+    const OwnerState before = ownerState(object.get());
 
     removeObjectScript(*object);
 
-    return recordScriptEdit("Detach Script", section, object, std::move(beforeSection), beforeOid, beforeSid);
+    return recordScriptEdit("Detach Script", section, object, std::move(beforeSection), before);
 }
 
 bool ScriptEditService::addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius) {
@@ -188,7 +213,7 @@ bool ScriptEditService::addSpatialScript(uint32_t programIndex, int tile, int el
     mapFile.map_scripts[section].push_back(script);
     mapFile.scripts_in_section[section] = static_cast<int>(mapFile.map_scripts[section].size());
 
-    return recordScriptEdit("Add Spatial Script", section, nullptr, std::move(beforeSection), 0, -1);
+    return recordScriptEdit("Add Spatial Script", section, nullptr, std::move(beforeSection), {});
 }
 
 const MapScript* ScriptEditService::findSpatialScript(uint32_t sid) const {
@@ -217,7 +242,7 @@ bool ScriptEditService::editSpatialScript(uint32_t sid, uint32_t programIndex,
     it->timer = built_tile::create(static_cast<uint32_t>(tile), static_cast<uint32_t>(elevation));
     it->spatial_radius = static_cast<uint32_t>(radius);
 
-    return recordScriptEdit("Edit Spatial Script", SPATIAL_SECTION, nullptr, std::move(beforeSection), 0, -1);
+    return recordScriptEdit("Edit Spatial Script", SPATIAL_SECTION, nullptr, std::move(beforeSection), {});
 }
 
 bool ScriptEditService::removeSpatialScript(uint32_t sid) {
@@ -231,7 +256,7 @@ bool ScriptEditService::removeSpatialScript(uint32_t sid) {
     if (vec.size() == sizeBefore) {
         return false; // nothing matched
     }
-    return recordScriptEdit("Delete Spatial Script", SPATIAL_SECTION, nullptr, std::move(beforeSection), 0, -1);
+    return recordScriptEdit("Delete Spatial Script", SPATIAL_SECTION, nullptr, std::move(beforeSection), {});
 }
 
 } // namespace geck

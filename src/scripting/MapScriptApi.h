@@ -20,6 +20,7 @@ class Map;
 struct MapObject;
 struct EditArea;
 class ObjectCommandController;
+enum class ProtoScript;
 namespace pattern {
     struct FillPlan;
 }
@@ -395,8 +396,10 @@ private:
         int orientation;
     };
     // Record a freshly-built `mapObject`: data-only when headless, else build its sprite from `frmPid`
-    // and register the placement. False when the GUI cannot resolve the art.
-    bool registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction);
+    // and register the placement. False when the GUI cannot resolve the art. `protoScript` says
+    // whether it also gets its proto's script (see ProtoScript).
+    bool registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction,
+        ProtoScript protoScript);
     // Build + register one exit-grid MISC marker at `hex` with the given art and destination. Assumes
     // `hex` is on-grid (callers validate). Returns registerObject's result.
     bool placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid, const ExitDest& dest);

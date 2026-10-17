@@ -27,6 +27,7 @@ struct FillPlan {
     struct Entry {
         std::shared_ptr<MapObject> mapObject;
         std::shared_ptr<Object> object; ///< null when sprites are not built or art failed to load
+        bool attachProtoScript = false; ///< replay also gives it its proto's script (ProtoScript::Attach)
     };
 
     std::vector<Entry> objects;
