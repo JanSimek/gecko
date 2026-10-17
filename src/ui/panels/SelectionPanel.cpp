@@ -1248,6 +1248,7 @@ void SelectionPanel::onAddInventoryClicked() {
     auto item = std::make_unique<MapObject>();
     item->pro_pid = *itemPid;
     item->frm_pid = pro->header.FID;
+    item->applyProtoDefaults(*pro);
     item->amount = static_cast<uint32_t>(dialog.selectedAmount());
     item->elevation = holder->elevation;
     item->position = holder->position;

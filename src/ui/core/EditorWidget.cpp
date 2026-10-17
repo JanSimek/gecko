@@ -52,6 +52,7 @@
 
 #include "editor/Object.h"
 #include "editor/Reachability.h"
+#include "editor/helper/ObjectQueries.h"
 #include "pattern/PatternStamper.h"
 #include "pattern/PatternSprite.h"
 #include "editor/HexagonGrid.h"
@@ -996,9 +997,7 @@ std::shared_ptr<MapObject> EditorWidget::createScrollBlockerObject(int hexPositi
     // and nothing else, so blockers written with any other proto (this used to write 24, "Flare")
     // are inert in game however they are drawn.
     mapObject->pro_pid = WallBlockers::SCROLL_BLOCKER_PID.pid();
-
-    // Scroll blockers don't block movement, they are visual indicators only
-    mapObject->flags = 0;
+    object_query::applyProtoDefaults(*mapObject, _resources);
 
     mapObject->unknown0 = 0;
     mapObject->x = 0;
@@ -1006,8 +1005,6 @@ std::shared_ptr<MapObject> EditorWidget::createScrollBlockerObject(int hexPositi
     mapObject->sx = 0;
     mapObject->sy = 0;
     mapObject->critter_index = -1;
-    mapObject->light_radius = 0;
-    mapObject->light_intensity = 0;
     mapObject->outline_color = 0;
     mapObject->map_scripts_pid = -1;
     mapObject->script_id = -1;
@@ -2698,12 +2695,11 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     mapObject->pro_pid = _previewObjectInfo->pro->header.PID;
     mapObject->frm_pid = _previewObjectInfo->pro->header.FID;
 
+    mapObject->applyProtoDefaults(*_previewObjectInfo->pro);
+
     mapObject->sx = 0;
     mapObject->sy = 0;
-    mapObject->flags = 0;
     mapObject->critter_index = -1;
-    mapObject->light_radius = 0;
-    mapObject->light_intensity = 0;
     mapObject->outline_color = 0;
     mapObject->map_scripts_pid = -1;
     mapObject->script_id = -1;

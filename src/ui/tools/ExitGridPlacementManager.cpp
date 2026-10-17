@@ -8,6 +8,7 @@
 #include "util/ExitGridDirection.h"
 #include "util/HexLine.h"
 #include "editor/HexagonGrid.h"
+#include "editor/helper/ObjectQueries.h"
 #include "selection/SelectionManager.h"
 #include "selection/SelectionState.h"
 #include "resource/MapNameResolver.h"
@@ -143,12 +144,10 @@ std::shared_ptr<MapObject> ExitGridPlacementManager::createExitGridObject(int he
     // Direction-specific art, chosen per hex by the caller — independent of the destination (exit_*).
     exitGrid->pro_pid = proPid;
     exitGrid->frm_pid = frmPid;
-    exitGrid->flags = 0;
+    object_query::applyProtoDefaults(*exitGrid, _resources);
     exitGrid->elevation = _context.getCurrentElevation();
 
     exitGrid->critter_index = -1;
-    exitGrid->light_radius = 0;
-    exitGrid->light_intensity = 0;
     exitGrid->outline_color = 0;
     exitGrid->map_scripts_pid = -1;
     exitGrid->script_id = -1;
