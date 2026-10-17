@@ -16,7 +16,7 @@
 3. **Analysis/MCP tail** — small, self-contained items.
 4. **Editor UX** — customizable toolbar (driven by the `ActionSpec` table); undo residuals;
    log-panel follow-ups.
-5. **Biome script library** — `town.luau`, `coast.luau`; placement polish. Note: generating
+5. **Biome script library** — `town.luau`, `coast.luau`. Note: generating
    random caves proved not possible (every synthesised rim broke the wall art, see Caves), so
    `cave.luau` only copies an existing shipped cave map; expect the same limit for other biomes
    whose look depends on hand-laid wall art.
@@ -270,10 +270,6 @@ Open items:
 - **`worldmap.msg`** — random-encounter descriptions (`[3000 + 50*tableId + entryId]`,
   fallout2-ce worldmap.cc:3595); runtime-index-tied to the encounter table/entry ordering, so
   not a small add. (Area/city labels turned out to live in map.msg and are already surfaced.)
-- **Endgame follow-ups** — `enddeath.txt` death endings (in master.dat) and the narration
-  subtitle text (`text/<lang>/cuts/<narrator>.txt`).
-- **`party.txt`** (companions), **`holodisk.txt`**, **`karmavar.txt`** — lore/state, lower
-  priority.
 
 *(MCP server guard note: per-call cancellation / progress notifications are deliberately not
 planned — the stdio loop is synchronous and tool calls are short.)*

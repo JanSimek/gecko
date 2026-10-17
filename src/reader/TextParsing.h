@@ -45,6 +45,27 @@ inline std::vector<std::string> splitCsv(const std::string& s) {
     return out;
 }
 
+/// Split on any run of space, tab or comma, dropping empty tokens — the engine's strtok(" \t,") over
+/// the flat tables under data/ (quests.txt, holodisk.txt, karmavar.txt, enddeath.txt).
+inline std::vector<std::string> splitTokens(const std::string& s) {
+    std::vector<std::string> out;
+    std::string current;
+    for (const char c : s) {
+        if (c == ' ' || c == '\t' || c == ',' || c == '\r') {
+            if (!current.empty()) {
+                out.push_back(current);
+                current.clear();
+            }
+        } else {
+            current += c;
+        }
+    }
+    if (!current.empty()) {
+        out.push_back(current);
+    }
+    return out;
+}
+
 /// Parse a numeric field the way the engine does — std::atoi: take the leading digits, yield 0 for a
 /// non-numeric value, never error (so "35%" -> 35 and "8{Wielded}" -> 8). An empty (absent) field keeps
 /// `fallback`, which callers set to the field's default — matching the engine's struct default for an

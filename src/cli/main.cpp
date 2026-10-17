@@ -8,6 +8,7 @@
 #include "cli/GlobalVars.h"
 #include "cli/Quests.h"
 #include "cli/Endings.h"
+#include "cli/Party.h"
 #include "cli/GvarRefs.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
@@ -45,6 +46,7 @@ struct CliArgs {
     bool gvars = false;
     bool quests = false;
     bool endings = false;
+    bool party = false;
     bool findGvar = false;
     bool dumpGrid = false;
     bool lintScript = false;
@@ -141,11 +143,15 @@ void printUsage(const char* program) {
               << "  " << program << " map encounters --data <dir-or-.dat> [--data <...>]\n"
               << "      The worldmap terrain types and random-encounter group tables from worldmap.txt.\n"
               << "  " << program << " map gvars --data <dir-or-.dat> [--data <...>]\n"
-              << "      The global-variable dictionary (vault13.gam): each GVAR index -> name + default.\n"
+              << "      The global-variable dictionary (vault13.gam): each GVAR index -> name + default, plus the\n"
+              << "      roles the data files give it (quest, ending, death ending, karma, holodisk).\n"
               << "  " << program << " map quests --data <dir-or-.dat> [--data <...>]\n"
               << "      The quest registry (quests.txt): each quest's area, tracking gvar, thresholds, text.\n"
               << "  " << program << " map endings --data <dir-or-.dat> [--data <...>]\n"
-              << "      The endgame win-condition table (endgame.txt): each slide's gvar==value, art, narrator.\n"
+              << "      The endgame slides (endgame.txt) and death endings (enddeath.txt) with their conditions\n"
+              << "      and narration subtitles.\n"
+              << "  " << program << " map party --data <dir-or-.dat> [--data <...>]\n"
+              << "      The companions (party.txt): pid, combat options, level-up protos.\n"
               << "  " << program << " map find-gvar <GVAR_NAME> --data <dir-or-.dat> [--data <...>]\n"
               << "      Scripts that read/write a global variable (needs an .ssl source tree mounted): set vs get.\n"
               << "  " << program << " map script-refs <gvar|call|procedure|macro|pid|map> <NAME> --data <dir-or-.dat> [--data <...>]\n"
@@ -252,7 +258,7 @@ bool isKnownSubcommand(const std::vector<std::string>& args) {
         && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern"
             || args[1] == "describe-script" || args[1] == "reachability" || args[1] == "describe-map"
             || args[1] == "graph" || args[1] == "world" || args[1] == "encounters"
-            || args[1] == "gvars" || args[1] == "quests" || args[1] == "endings" || args[1] == "find-gvar"
+            || args[1] == "gvars" || args[1] == "quests" || args[1] == "endings" || args[1] == "party" || args[1] == "find-gvar"
             || args[1] == "dump-grid" || args[1] == "lint-script" || args[1] == "script-refs");
 }
 
@@ -600,7 +606,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
-    if (out.gvars || out.quests || out.endings) { // these take no arguments beyond --data (handled above)
+    if (out.gvars || out.quests || out.endings || out.party) { // these take no arguments beyond --data (handled above)
         std::cerr << "error: unexpected argument: " << arg << "\n";
         printUsage(program);
         return 0;
@@ -656,6 +662,7 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     out.gvars = args[1] == "gvars";
     out.quests = args[1] == "quests";
     out.endings = args[1] == "endings";
+    out.party = args[1] == "party";
     out.findGvar = args[1] == "find-gvar";
     out.dumpGrid = args[1] == "dump-grid";
     out.lintScript = args[1] == "lint-script";
@@ -1099,6 +1106,9 @@ int runAnalysisCommand(geck::resource::GameResources& resources, const CliArgs& 
     }
     if (cli.endings) {
         return geck::cli::buildEndings(resources, std::cout);
+    }
+    if (cli.party) {
+        return geck::cli::buildParty(resources, std::cout);
     }
     if (cli.findGvar) {
         if (cli.findGvarName.empty()) {

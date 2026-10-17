@@ -20,6 +20,7 @@ add_executable(general_tests
     general/test_worldmap_scene.cpp
     general/test_quests_txt.cpp
     general/test_endgame_txt.cpp
+    general/test_gvar_tables_txt.cpp
     general/test_gvar_refs.cpp
     general/test_reading_msg.cpp
     general/test_reading_pro_drug.cpp

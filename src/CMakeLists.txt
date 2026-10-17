@@ -377,8 +377,14 @@ add_library(vault STATIC
     # Quests (quests.txt — the quest registry)
     format/quests/QuestsTxt.h
 
-    # Endgame (endgame.txt — the ending slideshow win-condition table)
+    # Endgame (endgame.txt slides, enddeath.txt death endings)
     format/endgame/EndgameTxt.h
+    format/endgame/EndDeathTxt.h
+
+    # Pip-Boy holodisks, karma titles and companions (holodisk.txt, karmavar.txt, party.txt)
+    format/holodisk/HolodiskTxt.h
+    format/karma/KarmaVarTxt.h
+    format/party/PartyTxt.h
 
     # PRO
     format/pro/Pro.h
@@ -462,6 +468,17 @@ add_library(vault STATIC
 
     reader/endgame/EndgameTxtReader.h
     reader/endgame/EndgameTxtReader.cpp
+    reader/endgame/EndDeathTxtReader.h
+    reader/endgame/EndDeathTxtReader.cpp
+
+    reader/holodisk/HolodiskTxtReader.h
+    reader/holodisk/HolodiskTxtReader.cpp
+
+    reader/karma/KarmaVarTxtReader.h
+    reader/karma/KarmaVarTxtReader.cpp
+
+    reader/party/PartyTxtReader.h
+    reader/party/PartyTxtReader.cpp
 
     reader/pro/ProReader.h
     reader/pro/ProReader.cpp
@@ -775,6 +792,12 @@ if(GECK_BUILD_CLI)
         cli/Quests.cpp
         cli/Endings.h
         cli/Endings.cpp
+        cli/GameText.h
+        cli/GameText.cpp
+        cli/GvarRoles.h
+        cli/GvarRoles.cpp
+        cli/Party.h
+        cli/Party.cpp
         cli/GvarRefs.h
         cli/GvarRefs.cpp
         cli/CritterCombatFlags.h

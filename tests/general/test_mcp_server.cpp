@@ -38,7 +38,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             names.push_back(tool["name"].get<std::string>());
             CHECK(tool.contains("inputSchema"));
         }
-        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "mounts", "describe_script", "find_script", "find_text", "export_entities", "export_protos", "reachability", "describe_map", "map_graph", "world_map", "world_encounters", "quests", "gvars", "endings", "find_gvar", "script_refs", "lint_script", "generate", "render_map", "extract_pattern", "script_api", "frm_info", "resolve_fid", "list_frms", "render_frm", "resource_find", "resource_list", "resource_missing", "describe_save", "hex_sightline" }) {
+        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "mounts", "describe_script", "find_script", "find_text", "export_entities", "export_protos", "reachability", "describe_map", "map_graph", "world_map", "world_encounters", "quests", "gvars", "endings", "party", "find_gvar", "script_refs", "lint_script", "generate", "render_map", "extract_pattern", "script_api", "frm_info", "resolve_fid", "list_frms", "render_frm", "resource_find", "resource_list", "resource_missing", "describe_save", "hex_sightline" }) {
             CHECK(std::find(names.begin(), names.end(), expected) != names.end());
         }
     }
@@ -245,7 +245,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         CHECK(resp["result"]["isError"] == true);
     }
 
-    SECTION("quests / gvars with no data mounted report tool errors (no quests.txt / vault13.gam)") {
+    SECTION("quests / gvars / endings / party with no data mounted report tool errors") {
         const json q = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 16 }, { "method", "tools/call" },
             { "params", { { "name", "quests" }, { "arguments", json::object() } } } });
         CHECK(q["result"]["isError"] == true);
@@ -255,6 +255,9 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         const json e = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 18 }, { "method", "tools/call" },
             { "params", { { "name", "endings" }, { "arguments", json::object() } } } });
         CHECK(e["result"]["isError"] == true);
+        const json p = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 19 }, { "method", "tools/call" },
+            { "params", { { "name", "party" }, { "arguments", json::object() } } } });
+        CHECK(p["result"]["isError"] == true);
     }
 
     SECTION("resolve_fid decodes a FID without any data mounted") {

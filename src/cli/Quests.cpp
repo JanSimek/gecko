@@ -1,15 +1,14 @@
 #include "cli/Quests.h"
 
 #include "resource/ConfigLoad.h"
+#include "cli/GameText.h"
 #include "cli/GlobalVars.h" // loadGameGam
 #include "format/gam/Gam.h"
-#include "format/msg/Msg.h"
 #include "format/quests/QuestsTxt.h"
 #include "reader/quests/QuestsTxtReader.h"
 #include "resource/GameResources.h"
 
 #include <nlohmann/json.hpp>
-#include <spdlog/spdlog.h>
 
 #include <cstddef>
 #include <ostream>
@@ -20,22 +19,6 @@ namespace geck::cli {
 namespace {
 
     using ordered_json = nlohmann::ordered_json;
-
-    // Message `index` from the .msg at `path`, or "" if unavailable. quests.txt indexes map.msg
-    // (location names, the 1500+ range) and quests.msg (descriptions) directly by these ids.
-    std::string msgText(resource::GameResources& resources, const char* path, int index) {
-        if (index < 0) {
-            return {};
-        }
-        try {
-            if (Msg* msg = resources.repository().tryLoad<Msg>(path); msg != nullptr) {
-                return msg->message(index).text;
-            }
-        } catch (const std::exception& e) {
-            spdlog::debug("quests: {} unavailable: {}", path, e.what());
-        }
-        return {};
-    }
 
     ordered_json orNull(const std::string& s) {
         return s.empty() ? ordered_json(nullptr) : ordered_json(s);
@@ -63,10 +46,10 @@ int buildQuests(resource::GameResources& resources, std::ostream& out) {
             gvarStart = gam->gvarValue(gvarIndex);
         }
         array.push_back({ { "location", quest.location },
-            { "area", orNull(msgText(resources, "text/english/game/map.msg", quest.location)) },
+            { "area", orNull(gameMessage(resources, "map.msg", quest.location)) },
             { "gvar", quest.gvar }, { "gvarName", gvarName }, { "gvarStart", gvarStart },
             { "displayThreshold", quest.displayThreshold }, { "completedThreshold", quest.completedThreshold },
-            { "description", orNull(msgText(resources, "text/english/game/quests.msg", quest.description)) } });
+            { "description", orNull(gameMessage(resources, "quests.msg", quest.description)) } });
     }
 
     ordered_json root;

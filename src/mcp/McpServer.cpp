@@ -10,6 +10,7 @@
 #include "cli/GlobalVars.h"
 #include "cli/Quests.h"
 #include "cli/Endings.h"
+#include "cli/Party.h"
 #include "cli/GvarRefs.h"
 #include "cli/HexSightline.h"
 #include "cli/FrmInspect.h"
@@ -424,6 +425,12 @@ namespace {
     json toolEndings(resource::GameResources& resources, const json& /*args*/) {
         std::ostringstream oss;
         const int rc = cli::buildEndings(resources, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolParty(resource::GameResources& resources, const json& /*args*/) {
+        std::ostringstream oss;
+        const int rc = cli::buildParty(resources, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -1100,18 +1107,34 @@ namespace {
         t.push_back({ "gvars",
             "The global-variable dictionary from vault13.gam: every GVAR by 'index' -> 'name' (GVAR_*) "
             "+ 'default'. Global variables are the engine's progression state machine, so this decodes "
-            "a gvar index (from quests, or a script) to a human-readable name. No arguments.",
+            "a gvar index (from quests, or a script) to a human-readable name. A gvar the data files give "
+            "a meaning also carries 'roles': 'quest' (quests.txt: description + display/completed "
+            "thresholds), 'ending' (an endgame slide shown at 'value'), 'deathEnding' (a death narration "
+            "dropped once the gvar reaches 'droppedAt'), 'karma' (a character-screen karma title shown "
+            "while non-zero) and 'holodisk' (a Pip-Boy holodisk owned while non-zero). No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolGlobalVars(r, a); }, "" });
         t.push_back({ "endings",
             "The endgame slideshow's win-condition table from endgame.txt: each ending slide with the "
             "global variable + value that triggers it ('gvar' + 'gvarName' via vault13.gam + a readable "
-            "'condition'), the slide 'art', and the 'narrator' subtitle base name. Slides sharing a gvar "
-            "at different values are a location's branching outcomes — so this answers 'what world state "
-            "produces each ending'. With quests + gvars it closes the start->objectives->ending loop. "
-            "No arguments.",
+            "'condition'), the slide 'art', the 'narrator' base name and its narration 'subtitles'. "
+            "Slides sharing a gvar at different values are a location's branching outcomes — so this "
+            "answers 'what world state produces each ending'. 'deathEndings' (enddeath.txt) are the "
+            "narrations played when the player dies: the engine keeps the lines whose 'condition' (gvar "
+            "below 'value'), 'areaKnown'/'areaNotKnown' (city.txt areas) and 'minLevel' hold and picks "
+            "one weighted by 'percentage'; 'forcedWhen' marks the one played instead on that gvar "
+            "(death in combat, not the timeout). With quests + gvars it closes the "
+            "start->objectives->ending loop. No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolEndings(r, a); }, "" });
+        t.push_back({ "party",
+            "The companions from party.txt: each party member's proto 'pid' + 'name', its 'options' (the "
+            "combat settings the player may pick for it: areaAttackMode, attackWho, bestWeapon, chemUse, "
+            "distance, runAwayMode, disposition), and its level-ups: once the player reaches "
+            "'levelMinimum' it may level every 'levelUpEvery' player levels, swapping to the next proto in "
+            "'levels'. Resolve pids further with proto_info. No arguments.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolParty(r, a); }, "" });
         t.push_back({ "find_gvar",
             "Find where a global variable is used in the mounted .ssl script sources: every read or write "
             "of 'gvar' in code a compiled script actually runs, as {script, procedure, line, kind, text}, "
