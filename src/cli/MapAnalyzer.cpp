@@ -492,7 +492,7 @@ namespace {
     ordered_json objectsToJson(const MapUsage& usage, NameResolver& names, Aggregate& agg) {
         auto array = ordered_json::array();
         for (const auto& [pid, count] : sortedByCountDesc(usage.objects)) {
-            array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu }, { "type", typeLabel(pid) },
+            array.push_back({ { "pid", pidHex(pid) }, { "number", ProtoId(pid).protoId() }, { "type", typeLabel(pid) },
                 { "name", names.protoName(pid) }, { "count", count }, { "flat", names.isFlat(pid) } });
             agg.objCount[pid] += count;
             agg.objMaps[pid]++;
@@ -513,7 +513,7 @@ namespace {
     ordered_json aggObjectsToJson(const Aggregate& agg, NameResolver& names) {
         auto array = ordered_json::array();
         for (const auto& [pid, count] : sortedByCountDesc(agg.objCount)) {
-            array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu }, { "type", typeLabel(pid) },
+            array.push_back({ { "pid", pidHex(pid) }, { "number", ProtoId(pid).protoId() }, { "type", typeLabel(pid) },
                 { "name", names.protoName(pid) }, { "total", count }, { "maps", agg.objMaps.at(pid) }, { "flat", names.isFlat(pid) } });
         }
         return array;
@@ -531,7 +531,7 @@ namespace {
     ordered_json paletteSceneryToJson(const std::map<uint32_t, int>& scenery, NameResolver& names) {
         auto array = ordered_json::array();
         for (const auto& [pid, weight] : sortedByCountDesc(scenery)) {
-            array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
+            array.push_back({ { "pid", pidHex(pid) }, { "number", ProtoId(pid).protoId() },
                 { "name", names.protoName(pid) }, { "weight", weight } });
         }
         return array;
@@ -704,7 +704,7 @@ namespace {
                 }
                 const uint32_t pid = object->pro_pid;
                 const uint32_t packet = object->ai_packet != 0 ? object->ai_packet : names.critterAiPacket(pid);
-                ordered_json entry = { { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
+                ordered_json entry = { { "pid", pidHex(pid) }, { "number", ProtoId(pid).protoId() },
                     { "name", names.protoName(pid) }, { "hex", object->position }, { "elevation", elevation },
                     { "hidden", isHiddenObject(*object) }, { "team", object->group_id }, { "aiPacket", packet },
                     { "ai", critterAiToJson(ai.byPacketNum(static_cast<int>(packet))) },
@@ -949,7 +949,7 @@ namespace {
             if (pattern && !std::regex_search(names.protoName(pid), *pattern)) {
                 continue;
             }
-            ordered_json record{ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
+            ordered_json record{ { "pid", pidHex(pid) }, { "number", ProtoId(pid).protoId() },
                 { "type", typeLabel(pid) }, { "name", names.protoName(pid) },
                 { "fid", pidHex(object->frm_pid) }, // the art FID — feed to resolve_fid to SEE what it is
                 { "hex", object->position }, { "col", hexgrid::columnOf(object->position) },
@@ -966,7 +966,7 @@ namespace {
                         continue;
                     }
                     contents.push_back({ { "pid", pidHex(item->pro_pid) },
-                        { "number", item->pro_pid & 0xFFFFFFu }, { "name", names.protoName(item->pro_pid) },
+                        { "number", ProtoId(item->pro_pid).protoId() }, { "name", names.protoName(item->pro_pid) },
                         { "count", item->objects_in_inventory > 0 ? item->objects_in_inventory : 1u } });
                 }
                 if (!contents.empty()) {

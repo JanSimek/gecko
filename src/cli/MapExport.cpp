@@ -162,7 +162,7 @@ namespace {
         ordered_json row;
         row["kind"] = object.isExitGridMarker() ? "exitgrid" : kindOf(object.pro_pid);
         row["pid"] = object.pro_pid;
-        row["proto"] = object.pro_pid & 0xFFFFFFu;
+        row["proto"] = object.pid().protoId();
         row["name"] = protos(object.pro_pid).name;
         row["map"] = mapPath;
         row["elevation"] = elevation;

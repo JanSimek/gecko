@@ -107,7 +107,6 @@ The widget can be integrated into existing dialogs by:
 All game limits are defined as constants:
 - `MAX_LIGHT_RADIUS = 8` (hexes)
 - `MAX_LIGHT_INTENSITY = 65536` (0-100% intensity)
-- `MAX_PID_VALUE = 0x5FFFFFF` (24-bit object ID)
 - `MAX_MATERIAL_ID = 99`
 - And many more following game specifications
 
