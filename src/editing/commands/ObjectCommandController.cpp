@@ -18,13 +18,7 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     std::vector<sf::Sprite>& wallBlockerOverlays,
     UndoStack& undoStack,
     CommandHost& host)
-    : _resources(resources)
-    , _map(map)
-    , _hexgrid(hexgrid)
-    , _mapSpriteLoader(mapSpriteLoader)
-    , _objects(objects)
-    , _wallBlockerOverlays(wallBlockerOverlays)
-    , _host(host)
+    : _host(host)
     , _batcher(undoStack, [this] { _host.undoStackChanged(); })
     , _tileService(map, _batcher, [this](int elevation) -> std::vector<Tile>& { return _host.ensureElevationTiles(elevation); }, [this] { return _host.getCurrentElevation(); }, [this](int hexIndex, bool isRoof, int elevation) { _host.updateTileSprite(hexIndex, isRoof, elevation); })
     , _inventoryService(_batcher)

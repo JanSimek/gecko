@@ -55,7 +55,6 @@ set(GECK_APP_SOURCES
     # Qt6 UI Core
     ui/core/MainWindow.h
     ui/core/MainWindow.cpp
-    editor/TileChange.h
     ui/core/VisibilitySettings.h
     ui/core/EditorWidget.h
     ui/core/EditorWidget.cpp
@@ -498,10 +497,10 @@ target_include_directories(vault PUBLIC
 )
 
 find_package(Threads REQUIRED) # ssl/Corpus loads scripts on worker threads
+# spdlog is PUBLIC: the reader/writer base headers (FileParser.h, BinaryUtils.h, FileWriter.h, ...) include it.
 target_link_libraries(vault PUBLIC
     ZLIB::ZLIB
     Threads::Threads
-PRIVATE
     gecko::spdlog
 )
 
@@ -596,6 +595,7 @@ add_library(gecko_core STATIC
     editor/Object.h
     editor/Object.cpp
     editor/HexagonGrid.h
+    editor/TileChange.h
     editor/HexagonGrid.cpp
     editor/HexGeometry.h
     editor/FloorSynth.h

@@ -179,12 +179,6 @@ public:
     bool commitEdgeEdit(const std::string& description, std::optional<MapEdge> before);
 
 private:
-    resource::GameResources& _resources;
-    std::unique_ptr<Map>& _map;
-    const HexagonGrid& _hexgrid;
-    MapSpriteLoader& _mapSpriteLoader;
-    std::vector<std::shared_ptr<Object>>& _objects;
-    std::vector<sf::Sprite>& _wallBlockerOverlays;
     CommandHost& _host;
     UndoBatcher _batcher;
     TileEditService _tileService;
