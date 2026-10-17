@@ -14,6 +14,7 @@
 
 namespace geck {
 
+class Frm;
 class HexagonGrid;
 class Map;
 struct MapObject;
@@ -131,6 +132,11 @@ public:
     /// objects, as opposed to a wall face. Lets a generator tell boundary walls from the flat rock
     /// texture that carpets solid ground. Raises when the proto can't be loaded (like protoBlocks).
     bool protoFlat(int pid) const;
+    /// The scenery proto's engine subtype (SCENERY_TYPE_* without the prefix): "Door", "Stairs",
+    /// "Elevator", "LadderUp", "LadderDown" or "Generic". Lets a generator copying a shipped map
+    /// leave out the doors, ladders and elevators that lead to places the copy doesn't have. Raises
+    /// when the proto can't be loaded or isn't scenery.
+    std::string protoSceneryType(int pid) const;
     /// The proto's art FID (what placeProto resolves and stores) — lets a generator identify a
     /// proto's art via resolve_fid. Raises when the proto can't be loaded (like protoBlocks).
     int protoFid(int pid) const;
@@ -140,6 +146,10 @@ public:
     /// width to tile wall art gap-free) or its per-frame anchor offsets, without a one-off accessor
     /// per field. Raises when the proto or its FRM can't be resolved (like protoBlocks).
     std::vector<int> protoArtFrames(int pid) const;
+    /// The screen rectangle {left, top, right, bottom} the engine draws `pid`'s art in when it stands
+    /// on `hex` (fallout2-ce object.cc objectGetRect: rotation 0, frame 0, no pixel offset), in a
+    /// fixed screen frame — only differences between rects mean anything.
+    std::vector<int> artRect(int pid, int hex) const;
     /// Every map file in the mounted data (VFS paths, e.g. "maps/desert1.map"), sorted. Lets a
     /// generator pick a reference map at random when none was given.
     std::vector<std::string> listMaps() const;
@@ -298,6 +308,26 @@ public:
     /// markers). Cells the repair ladder re-drew bring nothing (their floor no longer matches the
     /// source). Returns objects placed; raises on an unknown type or when no quilt has run.
     int quiltObjects(const std::string& typeName, const std::vector<int>& excludePids);
+    /// The hexes of the bound elevation that block movement, by the engine's instance-flag rule
+    /// (a critter/scenery/wall neither hidden nor no-block; doors count as passable) — the same
+    /// mask `map reachability` floods, over the objects placed so far (a fill's planned objects
+    /// included). Sorted. Lets a generator put the player start and exits where they can be walked.
+    std::vector<int> blockedHexes() const;
+    /// Copy a reference elevation's objects of the given types onto the same hexes of the bound
+    /// map — the whole object record (art, direction, instance flags, light, pixel offset),
+    /// untranslated, in the reference's own order (the editor draws in map order): how a generator
+    /// reuses a shipped layout's hand-placed walls exactly. Scripts and inventories stay behind.
+    /// `excludePids` skips protos the copy must not carry over. Returns objects placed; raises on
+    /// an unknown type or an unreadable map.
+    int copyObjects(const std::string& mapPath, int refElevation, const std::vector<std::string>& typeNames,
+        const std::vector<int>& excludePids);
+    /// Copy the reference elevation's exit-grid markers standing on `hexes`, retargeted to a new
+    /// destination (same arguments as placeExitGrid). Each keeps its own direction proto and pixel
+    /// offset, so an exit line keeps the mappers' shape; its art switches to the destination's
+    /// family (brown to the world map, green to a map). Returns markers placed; raises on an
+    /// invalid destination or an unreadable map.
+    int copyExitGrids(const std::string& mapPath, int refElevation, const std::vector<int>& hexes, int destMapId,
+        int destHex, int destElevation, int orientation);
     /// The previous quiltFloor* run's fidelity stats, flattened as (painted, blocks,
     /// perfectBlocks, mismatchedCells, repairedCells, unresolvedSeams). Repaired cells are normal
     /// in small numbers; unresolved seams are borders the reference never showed. Script-visible
@@ -353,6 +383,9 @@ public:
     bool mutated() const { return _placedObjects > 0 || _paintedTiles > 0 || _mutatedDirectly; }
 
 private:
+    /// The FRM of `pid`'s art; raises if the proto or its art can't load.
+    const Frm& protoFrm(int pid) const;
+
     // Where an exit grid sends the player (engine fields exit_map/exit_position/exit_elevation/
     // exit_orientation). Bundled so the exit-grid builders don't take a long parameter list.
     struct ExitDest {

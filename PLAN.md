@@ -11,15 +11,13 @@
 
 ## What's next (priority order)
 
-1. **SSL script analysis** — rest of phase 4 (Scripts panel markers, bytecode fallback); see its section.
-2. **Cave rim quality** — the known-issues list below; highest-value generation work.
-3. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
-4. **SSL script editing** — open question: whether an in-app editor is still wanted now that
+1. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
+2. **SSL script editing** — open question: whether an in-app editor is still wanted now that
    compiling lives in VS Code + BGforge MLS (see the SSL section).
-5. **Minimap / overview panel** (feature-gap audit).
-6. **In-game preview mode** — idle animations first.
-7. **Analysis/MCP tail** — small, self-contained items.
-8. **Editor UX** — configurable keybindings + customizable toolbar (share one command/action
+3. **Minimap / overview panel** (feature-gap audit).
+4. **In-game preview mode** — idle animations first.
+5. **Analysis/MCP tail** — small, self-contained items.
+6. **Editor UX** — configurable keybindings + customizable toolbar (share one command/action
    table); undo residuals; log-panel follow-ups.
 
 ---
@@ -40,39 +38,26 @@
 - The Tier-2 scripting runtime is **Luau + LuaBridge3** (spike-validated over sol2/PUC-Lua on
   sandbox safety); decision record in git history.
 
-## Cave rim quality (improved, NOT hand-authored quality yet)
+## Caves
 
-`cave.luau` builds the cavern from a metaball field and lines the rim with pieces learned from the
-shipped caves, keyed by **rock-neighbour mask** (79% orientation-family accuracy cross-validated on
-cave4, vs 53% for a compass bin). Inspect regions with `map render --crop-hex`.
-*Superseded piece-selection models — do not retry:* outward-normal compass bin; edge-constraint
-(Wang) `follow[prev][dir]` sequence; hand-authored per-piece override table.
+`cave.luau` copies a whole shipped cave interior (19 found at run time) — floor, walls, scenery
+verbatim via `api:copyObjects` — and adds worldmap exits and a player start.
+*Synthesised cave rims — do not retry:* metaball, tile and grid-axis-room cavern shapes with
+learned panel chains (`api:artRect`), per-hex rock-mask placement, compass bins, Wang edges, a
+hand override table. The wall art is a panorama of strips that only reads right where the mappers
+laid it: every synthesised rim showed slabs or cut edges at steps and corners. Stitching shipped
+fragments at corridor cuts is data-starved: shipped floor edges are jagged, so a corridor keeps one
+width for 5 tiles only ~14 times in cave1..4.
 
-**Known issues (screenshot review, 2026-07):**
-
-- **Jagged edges** — the learned pieces still don't tile cleanly at the floor/rock boundary;
-  up close the run is messy vs a hand-authored rim (mismatched faces, imperfect corners/tops).
-- **Dead-straight bottom edge** — the shipped reference caves continue off the map edge, so
-  their boundary there is a straight map-edge line the model mimics. Fix: detect and exclude
-  off-map-edge boundary when learning from references, and don't carve generated chambers up
-  to the map edge.
-- **Near-edge lip cover** — shipped maps layer flat `Wall`/`Wall s.t.` fills over the tops of
-  rock walls on the near (down-screen) edges; currently excluded by `isFlatWall`.
-
-**Remaining content (complementary):**
-
-- **Rim scenery** — shipped caves scatter ~70 Rocks/Stalagmites; the generator places 0
-  (floor-quilt + `quiltObjects` transplant, or a curated palette, is a cheap first step).
-- **Stamped rock formations** — extract real multi-hex formations from `cave1..4`
-  (`extract_pattern`/`placeStamp`) to reuse authored composition.
-- **Town/building walls** — straight `Wall s.t.` runs + door openings differ from organic rims.
-- **Roof layer** for enclosed areas.
+- **Variety** — every generated cave is one of the 19 shipped layouts. More would need joining
+  shipped pieces with a pixel-exact re-walled seam, or more source maps (mods).
 
 ## Biome script library
 
 Expand the `scripts/README.md` table as new generators land.
 
-- **`town.luau`** — needs the straight-wall-run + door-opening model above.
+- **`town.luau`** — needs a straight `Wall s.t.` run + door-opening model, and a roof layer for
+  enclosed areas.
 - **`coast.luau`** — newly practical: quilting reproduces a shoreline's authored blend tiles
   from a reference map.
 - **Ergonomics (minor):** normalized `[0,1]` coordinate helpers (`hexAt(fx, fy)`) and document
@@ -82,6 +67,18 @@ Expand the `scripts/README.md` table as new generators land.
 
 Footprint-aware, iso-diamond-masked placement for the curated scripts/tools; extract recurring
 multi-object clusters as **prefabs** (place a rock formation as one unit).
+
+- **Script-placed objects lose their proto flags** — `MapScriptApi::placeObject`/`placeProto` write
+  instance `flags = 0`, but the engine reads an object's flags from the map, not its proto: a placed
+  `OBJECT_FLAT` fill is drawn standing, a `NO_BLOCK` weed blocks movement, and transparency,
+  light-through and shoot-through are lost.
+  Fix: seed new objects' flags (and light radius/intensity) from the proto, as the
+  engine's `objectCreateWithFrmIdProtoId` (obj_new) does. (`copyObjects` clones the shipped record.)
+
+- **The editor draws standing objects in map-file order** — flat ones already go first
+  (`forEachInDrawOrder`, the engine's `_obj_render_pre_roof` flat pass), but the engine then walks
+  hexes in screen order (`_orderTable`, `gObjectListHeadByTile`), so a rock a script appends after a
+  wall draws over the wall in gecko but not in the game. Fix: sort the standing pass the same way.
 
 ## Smarter exit placement
 

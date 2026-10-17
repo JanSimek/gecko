@@ -16,6 +16,8 @@
 #include "util/Constants.h"
 #include "writer/map/MapWriter.h"
 
+#include "writer/pro/ProWriter.h"
+#include "support/ByteWriter.h"
 #include "support/ControllerFixture.h"
 #include "support/QuiltReference.h"
 
@@ -833,6 +835,75 @@ TEST_CASE("MapScriptApi quiltObjects transplants the reference objects on copied
     std::filesystem::remove_all(root, ec);
 }
 
+TEST_CASE("MapScriptApi copyObjects copies a reference elevation's objects onto the same hexes", "[scripting]") {
+    // A reference with misc exit-grid markers (MISC needs no proto to author or copy headlessly).
+    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_copy_obj"; // NOSONAR: throwaway test dir
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "maps");
+    uint32_t markerPid = 0;
+    std::vector<int> markerHexes;
+    {
+        ControllerFixture author;
+        MapScriptApi authorApi(author.resources, author.hexgrid, author.controller, *author.map, ELEV,
+            /*buildSprites*/ false);
+        markerHexes = { authorApi.hexIndex(8, 8), authorApi.hexIndex(12, 10), authorApi.hexIndex(31, 57) };
+        for (const int hex : markerHexes) {
+            REQUIRE(authorApi.placeExitGrid(hex, -2, 0, 0, 0));
+        }
+        markerPid = author.mapFile().map_objects.at(ELEV).front()->pro_pid;
+        MapWriter writer{ [](int32_t) -> Pro* { return nullptr; } };
+        writer.openFile(root / "maps/ref.map");
+        REQUIRE(writer.write(author.map->getMapFile()));
+    }
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root);
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, /*buildSprites*/ false);
+
+    SECTION("every object lands on its own hex, proto and art verbatim") {
+        CHECK(api.copyObjects("maps/ref.map", ELEV, { "misc" }, {}) == 3);
+        std::vector<int> copied;
+        for (const auto& object : fx.mapFile().map_objects.at(ELEV)) {
+            CHECK(object->pro_pid == markerPid);
+            copied.push_back(object->position);
+        }
+        std::ranges::sort(copied);
+        std::ranges::sort(markerHexes);
+        CHECK(copied == markerHexes);
+    }
+
+    SECTION("excludePids, another type or an empty elevation copy nothing") {
+        CHECK(api.copyObjects("maps/ref.map", ELEV, { "misc" }, { static_cast<int>(markerPid) }) == 0);
+        CHECK(api.copyObjects("maps/ref.map", ELEV, { "wall", "scenery" }, {}) == 0);
+        CHECK(api.copyObjects("maps/ref.map", ELEV + 1, { "misc" }, {}) == 0);
+    }
+
+    SECTION("copyExitGrids retargets the markers on the listed hexes, keeping their direction") {
+        // The authored markers lead to the world map (brown art); retarget two of them to map 5.
+        const std::vector<int> picked = { markerHexes[0], markerHexes[2] };
+        CHECK(api.copyExitGrids("maps/ref.map", ELEV, picked, 5, 1234, 0, 0) == 2);
+        const auto& objects = fx.mapFile().map_objects.at(ELEV);
+        REQUIRE(objects.size() == 2);
+        const int dir = static_cast<int>(markerPid - ExitGrid::FIRST_EXIT_GRID_PID);
+        for (const auto& object : objects) {
+            CHECK(std::ranges::find(picked, object->position) != picked.end());
+            CHECK(object->pro_pid == markerPid);
+            CHECK(object->frm_pid == ExitGrid::greenFrm(dir));
+            CHECK(object->exit_map == 5);
+            CHECK(object->exit_position == 1234);
+        }
+        CHECK_THROWS(api.copyExitGrids("maps/ref.map", ELEV, picked, 5, 40000, 0, 0)); // off-grid destination
+    }
+
+    SECTION("genuine failures raise") {
+        CHECK_THROWS(api.copyObjects("maps/ref.map", ELEV, { "misc", "gizmo" }, {})); // unknown type name
+        CHECK_THROWS(api.copyObjects("maps/nope.map", ELEV, { "misc" }, {})); // unreadable map
+    }
+
+    std::filesystem::remove_all(root, ec);
+}
+
 TEST_CASE("MapScriptApi quiltSource learns only from the reference sub-rectangle", "[scripting][quilt]") {
     // Two vocabularies side by side: left half checkerboard 271/272, right half 273/274.
     const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_quilt_src"; // NOSONAR: throwaway test dir
@@ -903,8 +974,10 @@ TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[s
         CHECK_THROWS(api.mapObjectsAt("maps/desert1.map", 0, "wall"));
         CHECK_THROWS(api.protoBlocks(0x02000066));
         CHECK_THROWS(api.protoFlat(0x02000066));
+        CHECK_THROWS(api.protoSceneryType(0x02000066));
         CHECK_THROWS(api.protoFid(0x02000066));
         CHECK_THROWS(api.protoArtFrames(0x02000066));
+        CHECK_THROWS(api.artRect(0x02000066, 20100));
         CHECK_THROWS(api.mapScenery("maps/desert1.map"));
         CHECK_THROWS(api.mapScenery("no/such/map.map"));
         CHECK_THROWS(api.mapSceneryHistogram("maps/desert1.map"));
@@ -1084,4 +1157,57 @@ TEST_CASE("A detached MapScriptApi raises on every host-backed call", "[scriptin
 
     // Geometry needs no host at all.
     CHECK(api.isValidHex(0));
+}
+
+// artRect places a proto's art the way the engine draws it (fallout2-ce object.cc objectGetRect over
+// tile.cc tileToScreenXY): the frame hangs from the hex's point + (16, 8) + the FRM's direction shift,
+// centred on x with its bottom on y. Cave rims are laid by abutting these rects pixel-exactly, so the
+// geometry is pinned on three neighbouring hexes of one 16x120 strip with a (8, -4) shift.
+TEST_CASE("MapScriptApi artRect gives the screen rectangle the engine draws a proto's art in", "[scripting]") {
+    const auto root = std::filesystem::path{ GECK_TEST_TMP_DIR } / "geck_artrect"; // inside the build tree
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "proto" / "walls");
+    std::filesystem::create_directories(root / "art" / "walls");
+    std::ofstream(root / "proto" / "walls" / "walls.lst") << "piece.pro\n";
+    std::ofstream(root / "art" / "walls" / "walls.lst") << "piece.frm\n";
+    {
+        Pro pro{ root / "proto" / "walls" / "piece.pro" };
+        pro.header.PID = 0x03000001;
+        pro.header.FID = 0x03000000; // walls.lst entry 0
+        ProWriter writer;
+        writer.openFile(root / "proto" / "walls" / "piece.pro");
+        REQUIRE(writer.write(pro));
+    }
+    {
+        geck::test::ByteWriter frm;
+        frm.be32(4).be16(1).be16(0).be16(1); // version, fps, action frame, frames per direction
+        for (int i = 0; i < 6; ++i) {
+            frm.be16(8); // shiftX
+        }
+        for (int i = 0; i < 6; ++i) {
+            frm.be16(static_cast<uint16_t>(-4)); // shiftY
+        }
+        for (int i = 0; i < 6; ++i) {
+            frm.be32(0); // one shared direction
+        }
+        frm.be32(12 + 16 * 120);
+        frm.be16(16).be16(120).be32(16 * 120).be16(0).be16(0).fill(1, 16 * 120);
+        std::ofstream(root / "art" / "walls" / "piece.frm", std::ios::binary)
+            .write(reinterpret_cast<const char*>(frm.data().data()), static_cast<std::streamsize>(frm.size()));
+    }
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root.string());
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
+
+    // Row 10. Hex 2199 is the rightmost column (counted from the right: 0, even): its point is
+    // (16 * row, 12 * row) = (160, 120), so the anchor is (160 + 16 + 8, 120 + 8 - 4) = (184, 124).
+    CHECK(api.artRect(0x03000001, 2199) == std::vector<int>{ 176, 5, 191, 124 });
+    // One column left (odd): 32px further right, same height.
+    CHECK(api.artRect(0x03000001, 2198) == std::vector<int>{ 208, 5, 223, 124 });
+    // Two columns left (even again): 48px right and 12px up — and it starts on the pixel after 2198 ends.
+    CHECK(api.artRect(0x03000001, 2197) == std::vector<int>{ 224, -7, 239, 112 });
+    CHECK_THROWS(api.artRect(0x03000001, -1));
+
+    std::filesystem::remove_all(root);
 }

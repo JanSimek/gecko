@@ -17,6 +17,7 @@
 #include "editor/Hex.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
+#include "editor/Reachability.h"
 #include "scripting/EditArea.h"
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
@@ -388,6 +389,40 @@ bool MapScriptApi::protoFlat(int pid) const {
     return Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
 }
 
+std::string MapScriptApi::protoSceneryType(int pid) const {
+    const Pro* pro = nullptr;
+    try {
+        pro = resourcesRef().loadPro(static_cast<uint32_t>(pid));
+    } catch (const std::exception&) {
+        pro = nullptr;
+    }
+    if (pro == nullptr) {
+        throw ScriptError(std::format(
+            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
+            static_cast<uint32_t>(pid)));
+    }
+    if (ProtoId(static_cast<uint32_t>(pid)).objectType() != ObjectType::Scenery) {
+        throw ScriptError(std::format("protoSceneryType: proto 0x{:08x} is not scenery", static_cast<uint32_t>(pid)));
+    }
+    switch (static_cast<SceneryType>(pro->objectSubtypeId())) {
+        case SceneryType::Door:
+            return "Door";
+        case SceneryType::Stairs:
+            return "Stairs";
+        case SceneryType::Elevator:
+            return "Elevator";
+        case SceneryType::LadderUp:
+            return "LadderUp";
+        case SceneryType::LadderDown:
+            return "LadderDown";
+        case SceneryType::Generic:
+            return "Generic";
+        default:
+            throw ScriptError(std::format("protoSceneryType: proto 0x{:08x} has unknown scenery type {}",
+                static_cast<uint32_t>(pid), pro->objectSubtypeId()));
+    }
+}
+
 std::vector<std::string> MapScriptApi::listMaps() const {
     std::vector<std::string> maps;
     try {
@@ -503,9 +538,9 @@ int MapScriptApi::protoFid(int pid) const {
     return pro->header.FID;
 }
 
-std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
-    // Proto -> art FID -> FRM, the path placeProto and the renderer take, flattened to per-frame
-    // geometry. Hard-fail: a caller measuring footprints cannot recover from a silent wrong answer.
+const Frm& MapScriptApi::protoFrm(int pid) const {
+    // Proto -> art FID -> FRM, the path placeProto and the renderer take. Hard-fail: a caller
+    // measuring footprints cannot recover from a silent wrong answer.
     const int fid = protoFid(pid); // raises if the proto can't load
     const std::string artPath = resourcesRef().frmResolver().resolve(static_cast<uint32_t>(fid));
     if (artPath.empty()) {
@@ -522,8 +557,13 @@ std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
         throw ScriptError(std::format("proto 0x{:08x} art '{}' has no renderable frame",
             static_cast<uint32_t>(pid), artPath));
     }
+    return *frm;
+}
+
+std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
+    // The FRM flattened to per-frame geometry.
     std::vector<int> out;
-    const auto& directions = frm->directions();
+    const auto& directions = protoFrm(pid).directions();
     for (int d = 0; d < static_cast<int>(directions.size()); ++d) {
         const auto& frames = directions[d].frames();
         out.reserve(out.size() + frames.size() * 6);
@@ -538,6 +578,33 @@ std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
         }
     }
     return out;
+}
+
+std::vector<int> MapScriptApi::artRect(int pid, int hex) const {
+    if (!isValidHex(hex)) {
+        throw ScriptError(std::format("artRect: hex {} is off the 200x200 hex grid", hex));
+    }
+    const auto& direction = protoFrm(pid).directions().front();
+    if (direction.frames().empty()) {
+        throw ScriptError(std::format("artRect: proto 0x{:08x} art has no frame", static_cast<uint32_t>(pid)));
+    }
+    const Frame& frame = direction.frames().front();
+    // fallout2-ce tile.cc tileToScreenXY with the view origin at (0, 0): columns run right to left,
+    // and an odd column (counted from the right) sits half a hex lower.
+    const int col = HexagonGrid::GRID_WIDTH - 1 - hex % HexagonGrid::GRID_WIDTH;
+    const int row = hex / HexagonGrid::GRID_WIDTH;
+    int x = 48 * (col / 2) + 16 * row;
+    int y = -12 * (col / 2) + 12 * row;
+    if (col % 2 != 0) {
+        x += 32;
+    }
+    // object.cc objectGetRect: the art hangs from (tile + (16, 8) + the direction's shift), centred
+    // on x, bottom on y. Rotation 0, frame 0 and no per-object pixel offset, as the map objects
+    // scripts place.
+    const int anchorX = x + 16 + direction.shiftX();
+    const int anchorY = y + 8 + direction.shiftY();
+    const int left = anchorX - frame.width() / 2;
+    return { left, anchorY - frame.height() + 1, left + frame.width() - 1, anchorY };
 }
 
 void MapScriptApi::beginBatch(const std::string& description) {
@@ -949,6 +1016,68 @@ int MapScriptApi::quiltObjects(const std::string& typeName, const std::vector<in
     return placed;
 }
 
+std::vector<int> MapScriptApi::blockedHexes() const {
+    std::vector<std::shared_ptr<MapObject>> objects;
+    const auto& objectsByElevation = mapRef().getMapFile().map_objects;
+    if (const auto it = objectsByElevation.find(_elevation); it != objectsByElevation.end()) {
+        objects = it->second;
+    }
+    if (_planSink != nullptr) {
+        for (const auto& entry : _planSink->objects) {
+            if (entry.mapObject && static_cast<int>(entry.mapObject->elevation) == _elevation) {
+                objects.push_back(entry.mapObject);
+            }
+        }
+    }
+    const std::vector<char> mask = reachability::blockedMask(resourcesRef(), objects);
+    std::vector<int> hexes;
+    for (int hex = 0; hex < static_cast<int>(mask.size()); ++hex) {
+        if (mask[hex] != 0) {
+            hexes.push_back(hex);
+        }
+    }
+    return hexes;
+}
+
+int MapScriptApi::copyObjects(const std::string& mapPath, int refElevation, const std::vector<std::string>& typeNames,
+    const std::vector<int>& excludePids) {
+    std::vector<ObjectType> wanted;
+    for (const auto& typeName : typeNames) {
+        wanted.push_back(objectTypeFromName(typeName)); // throws on an unknown type
+    }
+    const Map& reference = referenceMap(mapPath); // throws if unreadable
+    const auto& objectsByElevation = reference.getMapFile().map_objects;
+    const auto it = objectsByElevation.find(refElevation);
+    if (it == objectsByElevation.end()) {
+        return 0; // the reference elevation holds no objects — a valid empty copy
+    }
+    // One pass in the reference's own order: the editor draws objects in map order, so copying one
+    // type after another stacked e.g. every rock over every wall.
+    int placed = 0;
+    for (const auto& object : it->second) {
+        if (!object || object->position < 0 || std::ranges::find(wanted, ProtoId(object->pro_pid).objectType()) == wanted.end()) {
+            continue;
+        }
+        if (std::ranges::find(excludePids, static_cast<int>(object->pro_pid)) != excludePids.end()) {
+            continue;
+        }
+        // The whole record — instance flags (flat, no-block, hidden), light, pixel offset, frame —
+        // not just pid/art/direction: the engine reads those from the map, not the proto. What
+        // ties it to the source map stays behind: its script and its inventory.
+        std::shared_ptr<MapObject> copy = object->cloneDeep();
+        copy->elevation = static_cast<uint32_t>(_elevation);
+        copy->script_id = -1;
+        copy->map_scripts_pid = -1;
+        copy->critter_index = -1;
+        copy->inventory.clear();
+        copy->objects_in_inventory = 0;
+        if (registerObject(copy, copy->position, copy->frm_pid, copy->direction)) {
+            ++placed;
+        }
+    }
+    return placed;
+}
+
 int MapScriptApi::quiltFloorRect(const std::string& mapPath, int refElevation, int col0, int row0, int col1, int row1) {
     return quiltFloorTiles(mapPath, refElevation, tilesInRect(col0, row0, col1, row1));
 }
@@ -1205,6 +1334,41 @@ bool MapScriptApi::placeExitGrid(int hex, int destMapId, int destHex, int destEl
     // family the destination implies (green inter-map / brown world-town).
     const ExitGridArt art = exitGridArtForDirection(ExitGrid::DIR_BOTTOM, destinationKindFor(dest));
     return placeExitGridMarker(hex, art.proPid, art.frmPid, { dest, destHex, destElevation, orientation });
+}
+
+int MapScriptApi::copyExitGrids(const std::string& mapPath, int refElevation, const std::vector<int>& hexes,
+    int destMapId, int destHex, int destElevation, int orientation) {
+    validateExitGridDest(destMapId, destHex, destElevation, orientation);
+    const Map& reference = referenceMap(mapPath); // throws if unreadable
+    const auto& objectsByElevation = reference.getMapFile().map_objects;
+    const auto it = objectsByElevation.find(refElevation);
+    if (it == objectsByElevation.end()) {
+        return 0;
+    }
+    const auto dest = static_cast<uint32_t>(destMapId);
+    const ExitGridDestinationKind kind = destinationKindFor(dest);
+    int placed = 0;
+    for (const auto& object : it->second) {
+        if (!object || !object->isExitGridMarker() || std::ranges::find(hexes, object->position) == hexes.end()) {
+            continue;
+        }
+        // Keep the marker's own direction (its proto: which bar, which way it faces), so the exit
+        // line reads as the mappers drew it; only the art family follows the new destination.
+        const int dir = static_cast<int>(object->pro_pid - ExitGrid::FIRST_EXIT_GRID_PID);
+        std::shared_ptr<MapObject> copy = object->cloneDeep();
+        copy->elevation = static_cast<uint32_t>(_elevation);
+        copy->script_id = -1;
+        copy->map_scripts_pid = -1;
+        copy->frm_pid = exitGridArtForDirection(dir, kind).frmPid;
+        copy->exit_map = dest;
+        copy->exit_position = static_cast<uint32_t>(destHex);
+        copy->exit_elevation = static_cast<uint32_t>(destElevation);
+        copy->exit_orientation = static_cast<uint32_t>(orientation);
+        if (registerObject(copy, copy->position, copy->frm_pid, copy->direction)) {
+            ++placed;
+        }
+    }
+    return placed;
 }
 
 int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int screenHalfHeight,
