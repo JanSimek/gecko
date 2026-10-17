@@ -41,6 +41,10 @@ public:
     // (ITEM for items/scenery/walls, CRITTER for critters); `programIndex` is the
     // scripts.lst line. attachScript replaces any existing script on the object.
     bool attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex);
+    // Give a new object the script its proto names (`protoSid`, Pro::sid()), as the engine's
+    // objectSetScriptFromProto does when it creates one: the SID's type picks the section, its low
+    // 24 bits are the program index. Undoable; false for -1 or a type with no section.
+    bool attachProtoScript(const std::shared_ptr<MapObject>& object, uint32_t protoSid);
     bool detachScript(const std::shared_ptr<MapObject>& object);
     bool addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
     // Edit an existing spatial script in place, keeping its SID (pid) stable so a live selection
@@ -59,14 +63,25 @@ public:
     void eraseScript(uint32_t sid);
 
 private:
+    // The owner-side fields a script edit changes: OID, SID and (for critters) the engine's
+    // obj->scriptIndex. Defaults describe "no owner" for spatial scripts.
+    struct OwnerState {
+        uint32_t oid = 0;
+        int32_t sid = -1;
+        int32_t scriptIndex = -1;
+    };
+    static OwnerState ownerState(const MapObject* object);
+
+    bool attach(const std::shared_ptr<MapObject>& object, MapScript::ScriptType type,
+        uint32_t programIndex, const std::string& description);
     uint32_t allocateScriptId(int section) const;
     uint32_t allocateObjectId() const;
     void removeObjectScript(MapObject& object);
     void applyScriptSnapshot(int section, const std::shared_ptr<MapObject>& object,
-        const std::vector<MapScript>& sectionScripts, uint32_t oid, int32_t sid);
+        const std::vector<MapScript>& sectionScripts, const OwnerState& owner);
     bool recordScriptEdit(const std::string& description, int section,
         const std::shared_ptr<MapObject>& object,
-        std::vector<MapScript> beforeSection, uint32_t beforeOid, int32_t beforeSid);
+        std::vector<MapScript> beforeSection, const OwnerState& before);
 
     std::unique_ptr<Map>& _map;
     UndoBatcher& _batcher;

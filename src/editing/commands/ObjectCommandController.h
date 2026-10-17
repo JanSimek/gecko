@@ -36,6 +36,14 @@ namespace resource {
 // ExitGridCommandState and MapObjectInstanceState are defined in ObjectEditService.h
 // (the aggregate that owns exit-grid and per-instance editing) and re-exported here.
 
+/// Whether a placement also gives the object its proto's script. A NEW object does: the engine's
+/// obj_new attaches it (objectSetScriptFromProto). A copy does only when its source was scripted
+/// (_obj_copy); a reinserted or restored object never does.
+enum class ProtoScript {
+    None,
+    Attach,
+};
+
 class ObjectCommandController {
 public:
     /// @param host presentation/event sink notified as edits are applied (see CommandHost).
@@ -83,11 +91,14 @@ public:
     /// True while at least one beginBatch() is open.
     bool isBatching() const { return _batcher.isBatching(); }
 
-    bool registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
+    /// Undoable placement. With ProtoScript::Attach, an object whose PRO names a script also gets
+    /// it (ScriptEditService::attachProtoScript), in the same undo entry as the placement.
+    bool registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object,
+        ProtoScript protoScript = ProtoScript::None);
     /// Undoable placement that records the MapObject data only (no sprite). For headless
     /// callers (gecko-cli, generation scripts run without a GL context); the GUI uses
     /// registerObjectPlacement so the object is also drawn.
-    bool registerObjectData(const std::shared_ptr<MapObject>& mapObject);
+    bool registerObjectData(const std::shared_ptr<MapObject>& mapObject, ProtoScript protoScript = ProtoScript::None);
     bool registerObjectDeletion(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& removedObjects);
     bool registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
     bool registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
@@ -179,6 +190,11 @@ public:
     bool commitEdgeEdit(const std::string& description, std::optional<MapEdge> before);
 
 private:
+    // Attaches the proto's script after `place` succeeds, both in one undo entry; see ProtoScript.
+    bool placeWithProtoScript(const std::shared_ptr<MapObject>& mapObject, ProtoScript protoScript,
+        const std::function<bool()>& place);
+
+    resource::GameResources& _resources;
     CommandHost& _host;
     UndoBatcher _batcher;
     TileEditService _tileService;

@@ -1,6 +1,8 @@
 #include "ObjectCommandController.h"
 
 #include "editing/commands/CommandHost.h"
+#include "editor/helper/ObjectQueries.h"
+#include "format/map/MapObject.h"
 
 // ObjectCommandController is a thin facade: its constructor wires up the editing
 // services and every method delegates to one of them, so only the service/param
@@ -18,7 +20,8 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     std::vector<sf::Sprite>& wallBlockerOverlays,
     UndoStack& undoStack,
     CommandHost& host)
-    : _host(host)
+    : _resources(resources)
+    , _host(host)
     , _batcher(undoStack, [this] { _host.undoStackChanged(); })
     , _tileService(map, _batcher, [this](int elevation) -> std::vector<Tile>& { return _host.ensureElevationTiles(elevation); }, [this] { return _host.getCurrentElevation(); }, [this](int hexIndex, bool isRoof, int elevation) { _host.updateTileSprite(hexIndex, isRoof, elevation); })
     , _inventoryService(_batcher)
@@ -59,12 +62,31 @@ void ObjectCommandController::removePlacedObject(const std::shared_ptr<MapObject
     _objectService.removePlacedObject(mapObject, object);
 }
 
-bool ObjectCommandController::registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
-    return _objectService.registerObjectPlacement(mapObject, object);
+bool ObjectCommandController::placeWithProtoScript(const std::shared_ptr<MapObject>& mapObject,
+    ProtoScript protoScript, const std::function<bool()>& place) {
+    const int32_t sid = (protoScript == ProtoScript::Attach && mapObject)
+        ? object_query::protoSid(*mapObject, _resources)
+        : -1;
+    if (sid == -1) {
+        return place();
+    }
+    ScopedUndoBatch batch(*this, "Place Object");
+    if (!place()) {
+        return false;
+    }
+    _scriptService.attachProtoScript(mapObject, static_cast<uint32_t>(sid));
+    return true;
 }
 
-bool ObjectCommandController::registerObjectData(const std::shared_ptr<MapObject>& mapObject) {
-    return _objectService.registerObjectData(mapObject);
+bool ObjectCommandController::registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject,
+    const std::shared_ptr<Object>& object, ProtoScript protoScript) {
+    return placeWithProtoScript(mapObject, protoScript,
+        [&] { return _objectService.registerObjectPlacement(mapObject, object); });
+}
+
+bool ObjectCommandController::registerObjectData(const std::shared_ptr<MapObject>& mapObject, ProtoScript protoScript) {
+    return placeWithProtoScript(mapObject, protoScript,
+        [&] { return _objectService.registerObjectData(mapObject); });
 }
 
 bool ObjectCommandController::registerObjectDeletion(

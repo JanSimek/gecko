@@ -213,7 +213,8 @@ void EditorWidget::removePlacedObject(const std::shared_ptr<MapObject>& mapObjec
 // The register*() helpers below forward to the controller, which emits undoStackChanged
 // through its onStackChanged callback (wired in the constructor).
 void EditorWidget::registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
-    _controller.commandController().registerObjectPlacement(mapObject, object);
+    // A palette placement is a new object, so it also gets its proto's script, as obj_new does.
+    _controller.commandController().registerObjectPlacement(mapObject, object, ProtoScript::Attach);
 }
 
 void EditorWidget::registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects,

@@ -328,6 +328,119 @@ TEST_CASE("MapScriptApi placement seeds the object's flags from its proto", "[sc
     std::filesystem::remove_all(root);
 }
 
+namespace {
+// A data tree with two wall protos: 1 names a script (an item-type SID, program index 68, the way
+// the shipped gravesite protos do) and 2 names none.
+constexpr uint32_t SCRIPTED_WALL = 0x03000001;
+constexpr uint32_t PLAIN_WALL = 0x03000002;
+constexpr uint32_t PROTO_SID = 0x03000044;
+
+void writeWallProtos(const std::filesystem::path& root) {
+    std::filesystem::create_directories(root / "proto" / "walls");
+    std::ofstream(root / "proto" / "walls" / "walls.lst") << "scripted.pro\nplain.pro\n";
+    const auto write = [&root](const char* file, uint32_t pid, uint32_t sid) {
+        Pro pro{ root / "proto" / "walls" / file };
+        pro.header.PID = static_cast<int32_t>(pid);
+        pro.header.FID = 0x03000000;
+        pro.commonItemData.SID = sid;
+        ProWriter writer;
+        writer.openFile(root / "proto" / "walls" / file);
+        REQUIRE(writer.write(pro));
+    };
+    write("scripted.pro", SCRIPTED_WALL, PROTO_SID);
+    write("plain.pro", PLAIN_WALL, MapScript::NONE);
+}
+
+constexpr int ITEM_SECTION = static_cast<int>(MapScript::ScriptType::ITEM);
+} // namespace
+
+// The engine's obj_new gives every new object the script its proto names (objectSetScriptFromProto),
+// so a placed gravesite runs zigengrv. Placement used to write no script record at all.
+TEST_CASE("MapScriptApi placement gives a new object its proto's script", "[scripting]") {
+    const auto root = std::filesystem::path{ GECK_TEST_TMP_DIR } / "geck_place_proto_script";
+    std::filesystem::remove_all(root);
+    writeWallProtos(root);
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root.string());
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+
+    REQUIRE(api.placeProto(SCRIPTED_WALL, 20100, 0));
+    REQUIRE(api.placeProto(PLAIN_WALL, 20101, 0));
+    const auto& objs = fx.mapFile().map_objects[ELEV];
+    REQUIRE(objs.size() == 2);
+    const auto& scripts = fx.mapFile().map_scripts[ITEM_SECTION];
+    REQUIRE(scripts.size() == 1);
+    CHECK(fx.mapFile().scripts_in_section[ITEM_SECTION] == 1);
+    CHECK(scripts[0].script_id == 68); // the SID's low 24 bits: the 0-based program index
+    CHECK(MapScript::sidSection(scripts[0].pid) == ITEM_SECTION);
+    CHECK(objs[0]->map_scripts_pid == static_cast<int32_t>(scripts[0].pid));
+    CHECK(scripts[0].script_oid == objs[0]->unknown0);
+    CHECK(objs[1]->map_scripts_pid == -1);
+
+    // Object and script are one undo entry each placement: undoing the scripted one removes both.
+    REQUIRE(fx.undoStack.undo()); // the plain wall
+    REQUIRE(fx.undoStack.undo());
+    CHECK(fx.mapFile().map_objects[ELEV].empty());
+    CHECK(fx.mapFile().map_scripts[ITEM_SECTION].empty());
+    CHECK(fx.mapFile().scripts_in_section[ITEM_SECTION] == 0);
+    REQUIRE(fx.undoStack.redo());
+    REQUIRE(fx.mapFile().map_objects[ELEV].size() == 1);
+    CHECK(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
+
+    std::filesystem::remove_all(root);
+}
+
+// copyObjects follows the engine's _obj_copy: a copy of a scripted object gets its proto's script
+// (never the source's instance script, which belongs to the source map), an unscripted one none.
+TEST_CASE("MapScriptApi copyObjects re-attaches the proto script only to copies of scripted objects", "[scripting]") {
+    const auto root = std::filesystem::path{ GECK_TEST_TMP_DIR } / "geck_copy_proto_script";
+    std::filesystem::remove_all(root);
+    writeWallProtos(root);
+    std::filesystem::create_directories(root / "maps");
+    {
+        ControllerFixture author;
+        author.resources.files().addDataPath(root.string());
+        MapScriptApi authorApi(author.resources, author.hexgrid, author.controller, *author.map, ELEV, false);
+        REQUIRE(authorApi.placeProto(SCRIPTED_WALL, 20100, 0)); // gets the proto's script
+        REQUIRE(authorApi.placeProto(SCRIPTED_WALL, 20101, 0));
+        REQUIRE(author.controller.detachScript(author.mapFile().map_objects[ELEV][1])); // a mapper removed it
+        REQUIRE(author.controller.attachScript(author.mapFile().map_objects[ELEV][0], ITEM_SECTION, 7));
+        MapWriter writer{ [](int32_t) -> Pro* { return nullptr; } };
+        writer.openFile(root / "maps/ref.map");
+        REQUIRE(writer.write(author.map->getMapFile()));
+    }
+
+    ControllerFixture fx;
+    fx.resources.files().addDataPath(root.string());
+    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+    REQUIRE(api.copyObjects("maps/ref.map", ELEV, { "wall" }, {}) == 2);
+
+    const auto& objs = fx.mapFile().map_objects[ELEV];
+    REQUIRE(objs.size() == 2);
+    const auto& scripts = fx.mapFile().map_scripts[ITEM_SECTION];
+    REQUIRE(scripts.size() == 1);
+    CHECK(scripts[0].script_id == 68); // the proto's, not the source instance's 7
+    CHECK(objs[0]->map_scripts_pid == static_cast<int32_t>(scripts[0].pid));
+    CHECK(objs[1]->map_scripts_pid == -1);
+
+    std::filesystem::remove_all(root);
+}
+
+// The engine's objectSetScript also records a critter's program index in obj->scriptIndex.
+TEST_CASE("Attaching a script to a critter sets its script index", "[scripting]") {
+    ControllerFixture fx;
+    auto critter = std::make_shared<MapObject>();
+    critter->pro_pid = 0x01000001;
+    fx.mapFile().map_objects[ELEV].push_back(critter);
+
+    REQUIRE(fx.controller.attachScript(critter, static_cast<int>(MapScript::ScriptType::CRITTER), 42));
+    CHECK(critter->script_id == 42);
+    REQUIRE(fx.undoStack.undo());
+    CHECK(critter->script_id == -1);
+    CHECK(critter->map_scripts_pid == -1);
+}
+
 TEST_CASE("MapScriptApi newMap resets the bound map to empty", "[scripting]") {
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);

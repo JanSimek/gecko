@@ -336,6 +336,20 @@ public:
     FrmId fid() const { return FrmId(static_cast<uint32_t>(header.FID)); }
 
     ObjectType type() const { return pid().objectType(); }
+
+    /// The script a new object of this proto gets (engine proto->sid; a SID, its type in the high
+    /// byte), or -1 for none. Only item, critter, scenery and wall protos store one.
+    int32_t sid() const {
+        switch (type()) {
+            case ObjectType::Item:
+            case ObjectType::Critter:
+            case ObjectType::Scenery:
+            case ObjectType::Wall:
+                return static_cast<int32_t>(commonItemData.SID);
+            default:
+                return -1;
+        }
+    }
     ItemType itemType() const;
 
     const std::string typeToString() const;

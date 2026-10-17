@@ -11,14 +11,17 @@
 
 ## What's next (priority order)
 
-1. **Biome script library** — `town.luau`, `coast.luau`; placement polish.
-2. **SSL script editing** — open question: whether an in-app editor is still wanted now that
+1. **Minimap / overview panel** (feature-gap audit).
+2. **In-game preview mode** — idle animations first.
+3. **Analysis/MCP tail** — small, self-contained items.
+4. **Editor UX** — customizable toolbar (driven by the `ActionSpec` table); undo residuals;
+   log-panel follow-ups.
+5. **Biome script library** — `town.luau`, `coast.luau`; placement polish. Note: generating
+   random caves proved not possible (every synthesised rim broke the wall art, see Caves), so
+   `cave.luau` only copies an existing shipped cave map; expect the same limit for other biomes
+   whose look depends on hand-laid wall art.
+6. **SSL script editing** *(possible)* — only if an in-app editor is still wanted now that
    compiling lives in VS Code + BGforge MLS (see the SSL section).
-3. **Minimap / overview panel** (feature-gap audit).
-4. **In-game preview mode** — idle animations first.
-5. **Analysis/MCP tail** — small, self-contained items.
-6. **Editor UX** — configurable keybindings + customizable toolbar (share one command/action
-   table); undo residuals; log-panel follow-ups.
 
 ---
 
@@ -67,12 +70,6 @@ Expand the `scripts/README.md` table as new generators land.
 
 Footprint-aware, iso-diamond-masked placement for the curated scripts/tools; extract recurring
 multi-object clusters as **prefabs** (place a rock formation as one unit).
-
-- **Placed objects don't get their proto's script** — the engine's obj_new also attaches the proto's
-  script (`objectSetScriptFromProto`); gecko's placement seeds flags, light and type data from the
-  proto (`MapObject::applyProtoDefaults`) but writes no script record.
-- **A stamp object without `"flags"` is placed with flags 0** — captured stamps carry the record's
-  flags; a hand-written one should fall back to the proto's (`applyProtoDefaults`).
 
 ## Smarter exit placement
 
@@ -125,30 +122,15 @@ terrain-derived locations:
    engine's `objectSetScript`); existing cross-references to the old OID aren't audited/rewritten.
 6. **Edit visuals are sprite-rebuild only** — no engine-style `_obj_toggle_flat` outline
    recompute, multi-hex occupancy overlay, or live light-radius overlay beyond the rebuild.
-7. **Keybindings are hardcoded — no user remapping.** Shortcuts are scattered and fixed: the
-    menu/toolbar `QKeySequence`s in `MainWindow::setupMenuBar()`/`setupToolBar()` (New/Open/Save,
-    Select All `Ctrl+A`, scroll-blocker `B`, exit grids `Ctrl+E`, undo/redo, …), the editor-mode
-    keys in `InputHandler::handleKeyPressed` (`R` cycles a stamp variant, `Esc` cancels, `Delete`/
-    `Backspace` deletes), and a few ad-hoc ones (F11 spatial-script, F16). There is no central
-    registry or any UI to view or change them. **Add configurable keybindings:** a single
-    command/action table (stable action id → default `QKeySequence` + human label/category), a
-    Preferences page to rebind with live conflict detection, and persistence via `Settings`.
-    Build it from the stock pieces rather than inventing them: `QAction` *is* the command table
-    (it already carries the shortcut, icon, text and enabled state the menu/toolbar need), and
-    `QKeySequenceEdit` is the capture widget for the rebinding page — neither is used anywhere
-    in the codebase today. Drive
-    the menu/toolbar `QAction`s *and* the `InputHandler` dispatch from that table instead of
-    literals, so a rebind takes effect everywhere and the bindings stay discoverable. Engine-fidelity
-    note: this is editor UX only — it changes no map/format data.
-8. **Toolbar is a fixed button set — not user-customizable.** The primary toolbar (New, Browse Maps,
+7. **Toolbar is a fixed button set — not user-customizable.** The primary toolbar (New, Browse Maps,
     Save, Play) is a hardcoded `primaryToolbarActions` array in `MainWindow::setupToolBar()`. Most
     editors let users choose which buttons appear and reorder them. **Add a customizable toolbar:**
-    drive it from the same command/action table proposed in #7 (stable action id → icon/label/handler),
+    drive it from the `ActionSpec` table (`src/ui/input/ActionSpec.h`, stable action id → icon/label/handler),
     with a context-menu / Preferences UI to add, remove, and reorder buttons, persisted via `Settings`.
     Editor UX only; no map/format change.
-9. **Log panel follow-ups.** Add jump-to-source where a record carries a hex/object (needs
+8. **Log panel follow-ups.** Add jump-to-source where a record carries a hex/object (needs
    structured records, not text). Editor UX only; changes no map/format data.
-10. **Move the item views onto Qt's model/view where the convenience widgets are fighting us.**
+9. **Move the item views onto Qt's model/view where the convenience widgets are fighting us.**
     30 files use `QTableWidget`/`QListWidget`/`QTreeWidget`, 4 use a model. Three places where
     that costs something concrete — each its own change, in rising order of size:
     - **`DataPathsWidget`** — a `QAbstractTableModel` + `QTableView` would bring drag-to-reorder
@@ -162,7 +144,7 @@ terrain-derived locations:
       is the only reason `PaginationWidget` exists. A `QListView` in `IconMode` with a
       `QStyledItemDelegate` recycles item views and scrolls thousands of entries, so pagination
       stops being a concept the palettes need at all.
-11. **Background work uses `std::thread`/`QThread` directly; `QtConcurrent` is unused.** The
+10. **Background work uses `std::thread`/`QThread` directly; `QtConcurrent` is unused.** The
     loaders (`Loader.h`, `DataPathLoader`, `MapLoader`) each own a raw `std::thread`;
     `QtConcurrent::run` + `QFutureWatcher` would deliver completion on the GUI thread without the
     hand-rolled marshalling. **Weigh before doing:** this is the code the loading-dialog

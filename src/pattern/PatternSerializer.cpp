@@ -25,7 +25,9 @@ namespace {
         json["proPid"] = static_cast<qint64>(obj.proPid);
         json["frmPid"] = static_cast<qint64>(obj.frmPid);
         json["direction"] = static_cast<qint64>(obj.direction);
-        json["flags"] = static_cast<qint64>(obj.flags);
+        if (obj.flags.has_value()) {
+            json["flags"] = static_cast<qint64>(*obj.flags);
+        }
         return json;
     }
 
@@ -107,6 +109,7 @@ namespace {
         qint64 frmPid = 0;
         qint64 direction = 0;
         qint64 flags = 0;
+        const bool hasFlags = json.contains(QStringLiteral("flags"));
         if (!readRequired(json, QStringLiteral("dxHex"), INT32_LO, INT32_HI, dxHex, error)
             || !readRequired(json, QStringLiteral("dyHex"), INT32_LO, INT32_HI, dyHex, error)
             || !readRequired(json, QStringLiteral("proPid"), 0, U32_HI, proPid, error)
@@ -121,7 +124,7 @@ namespace {
         out.proPid = static_cast<uint32_t>(proPid);
         out.frmPid = static_cast<uint32_t>(frmPid);
         out.direction = static_cast<uint32_t>(direction);
-        out.flags = static_cast<uint32_t>(flags);
+        out.flags = hasFlags ? std::optional<uint32_t>(static_cast<uint32_t>(flags)) : std::nullopt;
         return true;
     }
 

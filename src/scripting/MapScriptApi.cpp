@@ -624,7 +624,8 @@ std::size_t MapScriptApi::sinkCap() const {
     return kSinkCapFactor * std::max<std::size_t>(footprint, 1);
 }
 
-bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction) {
+bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction,
+    ProtoScript protoScript) {
     // Placement is map state: with no map open this must raise rather than write through the
     // controller's own reference. The (void) discards a [[nodiscard]] (MSVC C4834 under /WX).
     (void)mapRef();
@@ -646,7 +647,7 @@ bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, i
             }
             object->setMapObject(mapObject);
         }
-        _planSink->objects.push_back({ mapObject, std::move(object) }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
+        _planSink->objects.push_back({ mapObject, std::move(object), protoScript == ProtoScript::Attach }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
         ++_placedObjects;
         return true;
     }
@@ -654,7 +655,7 @@ bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, i
     // Headless: record data only. The .map stores just these ids and the art resolves at load, so no
     // sprite or GL is needed and the FRM need not be mounted.
     if (!_buildSprites) {
-        if (controllerRef().registerObjectData(mapObject)) {
+        if (controllerRef().registerObjectData(mapObject, protoScript)) {
             ++_placedObjects;
             return true;
         }
@@ -668,7 +669,7 @@ bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, i
         return false;
     }
     object->setMapObject(mapObject);
-    if (controllerRef().registerObjectPlacement(mapObject, object)) {
+    if (controllerRef().registerObjectPlacement(mapObject, object, protoScript)) {
         ++_placedObjects;
         return true;
     }
@@ -690,7 +691,7 @@ bool MapScriptApi::placeObject(uint32_t proPid, uint32_t frmPid, int hex, uint32
     mapObject->frm_pid = frmPid;
     object_query::applyProtoDefaults(*mapObject, resourcesRef());
 
-    return registerObject(mapObject, hex, frmPid, direction);
+    return registerObject(mapObject, hex, frmPid, direction, ProtoScript::Attach);
 }
 
 bool MapScriptApi::placeProto(uint32_t proPid, int hex, uint32_t direction) {
@@ -1073,7 +1074,9 @@ int MapScriptApi::copyObjects(const std::string& mapPath, int refElevation, cons
         copy->critter_index = -1;
         copy->inventory.clear();
         copy->objects_in_inventory = 0;
-        if (registerObject(copy, copy->position, copy->frm_pid, copy->direction)) {
+        // As the engine's _obj_copy: a scripted source gets its proto's script back, an unscripted one none.
+        const ProtoScript protoScript = object->map_scripts_pid != -1 ? ProtoScript::Attach : ProtoScript::None;
+        if (registerObject(copy, copy->position, copy->frm_pid, copy->direction, protoScript)) {
             ++placed;
         }
     }
@@ -1323,7 +1326,7 @@ bool MapScriptApi::placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid
     mapObject->exit_position = static_cast<uint32_t>(dest.hex);
     mapObject->exit_elevation = static_cast<uint32_t>(dest.elevation);
     mapObject->exit_orientation = static_cast<uint32_t>(dest.orientation);
-    return registerObject(mapObject, hex, frmPid, 0);
+    return registerObject(mapObject, hex, frmPid, 0, ProtoScript::None);
 }
 
 bool MapScriptApi::placeExitGrid(int hex, int destMapId, int destHex, int destElevation, int orientation) {
@@ -1367,7 +1370,7 @@ int MapScriptApi::copyExitGrids(const std::string& mapPath, int refElevation, co
         copy->exit_position = static_cast<uint32_t>(destHex);
         copy->exit_elevation = static_cast<uint32_t>(destElevation);
         copy->exit_orientation = static_cast<uint32_t>(orientation);
-        if (registerObject(copy, copy->position, copy->frm_pid, copy->direction)) {
+        if (registerObject(copy, copy->position, copy->frm_pid, copy->direction, ProtoScript::None)) {
             ++placed;
         }
     }
