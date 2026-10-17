@@ -314,6 +314,9 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         CHECK(call("extract_pattern", { { "map", "m" }, { "out", "o" }, { "name", "n" }, { "pids", json::array({ -1 }) } }, 24)["result"]["isError"] == true);
         // find_gvar requires a non-empty gvar name (empty would match every line).
         CHECK(call("find_gvar", json::object(), 25)["result"]["isError"] == true);
+        // dump_grid used to ignore a mistyped flag and dump with the default instead.
+        CHECK(call("dump_grid", { { "map", "m.map" }, { "elevation", "1" } }, 26)["result"]["isError"] == true);
+        CHECK(call("dump_grid", { { "map", "m.map" }, { "roof", "true" } }, 27)["result"]["isError"] == true);
     }
 
     SECTION("ping is answered promptly with an empty result") {
@@ -354,6 +357,24 @@ TEST_CASE("McpServer generate stops a runaway script and stays responsive", "[mc
 
     const json ping = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 41 }, { "method", "ping" } });
     CHECK(ping["id"] == 41);
+}
+
+TEST_CASE("McpServer returns a tool's exception as a tool error, not a protocol error", "[mcp]") {
+    resource::GameResources resources;
+    mcp::McpServer server(resources);
+    geck::test::TempFile script{ "geck_mcp_throw", ".luau" };
+    {
+        std::ofstream file(script.path(), std::ios::binary);
+        file << "api:paintFloor(0, 271)";
+    }
+
+    // The out path names a directory, which the map writer cannot open as a file and throws.
+    const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 42 }, { "method", "tools/call" },
+        { "params", { { "name", "generate" },
+                        { "arguments", { { "script", script.path().string() }, { "out", script.path().parent_path().string() } } } } } });
+    CHECK_FALSE(resp.contains("error"));
+    REQUIRE(resp["result"]["isError"] == true);
+    CHECK(resp["result"]["content"][0]["text"].get<std::string>().starts_with("generate failed: "));
 }
 #endif
 

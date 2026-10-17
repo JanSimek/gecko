@@ -1015,9 +1015,7 @@ int runProtoCommand(const std::vector<std::string>& args, const char* program) {
     return geck::cli::exportProtos(resources, opts, std::cout);
 }
 
-} // namespace
-
-int main(int argc, char** argv) {
+int runCli(int argc, char** argv) {
     const std::vector<std::string> args(argv + 1, argv + argc);
 
     // The `frm` family is parsed and run on its own path (its own positional + flags), separate from
@@ -1115,4 +1113,17 @@ int main(int argc, char** argv) {
         return geck::cli::dumpMapGrid(resources, cli.dumpOpts, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    // A bad --data path or an unreadable map raises from deep in the resource layer; report it
+    // instead of letting it reach std::terminate.
+    try {
+        return runCli(argc, argv);
+    } catch (const std::exception& e) {
+        std::cerr << "error: " << e.what() << "\n";
+        return 1;
+    }
 }
