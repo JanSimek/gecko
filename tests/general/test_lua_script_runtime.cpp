@@ -813,3 +813,16 @@ TEST_CASE("Script seeds parse the same for single runs and batches", "[scripting
     CHECK_FALSE(parseScriptSeed("12abc").has_value());
     CHECK(randomScriptSeed() <= SCRIPT_SEED_MASK);
 }
+
+TEST_CASE("scripts/README.md documents every bound script_api function", "[scripting][lua]") {
+    // The README's API table is written by hand; this keeps it in step with the bound surface.
+    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/README.md");
+    REQUIRE(file.is_open());
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    const std::string readme = buffer.str();
+    for (const ScriptApiEntry& entry : scriptApiEntries()) {
+        INFO("api:" << entry.name);
+        CHECK(readme.find("api:" + std::string(entry.name) + "(") != std::string::npos);
+    }
+}

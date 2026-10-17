@@ -61,11 +61,17 @@ of a sealed room or a spawn placed inside solid terrain.
 | `api:tilesByPrefix(prefix)` | table | `{ [name] = id }` for every tiles.lst entry starting with `prefix` (case-insensitive) — pick from a tile family (`"cav"`, `"edg"`) without hardcoding ids; raises if no data |
 | `api:proto(type, number)` | PID | build a proto PID from a type name (`"scenery"`, `"item"`, `"critter"`, `"wall"`, `"tile"`, `"misc"`) and the id `map analyze` reports — `api:proto("scenery", 102)` == `0x02000066`, no opaque hex |
 | `api:noise2d(x, y)` | number | coherent value noise in `[0,1]`; sample as a density field for clumped, non-uniform placement |
+| `api:noise3d(x, y, z)` | number | coherent 3D value noise in `[0,1]`; the z axis varies the field per seed or octave |
 | `api:protoName(pid)` | string | the proto's engine display name (e.g. `"Scrub"`); lets you tell a decoration from a structural feature |
 | `api:mapScenery(mapPath)` | table | the distinct scenery PIDs a reference map uses (e.g. `"maps/desert1.map"`); upright decorations only (blockers excluded) |
 | `api:mapSceneryHistogram(mapPath)` | table | `{ [pid] = count }` — each scenery PID with how many times the reference places it |
 | `api:mapFloorTiles(mapPath)` | table | the floor-tile ids a reference map uses, most-used first |
 | `api:listMaps()` | table | every map path in the mounted data (empty if none) |
+| `api:objectAt(hex)` | pid | PID of an object occupying `hex` in the committed map, 0 if none |
+| `api:hasArea()` | bool | true when the run is bound to a selection area (Fill Selection, `fill`); the `area*` calls below read it and are empty without one |
+| `api:areaHexes()` | table | the selection's hex indices, ascending |
+| `api:areaFloorTiles()` / `api:areaRoofTiles()` | table | the selection's floor / roof tile indices, ascending |
+| `api:areaContainsHex(hex)` / `api:areaContainsTile(tile)` | bool | is the hex / floor tile inside the selection? |
 | `api:paintFloor(tile, id)` / `api:paintRoof(tile, id)` | bool | |
 | `api:placeObject(proPid, frmPid, hex, dir)` | bool | explicit art; `false` skips the hex (art missing / off-grid). Flags, light and type data (a critter's HP and team, a weapon's ammo, ...) come from the proto, as the engine creates objects |
 | `api:placeProto(proPid, hex, dir)` | bool | resolves the art FID from the proto; `false` skips the hex |
@@ -82,6 +88,7 @@ of a sealed room or a spawn placed inside solid terrain.
 | `api:protoFlat(pid)` | bool | is the proto `OBJECT_FLAT` (ground-hugging fill/rubble, not a standing wall face)? tells a boundary wall from the flat rock texture that carpets solid ground; raises if the proto can't load |
 | `api:protoSceneryType(pid)` | string | the scenery proto's engine subtype: `"Door"`, `"Stairs"`, `"Elevator"`, `"LadderUp"`, `"LadderDown"` or `"Generic"` — tell a shipped map's ways in and out from its set dressing; raises if the proto can't load or isn't scenery |
 | `api:protoFid(pid)` | fid | the proto's art FID (what `placeProto` resolves and stores) — decode with `resolve_fid` / render it to identify a proto's art instead of guessing from the number; raises if the proto can't load |
+| `api:protoArtFrames(pid)` | table | every frame of the proto's art as flat `(direction, frame, width, height, offsetX, offsetY)` 6-tuples, to measure a piece's footprint and anchor; raises if the proto or FRM can't load |
 | `api:artRect(pid, hex)` | table | `{left, top, right, bottom}`: the screen rectangle the engine draws the proto's art in on that hex (`objectGetRect`: rotation 0, frame 0, the FRM's direction shift applied) — compare rects to find which pieces abut pixel-exactly; raises if the proto/FRM can't load |
 | `api:setElevation(e)` | nil | switch which elevation (0..2) subsequent queries/edits target — author multi-level maps in one run; raises if the map lacks it |
 | `api:fillFloorRect(col0,row0,col1,row1,id)` / `api:fillRoofRect(...)` | int | paint every tile in the rectangle; returns tiles painted |
@@ -89,6 +96,8 @@ of a sealed room or a spawn placed inside solid terrain.
 | `api:quiltFloorRect(mapPath,refElev,col0,row0,col1,row1)` | int | **seamless floor synthesis**: paint the rectangle by patch-quilting the reference map's floor grid, so the edge/corner tile families transition the way the hand-authored map does (the seamless form of `fillFloorRect`); blends into non-empty tiles at the border. Seeded and reproducible; returns tiles painted; raises on an unreadable map / missing elevation |
 | `api:quiltFloorTiles(mapPath,refElev,{tile,...})` | int | `quiltFloorRect` for an explicit set of floor-tile indices — retexture an irregular region (e.g. a carved cavern) seamlessly |
 | `api:quiltStats()` | table | the previous quilt's fidelity, flattened: `{painted, blocks, perfect, mismatched, repaired, unresolvedSeams}` — repaired cells are normal in small numbers; `unresolvedSeams` count borders the reference never showed |
+| `api:quiltExclude({tileId,...})` | nil | leave these tile ids out of later quilts (never learned, never emitted) — filler art shipped maps hide under other sprites, like the black `bld2043` under city roofs. Sticky; pass `{}` to clear |
+| `api:quiltSource(col0,row0,col1,row1)` | nil | learn later quilts only from this inclusive tile rectangle of the reference — quilt one zone of a map from that zone alone. Sticky; any negative coordinate clears |
 | `api:quiltObjects(type, {excludePid,...})` | int | **transplant the reference objects standing on the cells the last quilt copied** — pid/art/direction verbatim, positions translated exactly, so a quilted mountain brings the cliff-face scenery its floor art belongs with. `excludePid` skips invisible engine markers (scroll blockers, block hexes); returns objects placed |
 | `api:copyObjects(mapPath, refElev, {type,...}, {excludePid,...})` | int | **copy a reference elevation's objects of these types onto the same hexes** — the whole object record (art, direction, instance flags, light, pixel offset) verbatim, in the reference's own order (objects sharing a hex draw in list order), scripts and inventories left behind; reuse a shipped layout's hand-placed walls exactly; returns objects placed |
 | `api:copyExitGrids(mapPath, refElev, {hex,...}, destMapId, destHex, destElev, orientation)` | int | copy the reference's exit-grid markers on those hexes retargeted to a new destination: each keeps its direction proto and offset (the exit line keeps the mappers' shape), the art follows the destination's family (brown world map, green map); returns markers placed |
