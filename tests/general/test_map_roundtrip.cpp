@@ -4,12 +4,14 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <vector>
 
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/pro/Pro.h"
 #include "reader/map/MapReader.h"
 #include "writer/map/MapWriter.h"
+#include "support/Fixtures.h"
 #include "support/MapObjectBuilder.h"
 #include "support/ProStubProvider.h"
 #include "support/TempFile.h"
@@ -370,4 +372,109 @@ TEST_CASE("MAP round-trip keeps an object whose PID has no known type", "[map][r
     REQUIRE(got.size() == 2);
     checkBase(*got[0], *untyped);
     checkBase(*got[1], *wall);
+}
+
+namespace {
+
+std::vector<uint8_t> writeToBytes(const Map::MapFile& mapFile, StubProvider& provider, const char* stem) {
+    TempFile file{ stem, ".map" };
+    {
+        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
+        writer.openFile(file.path());
+        REQUIRE(writer.write(mapFile));
+    }
+    return readAllBytes(file.path());
+}
+
+std::unique_ptr<Map> readFromBytes(const std::vector<uint8_t>& bytes, StubProvider& provider) {
+    MapReader reader{ [&](uint32_t pid) { return provider.load(pid); } };
+    auto map = reader.openFile("roundtrip.map", bytes);
+    REQUIRE(map != nullptr);
+    return map;
+}
+
+} // namespace
+
+TEST_CASE("MAP read -> write reproduces a shipped map byte for byte", "[map][roundtrip]") {
+    // sfshutl2.map: real header words, real per-elevation framing, 227 objects (see test_reading_map).
+    StubProvider provider;
+    for (uint32_t pid = 33555970u; pid <= 33555979u; ++pid) {
+        provider.addScenery(pid, SceneryType::Generic);
+    }
+    const auto original = readAllBytes(dataPath("sfshutl2.map"));
+    const auto map = readFromBytes(original, provider);
+
+    CHECK(writeToBytes(map->getMapFile(), provider, "geck_map_roundtrip_sfshutl2") == original);
+}
+
+TEST_CASE("MAP write -> read -> write keeps every script section byte for byte", "[map][roundtrip][scripts]") {
+    StubProvider provider;
+    auto original = Map::createEmptyMapFile();
+    // More than one 16-slot block in a section exercises the padding and per-block check words.
+    auto& spatial = original.map_scripts[static_cast<int>(MapScript::ScriptType::SPATIAL)];
+    for (uint32_t i = 0; i < 21; ++i) {
+        spatial.push_back(MapScript::makeSpatialScript(i, 100 + i, 1000 + i, i % 3, 2 + i % 4, 0));
+    }
+    auto& items = original.map_scripts[static_cast<int>(MapScript::ScriptType::ITEM)];
+    for (uint32_t i = 0; i < 3; ++i) {
+        items.push_back(MapScript::makeObjectScript(MapScript::ScriptType::ITEM, i, 200 + i, 0x1000 + i));
+    }
+    auto timer = MapScript::makeObjectScript(MapScript::ScriptType::TIMER, 0, 300, 0x2000);
+    timer.timer = 4242;
+    original.map_scripts[static_cast<int>(MapScript::ScriptType::TIMER)].push_back(timer);
+    for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
+        original.scripts_in_section[section] = static_cast<int>(original.map_scripts[section].size());
+    }
+
+    const auto first = writeToBytes(original, provider, "geck_map_roundtrip_scripts_a");
+    const auto reloaded = readFromBytes(first, provider);
+    const auto& result = reloaded->getMapFile();
+    for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
+        INFO("section " << section);
+        REQUIRE(result.map_scripts[section].size() == original.map_scripts[section].size());
+        for (size_t i = 0; i < original.map_scripts[section].size(); ++i) {
+            const MapScript& want = original.map_scripts[section][i];
+            const MapScript& got = result.map_scripts[section][i];
+            CHECK(got.pid == want.pid);
+            CHECK(got.timer == want.timer);
+            CHECK(got.spatial_radius == want.spatial_radius);
+            CHECK(got.script_id == want.script_id);
+            CHECK(got.script_oid == want.script_oid);
+            CHECK(got.local_var_offset == want.local_var_offset);
+        }
+    }
+    CHECK(writeToBytes(result, provider, "geck_map_roundtrip_scripts_b") == first);
+}
+
+TEST_CASE("MAP writer derives the inventory count from the inventory", "[map][roundtrip]") {
+    StubProvider provider;
+    const uint32_t containerPid = pidOf(ObjectType::Item, 200);
+    const uint32_t armorPid = pidOf(ObjectType::Item, 201);
+    provider.addItem(containerPid, ItemType::Container);
+    provider.addItem(armorPid, ItemType::Armor);
+
+    auto mapFile = Map::createEmptyMapFile();
+    auto container = std::make_shared<MapObject>();
+    fillBase(*container, 1);
+    container->pro_pid = containerPid;
+    container->elevation = 0;
+    container->objects_in_inventory = 5; // stale: the inventory holds one item
+    auto armor = std::make_unique<MapObject>();
+    fillBase(*armor, 2);
+    armor->pro_pid = armorPid;
+    armor->elevation = 0;
+    container->inventory.push_back(std::move(armor));
+    auto after = std::make_shared<MapObject>();
+    fillBase(*after, 3);
+    after->pro_pid = pidOf(ObjectType::Wall, 100);
+    after->elevation = 0;
+    mapFile.map_objects[0] = { container, after };
+
+    // Writing the stale 5 would make the reader consume four records that aren't there.
+    const auto reloaded = readFromBytes(writeToBytes(mapFile, provider, "geck_map_roundtrip_invcount"), provider);
+    const auto& objects = reloaded->getMapFile().map_objects.at(0);
+    REQUIRE(objects.size() == 2);
+    CHECK(objects[0]->objects_in_inventory == 1u);
+    CHECK(objects[0]->inventory.size() == 1);
+    checkBase(*objects[1], *after);
 }
