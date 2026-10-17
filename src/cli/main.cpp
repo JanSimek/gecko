@@ -66,6 +66,8 @@ struct CliArgs {
     geck::cli::DescribeMapOptions describeMapOpts;
     geck::cli::MapGraphOptions graphOpts;
     geck::cli::WorldMapOptions worldOpts;
+    int encountersX = -1; ///< map encounters --x/--y: describe this worldmap position instead
+    int encountersY = -1;
 };
 
 void printUsage(const char* program) {
@@ -140,8 +142,9 @@ void printUsage(const char* program) {
               << "      size, the maps it contains, and the straight-line distances between all areas.\n"
               << "      --render draws the worldmap itself to a PNG instead — the wrldmp tile grid with\n"
               << "      the area circles blended over it the way the engine does; --no-markers omits them.\n"
-              << "  " << program << " map encounters --data <dir-or-.dat> [--data <...>]\n"
-              << "      The worldmap terrain types and random-encounter group tables from worldmap.txt.\n"
+              << "  " << program << " map encounters [--x N --y N] --data <dir-or-.dat> [--data <...>]\n"
+              << "      The worldmap terrain types, encounter frequencies, groups and tables from worldmap.txt.\n"
+              << "      --x/--y (worldmap pixels) report the encounter odds at one position instead.\n"
               << "  " << program << " map gvars --data <dir-or-.dat> [--data <...>]\n"
               << "      The global-variable dictionary (vault13.gam): each GVAR index -> name + default, plus the\n"
               << "      roles the data files give it (quest, ending, death ending, karma, holodisk).\n"
@@ -344,6 +347,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         || (out.describeScript && (arg == "--index" || arg == "--locale"))
         || (out.lintScript && (arg == "--index" || arg == "--locale" || arg == "--map"))
         || (out.world && arg == "--render")
+        || (out.encounters && (arg == "--x" || arg == "--y"))
         || (out.reachability && arg == "--map")
         || (out.describeMap && arg == "--map")
         || (out.dumpGrid && (arg == "--map" || arg == "--elevation"));
@@ -601,7 +605,13 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
-    if (out.encounters) { // encounters takes no arguments beyond --data (handled above)
+    if (out.encounters && arg == "--x") {
+        return parseIntFlag(arg, args[i + 1], out.encountersX, program) ? 2 : 0;
+    }
+    if (out.encounters && arg == "--y") {
+        return parseIntFlag(arg, args[i + 1], out.encountersY, program) ? 2 : 0;
+    }
+    if (out.encounters) {
         std::cerr << "error: unexpected argument: " << arg << "\n";
         printUsage(program);
         return 0;
@@ -1096,6 +1106,13 @@ int runAnalysisCommand(geck::resource::GameResources& resources, const CliArgs& 
         return geck::cli::buildWorldMap(resources, std::cout);
     }
     if (cli.encounters) {
+        if ((cli.encountersX < 0) != (cli.encountersY < 0)) {
+            std::cerr << "error: encounters needs both --x and --y\n";
+            return 2;
+        }
+        if (cli.encountersX >= 0) {
+            return geck::cli::describeWorldPosition(resources, cli.encountersX, cli.encountersY, std::cout);
+        }
         return geck::cli::buildWorldEncounters(resources, std::cout);
     }
     if (cli.gvars) {
