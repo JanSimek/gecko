@@ -171,6 +171,9 @@ private slots:
     void showMapBrowserDialog();
     /// Switches the central area between the world map and whatever was showing before it.
     void toggleWorldMap(bool show);
+    /// An undoable header edit, or its undo/redo, may have added or removed an elevation: refresh the
+    /// Map Info panel and the elevation menu, and leave an elevation that is gone.
+    void onMapHeaderChanged();
 
 public slots:
     void showStatusMessage(const QString& message);

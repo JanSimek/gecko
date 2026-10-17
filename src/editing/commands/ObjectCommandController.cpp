@@ -32,7 +32,7 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     , _edgeService(map, _batcher)
     , _refreshObjects([this] { _host.refreshObjects(); })
     , _reloadTiles([this] { _host.reloadTiles(); })
-    , _mapService(map, objects, wallBlockerOverlays, _scriptService, _batcher, _refreshObjects, _reloadTiles)
+    , _mapService(map, objects, wallBlockerOverlays, _scriptService, _batcher, _refreshObjects, _reloadTiles, [this] { _host.mapHeaderChanged(); })
     , _objectService(resources, map, hexgrid, mapSpriteLoader, objects, wallBlockerOverlays, _batcher, _refreshObjects) {
 }
 
@@ -130,6 +130,14 @@ bool ObjectCommandController::registerInventoryEdit(const std::shared_ptr<MapObj
     std::vector<std::shared_ptr<MapObject>> before,
     std::vector<std::shared_ptr<MapObject>> after) {
     return _inventoryService.registerInventoryEdit(container, std::move(before), std::move(after));
+}
+
+bool ObjectCommandController::setMapHeader(const Map::MapHeader& after, const std::string& description, const std::string& mergeKey) {
+    return _mapService.setHeader(after, description, mergeKey);
+}
+
+bool ObjectCommandController::setElevationPresent(int elevation, bool present) {
+    return _mapService.setElevationPresent(elevation, present);
 }
 
 void ObjectCommandController::newEmptyMap() {

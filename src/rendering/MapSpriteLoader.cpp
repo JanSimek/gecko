@@ -79,17 +79,19 @@ void MapSpriteLoader::loadObjectSprites(
     objects.clear();
     wallBlockerOverlays.clear();
 
-    if (map.objects().empty()) {
+    // An elevation can be absent: removing the shown one refreshes it before the view switches away.
+    const auto elevationObjects = map.objects().find(elevation);
+    if (elevationObjects == map.objects().end()) {
         return;
     }
 
-    size_t totalObjects = map.objects().at(elevation).size();
+    size_t totalObjects = elevationObjects->second.size();
     size_t objectsLoaded = 0;
     size_t objectsSkipped = 0;
 
     spdlog::debug("Loading {} objects for elevation {}", totalObjects, elevation);
 
-    for (const auto& object : map.objects().at(elevation)) {
+    for (const auto& object : elevationObjects->second) {
         if (object->position == -1) {
             continue;
         }
@@ -152,7 +154,7 @@ void MapSpriteLoader::loadObjectSprites(
     }
 
     size_t overlaysCreated = 0;
-    for (const auto& object : map.objects().at(elevation)) {
+    for (const auto& object : elevationObjects->second) {
         if (object->position == -1) {
             continue;
         }

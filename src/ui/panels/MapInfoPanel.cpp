@@ -142,6 +142,7 @@ void MapInfoPanel::setupUI() {
 
     _elevation1Check = new QCheckBox("Elevation 1");
     _elevation2Check = new QCheckBox("Elevation 2");
+    _elevation2Check->setObjectName("elevation2");
     _elevation3Check = new QCheckBox("Elevation 3");
 
     elevationsLayout->addWidget(_elevation1Check);
@@ -152,6 +153,7 @@ void MapInfoPanel::setupUI() {
 
     QHBoxLayout* positionLayout = new QHBoxLayout();
     _playerPositionSpin = new QSpinBox();
+    _playerPositionSpin->setObjectName("playerPosition");
     _playerPositionSpin->setRange(0, HexPosition::MAX_VALUE); // Max hex position
     _setPositionButton = new QPushButton();
     _setPositionButton->setIcon(createIcon(":/icons/actions/target-arrow.svg"));
@@ -404,51 +406,9 @@ void MapInfoPanel::updateMapInfo() {
     }
 
     try {
-        auto& mapInfo = _map->getMapFile();
-
-        // Populating the widgets below emits their change signals; suppress the write-back to the map so
-        // a half-refreshed widget set can't clobber fields that haven't been updated yet.
-        _suppressFieldChanged = true;
-
-        // Update elevation checkboxes based on flags (inverted logic: 0 = enabled, 1 = disabled)
-        bool hasElevation1 = Map::elevationIsPresent(mapInfo.header.flags, ELEVATION_1);
-        bool hasElevation2 = Map::elevationIsPresent(mapInfo.header.flags, ELEVATION_2);
-        bool hasElevation3 = Map::elevationIsPresent(mapInfo.header.flags, ELEVATION_3);
-
-        // Temporarily disconnect signals to avoid triggering changes during update
-        setElevationCheckboxesBlocked(true);
-        _elevation1Check->setChecked(hasElevation1);
-        _elevation2Check->setChecked(hasElevation2);
-        _elevation3Check->setChecked(hasElevation3);
-        setElevationCheckboxesBlocked(false);
-
-        spdlog::debug("Map elevations: 1={}, 2={}, 3={}", hasElevation1, hasElevation2, hasElevation3);
-
-        _filenameEdit->setText(QString::fromStdString(mapInfo.header.filename));
-        _playerPositionSpin->setValue(static_cast<int>(mapInfo.header.player_default_position));
-        _playerElevationSpin->setValue(static_cast<int>(mapInfo.header.player_default_elevation));
-        _playerOrientationCombo->setCurrentIndex(static_cast<int>(mapInfo.header.player_default_orientation));
-        _globalVarsSpin->setValue(static_cast<int>(mapInfo.header.num_global_vars));
-        _localVarsSpin->setValue(static_cast<int>(mapInfo.header.num_local_vars));
-        _mapScriptIdSpin->setValue(static_cast<int>(mapInfo.header.script_id));
-        _darknessSpin->setValue(static_cast<int>(mapInfo.header.darkness));
-        _mapIdSpin->setValue(static_cast<int>(mapInfo.header.map_id));
-        _timestampSpin->setValue(static_cast<int>(mapInfo.header.timestamp));
-
-        bool isSavegame = (mapInfo.header.flags & static_cast<uint32_t>(MapHeaderFlags::Saved)) != 0;
-        _savegameCheck->setChecked(isSavegame);
-
-        _suppressFieldChanged = false; // done populating; user edits write back from here on
-
+        refreshHeaderFields();
         loadScriptVars();
-        _mapScriptEdit->setText(QString::fromStdString(_mapScriptName));
-
-        updateMapNameDisplay();
-
         populateGlobalVars();
-
-        // Disable the last remaining elevation's checkbox.
-        updateElevationCheckboxStates();
 
     } catch (const std::exception& e) {
         _suppressFieldChanged = false; // never leave write-back disabled if population threw mid-way
@@ -580,21 +540,56 @@ void MapInfoPanel::updateOverlayHint() {
     }
 }
 
-void MapInfoPanel::loadScriptVars() {
-    _mvars.clear();
-    _gamDoc.reset();
-    _gamPath.clear();
-    _globalVarsEdited = false;
-    _mapScriptName = "no script";
-
+void MapInfoPanel::refreshHeaderFields() {
     if (!_map) {
         return;
     }
+    const auto& header = _map->getMapFile().header;
 
+    // Populating the widgets emits their change signals; suppress the write-back so a half-refreshed
+    // widget set can't request an edit. Values already shown are left alone, so a refresh while the
+    // user is typing into a spin box doesn't reset its text.
+    const bool wasSuppressed = _suppressFieldChanged;
+    _suppressFieldChanged = true;
+    auto sync = [](QSpinBox* spin, int value) {
+        if (spin->value() != value) {
+            spin->setValue(value);
+        }
+    };
+
+    setElevationCheckboxesBlocked(true);
+    _elevation1Check->setChecked(Map::elevationIsPresent(header.flags, ELEVATION_1));
+    _elevation2Check->setChecked(Map::elevationIsPresent(header.flags, ELEVATION_2));
+    _elevation3Check->setChecked(Map::elevationIsPresent(header.flags, ELEVATION_3));
+    setElevationCheckboxesBlocked(false);
+
+    _filenameEdit->setText(QString::fromStdString(header.filename));
+    sync(_playerPositionSpin, static_cast<int>(header.player_default_position));
+    sync(_playerElevationSpin, static_cast<int>(header.player_default_elevation));
+    if (_playerOrientationCombo->currentIndex() != static_cast<int>(header.player_default_orientation)) {
+        _playerOrientationCombo->setCurrentIndex(static_cast<int>(header.player_default_orientation));
+    }
+    sync(_globalVarsSpin, static_cast<int>(header.num_global_vars));
+    sync(_localVarsSpin, static_cast<int>(header.num_local_vars));
+    sync(_mapScriptIdSpin, header.script_id);
+    sync(_darknessSpin, static_cast<int>(header.darkness));
+    sync(_mapIdSpin, static_cast<int>(header.map_id));
+    sync(_timestampSpin, static_cast<int>(header.timestamp));
+    _savegameCheck->setChecked((header.flags & static_cast<uint32_t>(MapHeaderFlags::Saved)) != 0);
+
+    _suppressFieldChanged = wasSuppressed;
+
+    resolveMapScriptName();
+    updateMapNameDisplay(); // the map.msg display name is per player elevation
+    updateElevationCheckboxStates();
+}
+
+void MapInfoPanel::resolveMapScriptName() {
+    _mapScriptName = "no script";
     try {
         // header.script_id is 1-based into scripts.lst. Resolved independently of the .gam so the name
         // shows even for a map that has none.
-        if (const int map_script_id = _map->getMapFile().header.script_id; map_script_id > 0) {
+        if (const int map_script_id = _map ? _map->getMapFile().header.script_id : -1; map_script_id > 0) {
             auto scripts = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
             const auto& scriptList = scripts->list();
             if (map_script_id <= static_cast<int>(scriptList.size()) && map_script_id >= 1) {
@@ -610,7 +605,23 @@ void MapInfoPanel::loadScriptVars() {
                 spdlog::warn("Map script ID {} out of bounds for scripts.lst size {}", map_script_id, scriptList.size());
             }
         }
+    } catch (const std::exception& e) {
+        spdlog::error("Error resolving the map script name: {}", e.what());
+    }
+    _mapScriptEdit->setText(QString::fromStdString(_mapScriptName));
+}
 
+void MapInfoPanel::loadScriptVars() {
+    _mvars.clear();
+    _gamDoc.reset();
+    _gamPath.clear();
+    _globalVarsEdited = false;
+
+    if (!_map) {
+        return;
+    }
+
+    try {
         // For a BASE map the engine re-reads globals from the .gam's MAP_GLOBAL_VARS (fallout2-ce map.cc),
         // ignoring the .map's own block - so the .gam is both source of truth and write target. Parsed
         // losslessly so an edit does not disturb names, spacing or comments.
@@ -677,53 +688,60 @@ void MapInfoPanel::clearMapInfo() {
 }
 
 void MapInfoPanel::onFieldChanged() {
-    // Ignore the signals that fire while updateMapInfo() populates the widgets, or a half-updated set
-    // gets written back - e.g. script_id reset to the stale spin value during load.
+    // Ignore the signals that fire while the widgets are populated, or a half-updated set gets
+    // requested as an edit - e.g. script_id reset to the stale spin value during load.
     if (_suppressFieldChanged || !_map) {
         return;
     }
 
-    auto& mapInfo = _map->getMapFile();
-
-    mapInfo.header.player_default_position = static_cast<uint32_t>(_playerPositionSpin->value());
-    mapInfo.header.player_default_elevation = static_cast<uint32_t>(_playerElevationSpin->value());
-    mapInfo.header.script_id = _mapScriptIdSpin->value();
-    mapInfo.header.darkness = static_cast<uint32_t>(_darknessSpin->value());
-    mapInfo.header.timestamp = static_cast<uint32_t>(_timestampSpin->value());
-
+    Map::MapHeader after = _map->getMapFile().header;
+    after.player_default_position = static_cast<uint32_t>(_playerPositionSpin->value());
+    after.player_default_elevation = static_cast<uint32_t>(_playerElevationSpin->value());
+    after.script_id = _mapScriptIdSpin->value();
+    after.darkness = static_cast<uint32_t>(_darknessSpin->value());
+    after.timestamp = static_cast<uint32_t>(_timestampSpin->value());
     if (_savegameCheck->isChecked()) {
-        mapInfo.header.flags |= static_cast<uint32_t>(MapHeaderFlags::Saved);
+        after.flags |= static_cast<uint32_t>(MapHeaderFlags::Saved);
     } else {
-        mapInfo.header.flags &= ~static_cast<uint32_t>(MapHeaderFlags::Saved);
+        after.flags &= ~static_cast<uint32_t>(MapHeaderFlags::Saved);
     }
 
-    QObject* sender = QObject::sender();
+    // Spin boxes emit once per step or keystroke; the merge key folds a run of them into one undo step.
+    QString description = "Edit Map Header";
+    QString mergeKey;
+    const QObject* sender = QObject::sender();
     if (sender == _playerPositionSpin) {
-        Q_EMIT playerPositionChanged(_playerPositionSpin->value());
+        description = "Edit Player Position";
+        mergeKey = "playerPosition";
     } else if (sender == _playerElevationSpin) {
-        updateMapNameDisplay(); // the map.msg display name is per-elevation
-        Q_EMIT playerElevationChanged(_playerElevationSpin->value());
+        description = "Edit Player Elevation";
+        mergeKey = "playerElevation";
     } else if (sender == _mapScriptIdSpin) {
-        Q_EMIT mapScriptIdChanged(_mapScriptIdSpin->value());
+        description = "Edit Map Script";
+        mergeKey = "scriptId";
     } else if (sender == _darknessSpin) {
-        Q_EMIT darknessChanged(_darknessSpin->value());
+        description = "Edit Darkness";
+        mergeKey = "darkness";
     } else if (sender == _timestampSpin) {
-        Q_EMIT timestampChanged(_timestampSpin->value());
+        description = "Edit Timestamp";
+        mergeKey = "timestamp";
+    } else if (sender == _savegameCheck) {
+        description = "Toggle Save Game Map";
     }
 
-    spdlog::debug("MapInfoPanel: Field changed, map header updated");
+    Q_EMIT headerEditRequested(after, description, mergeKey);
+    refreshHeaderFields(); // show what was applied (nothing, with no editor attached)
 }
 
 void MapInfoPanel::onOrientationChanged(int index) {
-    if (!_map) {
+    if (_suppressFieldChanged || !_map) {
         return;
     }
 
-    auto& mapInfo = _map->getMapFile();
-    mapInfo.header.player_default_orientation = static_cast<uint32_t>(index);
-
-    Q_EMIT playerOrientationChanged(index);
-    spdlog::debug("MapInfoPanel: Player orientation changed to {}", index);
+    Map::MapHeader after = _map->getMapFile().header;
+    after.player_default_orientation = static_cast<uint32_t>(index);
+    Q_EMIT headerEditRequested(after, "Edit Player Orientation", "playerOrientation");
+    refreshHeaderFields();
 }
 
 void MapInfoPanel::onSelectPositionClicked() {
@@ -741,8 +759,12 @@ void MapInfoPanel::setPlayerPosition(int hexPosition, int elevation) {
         return;
     }
 
-    _playerPositionSpin->setValue(hexPosition);
-    _playerElevationSpin->setValue(elevation);
+    // One request for both fields, so a picked start is one undo step.
+    Map::MapHeader after = _map->getMapFile().header;
+    after.player_default_position = static_cast<uint32_t>(hexPosition);
+    after.player_default_elevation = static_cast<uint32_t>(elevation);
+    Q_EMIT headerEditRequested(after, "Set Player Start", QString());
+    refreshHeaderFields();
 }
 
 void MapInfoPanel::setElevationCheckboxesBlocked(bool blocked) {
@@ -756,7 +778,7 @@ void MapInfoPanel::updateElevationCheckboxStates() {
         return;
     }
 
-    auto& mapFile = _map->getMapFile();
+    const auto& mapFile = _map->getMapFile();
 
     // Elevation flag bits are inverted: bit clear (0) = enabled.
     int enabledCount = 0;
@@ -824,71 +846,34 @@ void MapInfoPanel::onElevationCheckboxChanged() {
         return;
     }
 
-    auto& mapFile = _map->getMapFile();
-    bool isChecked = sender->isChecked();
-    const uint32_t flagBit = Map::elevationFlag(elevation);
-    bool wasEnabled = Map::elevationIsPresent(mapFile.header.flags, elevation);
+    const bool isChecked = sender->isChecked();
+    const bool wasEnabled = Map::elevationIsPresent(_map->getMapFile().header.flags, elevation);
 
     if (isChecked && !wasEnabled) {
-        mapFile.header.flags &= ~flagBit; // Clear bit to enable elevation
-
-        if (mapFile.tiles.find(elevation) == mapFile.tiles.end()) {
-            mapFile.tiles[elevation] = Map::createEmptyElevation();
-        }
-
-        if (mapFile.map_objects.find(elevation) == mapFile.map_objects.end()) {
-            mapFile.map_objects[elevation].clear();
-        }
-
-        Q_EMIT elevationAdded(elevation);
-        spdlog::debug("MapInfoPanel: Added {} to map", elevationName.toStdString());
-
-        updateElevationCheckboxStates();
-
+        Q_EMIT elevationPresenceRequested(elevation, true);
+        spdlog::debug("MapInfoPanel: requested adding {}", elevationName.toStdString());
     } else if (!isChecked && wasEnabled) {
-        QString message = QString("Are you sure you want to remove %1?\n\n"
-                                  "This will permanently delete:\n"
-                                  "• All tiles on this elevation\n"
-                                  "• All objects on this elevation\n"
-                                  "• Any scripts associated with objects on this elevation\n\n"
-                                  "This action cannot be undone.")
-                              .arg(elevationName);
+        const QString message = QString("Are you sure you want to remove %1?\n\n"
+                                        "This deletes:\n"
+                                        "• All tiles on this elevation\n"
+                                        "• All objects on this elevation\n"
+                                        "• Their scripts, and the spatial scripts placed on it")
+                                    .arg(elevationName);
 
-        QMessageBox::StandardButton reply = QMessageBox::question(
+        const QMessageBox::StandardButton reply = QMessageBox::question(
             this,
             "Remove Elevation",
             message,
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No);
-
         if (reply == QMessageBox::Yes) {
-            mapFile.header.flags |= flagBit; // Set bit to disable elevation
-
-            auto tileIt = mapFile.tiles.find(elevation);
-            if (tileIt != mapFile.tiles.end()) {
-                tileIt->second.clear();
-                mapFile.tiles.erase(tileIt);
-            }
-
-            auto objectIt = mapFile.map_objects.find(elevation);
-            if (objectIt != mapFile.map_objects.end()) {
-                objectIt->second.clear();
-                mapFile.map_objects.erase(objectIt);
-            }
-
-            Q_EMIT elevationRemoved(elevation);
-            spdlog::debug("MapInfoPanel: Removed {} from map", elevationName.toStdString());
-
-            updateElevationCheckboxStates();
-
-        } else {
-            // User cancelled: revert checkbox state.
-            sender->blockSignals(true);
-            sender->setChecked(true);
-            sender->blockSignals(false);
-            spdlog::debug("MapInfoPanel: Elevation removal cancelled by user");
+            Q_EMIT elevationPresenceRequested(elevation, false);
+            spdlog::debug("MapInfoPanel: requested removing {}", elevationName.toStdString());
         }
     }
+
+    // Show what was applied: this also reverts the checkbox after a cancel or a refused request.
+    refreshHeaderFields();
 }
 
 // Bulk map operations confirm with the user, then emit a request the editor
@@ -899,7 +884,7 @@ void MapInfoPanel::onClearElevationClicked() {
     }
 
     const int elevation = _clearElevationCombo->currentData().toInt();
-    auto& mapFile = _map->getMapFile();
+    const auto& mapFile = _map->getMapFile();
 
     auto it = mapFile.map_objects.find(elevation);
     const size_t count = (it != mapFile.map_objects.end()) ? it->second.size() : 0;
@@ -934,7 +919,7 @@ void MapInfoPanel::onCopyElevationClicked() {
         return;
     }
 
-    auto& mapFile = _map->getMapFile();
+    const auto& mapFile = _map->getMapFile();
 
     // Both elevations must be enabled (present) for a meaningful, saveable copy.
     if (!Map::elevationIsPresent(mapFile.header.flags, from)) {
@@ -1047,6 +1032,7 @@ void MapInfoPanel::onGlobalVarChanged(QTreeWidgetItem* item, int column) {
 
     // The .gam is the source of truth for a BASE map's globals: rewrite the value in place, preserving
     // name, spacing and comment, and flag it dirty so it is written alongside the .map.
+    GlobalVarsState before = captureGlobalVars();
     _gamDoc->setMapGlobalVar(static_cast<std::size_t>(index), value);
     _mvars[static_cast<size_t>(index)].second = value; // keep the display copy in sync
     // Mirror the edit into the .map's stored global-var block so the two stay in sync — the engine
@@ -1054,9 +1040,7 @@ void MapInfoPanel::onGlobalVarChanged(QTreeWidgetItem* item, int column) {
     if (auto& mapVars = _map->getMapFile().map_global_vars; static_cast<std::size_t>(index) < mapVars.size()) {
         mapVars[static_cast<std::size_t>(index)] = value;
     }
-    _globalVarsEdited = true;
-
-    Q_EMIT mapVariablesChanged();
+    commitGlobalVarsEdit(std::move(before), "Edit Map Variable");
     spdlog::debug("MapInfoPanel: global var [{}] set to {}", index, value);
 }
 
@@ -1097,6 +1081,7 @@ void MapInfoPanel::onAddGlobalVar() {
 
     // New variables default to 0 and are appended last so existing variables keep their index. The user
     // can then edit the value cell. Re-run the populate path so the new (editable) row shows.
+    GlobalVarsState before = captureGlobalVars();
     if (!_gamDoc->addMapGlobalVar(newName, 0)) {
         QMessageBox::warning(this, "Add Map Variable",
             "This map's .gam has no MAP_GLOBAL_VARS section to add a variable to.");
@@ -1108,11 +1093,10 @@ void MapInfoPanel::onAddGlobalVar() {
     auto& addMapFile = _map->getMapFile();
     addMapFile.map_global_vars.push_back(0);
     addMapFile.header.num_global_vars = static_cast<uint32_t>(addMapFile.map_global_vars.size());
-    _globalVarsEdited = true;
     _newGlobalVarNameEdit->clear();
     populateGlobalVars();
-
-    Q_EMIT mapVariablesChanged();
+    refreshHeaderFields();
+    commitGlobalVarsEdit(std::move(before), "Add Map Variable");
     spdlog::debug("MapInfoPanel: added map global var '{}'", newName);
 }
 
@@ -1145,6 +1129,7 @@ void MapInfoPanel::onRemoveGlobalVar() {
         return;
     }
 
+    GlobalVarsState before = captureGlobalVars();
     if (!_gamDoc->removeMapGlobalVar(static_cast<std::size_t>(index))) {
         return;
     }
@@ -1155,11 +1140,42 @@ void MapInfoPanel::onRemoveGlobalVar() {
         removeMapFile.map_global_vars.erase(removeMapFile.map_global_vars.begin() + index);
         removeMapFile.header.num_global_vars = static_cast<uint32_t>(removeMapFile.map_global_vars.size());
     }
+    populateGlobalVars();
+    refreshHeaderFields();
+    commitGlobalVarsEdit(std::move(before), "Remove Map Variable");
+    spdlog::debug("MapInfoPanel: removed map global var [{}] '{}'", index, varName.toStdString());
+}
+
+MapInfoPanel::GlobalVarsState MapInfoPanel::captureGlobalVars() const {
+    GlobalVarsState state;
+    state.gam = _gamDoc;
+    state.vars = _mvars;
+    if (_map) {
+        state.mapVars = _map->getMapFile().map_global_vars;
+    }
+    return state;
+}
+
+void MapInfoPanel::commitGlobalVarsEdit(GlobalVarsState before, const QString& description) {
+    _globalVarsEdited = true;
+    Q_EMIT globalVarsEdited(before, captureGlobalVars(), description);
+    Q_EMIT mapVariablesChanged();
+}
+
+void MapInfoPanel::applyGlobalVarsState(const GlobalVarsState& state) {
+    if (!_map) {
+        return;
+    }
+    // The .map's MVAR block mirrors the .gam this panel owns, so both are restored together.
+    _gamDoc = state.gam;
+    _mvars = state.vars;
+    auto& mapFile = _map->getMapFile();
+    mapFile.map_global_vars = state.mapVars;
+    mapFile.header.num_global_vars = static_cast<uint32_t>(state.mapVars.size());
     _globalVarsEdited = true;
     populateGlobalVars();
-
+    refreshHeaderFields();
     Q_EMIT mapVariablesChanged();
-    spdlog::debug("MapInfoPanel: removed map global var [{}] '{}'", index, varName.toStdString());
 }
 
 void MapInfoPanel::persistMapNames() {

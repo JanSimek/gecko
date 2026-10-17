@@ -75,6 +75,7 @@
 #include <QMenu>
 #include <QToolButton>
 #include <QIcon>
+#include <QPointer>
 #include <QSignalBlocker>
 #include <QTabWidget>
 #include <QFileDialog>
@@ -2114,35 +2115,34 @@ void MainWindow::connectPanelSignals() {
                 if (_currentEditorWidget)
                     _currentEditorWidget->centerViewOnPlayerPosition();
             });
-        connect(_mapInfoPanel, &MapInfoPanel::elevationAdded,
-            this, [this](int elevation) {
-                if (!_currentEditorWidget)
-                    return;
-                setMapModified(true);
-                updateElevationMenu(_currentEditorWidget->getMap());
-                if (_currentEditorWidget->getCurrentElevation() == elevation) {
-                    _currentEditorWidget->loadTileSprites();
-                    spdlog::debug("MainWindow: Reloaded sprites for newly added elevation {}", elevation);
+        // Header and elevation edits are requests the editor applies as undoable commands; the panel
+        // and the elevation menu follow through EditorWidget::mapHeaderChanged.
+        connect(_mapInfoPanel, &MapInfoPanel::headerEditRequested, this,
+            [this](const Map::MapHeader& after, const QString& description, const QString& mergeKey) {
+                if (_currentEditorWidget) {
+                    _currentEditorWidget->editMapHeader(after, description.toStdString(), mergeKey.toStdString());
                 }
             });
-        connect(_mapInfoPanel, &MapInfoPanel::elevationRemoved,
-            this, [this](int elevation) {
-                if (!_currentEditorWidget)
+        connect(_mapInfoPanel, &MapInfoPanel::elevationPresenceRequested, this, [this](int elevation, bool present) {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->setElevationPresent(elevation, present);
+            }
+        });
+        // The panel owns the .gam a global-variable edit changes, so the undo entry restores its state.
+        connect(_mapInfoPanel, &MapInfoPanel::globalVarsEdited, this,
+            [this](const MapInfoPanel::GlobalVarsState& before, const MapInfoPanel::GlobalVarsState& after,
+                const QString& description) {
+                if (!_currentEditorWidget) {
                     return;
-                setMapModified(true);
-                updateElevationMenu(_currentEditorWidget->getMap());
-                if (_currentEditorWidget->getCurrentElevation() != elevation)
-                    return;
-                if (auto* map = _currentEditorWidget->getMap()) {
-                    uint32_t flags = map->getMapFile().header.flags;
-                    if (Map::elevationIsPresent(flags, ELEVATION_1))
-                        elevationChanged(ELEVATION_1);
-                    else if (Map::elevationIsPresent(flags, ELEVATION_2))
-                        elevationChanged(ELEVATION_2);
-                    else if (Map::elevationIsPresent(flags, ELEVATION_3))
-                        elevationChanged(ELEVATION_3);
                 }
-                spdlog::debug("MainWindow: Switched away from removed elevation {}", elevation);
+                auto restore = [panel = QPointer<MapInfoPanel>(_mapInfoPanel)](const MapInfoPanel::GlobalVarsState& state) {
+                    if (panel) {
+                        panel->applyGlobalVarsState(state);
+                    }
+                };
+                _currentEditorWidget->pushUndoCommand({ .description = description.toStdString(),
+                    .undo = [restore, before]() { restore(before); },
+                    .redo = [restore, after]() { restore(after); } });
             });
         connect(_mapInfoPanel, &MapInfoPanel::clearElevationRequested,
             this, [this](int elevation) {
@@ -2189,14 +2189,6 @@ void MainWindow::connectPanelSignals() {
             }
         });
 
-        // Header edits write straight to the map with no undo command, so flag it modified here. They
-        // also fire while populating from a fresh map, but the callers clear the flag right after.
-        connect(_mapInfoPanel, &MapInfoPanel::playerPositionChanged, this, [this](int) { setMapModified(true); });
-        connect(_mapInfoPanel, &MapInfoPanel::playerElevationChanged, this, [this](int) { setMapModified(true); });
-        connect(_mapInfoPanel, &MapInfoPanel::playerOrientationChanged, this, [this](int) { setMapModified(true); });
-        connect(_mapInfoPanel, &MapInfoPanel::mapScriptIdChanged, this, [this](int) { setMapModified(true); });
-        connect(_mapInfoPanel, &MapInfoPanel::darknessChanged, this, [this](int) { setMapModified(true); });
-        connect(_mapInfoPanel, &MapInfoPanel::timestampChanged, this, [this](int) { setMapModified(true); });
         // Editing a Map name / Lookup name marks the map modified; the value is written to the writable
         // copy when the map is saved (see the saveMap handlers, which call persistMapNames()).
         connect(_mapInfoPanel, &MapInfoPanel::mapNamesChanged, this, [this]() { setMapModified(true); });
@@ -2278,6 +2270,7 @@ void MainWindow::connectToEditorWidget() {
         _tilePalettePanel->setSelectionManager(_currentEditorWidget->getSelectionManager());
     }
 
+    connect(_currentEditorWidget, &EditorWidget::mapHeaderChanged, this, &MainWindow::onMapHeaderChanged);
     connect(_currentEditorWidget, &EditorWidget::statusMessageRequested, this, &MainWindow::showStatusMessage);
     connect(_currentEditorWidget, &EditorWidget::statusMessageClearRequested, this, &MainWindow::clearStatusMessage);
     // Keep the checkable tool-mode toolbar actions in sync with the active mode
@@ -2546,6 +2539,29 @@ void MainWindow::updateMapInfo(Map* map) {
             spdlog::debug("Loaded objects into ObjectPalettePanel");
         } catch (const std::exception& e) {
             spdlog::error("Failed to load objects for palette: {}", e.what());
+        }
+    }
+}
+
+void MainWindow::onMapHeaderChanged() {
+    Map* map = _currentEditorWidget ? _currentEditorWidget->getMap() : nullptr;
+    if (!map) {
+        return;
+    }
+    if (_mapInfoPanel) {
+        _mapInfoPanel->refreshHeaderFields();
+    }
+    updateElevationMenu(map);
+
+    const uint32_t flags = map->getMapFile().header.flags;
+    if (Map::elevationIsPresent(flags, _currentEditorWidget->getCurrentElevation())) {
+        return;
+    }
+    for (int elevation = 0; elevation < Map::ELEVATION_COUNT; ++elevation) {
+        if (Map::elevationIsPresent(flags, elevation)) {
+            Q_EMIT elevationChanged(elevation);
+            spdlog::debug("MainWindow: switched to elevation {}, the shown one was removed", elevation);
+            return;
         }
     }
 }

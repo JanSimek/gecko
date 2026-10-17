@@ -72,6 +72,8 @@ public:
         uint32_t num_global_vars;
         uint32_t map_id;
         uint32_t timestamp;
+
+        bool operator==(const MapHeader&) const = default;
     };
 
     struct MapFile {

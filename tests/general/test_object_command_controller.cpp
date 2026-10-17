@@ -457,3 +457,93 @@ TEST_CASE("newEmptyMap inside a batch discards the edits buffered before it", "[
     CHECK(fx.mapFile().map_objects[0].empty());
     CHECK_FALSE(fx.undoStack.canUndo());
 }
+
+TEST_CASE("setMapHeader is undoable and folds a run of same-field edits into one step", "[undo][controller]") {
+    ControllerFixture fx;
+    const uint32_t original = fx.mapFile().header.player_default_position;
+
+    Map::MapHeader header = fx.mapFile().header;
+    for (uint32_t pos : { 1u, 12u, 123u }) {
+        header.player_default_position = pos;
+        REQUIRE(fx.controller.setMapHeader(header, "Edit Player Position", "playerPosition"));
+    }
+    CHECK(fx.mapFile().header.player_default_position == 123u);
+
+    // An unchanged header records nothing.
+    CHECK_FALSE(fx.controller.setMapHeader(header, "Edit Player Position", "playerPosition"));
+
+    // The three keystrokes are one undo step.
+    REQUIRE(fx.undoStack.undo());
+    CHECK(fx.mapFile().header.player_default_position == original);
+    CHECK_FALSE(fx.undoStack.canUndo());
+    REQUIRE(fx.undoStack.redo());
+    CHECK(fx.mapFile().header.player_default_position == 123u);
+
+    // A different field starts a new step.
+    header.darkness = 1;
+    REQUIRE(fx.controller.setMapHeader(header, "Edit Darkness", "darkness"));
+    REQUIRE(fx.undoStack.undo());
+    CHECK(fx.mapFile().header.darkness == 0u);
+    CHECK(fx.mapFile().header.player_default_position == 123u);
+}
+
+TEST_CASE("setElevationPresent removes an elevation with its objects and scripts, undoably", "[undo][controller]") {
+    ControllerFixture fx;
+    addScriptedObject(fx, 1, 7, 0);
+    REQUIRE(fx.controller.addSpatialScript(/*programIndex*/ 3, /*tile*/ 5000, /*elevation*/ 1, /*radius*/ 2));
+    REQUIRE(fx.controller.addSpatialScript(/*programIndex*/ 4, /*tile*/ 5000, /*elevation*/ 0, /*radius*/ 2));
+    fx.undoStack.clear();
+    const auto before = fx.mapFile().map_scripts;
+    REQUIRE(Map::elevationIsPresent(fx.mapFile().header.flags, 1));
+
+    REQUIRE(fx.controller.setElevationPresent(1, false));
+
+    CHECK_FALSE(Map::elevationIsPresent(fx.mapFile().header.flags, 1));
+    CHECK_FALSE(fx.mapFile().tiles.contains(1));
+    CHECK_FALSE(fx.mapFile().map_objects.contains(1));
+    // The object's script and the spatial script placed on elevation 1 are gone; elevation 0's stays.
+    CHECK(fx.mapFile().map_scripts[ITEM_SECTION].empty());
+    REQUIRE(fx.mapFile().map_scripts[SPATIAL_SECTION].size() == 1);
+    CHECK(built_tile::elevationOf(fx.mapFile().map_scripts[SPATIAL_SECTION][0].timer) == 0u);
+
+    REQUIRE(fx.undoStack.undo());
+    CHECK(Map::elevationIsPresent(fx.mapFile().header.flags, 1));
+    CHECK(fx.mapFile().tiles.at(1).size() == Map::TILES_PER_ELEVATION);
+    CHECK(fx.mapFile().map_objects.at(1).size() == 1);
+    CHECK(fx.mapFile().map_scripts[ITEM_SECTION].size() == before[ITEM_SECTION].size());
+    CHECK(fx.mapFile().map_scripts[SPATIAL_SECTION].size() == before[SPATIAL_SECTION].size());
+
+    REQUIRE(fx.undoStack.redo());
+    CHECK_FALSE(fx.mapFile().map_objects.contains(1));
+}
+
+TEST_CASE("setElevationPresent adds an empty elevation and refuses to remove the last one", "[undo][controller]") {
+    ControllerFixture fx;
+    REQUIRE(fx.controller.setElevationPresent(2, false));
+    REQUIRE(fx.controller.setElevationPresent(1, false));
+    // Elevation 0 is the last one present.
+    CHECK_FALSE(fx.controller.setElevationPresent(0, false));
+    CHECK(Map::elevationIsPresent(fx.mapFile().header.flags, 0));
+
+    // No-op requests record nothing.
+    CHECK_FALSE(fx.controller.setElevationPresent(0, true));
+
+    REQUIRE(fx.controller.setElevationPresent(2, true));
+    CHECK(Map::elevationIsPresent(fx.mapFile().header.flags, 2));
+    CHECK(fx.mapFile().tiles.at(2).size() == Map::TILES_PER_ELEVATION);
+    CHECK(fx.mapFile().map_objects.contains(2));
+
+    REQUIRE(fx.undoStack.undo());
+    CHECK_FALSE(Map::elevationIsPresent(fx.mapFile().header.flags, 2));
+    CHECK_FALSE(fx.mapFile().tiles.contains(2));
+}
+
+TEST_CASE("Loading the objects of an absent elevation leaves the view empty", "[controller]") {
+    // Removing the shown elevation refreshes it before the editor switches to another one.
+    ControllerFixture fx;
+    REQUIRE(fx.controller.setElevationPresent(1, false));
+    REQUIRE_FALSE(fx.mapFile().map_objects.contains(1));
+
+    REQUIRE_NOTHROW(fx.spriteLoader.loadObjectSprites(*fx.map, 1, fx.objects, fx.overlays));
+    CHECK(fx.objects.empty());
+}

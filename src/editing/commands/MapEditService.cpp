@@ -5,6 +5,7 @@
 #include "format/map/Tile.h"
 #include "editing/commands/ScriptEditService.h"
 #include "editing/commands/UndoBatcher.h"
+#include "util/BuiltTile.h"
 #include "util/UndoStack.h"
 
 namespace geck {
@@ -15,14 +16,16 @@ MapEditService::MapEditService(std::unique_ptr<Map>& map,
     ScriptEditService& scriptService,
     UndoBatcher& batcher,
     std::function<void()> refreshObjects,
-    std::function<void()> reloadTiles)
+    std::function<void()> reloadTiles,
+    std::function<void()> headerChanged)
     : _map(map)
     , _objects(objects)
     , _wallBlockerOverlays(wallBlockerOverlays)
     , _scriptService(scriptService)
     , _batcher(batcher)
     , _refreshObjects(std::move(refreshObjects))
-    , _reloadTiles(std::move(reloadTiles)) {
+    , _reloadTiles(std::move(reloadTiles))
+    , _headerChanged(std::move(headerChanged)) {
 }
 
 void MapEditService::newEmptyMap() {
@@ -155,6 +158,137 @@ bool MapEditService::copyElevation(int fromElevation, int toElevation) {
         applyElevationSnapshot(toElevation, afterObjects, afterTiles, haveAfterTiles);
     };
     cmd.redo();
+    return _batcher.push(std::move(cmd));
+}
+
+bool MapEditService::setHeader(const Map::MapHeader& after, const std::string& description, const std::string& mergeKey) {
+    if (!_map) {
+        return false;
+    }
+    const Map::MapHeader before = _map->getMapFile().header;
+    if (before == after) {
+        return false;
+    }
+
+    auto apply = [this](const Map::MapHeader& header) {
+        _map->getMapFile().header = header;
+        if (_headerChanged) {
+            _headerChanged();
+        }
+    };
+    UndoCommand cmd;
+    cmd.description = description;
+    cmd.mergeKey = mergeKey.empty() ? std::string() : "header:" + mergeKey;
+    cmd.undo = [apply, before]() { apply(before); };
+    cmd.redo = [apply, after]() { apply(after); };
+    apply(after);
+    return _batcher.push(std::move(cmd));
+}
+
+MapEditService::ElevationState MapEditService::captureElevation(int elevation) const {
+    const auto& mapFile = _map->getMapFile();
+    ElevationState state;
+    state.flags = mapFile.header.flags;
+    if (auto it = mapFile.tiles.find(elevation); it != mapFile.tiles.end()) {
+        state.tiles = it->second;
+    }
+    if (auto it = mapFile.map_objects.find(elevation); it != mapFile.map_objects.end()) {
+        state.objects = it->second; // shared_ptr copies keep removed objects alive for undo
+    }
+    return state;
+}
+
+void MapEditService::applyElevationState(int elevation, const ElevationState& state) {
+    auto& mapFile = _map->getMapFile();
+    mapFile.header.flags = state.flags;
+    if (state.tiles) {
+        mapFile.tiles[elevation] = *state.tiles;
+    } else {
+        mapFile.tiles.erase(elevation);
+    }
+    if (state.objects) {
+        mapFile.map_objects[elevation] = *state.objects;
+    } else {
+        mapFile.map_objects.erase(elevation);
+    }
+}
+
+bool MapEditService::setElevationPresent(int elevation, bool present) {
+    if (!_map || elevation < 0 || elevation >= Map::ELEVATION_COUNT) {
+        return false;
+    }
+    auto& mapFile = _map->getMapFile();
+    const uint32_t flag = Map::elevationFlag(elevation);
+    if (Map::elevationIsPresent(mapFile.header.flags, elevation) == present) {
+        return false;
+    }
+    if (!present) {
+        int presentCount = 0;
+        for (int e = 0; e < Map::ELEVATION_COUNT; ++e) {
+            presentCount += Map::elevationIsPresent(mapFile.header.flags, e) ? 1 : 0;
+        }
+        if (presentCount <= 1) {
+            return false; // a map needs at least one elevation
+        }
+    }
+
+    const ElevationState before = captureElevation(elevation);
+    const ScriptEditService::ScriptSections beforeScripts = _scriptService.snapshotScripts();
+
+    if (present) {
+        mapFile.header.flags &= ~flag; // the bit is clear when the elevation is present
+        if (!mapFile.tiles.contains(elevation)) {
+            mapFile.tiles[elevation] = Map::createEmptyElevation();
+        }
+        mapFile.map_objects.try_emplace(elevation);
+    } else {
+        mapFile.header.flags |= flag;
+        if (before.objects) {
+            for (const auto& obj : *before.objects) {
+                if (obj && obj->map_scripts_pid != -1) {
+                    _scriptService.eraseScript(static_cast<uint32_t>(obj->map_scripts_pid));
+                }
+            }
+        }
+        auto& spatial = mapFile.map_scripts[static_cast<int>(MapScript::ScriptType::SPATIAL)];
+        std::vector<uint32_t> spatialOnElevation;
+        for (const MapScript& script : spatial) {
+            if (static_cast<int>(built_tile::elevationOf(script.timer)) == elevation) {
+                spatialOnElevation.push_back(script.pid);
+            }
+        }
+        for (uint32_t sid : spatialOnElevation) {
+            _scriptService.eraseScript(sid);
+        }
+        mapFile.tiles.erase(elevation);
+        mapFile.map_objects.erase(elevation);
+    }
+
+    const ElevationState after = captureElevation(elevation);
+    const ScriptEditService::ScriptSections afterScripts = _scriptService.snapshotScripts();
+
+    auto refresh = [this]() {
+        _refreshObjects();
+        if (_reloadTiles) {
+            _reloadTiles();
+        }
+        if (_headerChanged) {
+            _headerChanged();
+        }
+    };
+    UndoCommand cmd;
+    cmd.description = present ? "Add Elevation" : "Remove Elevation";
+    cmd.undo = [this, elevation, before, beforeScripts, refresh]() {
+        applyElevationState(elevation, before);
+        _scriptService.restoreScripts(beforeScripts);
+        refresh();
+    };
+    cmd.redo = [this, elevation, after, afterScripts, refresh]() {
+        applyElevationState(elevation, after);
+        _scriptService.restoreScripts(afterScripts);
+        refresh();
+    };
+    refresh();
     return _batcher.push(std::move(cmd));
 }
 

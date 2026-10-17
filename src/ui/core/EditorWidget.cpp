@@ -174,6 +174,7 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
             .currentElevation = [this]() { return _session.currentElevation(); },
             .updateTileSprite = [this](int hexIndex, bool isRoof, int elevation) { updateTileSprite(hexIndex, isRoof, elevation); },
             .loadTileSprites = [this]() { loadTileSprites(); },
+            .mapHeaderChanged = [this]() { Q_EMIT mapHeaderChanged(); },
         });
     _inputHandler = std::make_unique<InputHandler>();
     _dragDropManager = std::make_unique<DragDropManager>(
@@ -379,6 +380,18 @@ void EditorWidget::clearElevationObjects(int elevation) {
 
 void EditorWidget::copyElevation(int fromElevation, int toElevation) {
     _controller.commandController().copyElevation(fromElevation, toElevation);
+}
+
+void EditorWidget::editMapHeader(const Map::MapHeader& after, const std::string& description, const std::string& mergeKey) {
+    _controller.commandController().setMapHeader(after, description, mergeKey);
+}
+
+void EditorWidget::setElevationPresent(int elevation, bool present) {
+    _controller.commandController().setElevationPresent(elevation, present);
+}
+
+void EditorWidget::pushUndoCommand(UndoCommand command) {
+    _controller.commandController().pushCommand(std::move(command));
 }
 
 void EditorWidget::registerInventoryEdit(const std::shared_ptr<MapObject>& container,

@@ -110,10 +110,10 @@ terrain-derived locations:
 
 # Editor: known limitations & follow-ups
 
-1. **Undo coverage.** *Remaining:* the pre-existing elevation add/remove
-   (`MapInfoPanel` checkboxes) is still a direct mutation; a cascading script-delete when an
-   object is deleted; and the command-controller actions themselves aren't integration-tested
-   (they need GameResources/Qt — a `qt_tests` follow-up).
+1. **Undo coverage.** *Remaining:* a cascading script-delete when an object is deleted, and the
+   command-controller actions themselves aren't integration-tested (they need GameResources/Qt —
+   a `qt_tests` follow-up). Map Info header, elevation and map-variable edits are undoable
+   (`MapEditService::setHeader` / `setElevationPresent`, the panel's `globalVarsEdited`).
 2. **Newly created scripts get `local_var_count=0` / `offset=-1`** — exactly what the engine's
    `scriptAdd` writes; locals are allocated at runtime from the `.int`. The editor does not
    parse `.int` headers, and the local-var *count* lives in `scripts.lst`, not the binary.

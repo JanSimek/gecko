@@ -345,6 +345,10 @@ public:
     // Map-wide operations (undoable). The confirmation dialog lives in MapInfoPanel.
     void clearElevationObjects(int elevation);
     void copyElevation(int fromElevation, int toElevation);
+    void editMapHeader(const Map::MapHeader& after, const std::string& description, const std::string& mergeKey);
+    void setElevationPresent(int elevation, bool present);
+    /// Records an edit whose state lives outside the map (e.g. the Map Info panel's .gam document).
+    void pushUndoCommand(UndoCommand command);
 
     // Inventory edit (undoable). Snapshots come from SelectionPanel.
     void registerInventoryEdit(const std::shared_ptr<MapObject>& container,
@@ -406,6 +410,8 @@ signals:
     void statusMessageRequested(const QString& message);
     void statusMessageClearRequested();
     void undoStackChanged();
+    /// The map header changed, including which elevations are present: an edit or its undo/redo.
+    void mapHeaderChanged();
     /// A Console script changed the map through a path that records no undo command (e.g.
     /// setPlayerStart/newMap), so the host must flag the map modified explicitly.
     void mapModifiedByScript();

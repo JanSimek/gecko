@@ -134,6 +134,10 @@ public:
     /// undoable command, overwriting the destination. Scripts are not copied; the
     /// cloned objects are detached from any source scripts.
     bool copyElevation(int fromElevation, int toElevation);
+    /// Undoable header edit; see MapEditService::setHeader.
+    bool setMapHeader(const Map::MapHeader& after, const std::string& description, const std::string& mergeKey = {});
+    /// Undoable elevation add/remove; see MapEditService::setElevationPresent.
+    bool setElevationPresent(int elevation, bool present);
 
     /// Replaces the bound map with a fresh empty Fallout 2 map (default header, three
     /// empty elevations, no objects/scripts) and refreshes the view. This is a

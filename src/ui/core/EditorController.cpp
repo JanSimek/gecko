@@ -23,7 +23,8 @@ void EditorController::initEditingCore(resource::GameResources& resources, Editi
         std::move(callbacks.ensureElevationTiles),
         std::move(callbacks.currentElevation),
         std::move(callbacks.updateTileSprite),
-        std::move(callbacks.loadTileSprites));
+        std::move(callbacks.loadTileSprites),
+        std::move(callbacks.mapHeaderChanged));
     _commandController = std::make_unique<ObjectCommandController>(
         resources,
         _session.mapPtr(),
