@@ -264,9 +264,6 @@ Open items:
 - **Corpus / world index** — index `analyze` + the semantic facts across all shipped maps so an
   agent can query *examples* ("how do shipped towns place and wire shopkeepers?") — improves
   generation, not just analysis.
-- **`worldmap.txt`** — the per-position sub-tile *encounter* chances and fill flags are still
-  unparsed (of each subtile line only the terrain is kept; the tile's `art_idx`,
-  `walk_mask_name` and `encounter_difficulty` are read).
 - **`worldmap.msg`** — random-encounter descriptions (`[3000 + 50*tableId + entryId]`,
   fallout2-ce worldmap.cc:3595); runtime-index-tied to the encounter table/entry ordering, so
   not a small add. (Area/city labels turned out to live in map.msg and are already surfaced.)

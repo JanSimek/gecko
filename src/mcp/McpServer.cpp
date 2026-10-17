@@ -403,9 +403,15 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
-    json toolWorldEncounters(resource::GameResources& resources, const json& /*args*/) {
+    json toolWorldEncounters(resource::GameResources& resources, const json& args) {
+        const bool hasX = args.contains("x");
+        if (hasX != args.contains("y")) {
+            throw ToolError{ "arguments 'x' and 'y' go together" };
+        }
         std::ostringstream oss;
-        const int rc = cli::buildWorldEncounters(resources, oss);
+        const int rc = hasX ? cli::describeWorldPosition(resources, static_cast<int>(requireInt(args, "x", 0, INT32_MAX)),
+                                  static_cast<int>(requireInt(args, "y", 0, INT32_MAX)), oss)
+                            : cli::buildWorldEncounters(resources, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -1080,13 +1086,23 @@ namespace {
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolWorldMap(r, a); }, "" });
         t.push_back({ "world_encounters",
-            "The worldmap's terrain types and random-encounter group tables, from worldmap.txt. "
-            "'terrains' (name, shortName, 'difficulty' — the terrain's per-step travel cost) and "
-            "'encounters' — each [Encounter: NAME] group with its spawn 'entries' ({pid, ratioPercent, "
-            "dead, script, items}). The shipped encounter names are region-prefixed (ARRO_*, KLA_*, …), "
-            "so they map to areas. Critter pids are raw — resolve them with proto_info. (Per-position "
-            "encounter placement is not parsed; terrain-at-position is in world_map.) No arguments.",
-            json({ { "type", "object" }, { "properties", json::object() } }),
+            "The worldmap's random-encounter data, from worldmap.txt. With no arguments: 'terrains' "
+            "(name, shortName, 'difficulty' — the terrain's per-step travel cost), 'frequencies' (the "
+            "percent each frequency name rolls), 'encounters' — each [Encounter: NAME] group with its "
+            "spawn 'entries' ({pid, ratioPercent, dead, script, items}) — and 'encounterTables' — each "
+            "[Encounter Table N] with its 'lookupName', 'maps' ({map, mapFile}: the maps.txt name and its "
+            ".map file, as in world_map), weighted 'entries' ({chance, counter, special, map, groups: "
+            "[{name, minCount, maxCount, situation}], scenery, condition, conditionGvars}) and "
+            "'skippedEntries' (enc_NN lines past a numbering gap, which the engine never reads). A group "
+            "name is an [Encounter: NAME] group or 'Player'. The shipped names are region-prefixed "
+            "(ARRO_*, KLA_*, …), so they map to areas. Critter pids are raw — resolve them with "
+            "proto_info. With 'x' and 'y' (worldmap pixels, as world_map positions): the sub-tile there — "
+            "terrain, fill, the encounter 'chances' per part of the day (morning 6:00-11:59, afternoon "
+            "12:00-17:59, night) as frequency + percent, and the 'encounterTable' rolled there. The engine "
+            "rolls that percent (easy/hard difficulty shift it by percent/15), then picks among the table "
+            "entries whose condition holds and whose counter isn't 0, weighted by 'chance' plus luck, perks "
+            "and difficulty.",
+            json({ { "type", "object" }, { "properties", { { "x", { { "type", "integer" } } }, { "y", { { "type", "integer" } } } } } }),
             [](resource::GameResources& r, const json& a) { return toolWorldEncounters(r, a); }, "" });
         t.push_back({ "quests",
             "The quest registry from quests.txt — what the player has to DO. Each quest: 'area' (the "

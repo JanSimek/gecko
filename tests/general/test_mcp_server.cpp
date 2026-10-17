@@ -245,6 +245,13 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         CHECK(resp["result"]["isError"] == true);
     }
 
+    SECTION("world_encounters needs x and y together") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 15 }, { "method", "tools/call" },
+            { "params", { { "name", "world_encounters" }, { "arguments", { { "x", 10 } } } } } });
+        CHECK(resp["result"]["isError"] == true);
+        CHECK(resp["result"]["content"][0]["text"].get<std::string>().find("'x' and 'y'") != std::string::npos);
+    }
+
     SECTION("quests / gvars with no data mounted report tool errors (no quests.txt / vault13.gam)") {
         const json q = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 16 }, { "method", "tools/call" },
             { "params", { { "name", "quests" }, { "arguments", json::object() } } } });

@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <string>
 #include <vector>
 
 #include "format/worldmap/WorldmapTxt.h"
@@ -13,7 +15,7 @@ namespace {
 // the bare "Dead" flag, Script:NN) plus inline ';' comments the reader must strip.
 constexpr const char* kWorldmapTxt = R"(; worldmap data
 [Data]
-Frequent=43%       ; ignored frequency
+Frequent=43%       ; without None the engine reads no frequency at all
 terrain_types=Desert:1, Mountain:2, City:1, Ocean:1
 terrain_short_names=DES, MNT, CTY, OCN ; WIP
 
@@ -62,6 +64,7 @@ TEST_CASE("parseWorldmapTxt reads terrain types and encounter groups", "[worldma
     CHECK(rats->entries[0].distance == 3);
 
     CHECK(world.findEncounter("Nope") == nullptr);
+    CHECK(world.frequencyPercent == std::array<int, 6>{});
 }
 
 TEST_CASE("parseWorldmapTxt reads the [Tile NN] grid and terrainAt maps pixels to terrain", "[worldmap]") {
@@ -109,6 +112,91 @@ encounter_difficulty=3
 
     CHECK(world.difficultyOf("Mountain") == 4);
     CHECK(world.difficultyOf("Nope") == 0);
+
+    // The rest of a sub-tile line: fill, the frequency per part of the day, and the encounter table.
+    const WorldmapSubtile* ocean = world.subtileAt(0, 60);
+    REQUIRE(ocean != nullptr);
+    CHECK(ocean->fill == "fill_w");
+    CHECK(ocean->chance[0] == EncounterFrequency::None);
+    CHECK(ocean->encounterTable == "Fish");
+    CHECK(world.subtileAt(-1, 0) == nullptr);
+}
+
+TEST_CASE("parseWorldmapTxt reads encounter frequencies and tables as the engine does", "[worldmap]") {
+    constexpr const char* kTables = R"(
+[Data]
+Forced=100%
+Common=22%
+None=0%
+Rare=4%
+Uncommon=12%
+; no Frequent: the engine stops there and leaves Forced 0 too
+
+[Encounter Table 0]
+lookup_name=DstN
+maps=Desert Encounter 1, Desert Encounter 2
+enc_00=Chance:50%,Enc:(2-5) Raiders AMBUSH Player,Scenery:Normal,If(Player(Level) > 4)
+enc_01=Chance:9%,Enc:(2-4) ARRO_Spore_Plants AND (1-2) ARRO_Silver_Geckos FIGHTING Player
+enc_02=Chance:1%,Special,If(Global(1) > 1) And If(Player(Level) < 7)   ; trailing comment
+enc_03=Chance:5%,Counter:1,Map:Special Holy Encounter 2,Enc:Special1,Scenery:Heavy
+enc_05=Chance:5%,Enc:(1-1) Unreachable   ; enc_04 is missing, so the engine stops before this
+
+[Encounter Table 2]
+lookup_name=Orphan   ; Table 1 is missing, so the engine never reads this
+
+[Tile Data]
+num_horizontal_tiles=1
+[Tile 0]
+art_idx=339
+0_0=Desert, No_Fill, Common, Uncommon, Rare, dstn
+)";
+    const WorldmapTxt world = parseWorldmapTxt(std::string{ kTables });
+
+    CHECK(world.frequencyPercent == std::array<int, 6>{ 0, 4, 12, 22, 0, 0 });
+
+    REQUIRE(world.encounterTables.size() == 1);
+    const EncounterTable& table = world.encounterTables[0];
+    CHECK(table.lookupName == "DstN");
+    CHECK(table.maps == std::vector<std::string>{ "Desert Encounter 1", "Desert Encounter 2" });
+    REQUIRE(table.entries.size() == 4);
+    CHECK(table.skippedEntries == 1); // enc_05
+
+    const EncounterTableEntry& raiders = table.entries[0];
+    CHECK(raiders.chance == 50);
+    CHECK(raiders.counter == -1);
+    CHECK(raiders.condition == "If(Player(Level) > 4)");
+    REQUIRE(raiders.groups.size() == 2);
+    CHECK(raiders.groups[0].name == "Raiders");
+    CHECK(raiders.groups[0].minCount == 2);
+    CHECK(raiders.groups[0].maxCount == 5);
+    CHECK(raiders.groups[0].situation == "ambush");
+    CHECK(raiders.groups[1].name == "Player");
+    CHECK(raiders.groups[1].minCount == 1);
+    CHECK(raiders.groups[1].situation == "nothing");
+
+    const auto& fight = table.entries[1].groups;
+    REQUIRE(fight.size() == 3);
+    CHECK(fight[0].situation == "and");
+    CHECK(fight[1].name == "ARRO_Silver_Geckos");
+    CHECK(fight[1].situation == "fighting");
+
+    CHECK(table.entries[2].special);
+    CHECK(table.entries[2].groups.empty());
+    CHECK(table.entries[2].condition == "If(Global(1) > 1) And If(Player(Level) < 7)");
+
+    const EncounterTableEntry& holy = table.entries[3];
+    CHECK(holy.counter == 1);
+    CHECK(holy.map == "Special Holy Encounter 2");
+    CHECK(holy.scenery == "heavy");
+    REQUIRE(holy.groups.size() == 1);
+    CHECK(holy.groups[0].name == "Special1");
+
+    // A sub-tile names its table case-insensitively, as wmParseFindEncounterTypeMatch matches it.
+    const WorldmapSubtile* desert = world.subtileAt(10, 10);
+    REQUIRE(desert != nullptr);
+    CHECK(desert->chance == std::array{ EncounterFrequency::Common, EncounterFrequency::Uncommon, EncounterFrequency::Rare });
+    CHECK(world.findEncounterTable(desert->encounterTable) == &table);
+    CHECK(world.findEncounterTable("Orphan") == nullptr);
 }
 
 TEST_CASE("parseWorldmapTxt tolerates empty input", "[worldmap]") {
