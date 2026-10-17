@@ -679,6 +679,8 @@ add_library(gecko_editing STATIC
     scripting/MapScriptApi.cpp
     scripting/ScriptApiReference.h
     scripting/ScriptApiReference.cpp
+    scripting/ScriptSeed.h
+    scripting/ScriptSeed.cpp
 )
 add_library(gecko::editing ALIAS gecko_editing)
 

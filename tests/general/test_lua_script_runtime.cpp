@@ -17,6 +17,7 @@
 #include "scripting/LuaScriptRuntime.h"
 #include "scripting/MapScriptApi.h"
 #include "scripting/ScriptApiReference.h"
+#include "scripting/ScriptSeed.h"
 #include "writer/map/MapWriter.h"
 
 #include "support/ControllerFixture.h"
@@ -800,4 +801,15 @@ TEST_CASE("Captured print output is capped", "[scripting][lua]") {
     REQUIRE(r.ok);
     CHECK(r.output.size() < LuaSandboxHost::PRINT_LIMIT_BYTES + 2048);
     CHECK(r.output.find("print output truncated") != std::string::npos);
+}
+
+TEST_CASE("Script seeds parse the same for single runs and batches", "[scripting][lua]") {
+    CHECK(parseScriptSeed("1234") == 1234u);
+    // Past 32 bits (std::stol threw there on Windows, where long is 32-bit) and negative values are
+    // masked to the 31 bits Luau's math.randomseed keeps.
+    CHECK(parseScriptSeed("4294967297") == 1u);
+    CHECK(parseScriptSeed("-1") == SCRIPT_SEED_MASK);
+    CHECK_FALSE(parseScriptSeed("abc").has_value());
+    CHECK_FALSE(parseScriptSeed("12abc").has_value());
+    CHECK(randomScriptSeed() <= SCRIPT_SEED_MASK);
 }

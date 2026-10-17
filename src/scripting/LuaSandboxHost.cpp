@@ -1,10 +1,8 @@
 #include "scripting/LuaSandboxHost.h"
 
-#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
-#include <random>
 
 #include <lua.h>
 #include <lualib.h>
@@ -16,6 +14,7 @@
 
 #include "scripting/MapScriptApi.h"
 #include "scripting/ScriptApiReference.h"
+#include "scripting/ScriptSeed.h"
 
 namespace geck {
 
@@ -57,26 +56,12 @@ bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::
 #undef GECK_SCRIPT_API_BIND
     luabridge::setGlobal(_state, &api, "api");
 
-    // --arg seed=N when it parses, else a fresh one per host. Luau's math.randomseed truncates to a
-    // 32-bit signed int, so keep the seed in range; the counter avoids random_device repeats.
-    int seed = 0;
-    {
-        static std::atomic<uint32_t> runCounter{ 0 };
-        const auto it = args.find("seed");
-        bool fromArg = false;
-        if (it != args.end()) {
-            try {
-                seed = static_cast<int>(std::stol(it->second));
-                fromArg = true;
-            } catch (const std::exception&) {
-                fromArg = false;
-            }
-        }
-        if (!fromArg) {
-            std::random_device rd;
-            seed = static_cast<int>((rd() ^ runCounter.fetch_add(1)) & 0x7FFFFFFF);
-        }
+    // --arg seed=N when it parses, else a fresh one per host.
+    std::optional<uint32_t> argSeed;
+    if (const auto it = args.find("seed"); it != args.end()) {
+        argSeed = parseScriptSeed(it->second);
     }
+    const int seed = static_cast<int>(argSeed.value_or(randomScriptSeed()));
 
     // Seed the api's stream from the same resolved seed, so both RNGs reproduce from --arg seed=N in
     // every host. A caller that pre-seeds (the fill preview) passes the same seed, so this is idempotent.
