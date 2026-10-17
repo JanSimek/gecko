@@ -876,7 +876,7 @@ bool EditorWidget::writeMapTo(const std::string& destination) {
             // Preserve the map's ".EDG" map-edge sidecar beside the saved map (if it had one).
             // A write failure here must not fail the already-saved map, so it is only logged.
             try {
-                if (const auto edgeBytes = resource::writeMapEdgeBeside(_session.map()->edge(), destination)) {
+                if (const auto edgeBytes = resource::writeMapEdgeBeside(_session.map()->edge(), destination); edgeBytes.has_value()) {
                     spdlog::info("Saved map-edge sidecar for {} ({} bytes)", destination, *edgeBytes);
                 }
             } catch (const std::exception& e) {

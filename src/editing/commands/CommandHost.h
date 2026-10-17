@@ -35,7 +35,7 @@ public:
     /// Reload every tile sprite (after a bulk tile change such as a cleared/copied elevation).
     virtual void reloadTiles() = 0;
     /// The map header changed (an edit, or its undo/redo), including which elevations are present.
-    virtual void mapHeaderChanged() { }
+    virtual void mapHeaderChanged() { /* a headless host shows no header */ }
 };
 
 /**

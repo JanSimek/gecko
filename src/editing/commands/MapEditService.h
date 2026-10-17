@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "format/map/Map.h"
@@ -28,14 +29,20 @@ class UndoBatcher;
  */
 class MapEditService {
 public:
+    /// What the service calls back as it edits: rebuild the object visuals, reload the tile sprites,
+    /// and report a header change (including which elevations are present).
+    struct Hooks {
+        std::function<void()> refreshObjects;
+        std::function<void()> reloadTiles;
+        std::function<void()> headerChanged;
+    };
+
     MapEditService(std::unique_ptr<Map>& map,
         std::vector<std::shared_ptr<Object>>& objects,
         std::vector<sf::Sprite>& wallBlockerOverlays,
         ScriptEditService& scriptService,
         UndoBatcher& batcher,
-        std::function<void()> refreshObjects,
-        std::function<void()> reloadTiles,
-        std::function<void()> headerChanged);
+        Hooks hooks);
 
     /// Replaces the bound map with a fresh empty Fallout 2 map and refreshes the
     /// view. Destructive reset (like File > New); NOT recorded on the undo stack, and it clears
@@ -53,7 +60,7 @@ public:
     /// Replaces the map header as one undoable command. Consecutive edits sharing a non-empty
     /// `mergeKey` (a spin box stepped through values) collapse into one undo entry. Returns false
     /// if nothing changes.
-    bool setHeader(const Map::MapHeader& after, const std::string& description, const std::string& mergeKey = {});
+    bool setHeader(const Map::MapHeader& after, std::string_view description, std::string_view mergeKey = {});
 
     /// Enables or disables an elevation as one undoable command. Disabling also deletes its tiles,
     /// its objects, their scripts and the spatial scripts placed on it: the engine reads every

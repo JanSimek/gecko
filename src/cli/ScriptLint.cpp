@@ -146,7 +146,7 @@ namespace {
     MapPlacements placementsOf(const Map& map) {
         MapPlacements out;
         const auto& mapFile = map.getMapFile();
-        if (const auto programIndex = mapFile.header.programIndex()) {
+        if (const auto programIndex = mapFile.header.programIndex(); programIndex.has_value()) {
             out.placements[*programIndex].insert(resource::ScriptPlacement::Map);
         }
         for (std::size_t section = 0; section < std::size(mapFile.map_scripts); ++section) {

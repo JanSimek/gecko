@@ -14,6 +14,7 @@
 #include <optional>
 
 #include "format/map/Map.h"
+#include "reader/ReaderExceptions.h"
 #include "format/lst/Lst.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
@@ -589,7 +590,7 @@ void MapInfoPanel::resolveMapScriptName() {
     try {
         // header.script_id is 1-based into scripts.lst. Resolved independently of the .gam so the name
         // shows even for a map that has none.
-        if (const auto programIndex = _map ? _map->getMapFile().header.programIndex() : std::nullopt) {
+        if (const auto programIndex = _map ? _map->getMapFile().header.programIndex() : std::nullopt; programIndex.has_value()) {
             auto scripts = _resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
             const auto& scriptList = scripts->list();
             if (*programIndex < static_cast<int>(scriptList.size())) {
@@ -605,7 +606,7 @@ void MapInfoPanel::resolveMapScriptName() {
                 spdlog::warn("Map script ID {} out of bounds for scripts.lst size {}", *programIndex + 1, scriptList.size());
             }
         }
-    } catch (const std::exception& e) {
+    } catch (const FileReaderException& e) {
         spdlog::error("Error resolving the map script name: {}", e.what());
     }
     _mapScriptEdit->setText(QString::fromStdString(_mapScriptName));
@@ -825,7 +826,7 @@ void MapInfoPanel::onElevationCheckboxChanged() {
         return;
     }
 
-    QCheckBox* sender = qobject_cast<QCheckBox*>(QObject::sender());
+    const auto* sender = qobject_cast<const QCheckBox*>(QObject::sender());
     if (!sender) {
         return;
     }
@@ -847,9 +848,7 @@ void MapInfoPanel::onElevationCheckboxChanged() {
     }
 
     const bool isChecked = sender->isChecked();
-    const bool wasEnabled = Map::elevationIsPresent(_map->getMapFile().header.flags, elevation);
-
-    if (isChecked && !wasEnabled) {
+    if (const bool wasEnabled = Map::elevationIsPresent(_map->getMapFile().header.flags, elevation); isChecked && !wasEnabled) {
         Q_EMIT elevationPresenceRequested(elevation, true);
         spdlog::debug("MapInfoPanel: requested adding {}", elevationName.toStdString());
     } else if (!isChecked && wasEnabled) {
@@ -1040,7 +1039,7 @@ void MapInfoPanel::onGlobalVarChanged(QTreeWidgetItem* item, int column) {
     if (auto& mapVars = _map->getMapFile().map_global_vars; static_cast<std::size_t>(index) < mapVars.size()) {
         mapVars[static_cast<std::size_t>(index)] = value;
     }
-    commitGlobalVarsEdit(std::move(before), "Edit Map Variable");
+    commitGlobalVarsEdit(before, "Edit Map Variable");
     spdlog::debug("MapInfoPanel: global var [{}] set to {}", index, value);
 }
 
@@ -1096,7 +1095,7 @@ void MapInfoPanel::onAddGlobalVar() {
     _newGlobalVarNameEdit->clear();
     populateGlobalVars();
     refreshHeaderFields();
-    commitGlobalVarsEdit(std::move(before), "Add Map Variable");
+    commitGlobalVarsEdit(before, "Add Map Variable");
     spdlog::debug("MapInfoPanel: added map global var '{}'", newName);
 }
 
@@ -1142,7 +1141,7 @@ void MapInfoPanel::onRemoveGlobalVar() {
     }
     populateGlobalVars();
     refreshHeaderFields();
-    commitGlobalVarsEdit(std::move(before), "Remove Map Variable");
+    commitGlobalVarsEdit(before, "Remove Map Variable");
     spdlog::debug("MapInfoPanel: removed map global var [{}] '{}'", index, varName.toStdString());
 }
 
@@ -1156,7 +1155,7 @@ MapInfoPanel::GlobalVarsState MapInfoPanel::captureGlobalVars() const {
     return state;
 }
 
-void MapInfoPanel::commitGlobalVarsEdit(GlobalVarsState before, const QString& description) {
+void MapInfoPanel::commitGlobalVarsEdit(const GlobalVarsState& before, const QString& description) {
     _globalVarsEdited = true;
     Q_EMIT globalVarsEdited(before, captureGlobalVars(), description);
     Q_EMIT mapVariablesChanged();

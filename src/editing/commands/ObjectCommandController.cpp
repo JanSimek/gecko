@@ -26,7 +26,8 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     , _edgeService(map, _batcher)
     , _refreshObjects([this] { _host.refreshObjects(); })
     , _reloadTiles([this] { _host.reloadTiles(); })
-    , _mapService(map, objects, wallBlockerOverlays, _scriptService, _batcher, _refreshObjects, _reloadTiles, [this] { _host.mapHeaderChanged(); })
+    , _mapService(map, objects, wallBlockerOverlays, _scriptService, _batcher,
+          { .refreshObjects = _refreshObjects, .reloadTiles = _reloadTiles, .headerChanged = [this] { _host.mapHeaderChanged(); } })
     , _objectService(resources, map, hexgrid, mapSpriteLoader, objects, wallBlockerOverlays, _batcher, _refreshObjects) {
 }
 

@@ -24,8 +24,7 @@ namespace geck::resource {
 namespace {
     // A file straight off disk; nullopt if it isn't a readable regular file.
     std::optional<std::vector<std::uint8_t>> readDiskBytes(const std::filesystem::path& path) {
-        std::error_code ec;
-        if (!std::filesystem::is_regular_file(path, ec)) {
+        if (std::error_code ec; !std::filesystem::is_regular_file(path, ec)) {
             return std::nullopt;
         }
         std::ifstream in(path, std::ios::binary);
@@ -61,8 +60,8 @@ namespace {
 std::function<Pro*(std::uint32_t)> protoLoader(GameResources& resources) {
     return [&resources](std::uint32_t pid) -> Pro* {
         try {
-            return resources.loadPro(pid);
-        } catch (const std::exception& e) {
+            return resources.tryLoadPro(pid);
+        } catch (const FileReaderException& e) { // present, but doesn't parse
             spdlog::debug("protoLoader: pid {} failed: {}", pid, e.what());
             return nullptr;
         }
@@ -70,16 +69,17 @@ std::function<Pro*(std::uint32_t)> protoLoader(GameResources& resources) {
 }
 
 std::unique_ptr<Map> readMap(GameResources& resources, const std::filesystem::path& path, MapSource source) {
-    MapSource foundIn = source == MapSource::Disk ? MapSource::Disk : MapSource::DataPaths;
+    using enum MapSource;
+    MapSource foundIn = source == Disk ? Disk : DataPaths;
     auto bytes = readBytes(resources, path, foundIn);
-    if (!bytes && source == MapSource::DataPathsThenDisk) {
+    if (!bytes && source == DataPathsThenDisk) {
         // The VFS only lists what existed when a path was mounted, so a map written since (one
         // `generate` just produced) or one outside the data is read off disk instead.
-        foundIn = MapSource::Disk;
+        foundIn = Disk;
         bytes = readDiskBytes(path);
     }
     if (!bytes) {
-        throw IOException(source == MapSource::DataPathsThenDisk ? "map not found in the mounted data or on disk"
+        throw IOException(source == DataPathsThenDisk ? "map not found in the mounted data or on disk"
                                                                  : "map not found",
             path);
     }

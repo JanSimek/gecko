@@ -79,7 +79,7 @@ namespace {
     std::set<int> placedScripts(const Map& map) {
         const Map::MapFile& file = map.getMapFile();
         std::set<int> out;
-        if (const auto programIndex = file.header.programIndex()) {
+        if (const auto programIndex = file.header.programIndex(); programIndex.has_value()) {
             out.insert(*programIndex);
         }
         for (const auto& section : file.map_scripts) {

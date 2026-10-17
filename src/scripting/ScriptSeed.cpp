@@ -6,7 +6,7 @@
 
 namespace geck {
 
-std::optional<std::uint32_t> parseScriptSeed(const std::string& text) {
+std::optional<std::uint32_t> parseScriptSeed(std::string_view text) {
     std::int64_t value = 0;
     const char* end = text.data() + text.size();
     const auto [ptr, ec] = std::from_chars(text.data(), end, value);

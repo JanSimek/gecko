@@ -192,7 +192,7 @@ void ScriptsPanel::populate() {
     // is listed as one extra "Map" row. Its id is 1-based (unlike section scripts' 0-based script_id), so
     // subtract 1 to resolve it — mirroring the Map Info panel. It has no owning object, so the NONE
     // sentinel makes a double-click here do nothing. <=0 means no map script.
-    if (const auto programIndex = mapFile.header.programIndex()) {
+    if (const auto programIndex = mapFile.header.programIndex(); programIndex.has_value()) {
         addRow(QStringLiteral("Map"), *programIndex, static_cast<qulonglong>(MapScript::NONE),
             static_cast<qulonglong>(MapScript::NONE), QStringLiteral("(map script)"), lst);
         _table->item(_table->rowCount() - 1, COL_FILENAME)->setData(PLACEMENT_ROLE, static_cast<int>(resource::ScriptPlacement::Map));

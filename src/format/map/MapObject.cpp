@@ -31,9 +31,9 @@ namespace {
                 object.flags = Pro::setFlag(object.flags, flag);
             }
         }
-        const auto transparency = std::ranges::find_if(TRANSPARENCY_FLAGS,
-            [protoFlags](Flag flag) { return Pro::hasFlag(protoFlags, flag); });
-        if (transparency != TRANSPARENCY_FLAGS.end()) {
+        if (const auto transparency = std::ranges::find_if(TRANSPARENCY_FLAGS,
+                [protoFlags](Flag flag) { return Pro::hasFlag(protoFlags, flag); });
+            transparency != TRANSPARENCY_FLAGS.end()) {
             object.flags = Pro::setFlag(object.flags, *transparency);
         }
 
@@ -49,18 +49,19 @@ namespace {
 
     // _proto_update_gen: a new item starts loaded/charged and keyed as its proto says.
     void seedItemData(MapObject& object, const Pro& pro) {
+        using enum ItemType;
         switch (pro.itemType()) {
-            case ItemType::Weapon:
+            case Weapon:
                 object.ammo = pro.weaponData.ammoCapacity;
                 object.ammo_pid = static_cast<uint32_t>(pro.weaponData.ammoPID);
                 break;
-            case ItemType::Ammo:
+            case Ammo:
                 object.ammo = pro.ammoData.quantity;
                 break;
-            case ItemType::Misc:
+            case Misc:
                 object.ammo = pro.miscData.charges;
                 break;
-            case ItemType::Key:
+            case Key:
                 object.keycode = pro.keyData.keyId;
                 break;
             default:
@@ -71,20 +72,21 @@ namespace {
     // _proto_update_gen: doors, stairs, elevators and ladders take their proto's state and target.
     void seedSceneryData(MapObject& object, const Pro& pro) {
         const auto& scenery = pro.sceneryData;
+        using enum SceneryType;
         switch (static_cast<SceneryType>(pro.objectSubtypeId())) {
-            case SceneryType::Door:
+            case Door:
                 object.walkthrough = scenery.doorData.walkThroughFlag;
                 break;
-            case SceneryType::Stairs:
+            case Stairs:
                 object.elevhex = scenery.stairsData.destTile;
                 object.map = scenery.stairsData.destElevation; // the engine's destinationMap
                 break;
-            case SceneryType::Elevator:
+            case Elevator:
                 object.elevtype = scenery.elevatorData.elevatorType;
                 object.elevlevel = scenery.elevatorData.elevatorLevel;
                 break;
-            case SceneryType::LadderUp:
-            case SceneryType::LadderDown:
+            case LadderUp:
+            case LadderDown:
                 object.elevhex = scenery.ladderData.destTileAndElevation;
                 object.map = 0; // a ladder proto carries no map
                 break;
@@ -178,17 +180,18 @@ std::unique_ptr<MapObject> MapObject::cloneDeep() const {
 
 void MapObject::applyProtoDefaults(const Pro& pro) {
     seedFlagsAndLight(*this, pro);
+    using enum ObjectType;
     switch (pro.type()) {
-        case ObjectType::Item:
+        case Item:
             seedItemData(*this, pro);
             break;
-        case ObjectType::Scenery:
+        case Scenery:
             seedSceneryData(*this, pro);
             break;
-        case ObjectType::Critter:
+        case Critter:
             seedCritterData(*this, pro);
             break;
-        case ObjectType::Misc:
+        case Misc:
             if (const auto id = pro.pid().protoId(); id >= static_cast<uint32_t>(MiscProtoTypeId::FirstExitGrid)
                 && id <= static_cast<uint32_t>(MiscProtoTypeId::LastExitGrid)) {
                 // _proto_update_gen: an exit grid leads nowhere until it is given a destination.

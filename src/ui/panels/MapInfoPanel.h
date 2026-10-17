@@ -130,7 +130,7 @@ private:
     void resolveMapScriptName();
     [[nodiscard]] GlobalVarsState captureGlobalVars() const;
     // After an in-place edit: emits globalVarsEdited with `before` and the state now held.
-    void commitGlobalVarsEdit(GlobalVarsState before, const QString& description);
+    void commitGlobalVarsEdit(const GlobalVarsState& before, const QString& description);
     // (Re)build the global-variables tree from _mvars; guarded by _suppressVarEdit so the setText calls
     // don't fire onGlobalVarChanged. Shared by the initial map load and the add/remove handlers.
     void populateGlobalVars();

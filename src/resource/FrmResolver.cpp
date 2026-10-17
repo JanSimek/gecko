@@ -121,8 +121,8 @@ std::string FrmResolver::critterFrmName(const std::string& baseName, uint32_t fi
     if (named.empty() || named == standing) {
         return standing;
     }
-    const std::string prefix(frmTypeDescriptions[static_cast<size_t>(ObjectType::Critter)].prefixPath);
-    if (_repository.tryLoad<Frm>(prefix + named) != nullptr) {
+    if (const std::string prefix(frmTypeDescriptions[static_cast<size_t>(ObjectType::Critter)].prefixPath);
+        _repository.tryLoad<Frm>(prefix + named) != nullptr) {
         return named;
     }
     // The engine draws nothing for missing art; showing the standing pose keeps the critter findable.
@@ -154,7 +154,7 @@ std::optional<uint32_t> FrmResolver::resolveFid(const std::string& artPath) {
             continue;
         }
 
-        auto* lst = _repository.tryLoad<Lst>(std::string(description.lstFilePath));
+        const auto* lst = _repository.tryLoad<Lst>(std::string(description.lstFilePath));
         if (!lst) {
             return std::nullopt;
         }

@@ -170,7 +170,7 @@ namespace {
         out << "painted " << api.paintedTiles() << " tiles, placed " << api.placedObjects() << " objects.\n";
 
         // Writes the .EDG sidecar too, so `--in` keeps the map edge of the map it decorated.
-        if (!resource::writeMap(resources, *map, outPath)) {
+        if (!resource::writeMap(resources, *map, outPath).has_value()) {
             out << "error: failed to write map: " << outPath << "\n";
             return 1;
         }
@@ -215,7 +215,7 @@ int generateMap(resource::GameResources& resources, const GenerateOptions& optio
         argSeed = parseScriptSeed(it->second);
     }
     const uint32_t baseSeed = argSeed.value_or(randomScriptSeed());
-    if (!argSeed) {
+    if (!argSeed.has_value()) {
         out << "batch seed base " << baseSeed << " (re-run with --arg seed=" << baseSeed << " to reproduce)\n";
     }
 

@@ -92,7 +92,7 @@ namespace {
     // 0-based program index directly (see ScriptsPanel / MapInfoPanel).
     void scanScripts(GameResources& resources, const Map& map, MapCompletenessReport& report) {
         std::set<std::uint32_t> programIndices;
-        if (const auto programIndex = map.getMapFile().header.programIndex()) {
+        if (const auto programIndex = map.getMapFile().header.programIndex(); programIndex.has_value()) {
             programIndices.insert(static_cast<std::uint32_t>(*programIndex));
         }
         for (const auto& section : map.getMapFile().map_scripts) {

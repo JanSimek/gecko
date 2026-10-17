@@ -186,7 +186,7 @@ void ObjectEditService::applyObjectPositions(const std::vector<std::shared_ptr<M
 }
 
 void ObjectEditService::applyObjectDirections(const std::vector<std::shared_ptr<MapObject>>& objects,
-    const std::vector<int>& directions) {
+    const std::vector<int>& directions) const {
     for (size_t i = 0; i < objects.size() && i < directions.size(); ++i) {
         if (!objects[i]) {
             continue;

@@ -111,7 +111,7 @@ TEST_CASE("EditorSession::resetToEmptyMap drops the old map's undo history", "[u
     geck::EditorSession session;
     session.resetToEmptyMap();
     int undone = 0;
-    session.undoStack().push({ .description = "Place", .undo = [&] { ++undone; }, .redo = [] {} });
+    session.undoStack().push({ .description = "Place", .undo = [&undone] { ++undone; }, .redo = [] { /* never redone */ } });
     REQUIRE(session.undoStack().canUndo());
 
     // File > New: replaying a command recorded against the previous map would write its

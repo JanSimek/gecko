@@ -2,6 +2,7 @@
 
 #include "reader/ReaderExceptions.h"
 
+#define ZLIB_CONST // next_in is const; zlib never writes the input
 #include <zlib.h>
 
 #include <format>
@@ -22,8 +23,7 @@ std::vector<std::uint8_t> inflateStream(std::span<const std::uint8_t> input, Def
     if (inflateInit2(&zs, windowBits) != Z_OK) {
         throw ParseException("zlib inflateInit2 failed");
     }
-    // zlib never writes through next_in; it is non-const only because ZLIB_CONST is not defined.
-    zs.next_in = const_cast<Bytef*>(input.data());
+    zs.next_in = input.data();
     zs.avail_in = static_cast<uInt>(input.size());
 
     std::vector<std::uint8_t> out;
@@ -34,9 +34,8 @@ std::vector<std::uint8_t> inflateStream(std::span<const std::uint8_t> input, Def
         zs.next_out = chunk.data();
         zs.avail_out = static_cast<uInt>(chunk.size());
         rc = inflate(&zs, Z_NO_FLUSH);
-        const bool failed = rc != Z_OK && rc != Z_STREAM_END;
-        const bool truncated = rc == Z_OK && zs.avail_in == 0 && zs.avail_out != 0;
-        if (failed || truncated) {
+        if (const bool truncated = rc == Z_OK && zs.avail_in == 0 && zs.avail_out != 0;
+            truncated || (rc != Z_OK && rc != Z_STREAM_END)) {
             inflateEnd(&zs);
             const char* name = container == DeflateContainer::Gzip ? "gzip" : "zlib";
             throw ParseException(truncated ? std::format("{} stream is truncated", name)

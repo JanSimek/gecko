@@ -376,18 +376,18 @@ TEST_CASE("MAP round-trip keeps an object whose PID has no known type", "[map][r
 
 namespace {
 
-std::vector<uint8_t> writeToBytes(const Map::MapFile& mapFile, StubProvider& provider, const char* stem) {
+std::vector<uint8_t> writeToBytes(const Map::MapFile& mapFile, const StubProvider& provider, const char* stem) {
     TempFile file{ stem, ".map" };
     {
-        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
+        MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
         writer.openFile(file.path());
         REQUIRE(writer.write(mapFile));
     }
     return readAllBytes(file.path());
 }
 
-std::unique_ptr<Map> readFromBytes(const std::vector<uint8_t>& bytes, StubProvider& provider) {
-    MapReader reader{ [&](uint32_t pid) { return provider.load(pid); } };
+std::unique_ptr<Map> readFromBytes(const std::vector<uint8_t>& bytes, const StubProvider& provider) {
+    MapReader reader{ [&provider](uint32_t pid) { return provider.load(pid); } };
     auto map = reader.openFile("roundtrip.map", bytes);
     REQUIRE(map != nullptr);
     return map;

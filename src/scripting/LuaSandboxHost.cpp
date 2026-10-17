@@ -61,7 +61,7 @@ bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::
     if (const auto it = args.find("seed"); it != args.end()) {
         argSeed = parseScriptSeed(it->second);
     }
-    const int seed = static_cast<int>(argSeed.value_or(randomScriptSeed()));
+    const auto seed = static_cast<int>(argSeed.value_or(randomScriptSeed()));
 
     // Seed the api's stream from the same resolved seed, so both RNGs reproduce from --arg seed=N in
     // every host. A caller that pre-seeds (the fill preview) passes the same seed, so this is idempotent.

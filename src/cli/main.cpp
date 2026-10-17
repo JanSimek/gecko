@@ -1115,7 +1115,7 @@ int runAnalysisCommand(geck::resource::GameResources& resources, const CliArgs& 
 
 int runCli(int argc, char** argv) {
     const std::vector<std::string> args(argv + 1, argv + argc);
-    if (const auto exitCode = runCommandFamily(args, argv[0])) {
+    if (const auto exitCode = runCommandFamily(args, argv[0]); exitCode.has_value()) {
         return *exitCode;
     }
 
@@ -1131,7 +1131,7 @@ int runCli(int argc, char** argv) {
 
     geck::resource::GameResources resources;
     mountCliData(resources, cli, argv[0]);
-    if (const auto exitCode = runProducingCommand(resources, cli)) {
+    if (const auto exitCode = runProducingCommand(resources, cli); exitCode.has_value()) {
         return *exitCode;
     }
     return runAnalysisCommand(resources, cli);

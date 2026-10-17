@@ -190,7 +190,7 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
 
     // The editor reaches the palettes through these hooks and signals rather than a pointer back here.
     _currentEditorWidget->setObjectPaletteHooks({
-        .objectInfo = [this](int objectIndex, ObjectCategory category) -> const ObjectInfo* {
+        .objectInfo = [this](int objectIndex, ObjectCategory category) {
             return _objectPalettePanel ? _objectPalettePanel->getObjectInfo(objectIndex, category) : nullptr;
         },
         .revealProto = [this](uint32_t pid) -> std::optional<std::pair<int, ObjectCategory>> {

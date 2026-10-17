@@ -15,17 +15,15 @@ MapEditService::MapEditService(std::unique_ptr<Map>& map,
     std::vector<sf::Sprite>& wallBlockerOverlays,
     ScriptEditService& scriptService,
     UndoBatcher& batcher,
-    std::function<void()> refreshObjects,
-    std::function<void()> reloadTiles,
-    std::function<void()> headerChanged)
+    Hooks hooks)
     : _map(map)
     , _objects(objects)
     , _wallBlockerOverlays(wallBlockerOverlays)
     , _scriptService(scriptService)
     , _batcher(batcher)
-    , _refreshObjects(std::move(refreshObjects))
-    , _reloadTiles(std::move(reloadTiles))
-    , _headerChanged(std::move(headerChanged)) {
+    , _refreshObjects(std::move(hooks.refreshObjects))
+    , _reloadTiles(std::move(hooks.reloadTiles))
+    , _headerChanged(std::move(hooks.headerChanged)) {
 }
 
 void MapEditService::newEmptyMap() {
@@ -161,7 +159,7 @@ bool MapEditService::copyElevation(int fromElevation, int toElevation) {
     return _batcher.push(std::move(cmd));
 }
 
-bool MapEditService::setHeader(const Map::MapHeader& after, const std::string& description, const std::string& mergeKey) {
+bool MapEditService::setHeader(const Map::MapHeader& after, std::string_view description, std::string_view mergeKey) {
     if (!_map) {
         return false;
     }
@@ -178,7 +176,7 @@ bool MapEditService::setHeader(const Map::MapHeader& after, const std::string& d
     };
     UndoCommand cmd;
     cmd.description = description;
-    cmd.mergeKey = mergeKey.empty() ? std::string() : "header:" + mergeKey;
+    cmd.mergeKey = mergeKey.empty() ? std::string() : std::string("header:").append(mergeKey);
     cmd.undo = [apply, before]() { apply(before); };
     cmd.redo = [apply, after]() { apply(after); };
     apply(after);

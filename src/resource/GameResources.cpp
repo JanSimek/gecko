@@ -33,7 +33,7 @@ Pro* GameResources::tryLoadPro(uint32_t pid) {
     std::string path;
     try {
         path = ProHelper::basePath(*this, pid);
-    } catch (const std::exception& e) {
+    } catch (const std::exception& e) { // NOSONAR: basePath reports a missing list or an out-of-range PID as runtime_error or IOException
         spdlog::debug("tryLoadPro: no proto for pid {:#x}: {}", pid, e.what());
         return nullptr;
     }

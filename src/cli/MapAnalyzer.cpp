@@ -798,7 +798,7 @@ namespace {
         // The header's script_id is 1-based: the engine runs scripts.lst[script_id - 1] (fallout2-ce
         // map.cc), so resolve to that 0-based programIndex. Null when the map has no script.
         root["scriptId"] = header.script_id;
-        if (const auto mapProgramIndex = header.programIndex()) {
+        if (const auto mapProgramIndex = header.programIndex(); mapProgramIndex.has_value()) {
             const int programIndex = *mapProgramIndex;
             std::string name;
             if (scriptsLst != nullptr && programIndex < static_cast<int>(scriptsLst->list().size())) {

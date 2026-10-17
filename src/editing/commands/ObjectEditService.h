@@ -100,7 +100,7 @@ private:
     // Set each object's hex position / direction, then rebuild the visuals. Shared by the
     // undo and redo halves of registerObjectMove / registerObjectRotation.
     void applyObjectPositions(const std::vector<std::shared_ptr<MapObject>>& objects, const std::vector<int>& positions);
-    void applyObjectDirections(const std::vector<std::shared_ptr<MapObject>>& objects, const std::vector<int>& directions);
+    void applyObjectDirections(const std::vector<std::shared_ptr<MapObject>>& objects, const std::vector<int>& directions) const;
     // Applies one exit-grid state snapshot to an object (shared by the undo/redo halves).
     static void applyExitGridState(MapObject& exitGrid, const ExitGridCommandState& state);
 
