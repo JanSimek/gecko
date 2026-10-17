@@ -11,9 +11,11 @@
 #include <nlohmann/json.hpp>
 
 #include <cstddef>
+#include <format>
 #include <ostream>
 #include <regex>
 #include <string>
+#include <string_view>
 
 namespace geck::cli {
 
@@ -56,10 +58,11 @@ namespace {
     }
 
     // The gvars an If(…) chain reads through Global(N), named through vault13.gam when it's mounted.
-    ordered_json conditionGvars(Gam* gam, const std::string& condition) {
+    ordered_json conditionGvars(const Gam* gam, std::string_view condition) {
+        using Iterator = std::regex_iterator<std::string_view::const_iterator>;
         static const std::regex global(R"(Global\((\d+)\))", std::regex::icase);
         auto gvars = ordered_json::array();
-        for (auto it = std::sregex_iterator(condition.begin(), condition.end(), global); it != std::sregex_iterator(); ++it) {
+        for (auto it = Iterator(condition.begin(), condition.end(), global); it != Iterator(); ++it) {
             const auto index = static_cast<std::size_t>(std::stoul((*it)[1].str()));
             const bool named = gam != nullptr && index < gam->gvarCount();
             gvars.push_back({ { "index", index }, { "name", named ? ordered_json(gam->gvarKey(index)) : ordered_json(nullptr) } });
@@ -74,7 +77,7 @@ namespace {
         return { { "map", lookupName }, { "mapFile", file.empty() ? ordered_json(nullptr) : ordered_json(file) } };
     }
 
-    ordered_json tableToJson(const EncounterTable& table, Gam* gam, const resource::MapNameResolver& names) {
+    ordered_json tableToJson(const EncounterTable& table, const Gam* gam, const resource::MapNameResolver& names) {
         auto entries = ordered_json::array();
         for (const auto& entry : table.entries) {
             auto groups = ordered_json::array();
@@ -103,7 +106,7 @@ namespace {
         return json;
     }
 
-    ordered_json tablesToJson(const WorldmapTxt& world, Gam* gam, const resource::MapNameResolver& names) {
+    ordered_json tablesToJson(const WorldmapTxt& world, const Gam* gam, const resource::MapNameResolver& names) {
         auto tables = ordered_json::array();
         for (const auto& table : world.encounterTables) {
             tables.push_back(tableToJson(table, gam, names));
@@ -136,8 +139,9 @@ int describeWorldPosition(resource::GameResources& resources, int x, int y, std:
     const WorldmapTxt world = loadWorldmap(resources);
     const WorldmapSubtile* subtile = world.subtileAt(x, y);
     if (subtile == nullptr) {
-        out << "{\"error\":\"no worldmap sub-tile at (" << x << ", " << y << ")\",\"width\":" << world.widthPixels()
-            << ",\"height\":" << world.heightPixels() << "}\n";
+        const ordered_json error = { { "error", std::format("no worldmap sub-tile at ({}, {})", x, y) },
+            { "width", world.widthPixels() }, { "height", world.heightPixels() } };
+        out << error.dump() << "\n";
         return 1;
     }
 

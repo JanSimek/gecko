@@ -4,6 +4,7 @@
 #include "reader/TextParsing.h"
 
 #include <cstddef>
+#include <functional>
 #include <map>
 #include <sstream>
 #include <string>
@@ -30,7 +31,7 @@ namespace {
     // [Data]: terrain_types = "Desert:1, Mountain:2, …"; terrain_short_names = "DES, MNT, …" (aligned
     // to terrain_types by position). The frequency keys (None=0%, Rare=4%, …) are collected in
     // `frequencies` and resolved in engine order at the end.
-    void applyDataField(WorldmapTxt& out, std::map<std::string, int>& frequencies, const std::string& key,
+    void applyDataField(WorldmapTxt& out, std::map<std::string, int, std::less<>>& frequencies, const std::string& key,
         const std::string& value) {
         for (const char* name : ENCOUNTER_FREQUENCY_NAMES) {
             if (key == name) {
@@ -229,7 +230,7 @@ namespace {
         Mode mode = Mode::Other;
         Encounter current;
         int currentTile = -1;
-        std::map<std::string, int> frequencies;
+        std::map<std::string, int, std::less<>> frequencies;
         std::map<int, RawEncounterTable> tables;
         RawEncounterTable* currentTable = nullptr;
     };
