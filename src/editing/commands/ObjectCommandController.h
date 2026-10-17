@@ -137,8 +137,9 @@ public:
 
     /// Replaces the bound map with a fresh empty Fallout 2 map (default header, three
     /// empty elevations, no objects/scripts) and refreshes the view. This is a
-    /// destructive reset — like File > New, it is NOT recorded on the undo stack — so a
-    /// generation script can start from a blank slate regardless of what was loaded.
+    /// destructive reset — like File > New, it is NOT recorded on the undo stack and it clears
+    /// the history recorded against the old map — so a generation script can start from a
+    /// blank slate regardless of what was loaded.
     void newEmptyMap();
 
     // Script attachment (undoable). `scriptType` is the MapScript section/type

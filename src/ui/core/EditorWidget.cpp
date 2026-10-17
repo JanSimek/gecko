@@ -948,6 +948,7 @@ void EditorWidget::createNewMap() {
 
     _session.selectionManager()->clearSelection();
     _controller.viewport().centerViewOnMap();
+    Q_EMIT undoStackChanged();
 
     if (_mainWindow) {
         _mainWindow->updateMapInfo(_session.map());

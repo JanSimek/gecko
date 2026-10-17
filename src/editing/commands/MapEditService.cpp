@@ -30,8 +30,10 @@ void MapEditService::newEmptyMap() {
         return;
     }
     // Swap in a blank MapFile, then drop the cached object/overlay sprites and rebuild the view from
-    // the now-empty map. Intentionally not undoable (a fresh start, like File > New).
+    // the now-empty map. Intentionally not undoable (a fresh start, like File > New), and it drops
+    // the history recorded against the old map.
     _map->setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
+    _batcher.clearHistory();
     _objects.clear();
     _wallBlockerOverlays.clear();
     _refreshObjects();

@@ -34,7 +34,8 @@ public:
         std::function<void()> reloadTiles);
 
     /// Replaces the bound map with a fresh empty Fallout 2 map and refreshes the
-    /// view. Destructive reset (like File > New); NOT recorded on the undo stack.
+    /// view. Destructive reset (like File > New); NOT recorded on the undo stack, and it clears
+    /// the history recorded against the old map.
     void newEmptyMap();
 
     /// Deletes every object on an elevation as one undoable command (pruning their

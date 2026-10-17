@@ -419,3 +419,41 @@ TEST_CASE("ScopedUndoBatch flushes on scope exit, even via an exception", "[undo
         CHECK_FALSE(fx.undoStack.canUndo());
     }
 }
+
+TEST_CASE("newEmptyMap drops the undo history recorded against the old map", "[undo][controller]") {
+    ControllerFixture fx;
+    auto placed = std::make_shared<MapObject>();
+    placed->position = 12345;
+    REQUIRE(fx.controller.registerObjectData(placed));
+    REQUIRE(fx.controller.clearElevationObjects(0));
+    REQUIRE(fx.undoStack.undo()); // leaves a redo entry too
+    REQUIRE(fx.undoStack.canRedo());
+
+    fx.controller.newEmptyMap();
+
+    // Replaying either entry would put the old map's object onto the blank one.
+    CHECK_FALSE(fx.undoStack.canUndo());
+    CHECK_FALSE(fx.undoStack.canRedo());
+    CHECK(fx.mapFile().map_objects[0].empty());
+}
+
+TEST_CASE("newEmptyMap inside a batch discards the edits buffered before it", "[undo][controller][batch]") {
+    ControllerFixture fx;
+    {
+        ScopedUndoBatch batch(fx.controller, "Script");
+        auto before = std::make_shared<MapObject>();
+        before->position = 100;
+        REQUIRE(fx.controller.registerObjectData(before));
+
+        fx.controller.newEmptyMap();
+
+        auto after = std::make_shared<MapObject>();
+        after->position = 200;
+        REQUIRE(fx.controller.registerObjectData(after));
+    }
+
+    // Only the post-reset placement is recorded; undoing it leaves the new map empty.
+    REQUIRE(fx.undoStack.undo());
+    CHECK(fx.mapFile().map_objects[0].empty());
+    CHECK_FALSE(fx.undoStack.canUndo());
+}
