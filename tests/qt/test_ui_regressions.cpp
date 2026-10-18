@@ -1559,7 +1559,10 @@ TEST_CASE("MapInfoPanel global-variable edits can be undone through the state it
     // The host's undo applies the captured state: the .map block, the rows and the .gam come back.
     panel.applyGlobalVarsState(*before);
     CHECK(fixture.map->getMapFile().map_global_vars[0] == 10);
-    CHECK(row->text(1) == QStringLiteral("10"));
+    // Applying a state rebuilds the rows, so look the row up again rather than reuse `row`.
+    QTreeWidgetItem* restored = tree->topLevelItem(0);
+    REQUIRE(restored != nullptr);
+    CHECK(restored->text(1) == QStringLiteral("10"));
     panel.persistMapVars();
     CHECK(geck::io::readFile(fixture.savedGam()).find("MVAR_first := 10;") != std::string::npos);
 }
