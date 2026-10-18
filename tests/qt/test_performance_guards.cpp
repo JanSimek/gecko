@@ -1,11 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
 #include <chrono>
 #include <thread>
 
 #include <QElapsedTimer>
-#include <QLabel>
 #include <QMetaObject>
 #include <QTreeView>
 
@@ -14,6 +12,7 @@
 #include "ui/panels/LogPanel.h"
 #include "ui/Settings.h"
 #include "resource/GameResources.h"
+#include "support/QtFind.h"
 #include "support/QtWait.h"
 
 using namespace geck;
@@ -109,10 +108,7 @@ TEST_CASE("File-browser tree population stays within its time budget", "[qt][per
     }
 
     const auto populatedLabelShown = [&panel]() {
-        const auto labels = panel.findChildren<QLabel*>();
-        return std::any_of(labels.begin(), labels.end(), [](const QLabel* label) {
-            return label->text().contains(QStringLiteral("files loaded"));
-        });
+        return geck::test::labelContaining(panel, QStringLiteral("files loaded")) != nullptr;
     };
 
     QElapsedTimer timer;

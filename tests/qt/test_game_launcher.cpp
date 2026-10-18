@@ -2,10 +2,10 @@
 
 #include "state/GameLauncher.h"
 
-#include <QTemporaryDir>
+#include "support/MacBundle.h"
+#include "support/TempFile.h"
 
 #include <filesystem>
-#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -13,13 +13,12 @@
 using namespace geck;
 
 TEST_CASE("findGameExecutable names the binary inside a detected installation", "[game_launcher]") {
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-    const std::filesystem::path root = tempDir.path().toStdString();
+    const test::TempDir tempDir("game-launcher");
+    const std::filesystem::path& root = tempDir.path();
 
     SECTION("An installation folder yields the executable in it") {
         std::filesystem::create_directories(root / "data");
-        std::ofstream(root / "fallout2-ce") << "";
+        test::writeFile(root / "fallout2-ce", "");
 
         const auto executable = findGameExecutable(root);
         REQUIRE(executable.has_value());
@@ -336,49 +335,18 @@ TEST_CASE("collectLaunchConfigurationWarnings reports incoherent launch setups",
     }
 }
 
-namespace {
-
-// A minimal .app: only Contents/Info.plist matters to macOsBundleDataRoot.
-std::filesystem::path makeBundle(const std::filesystem::path& root, const std::string& plistBody) {
-    const std::filesystem::path bundle = root / "Fallout II Community Edition.app";
-    std::filesystem::create_directories(bundle / "Contents");
-    if (!plistBody.empty()) {
-        std::ofstream(bundle / "Contents" / "Info.plist") << plistBody;
-    }
-    return bundle;
-}
-
-std::string plistWith(const std::string& baseDirType) {
-    return R"(<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>fallout2-ce</string>
-    <key>SDL_FILESYSTEM_BASE_DIR_TYPE</key>
-    <string>)"
-        + baseDirType + R"(</string>
-    <key>CFBundleName</key>
-    <string>Fallout II Community Edition</string>
-</dict>
-</plist>
-)";
-}
-
-} // namespace
-
 TEST_CASE("macOsBundleDataRoot follows the bundle's own SDL base-dir type", "[game_launcher]") {
     // On macOS the engine chdir's to SDL_GetBasePath() at startup and resolves master_patches
     // ("data") against it, so a bundle decides the game root and the launcher's working directory
     // is discarded. Reading the key rather than assuming it keeps a differently packaged build
     // working; fallout2-ce itself ships "parent".
-    // QTemporaryDir, not a fixed name under the shared temp directory: Catch2 re-enters the case
-    // once per SECTION, so each gets its own tree and cannot inherit the last one's bundle.
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-    const std::filesystem::path root = tempDir.path().toStdString();
+    // A fresh TempDir, not a fixed name: Catch2 re-enters the case once per SECTION, so each gets its
+    // own tree and cannot inherit the last one's bundle.
+    const test::TempDir tempDir("game-launcher");
+    const std::filesystem::path& root = tempDir.path();
 
     SECTION("\"parent\" resolves to the folder holding the .app") {
-        const auto bundle = makeBundle(root, plistWith("parent"));
+        const auto bundle = test::makeAppBundle(root, test::bundlePlist("parent"));
         const auto resolved = macOsBundleDataRoot(bundle);
 
         REQUIRE(resolved.has_value());
@@ -386,7 +354,7 @@ TEST_CASE("macOsBundleDataRoot follows the bundle's own SDL base-dir type", "[ga
     }
 
     SECTION("\"bundle\" resolves to the .app itself") {
-        const auto bundle = makeBundle(root, plistWith("bundle"));
+        const auto bundle = test::makeAppBundle(root, test::bundlePlist("bundle"));
         const auto resolved = macOsBundleDataRoot(bundle);
 
         REQUIRE(resolved.has_value());
@@ -394,7 +362,7 @@ TEST_CASE("macOsBundleDataRoot follows the bundle's own SDL base-dir type", "[ga
     }
 
     SECTION("A missing key means SDL's default, Contents/Resources") {
-        const auto bundle = makeBundle(root, R"(<?xml version="1.0" encoding="UTF-8"?>
+        const auto bundle = test::makeAppBundle(root, R"(<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
@@ -414,7 +382,7 @@ TEST_CASE("macOsBundleDataRoot follows the bundle's own SDL base-dir type", "[ga
     }
 
     SECTION("A .app without an Info.plist yields nothing rather than a guess") {
-        const auto bundle = makeBundle(root, "");
+        const auto bundle = test::makeAppBundle(root, "");
         CHECK_FALSE(macOsBundleDataRoot(bundle).has_value());
     }
 
@@ -423,12 +391,12 @@ TEST_CASE("macOsBundleDataRoot follows the bundle's own SDL base-dir type", "[ga
         // that would redirect the map into a directory nobody read a setting from. A binary plist
         // is the realistic case - Xcode emits them routinely and this parser only reads XML.
         SECTION("binary plist") {
-            const auto bundle = makeBundle(root, std::string("bplist00\xd4\x01\x02\x03\x04", 13));
+            const auto bundle = test::makeAppBundle(root, std::string("bplist00\xd4\x01\x02\x03\x04", 13));
             CHECK_FALSE(macOsBundleDataRoot(bundle).has_value());
         }
 
         SECTION("truncated XML") {
-            const auto bundle = makeBundle(root, R"(<?xml version="1.0" encoding="UTF-8"?>
+            const auto bundle = test::makeAppBundle(root, R"(<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
     <key>SDL_FILESYSTEM_BASE_DIR_TYPE</key>
@@ -437,14 +405,14 @@ TEST_CASE("macOsBundleDataRoot follows the bundle's own SDL base-dir type", "[ga
         }
 
         SECTION("not XML at all") {
-            const auto bundle = makeBundle(root, "this is not a plist");
+            const auto bundle = test::makeAppBundle(root, "this is not a plist");
             CHECK_FALSE(macOsBundleDataRoot(bundle).has_value());
         }
     }
 
     SECTION("The key is not confused with a neighbouring one of the same value") {
         // <string> elements follow every <key>; only the one after OUR key counts.
-        const auto bundle = makeBundle(root, R"(<?xml version="1.0" encoding="UTF-8"?>
+        const auto bundle = test::makeAppBundle(root, R"(<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>

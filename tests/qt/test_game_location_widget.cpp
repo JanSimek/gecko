@@ -3,11 +3,13 @@
 #include "ui/widgets/GameLocationWidget.h"
 
 #include <QLineEdit>
-#include <QPushButton>
-#include <QTemporaryDir>
+#include <QSignalSpy>
 
 #include <filesystem>
-#include <fstream>
+#include <string_view>
+
+#include "support/MacBundle.h"
+#include "support/TempFile.h"
 
 using geck::GameLocationWidget;
 
@@ -21,37 +23,19 @@ const QLineEdit* dataDirectoryEdit(const GameLocationWidget& widget) {
     return edit;
 }
 
-std::filesystem::path makeBundle(const std::filesystem::path& root, const std::string& baseDirType) {
-    const std::filesystem::path bundle = root / "Fallout II Community Edition.app";
-    std::filesystem::create_directories(bundle / "Contents" / "MacOS");
-    std::ofstream(bundle / "Contents" / "MacOS" / "fallout2-ce") << "binary";
-    std::ofstream(bundle / "Contents" / "Info.plist")
-        << R"(<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0">
-<dict>
-    <key>SDL_FILESYSTEM_BASE_DIR_TYPE</key>
-    <string>)"
-        << baseDirType << R"(</string>
-</dict>
-</plist>
-)";
-    return bundle;
-}
-
 } // namespace
 
 TEST_CASE("Choosing an .app fills the data directory from it and locks the field", "[qt][settings]") {
     // The engine chdir's to the bundle's base path, so for a bundle this setting cannot change
     // where the map goes. Leaving it editable invites exactly the mistake it cannot correct.
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-    const std::filesystem::path root = tempDir.path().toStdString();
+    const geck::test::TempDir tempDir("game-location");
+    const std::filesystem::path& root = tempDir.path();
 
     GameLocationWidget widget;
     const QLineEdit* dataDir = dataDirectoryEdit(widget);
 
     SECTION("A bundle drives the field and takes it out of the user's hands") {
-        widget.setExecutableLocation(makeBundle(root, "parent"));
+        widget.setExecutableLocation(geck::test::makeAppBundle(root, geck::test::bundlePlist("parent")));
 
         CHECK(widget.getDataDirectory() == root); // "parent" -> the folder holding the .app
         CHECK(dataDir->isReadOnly());
@@ -61,14 +45,14 @@ TEST_CASE("Choosing an .app fills the data directory from it and locks the field
     SECTION("A stored directory cannot overwrite the bundle's own") {
         // Preferences restores the executable and then the directory; the saved one is the value
         // that was being ignored all along, so it must not win.
-        widget.setExecutableLocation(makeBundle(root, "parent"));
+        widget.setExecutableLocation(geck::test::makeAppBundle(root, geck::test::bundlePlist("parent")));
         widget.setDataDirectory("/somewhere/the/engine/never/reads");
 
         CHECK(widget.getDataDirectory() == root);
     }
 
     SECTION("Switching to a plain executable hands the field back") {
-        widget.setExecutableLocation(makeBundle(root, "parent"));
+        widget.setExecutableLocation(geck::test::makeAppBundle(root, geck::test::bundlePlist("parent")));
         REQUIRE(dataDir->isReadOnly());
 
         widget.setExecutableLocation(root / "fallout2-ce");
@@ -86,13 +70,10 @@ TEST_CASE("Choosing an .app fills the data directory from it and locks the field
         // macOsBundleDataRoot yields nothing there, and the setting really is used - locking an
         // empty field would stop the user pointing Play anywhere at all.
         const std::filesystem::path bundle = root / "Broken.app";
-        std::filesystem::create_directories(bundle / "Contents");
         // A real binary plist: the XML reader chokes on it, which is the point. Byte values, not
         // escapes - the bounded \x{..} form the analyser asks for is C++23.
         constexpr char kBinaryPlist[] = { 'b', 'p', 'l', 'i', 's', 't', '0', '0', 0x01, 0x02 };
-        std::ofstream plist(bundle / "Contents" / "Info.plist", std::ios::binary);
-        plist.write(kBinaryPlist, sizeof(kBinaryPlist));
-        plist.close();
+        geck::test::writeFile(bundle / "Contents" / "Info.plist", std::string_view(kBinaryPlist, sizeof(kBinaryPlist)));
 
         widget.setExecutableLocation(bundle);
 
@@ -105,28 +86,30 @@ TEST_CASE("Choosing an .app fills the data directory from it and locks the field
 TEST_CASE("An .app is validated as an executable, and a plain folder is not one", "[qt][settings]") {
     // A bundle is a directory that is nonetheless an executable choice: its binary is in
     // Contents/MacOS. Any other directory cannot be launched.
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-    const std::filesystem::path root = tempDir.path().toStdString();
+    const geck::test::TempDir tempDir("game-location");
+    const std::filesystem::path& root = tempDir.path();
 
     GameLocationWidget widget;
-    QString lastStatus;
-    QString lastStyle;
-    QObject::connect(&widget, &GameLocationWidget::statusChanged,
-        [&lastStatus, &lastStyle](const QString& message, const QString& styleClass) {
-            lastStatus = message;
-            lastStyle = styleClass;
-        });
+    QSignalSpy statusSpy(&widget, &GameLocationWidget::statusChanged); // (message, styleClass)
+    REQUIRE(statusSpy.isValid());
+    const auto lastStatus = [&statusSpy]() {
+        REQUIRE_FALSE(statusSpy.isEmpty());
+        return statusSpy.last().at(0).toString();
+    };
+    const auto lastStyle = [&statusSpy]() {
+        REQUIRE_FALSE(statusSpy.isEmpty());
+        return statusSpy.last().at(1).toString();
+    };
 
     SECTION("A real bundle validates as an executable") {
-        const auto bundle = makeBundle(root, "parent");
+        const auto bundle = geck::test::makeAppBundle(root, geck::test::bundlePlist("parent"));
         std::filesystem::create_directories(root / "data"); // "parent" root, as a real install has
 
         widget.setExecutableLocation(bundle);
         widget.validateSelection();
 
-        CHECK(lastStyle.toStdString() == "success");
-        CHECK_FALSE(lastStatus.contains("may not be a valid Fallout 2 installation"));
+        CHECK(lastStyle().toStdString() == "success");
+        CHECK_FALSE(lastStatus().contains("may not be a valid Fallout 2 installation"));
     }
 
     SECTION("A bundle with no binary is called out as such") {
@@ -136,19 +119,19 @@ TEST_CASE("An .app is validated as an executable, and a plain folder is not one"
         widget.setExecutableLocation(empty);
         widget.validateSelection();
 
-        CHECK(lastStyle.toStdString() == "warning");
-        CHECK(lastStatus.contains("no executable"));
+        CHECK(lastStyle().toStdString() == "warning");
+        CHECK(lastStatus().contains("no executable"));
     }
 
     SECTION("A plain folder is rejected as an executable") {
         std::filesystem::create_directories(root / "data");
-        std::ofstream(root / "fallout2.exe") << "";
+        geck::test::writeFile(root / "fallout2.exe", "");
 
         widget.setExecutableLocation(root);
         widget.validateSelection();
 
-        CHECK(lastStyle.toStdString() == "warning");
-        CHECK(lastStatus.contains("not a folder"));
+        CHECK(lastStyle().toStdString() == "warning");
+        CHECK(lastStatus().contains("not a folder"));
     }
 }
 
@@ -156,36 +139,28 @@ TEST_CASE("Choosing an executable notifies once, not once per field it touches",
     // Deriving the data directory writes to that field, and its own textChanged would raise a
     // second configurationChanged nested inside the first - the dialog then re-entered its refresh
     // while still handling the executable change.
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-    const std::filesystem::path root = tempDir.path().toStdString();
+    const geck::test::TempDir tempDir("game-location");
+    const std::filesystem::path& root = tempDir.path();
 
     GameLocationWidget widget;
-    int notifications = 0;
-    QObject::connect(&widget, &GameLocationWidget::configurationChanged, [&notifications] { ++notifications; });
-
-    // cppcheck cannot follow a signal to its connected lambda, so it reads `notifications` as never
-    // incremented and calls every comparison below constant. The suppressions say that, rather than
-    // weakening the assertions - counting exactly one notification is the whole point of this case.
+    QSignalSpy notifications(&widget, &GameLocationWidget::configurationChanged);
+    REQUIRE(notifications.isValid());
 
     SECTION("selecting a bundle") {
-        widget.setExecutableLocation(makeBundle(root, "parent"));
-        // cppcheck-suppress knownConditionTrueFalse
-        CHECK(notifications == 1);
+        widget.setExecutableLocation(geck::test::makeAppBundle(root, geck::test::bundlePlist("parent")));
+        CHECK(notifications.count() == 1);
     }
 
     SECTION("releasing the field again") {
-        widget.setExecutableLocation(makeBundle(root, "parent"));
-        notifications = 0;
+        widget.setExecutableLocation(geck::test::makeAppBundle(root, geck::test::bundlePlist("parent")));
+        notifications.clear();
 
         widget.setExecutableLocation(root / "fallout2-ce"); // clears the derived value
-        // cppcheck-suppress knownConditionTrueFalse
-        CHECK(notifications == 1);
+        CHECK(notifications.count() == 1);
     }
 
     SECTION("a user editing the data directory still notifies") {
         widget.setDataDirectory("/games/fallout2");
-        // cppcheck-suppress knownConditionTrueFalse
-        CHECK(notifications == 1); // the field is only silenced while we drive it
+        CHECK(notifications.count() == 1); // the field is only silenced while we drive it
     }
 }

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "format/map/Map.h"
@@ -90,11 +91,18 @@ inline std::shared_ptr<MapObject> addSeeded(Map::MapFile& mapFile, uint32_t pid,
     return object;
 }
 
-/// A Map named "test.map" holding `mapFile` (an empty map by default).
-inline std::unique_ptr<Map> mapOf(Map::MapFile mapFile = Map::createEmptyMapFile()) {
-    auto map = std::make_unique<Map>("test.map");
+/// A Map loaded from `filename` holding `mapFile` (an empty map by default). The header keeps its
+/// own filename field ("newmap" for an empty map), so code that must name the map by its file
+/// cannot pass by reading the header instead.
+inline std::unique_ptr<Map> mapOf(const std::string& filename, Map::MapFile mapFile = Map::createEmptyMapFile()) {
+    auto map = std::make_unique<Map>(filename);
     map->setMapFile(std::make_unique<Map::MapFile>(std::move(mapFile)));
     return map;
+}
+
+/// A Map named "test.map" holding `mapFile` (an empty map by default).
+inline std::unique_ptr<Map> mapOf(Map::MapFile mapFile = Map::createEmptyMapFile()) {
+    return mapOf("test.map", std::move(mapFile));
 }
 
 } // namespace geck::test

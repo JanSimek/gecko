@@ -43,6 +43,15 @@ inline bool headlessCiEnvironment() {
 #endif
 }
 
+/// True where SFML cannot query live keyboard state: Linux with neither an X11 nor a Wayland display.
+inline bool keyboardStateUnavailable() {
+#if defined(__linux__)
+    return !environmentVariable("DISPLAY").has_value() && !environmentVariable("WAYLAND_DISPLAY").has_value();
+#else
+    return false;
+#endif
+}
+
 /// A 1x1 white texture, for sprites whose bounds matter but whose pixels don't. Needs a graphics
 /// context: call it after GECK_SKIP_IF_HEADLESS_CI().
 inline sf::Texture whiteTexture() {
@@ -60,4 +69,13 @@ inline sf::Texture whiteTexture() {
         if (::geck::test::headlessCiEnvironment()) {          \
             SKIP("Graphics tests skipped in CI environment"); \
         }                                                     \
+    } while (false)
+
+/// Skips the current Catch2 test where SFML cannot read the keyboard state the code under test
+/// queries (headless Linux).
+#define GECK_SKIP_IF_NO_KEYBOARD_STATE()                                                           \
+    do {                                                                                           \
+        if (::geck::test::keyboardStateUnavailable()) {                                            \
+            SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux"); \
+        }                                                                                          \
     } while (false)

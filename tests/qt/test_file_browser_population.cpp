@@ -1,13 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <QAbstractItemModel>
-#include <QLabel>
 #include <QTreeView>
 
 #include <chrono>
 
 #include "resource/GameResources.h"
 #include "support/Fixtures.h"
+#include "support/QtFind.h"
 #include "support/QtWait.h"
 #include "ui/Settings.h"
 #include "ui/panels/FileBrowserPanel.h"
@@ -35,12 +35,7 @@ bool modelContains(const QAbstractItemModel* model, int column, const QString& n
 // The population is asynchronous (loader worker thread, then the chunked tree build);
 // completion is observable through the status label's "N files loaded" text.
 bool populated(const FileBrowserPanel& panel) {
-    for (const auto* label : panel.findChildren<QLabel*>()) {
-        if (label->text().contains(QStringLiteral("files loaded"))) {
-            return true;
-        }
-    }
-    return false;
+    return geck::test::labelContaining(panel, QStringLiteral("files loaded")) != nullptr;
 }
 
 } // namespace

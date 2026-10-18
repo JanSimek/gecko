@@ -12,6 +12,11 @@
 
 namespace geck::test {
 
+/// One `.msg` entry, `{id}{}{text}` and a newline, for building game text files.
+inline std::string msgLine(int id, std::string_view text) {
+    return "{" + std::to_string(id) + "}{}{" + std::string(text) + "}\n";
+}
+
 /// A scratch data path: a unique TempDir the test fills with game files, plus a GameResources that
 /// mounts it. Write the files before the first mount() — a mounted directory lists what existed
 /// when it was mounted, so later writes need `files().refresh()`.

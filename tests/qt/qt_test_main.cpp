@@ -1,4 +1,5 @@
 #include <clocale>
+#include <cstdint>
 #include <cstdio>
 
 #ifdef _WIN32
@@ -8,6 +9,8 @@
 
 #include <QByteArray>
 #include <QApplication>
+#include <QDir>
+#include <QFile>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
@@ -32,9 +35,24 @@ public:
     }
 };
 
+// Settings (and the pattern and fill libraries) persist under <ConfigLocation>/gecko — the test-mode
+// location main() sets up. Every run through a case, each SECTION's included, starts with none of
+// it, so nothing an earlier case saved (a key override, a data path) leaks into the next.
+class SettingsIsolation : public Catch::EventListenerBase {
+public:
+    using Catch::EventListenerBase::EventListenerBase;
+
+    void testCasePartialStarting(const Catch::TestCaseInfo&, uint64_t) override {
+        const QDir configRoot(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation));
+        QDir(configRoot.filePath("gecko")).removeRecursively();
+        QFile::remove(configRoot.filePath("settings.json")); // Settings' fallback when gecko/ can't be made
+    }
+};
+
 } // namespace
 
 CATCH_REGISTER_LISTENER(TestNameTracer)
+CATCH_REGISTER_LISTENER(SettingsIsolation)
 
 int main(int argc, char** argv) {
 #ifdef _WIN32

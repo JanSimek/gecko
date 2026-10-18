@@ -1,7 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <QtGlobal>
-
 #include <SFML/Graphics/RenderTarget.hpp>
 #include <SFML/Window/Event.hpp>
 #include <SFML/Window/Keyboard.hpp>
@@ -13,17 +11,11 @@
 #include "ui/input/InputHandler.h"
 #include "util/ExitGridDirection.h"
 
+#include "support/GraphicsTestEnv.h"
+
 using geck::InputHandler;
 
 namespace {
-
-bool keyboardStateUnavailable() {
-#if defined(Q_OS_LINUX)
-    return qEnvironmentVariableIsEmpty("DISPLAY") && qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY");
-#else
-    return false;
-#endif
-}
 
 class HeadlessRenderTarget final : public sf::RenderTarget {
 public:
@@ -148,9 +140,7 @@ TEST_CASE("InputHandler forwards mouse events to the active registered-tool bran
 }
 
 TEST_CASE("InputHandler falls back when a registered-tool mouse press is not consumed", "[input][tools]") {
-    if (keyboardStateUnavailable()) {
-        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
-    }
+    GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     InputHandler::Callbacks cb;
     cb.onToolMousePressed = [](sf::Vector2f, sf::Mouse::Button) {
@@ -184,9 +174,7 @@ TEST_CASE("InputHandler cancels the active registered-tool branch on unconsumed 
 }
 
 TEST_CASE("InputHandler enters tile-placing action on click in tile mode", "[input]") {
-    if (keyboardStateUnavailable()) {
-        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
-    }
+    GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     h.handler.setCallbacks(InputHandler::Callbacks{});
     h.handler.setTilePlacementMode(true, /*tileIndex*/ 5);
@@ -197,9 +185,7 @@ TEST_CASE("InputHandler enters tile-placing action on click in tile mode", "[inp
 }
 
 TEST_CASE("InputHandler begins drag-selection on a plain click in select mode", "[input]") {
-    if (keyboardStateUnavailable()) {
-        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
-    }
+    GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     h.handler.setCallbacks(InputHandler::Callbacks{});
     // Default mode is Select with SelectionMode::ALL.
@@ -212,9 +198,7 @@ TEST_CASE("InputHandler begins drag-selection on a plain click in select mode", 
 // The "Draw edge" polyline state machine: clicks append vertices, moves fire a live preview, right-click
 // with >=2 vertices finalizes.
 TEST_CASE("InputHandler builds an exit-grid edge line and finalizes it on right-click", "[input][line]") {
-    if (keyboardStateUnavailable()) {
-        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
-    }
+    GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     std::vector<sf::Vector2f> finalized;
     int previewCalls = 0;
@@ -246,9 +230,7 @@ TEST_CASE("InputHandler builds an exit-grid edge line and finalizes it on right-
 }
 
 TEST_CASE("InputHandler cancels an exit-grid edge line on right-click with too few vertices", "[input][line]") {
-    if (keyboardStateUnavailable()) {
-        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
-    }
+    GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     bool finalized = false;
     bool cancelled = false;
@@ -267,20 +249,9 @@ TEST_CASE("InputHandler cancels an exit-grid edge line on right-click with too f
     CHECK_FALSE(h.handler.isInMarkExitsMode()); // tool dropped
 }
 
-// KeyPressed never touches the RenderTarget/view, so drive key behavior directly in tests.
-namespace {
-void pressKeyDirect(InputHandler& handler, sf::Keyboard::Key key) {
-    sf::Event::KeyPressed press;
-    press.code = key;
-    handler.handleKeyPressed(press);
-}
-} // namespace
-
 TEST_CASE("InputHandler's flip key toggles the Draw-edge side and re-fires the preview", "[input][line][flip]") {
-    if (keyboardStateUnavailable()) {
-        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
-    }
-    InputHandler handler;
+    GECK_SKIP_IF_NO_KEYBOARD_STATE();
+    Harness h;
     int previewCalls = 0;
     bool lastPreviewFlip = false;
     InputHandler::Callbacks cb;
@@ -288,27 +259,27 @@ TEST_CASE("InputHandler's flip key toggles the Draw-edge side and re-fires the p
         ++previewCalls;
         lastPreviewFlip = flipSide;
     };
-    handler.setCallbacks(cb);
-    handler.setMarkExitsMode(true);
+    h.handler.setCallbacks(cb);
+    h.handler.setMarkExitsMode(true);
 
     // Default side is the auto/outward side (not flipped).
-    CHECK_FALSE(handler.isMarkExitsFlipped());
+    CHECK_FALSE(h.handler.isMarkExitsFlipped());
 
     // Space flips to the opposite side and re-fires the preview so the new side is visible immediately.
-    pressKeyDirect(handler, sf::Keyboard::Key::Space);
-    CHECK(handler.isMarkExitsFlipped());
+    h.pressKey(sf::Keyboard::Key::Space);
+    CHECK(h.handler.isMarkExitsFlipped());
     CHECK(previewCalls == 1);
     CHECK(lastPreviewFlip == true);
 
     // Space again toggles back to the default side.
-    pressKeyDirect(handler, sf::Keyboard::Key::Space);
-    CHECK_FALSE(handler.isMarkExitsFlipped());
+    h.pressKey(sf::Keyboard::Key::Space);
+    CHECK_FALSE(h.handler.isMarkExitsFlipped());
     CHECK(previewCalls == 2);
     CHECK(lastPreviewFlip == false);
 }
 
 TEST_CASE("InputHandler forwards keys to the active registered-tool branch before global handlers", "[input][tools]") {
-    InputHandler handler;
+    Harness h;
     int toolKeys = 0;
     bool deleteCalled = false;
     InputHandler::Callbacks cb;
@@ -320,10 +291,10 @@ TEST_CASE("InputHandler forwards keys to the active registered-tool branch befor
         return false;
     };
     cb.onDeleteObjects = [&deleteCalled]() { deleteCalled = true; };
-    handler.setCallbacks(cb);
-    handler.setPluginToolMode(true);
+    h.handler.setCallbacks(cb);
+    h.handler.setPluginToolMode(true);
 
-    pressKeyDirect(handler, sf::Keyboard::Key::Delete);
+    h.pressKey(sf::Keyboard::Key::Delete);
 
     CHECK(toolKeys == 1);
     CHECK_FALSE(deleteCalled);
@@ -334,9 +305,7 @@ TEST_CASE("InputHandler forwards keys to the active registered-tool branch befor
 // GUI-only — see the pure snapToExitGridAngle tests for the geometry. Here we pin the no-op path: with
 // a live segment that Shift would snap, Shift up leaves the vertices and the preview cursor raw.
 TEST_CASE("InputHandler's Draw-edge preview leaves the cursor unsnapped when Shift is up", "[input][line][snap]") {
-    if (keyboardStateUnavailable()) {
-        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
-    }
+    GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     std::vector<sf::Vector2f> lastVertices;
     sf::Vector2f lastCursor{ -1.f, -1.f };
@@ -365,29 +334,27 @@ TEST_CASE("InputHandler's Draw-edge preview leaves the cursor unsnapped when Shi
 
     // The flip key's re-fire passes the same raw cursor.
     lastCursor = { -1.f, -1.f };
-    pressKeyDirect(h.handler, sf::Keyboard::Key::Space);
+    h.pressKey(sf::Keyboard::Key::Space);
     CHECK(isNear(lastCursor, raw));
 }
 
 TEST_CASE("InputHandler's flip key does nothing outside Draw-edge mode, and resets on mode change", "[input][line][flip]") {
-    if (keyboardStateUnavailable()) {
-        SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
-    }
-    InputHandler handler;
+    GECK_SKIP_IF_NO_KEYBOARD_STATE();
+    Harness h;
     int previewCalls = 0;
     InputHandler::Callbacks cb;
     cb.onMarkExitsLinePreview = [&](const std::vector<sf::Vector2f>&, sf::Vector2f, bool) { ++previewCalls; };
-    handler.setCallbacks(cb);
+    h.handler.setCallbacks(cb);
 
     // Not in MarkExits mode: Space is ignored (no toggle, no preview).
-    pressKeyDirect(handler, sf::Keyboard::Key::Space);
-    CHECK_FALSE(handler.isMarkExitsFlipped());
+    h.pressKey(sf::Keyboard::Key::Space);
+    CHECK_FALSE(h.handler.isMarkExitsFlipped());
     CHECK(previewCalls == 0);
 
     // Enter the mode, flip, then leave: the toggle resets to the default.
-    handler.setMarkExitsMode(true);
-    pressKeyDirect(handler, sf::Keyboard::Key::Space);
-    CHECK(handler.isMarkExitsFlipped());
-    handler.setMarkExitsMode(false); // back to Select
-    CHECK_FALSE(handler.isMarkExitsFlipped());
+    h.handler.setMarkExitsMode(true);
+    h.pressKey(sf::Keyboard::Key::Space);
+    CHECK(h.handler.isMarkExitsFlipped());
+    h.handler.setMarkExitsMode(false); // back to Select
+    CHECK_FALSE(h.handler.isMarkExitsFlipped());
 }

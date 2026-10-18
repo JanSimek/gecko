@@ -3,27 +3,19 @@
 #include <QApplication>
 #include <QAction>
 #include <QComboBox>
-#include <QDir>
 #include <QDockWidget>
-#include <QFile>
-#include <QFileInfo>
 #include <QGroupBox>
 #include <QLabel>
 #include <QShortcut>
 #include <QSignalSpy>
-#include <QStandardPaths>
-#include <QTemporaryDir>
 #include <QTableWidget>
 #include <QTest>
-#include <QTextStream>
 #include <QTreeWidget>
 
 #include <algorithm>
 #include <array>
 #include <filesystem>
-#include <fstream>
 #include <memory>
-#include <stdexcept>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -64,8 +56,15 @@
 #include "ui/ExternalEditorLauncher.h"
 #include "ui/ScriptSourceService.h"
 #include "support/CompiledScript.h"
+#include "support/DataTree.h"
 #include "support/EditorResources.h"
+#include "support/MapObjectBuilder.h"
+#include "support/ProEditorData.h"
+#include "support/QtDialogAnswer.h"
+#include "support/QtFind.h"
+#include "support/QtMainWindow.h"
 #include "support/QtWait.h"
+#include "support/TempFile.h"
 #include "ui/tools/ExitGridPlacementManager.h"
 #include "format/map/Map.h"
 #include "format/map/MapScript.h"
@@ -74,350 +73,51 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QTimer>
 
-namespace {
-
-QString messageLine(int id, const QString& text) {
-    return QString("{%1}{}{%2}\n").arg(id).arg(text);
-}
-
-void writeTextFile(const QString& path, const QString& contents) {
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
-        throw std::runtime_error(("Failed to open " + path).toStdString());
-    }
-
-    QTextStream stream(&file);
-    stream << contents;
-}
-
-class ResourceDataScope {
-public:
-    ResourceDataScope() {
-        if (!_root.isValid()) {
-            throw std::runtime_error("Failed to create temporary data directory");
-        }
-    }
-
-    ~ResourceDataScope() {
-        _resources->clearAllDataPaths();
-    }
-
-    void mount() {
-        _resources->clearAllDataPaths();
-        _resources->files().addDataPath(_root.path().toStdString());
-    }
-
-    void writeBinaryFile(const QString& relativePath, const std::vector<uint8_t>& bytes) const {
-        const QString fullPath = _root.filePath(relativePath);
-        QDir().mkpath(QFileInfo(fullPath).path());
-        QFile file(fullPath);
-        REQUIRE(file.open(QIODevice::WriteOnly));
-        file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<qint64>(bytes.size()));
-    }
-
-    void writeGameMessageFile(const QString& relativePath, const QString& contents) {
-        const QString fullPath = _root.filePath(relativePath);
-        QFileInfo fileInfo(fullPath);
-        QDir().mkpath(fileInfo.path());
-        writeTextFile(fullPath, contents);
-    }
-
-    geck::resource::GameResources& resources() {
-        return *_resources;
-    }
-
-    std::shared_ptr<geck::resource::GameResources> sharedResources() {
-        return _resources;
-    }
-
-private:
-    QTemporaryDir _root;
-    std::shared_ptr<geck::resource::GameResources> _resources = std::make_shared<geck::resource::GameResources>();
-};
-
-QString buildProtoMsg() {
-    QString contents;
-
-    const std::array<const char*, geck::fallout::enumCount<geck::fallout::MaterialType>()> materials = {
-        "Glass",
-        "Metal",
-        "Plastic",
-        "Wood",
-        "Dirt",
-        "Stone",
-        "Cement",
-        "Leather",
-    };
-
-    for (size_t index = 0; index < materials.size(); ++index) {
-        const auto material = static_cast<geck::fallout::MaterialType>(index);
-        contents += messageLine(geck::fallout::protoMessageId(material), QString::fromLatin1(materials[index]));
-    }
-
-    const std::array<const char*, geck::fallout::enumCount<geck::SceneryType>()> sceneryTypes = {
-        "Door",
-        "Stairs",
-        "Elevator",
-        "Ladder Bottom",
-        "Ladder Top",
-        "Generic",
-    };
-
-    for (size_t index = 0; index < sceneryTypes.size(); ++index) {
-        const auto sceneryType = static_cast<geck::SceneryType>(index);
-        contents += messageLine(geck::fallout::protoMessageId(sceneryType), QString::fromLatin1(sceneryTypes[index]));
-    }
-
-    const std::array<const char*, geck::fallout::enumCount<geck::fallout::BodyType>()> bodyTypes = {
-        "Biped",
-        "Quadruped",
-        "Robotic",
-    };
-
-    for (size_t index = 0; index < bodyTypes.size(); ++index) {
-        const auto bodyType = static_cast<geck::fallout::BodyType>(index);
-        contents += messageLine(geck::fallout::protoMessageId(bodyType), QString::fromLatin1(bodyTypes[index]));
-    }
-
-    const std::array<const char*, geck::fallout::enumCount<geck::fallout::DamageType>()> damageTypes = {
-        "Normal",
-        "Laser",
-        "Fire",
-        "Plasma",
-        "Electrical",
-        "EMP",
-        "Explosion",
-    };
-
-    for (size_t index = 0; index < damageTypes.size(); ++index) {
-        const auto damageType = static_cast<geck::fallout::DamageType>(index);
-        contents += messageLine(geck::fallout::protoMessageId(damageType), QString::fromLatin1(damageTypes[index]));
-    }
-
-    const std::array<const char*, geck::fallout::enumCount<geck::fallout::CaliberType>()> calibers = {
-        "None",
-        "Rocket",
-        "Flamethrower Fuel",
-        "C Energy Cell",
-        "D Energy Cell",
-        ".223",
-        "5mm",
-        ".40 cal",
-        "10mm",
-        ".44 cal",
-        "14mm",
-        "12-gauge",
-        "9mm",
-        "BB",
-        ".45 cal",
-        "2mm",
-        "4.7mm caseless",
-        "HN needler",
-        "7.62mm",
-    };
-
-    for (size_t index = 0; index < calibers.size(); ++index) {
-        const auto caliber = static_cast<geck::fallout::CaliberType>(index);
-        contents += messageLine(geck::fallout::protoMessageId(caliber), QString::fromLatin1(calibers[index]));
-    }
-
-    return contents;
-}
-
-QString buildPerkMsg(std::initializer_list<std::pair<geck::fallout::PerkId, const char*>> namedPerks = {},
-    bool includeAllPerks = false) {
-    QString contents;
-
-    if (includeAllPerks) {
-        for (int index = 0; index < geck::fallout::enumValue(geck::fallout::PerkId::Count); ++index) {
-            auto perkId = static_cast<geck::fallout::PerkId>(index);
-            contents += messageLine(geck::fallout::perkNameMessageId(perkId), QString("Perk %1").arg(index));
-        }
-    }
-
-    for (const auto& [perkId, label] : namedPerks) {
-        contents += messageLine(geck::fallout::perkNameMessageId(perkId), QString::fromLatin1(label));
-    }
-
-    return contents;
-}
-
-QString buildStatMsg() {
-    QString contents;
-    for (int index = 0; index < geck::fallout::enumValue(geck::fallout::StatId::Count); ++index) {
-        auto statId = static_cast<geck::fallout::StatId>(index);
-        QString label = QString("Stat %1").arg(index);
-
-        switch (statId) {
-            case geck::fallout::StatId::Strength:
-                label = "Strength";
-                break;
-            case geck::fallout::StatId::Perception:
-                label = "Perception";
-                break;
-            case geck::fallout::StatId::RadiationResistance:
-                label = "Radiation Resistance";
-                break;
-            case geck::fallout::StatId::PoisonResistance:
-                label = "Poison Resistance";
-                break;
-            default:
-                break;
-        }
-
-        contents += messageLine(geck::fallout::statNameMessageId(statId), label);
-    }
-
-    return contents;
-}
-
-QString normalizeActionText(QString text) {
-    text.remove('&');
-    return text;
-}
-
-QAction* findAction(QObject& root, const QString& text) {
-    const QString wanted = text;
-    const auto actions = root.findChildren<QAction*>();
-    for (QAction* action : actions) {
-        if (normalizeActionText(action->text()) == wanted) {
-            return action;
-        }
-    }
-
-    return nullptr;
-}
-
-// The cell at (row, column), failing the test rather than crashing the suite when it is missing.
-QTableWidgetItem& requireItem(const QTableWidget& table, int row, int column) {
-    QTableWidgetItem* item = table.item(row, column);
-    REQUIRE(item != nullptr);
-    return *item;
-}
-
-QComboBox* findComboBoxByToolTip(QWidget& root, const QString& tooltip) {
-    const QString wanted = tooltip;
-    const auto combos = root.findChildren<QComboBox*>();
-    for (QComboBox* combo : combos) {
-        if (combo->toolTip() == wanted) {
-            return combo;
-        }
-    }
-
-    return nullptr;
-}
-
-QSpinBox* findSpinBoxByToolTip(QWidget& root, const QString& tooltip) {
-    const QString wanted = tooltip;
-    const auto spinBoxes = root.findChildren<QSpinBox*>();
-    for (QSpinBox* spinBox : spinBoxes) {
-        if (spinBox->toolTip() == wanted) {
-            return spinBox;
-        }
-    }
-
-    return nullptr;
-}
-
-QCheckBox* findCheckBoxByText(QWidget& root, const QString& text) {
-    const QString wanted = text;
-    const auto checkBoxes = root.findChildren<QCheckBox*>();
-    for (QCheckBox* checkBox : checkBoxes) {
-        if (checkBox->text() == wanted) {
-            return checkBox;
-        }
-    }
-
-    return nullptr;
-}
-
-QGroupBox* findGroupBoxByTitle(QWidget& root, const QString& title) {
-    const auto groups = root.findChildren<QGroupBox*>();
-    for (QGroupBox* group : groups) {
-        if (group->title() == title) {
-            return group;
-        }
-    }
-
-    return nullptr;
-}
-
-void removeTestSettings() {
-    const QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
-    QDir().mkpath(configRoot);
-    QDir geckoDir(configRoot + "/gecko");
-    if (geckoDir.exists()) {
-        geckoDir.removeRecursively();
-    }
-    QDir().mkpath(configRoot + "/gecko");
-}
-
-std::shared_ptr<geck::Pro> makeItemPro(geck::ItemType itemType) {
-    auto pro = std::make_shared<geck::Pro>(std::filesystem::path("test.pro"));
-    pro->header.PID = 0;
-    pro->setObjectSubtypeId(static_cast<unsigned>(itemType));
-    return pro;
-}
-
-std::shared_ptr<geck::Pro> makeSceneryPro(geck::SceneryType sceneryType) {
-    auto pro = std::make_shared<geck::Pro>(std::filesystem::path("test.pro"));
-    pro->header.PID = static_cast<int32_t>(geck::ProtoId(geck::ObjectType::Scenery, 0).pid());
-    pro->setObjectSubtypeId(static_cast<unsigned>(sceneryType));
-    return pro;
-}
-
-std::shared_ptr<geck::Pro> makeCritterPro() {
-    auto pro = std::make_shared<geck::Pro>(std::filesystem::path("test.pro"));
-    pro->header.PID = static_cast<int32_t>(geck::ProtoId(geck::ObjectType::Critter, 0).pid());
-    return pro;
-}
-
-} // namespace
+namespace test = geck::test;
 
 TEST_CASE("Ammo widget uses caliber labels loaded from proto.msg", "[qt][pro]") {
-    ResourceDataScope resources;
-    resources.writeGameMessageFile("text/english/game/proto.msg", buildProtoMsg());
-    resources.mount();
+    test::DataTree data("pro-editor");
+    data.write("text/english/game/proto.msg", test::protoMsg());
+    auto& resources = data.mount();
 
-    geck::ProAmmoWidget widget(resources.resources());
-    auto pro = makeItemPro(geck::ItemType::Ammo);
+    geck::ProAmmoWidget widget(resources);
+    auto pro = test::makeItemPro(geck::ItemType::Ammo);
     pro->ammoData.caliber = geck::fallout::enumValue(geck::fallout::CaliberType::Mm10);
 
     widget.loadFromPro(pro);
 
-    auto* caliberCombo = widget.findChild<QComboBox*>();
+    auto* caliberCombo = test::findByToolTip<QComboBox>(widget, "Ammo caliber or energy cell type");
     REQUIRE(caliberCombo != nullptr);
     REQUIRE(caliberCombo->currentText() == "10mm");
 }
 
 TEST_CASE("Weapon widget preserves raw perk ids while using message-backed labels", "[qt][pro]") {
-    ResourceDataScope resources;
-    resources.writeGameMessageFile("text/english/game/proto.msg", buildProtoMsg());
-    resources.writeGameMessageFile("text/english/game/perk.msg", buildPerkMsg({
-                                                                     { geck::fallout::PerkId::WeaponLongRange, "Long Range" },
-                                                                     { geck::fallout::PerkId::WeaponAccurate, "Accurate" },
-                                                                     { geck::fallout::PerkId::WeaponPenetrate, "Penetrate" },
-                                                                     { geck::fallout::PerkId::WeaponKnockback, "Knockback" },
-                                                                     { geck::fallout::PerkId::WeaponScopeRange, "Scope Range" },
-                                                                     { geck::fallout::PerkId::WeaponFastReload, "Fast Reload" },
-                                                                     { geck::fallout::PerkId::WeaponNightSight, "Night Sight" },
-                                                                     { geck::fallout::PerkId::WeaponFlameboy, "Flameboy" },
-                                                                     { geck::fallout::PerkId::WeaponEnhancedKnockout, "Enhanced Knockout" },
-                                                                 }));
-    resources.mount();
+    test::DataTree data("pro-editor");
+    data.write("text/english/game/proto.msg", test::protoMsg());
+    data.write("text/english/game/perk.msg", test::perkMsg({
+                                                 { geck::fallout::PerkId::WeaponLongRange, "Long Range" },
+                                                 { geck::fallout::PerkId::WeaponAccurate, "Accurate" },
+                                                 { geck::fallout::PerkId::WeaponPenetrate, "Penetrate" },
+                                                 { geck::fallout::PerkId::WeaponKnockback, "Knockback" },
+                                                 { geck::fallout::PerkId::WeaponScopeRange, "Scope Range" },
+                                                 { geck::fallout::PerkId::WeaponFastReload, "Fast Reload" },
+                                                 { geck::fallout::PerkId::WeaponNightSight, "Night Sight" },
+                                                 { geck::fallout::PerkId::WeaponFlameboy, "Flameboy" },
+                                                 { geck::fallout::PerkId::WeaponEnhancedKnockout, "Enhanced Knockout" },
+                                             }));
+    auto& resources = data.mount();
 
-    geck::ProWeaponWidget widget(resources.resources());
-    auto pro = makeItemPro(geck::ItemType::Weapon);
+    geck::ProWeaponWidget widget(resources);
+    auto pro = test::makeItemPro(geck::ItemType::Weapon);
     pro->weaponData.damageType = geck::fallout::enumValue(geck::fallout::DamageType::Normal);
     pro->weaponData.ammoType = geck::fallout::enumValue(geck::fallout::CaliberType::Mm10);
     pro->weaponData.perk = geck::fallout::enumValue(geck::fallout::PerkId::WeaponNightSight);
 
     widget.loadFromPro(pro);
 
-    auto* perkCombo = findComboBoxByToolTip(widget, "Special perk associated with weapon");
-    auto* ammoTypeCombo = findComboBoxByToolTip(widget, "Ammunition type");
+    auto* perkCombo = test::findByToolTip<QComboBox>(widget, "Special perk associated with weapon");
+    auto* ammoTypeCombo = test::findByToolTip<QComboBox>(widget, "Ammunition type");
 
     REQUIRE(perkCombo != nullptr);
     REQUIRE(ammoTypeCombo != nullptr);
@@ -437,26 +137,26 @@ TEST_CASE("Weapon widget preserves raw perk ids while using message-backed label
 }
 
 TEST_CASE("Weapon energy checkbox edits sfall's extended-flags bit without clobbering the others", "[qt][pro]") {
-    ResourceDataScope resources;
-    resources.writeGameMessageFile("text/english/game/proto.msg", buildProtoMsg());
-    resources.writeGameMessageFile("text/english/game/perk.msg", buildPerkMsg({}, true));
-    resources.mount();
+    test::DataTree data("pro-editor");
+    data.write("text/english/game/proto.msg", test::protoMsg());
+    data.write("text/english/game/perk.msg", test::perkMsg({}, true));
+    auto& resources = data.mount();
 
     using enum geck::Pro::ExtendedItemFlags;
     const auto bit = [](geck::Pro::ExtendedItemFlags flag) { return static_cast<uint32_t>(flag); };
     const uint32_t kept = bit(BIG_GUN) | bit(TWO_HANDED) | bit(ITEM_HIDDEN);
 
-    auto pro = makeItemPro(geck::ItemType::Weapon);
+    auto pro = test::makeItemPro(geck::ItemType::Weapon);
     pro->commonItemData.flagsExt = kept | bit(ENERGY) | 0x76u; // attack modes 6 and 7
 
     // ProEditorDialog::saveProData order: the common fields first, then the type tab.
-    geck::ProCommonFieldsWidget common(resources.resources());
-    geck::ProWeaponWidget weapon(resources.resources());
+    geck::ProCommonFieldsWidget common(resources);
+    geck::ProWeaponWidget weapon(resources);
     common.loadFromPro(pro);
     weapon.loadFromPro(pro);
 
-    auto* energyCheck = findCheckBoxByText(weapon, "Energy weapon (sfall)");
-    auto* primaryMode = findSpinBoxByToolTip(common, "Primary attack animation index (0-15)");
+    auto* energyCheck = test::findButton(weapon, "Energy weapon (sfall)");
+    auto* primaryMode = test::findByToolTip<QSpinBox>(common, "Primary attack animation index (0-15)");
     REQUIRE(energyCheck != nullptr);
     REQUIRE(primaryMode != nullptr);
     REQUIRE(energyCheck->isChecked());
@@ -474,15 +174,15 @@ TEST_CASE("Weapon energy checkbox edits sfall's extended-flags bit without clobb
 }
 
 TEST_CASE("Drug widget loads stat and perk options from message files", "[qt][pro]") {
-    ResourceDataScope resources;
-    resources.writeGameMessageFile("text/english/game/stat.msg", buildStatMsg());
-    resources.writeGameMessageFile("text/english/game/perk.msg",
-        buildPerkMsg({ { geck::fallout::PerkId::JetAddiction, "Jet Addiction" } }, true));
-    resources.mount();
+    test::DataTree data("pro-editor");
+    data.write("text/english/game/stat.msg", test::statMsg());
+    data.write("text/english/game/perk.msg",
+        test::perkMsg({ { geck::fallout::PerkId::JetAddiction, "Jet Addiction" } }, true));
+    auto& resources = data.mount();
 
-    geck::ProDrugWidget widget(resources.resources());
-    auto* statCombo = findComboBoxByToolTip(widget, "Stat 1 to modify (None=no effect)");
-    auto* perkCombo = findComboBoxByToolTip(widget, "Perk applied when addicted");
+    geck::ProDrugWidget widget(resources);
+    auto* statCombo = test::findByToolTip<QComboBox>(widget, "Stat 1 to modify (None=no effect)");
+    auto* perkCombo = test::findByToolTip<QComboBox>(widget, "Perk applied when addicted");
 
     REQUIRE(statCombo != nullptr);
     REQUIRE(perkCombo != nullptr);
@@ -497,15 +197,15 @@ TEST_CASE("Drug widget loads stat and perk options from message files", "[qt][pr
 }
 
 TEST_CASE("Drug widget round-trips stat ids through value mapping, including None", "[qt][pro]") {
-    ResourceDataScope resources;
-    resources.writeGameMessageFile("text/english/game/stat.msg", buildStatMsg());
-    resources.writeGameMessageFile("text/english/game/perk.msg",
-        buildPerkMsg({ { geck::fallout::PerkId::JetAddiction, "Jet Addiction" } }, true));
-    resources.mount();
+    test::DataTree data("pro-editor");
+    data.write("text/english/game/stat.msg", test::statMsg());
+    data.write("text/english/game/perk.msg",
+        test::perkMsg({ { geck::fallout::PerkId::JetAddiction, "Jet Addiction" } }, true));
+    auto& resources = data.mount();
 
-    geck::ProDrugWidget widget(resources.resources());
+    geck::ProDrugWidget widget(resources);
 
-    auto pro = makeItemPro(geck::ItemType::Drug);
+    auto pro = test::makeItemPro(geck::ItemType::Drug);
     // stat0 = Perception, stat1 = "no stat" (0xFFFFFFFF sentinel), stat2 = Strength.
     pro->drugData.stat0 = static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Perception));
     pro->drugData.stat1 = 0xFFFFFFFFu;
@@ -513,15 +213,15 @@ TEST_CASE("Drug widget round-trips stat ids through value mapping, including Non
 
     widget.loadFromPro(pro);
 
-    auto* stat0Combo = findComboBoxByToolTip(widget, "Stat 1 to modify (None=no effect)");
-    auto* stat1Combo = findComboBoxByToolTip(widget, "Stat 2 to modify (None=no effect)");
+    auto* stat0Combo = test::findByToolTip<QComboBox>(widget, "Stat 1 to modify (None=no effect)");
+    auto* stat1Combo = test::findByToolTip<QComboBox>(widget, "Stat 2 to modify (None=no effect)");
     REQUIRE(stat0Combo != nullptr);
     REQUIRE(stat1Combo != nullptr);
     // Selection is bound to the engine stat id (itemData), not the list position.
     REQUIRE(stat0Combo->currentData().toInt() == geck::fallout::enumValue(geck::fallout::StatId::Perception));
     REQUIRE(stat1Combo->currentText() == "None");
 
-    auto out = makeItemPro(geck::ItemType::Drug);
+    auto out = test::makeItemPro(geck::ItemType::Drug);
     widget.saveToPro(out);
 
     REQUIRE(out->drugData.stat0 == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Perception)));
@@ -530,12 +230,12 @@ TEST_CASE("Drug widget round-trips stat ids through value mapping, including Non
 }
 
 TEST_CASE("Scenery widget switches subtype editors and preserves subtype values", "[qt][pro]") {
-    ResourceDataScope resources;
-    resources.writeGameMessageFile("text/english/game/proto.msg", buildProtoMsg());
-    resources.mount();
+    test::DataTree data("pro-editor");
+    data.write("text/english/game/proto.msg", test::protoMsg());
+    auto& resources = data.mount();
 
-    geck::ProSceneryWidget widget(resources.resources());
-    auto pro = makeSceneryPro(geck::SceneryType::Elevator);
+    geck::ProSceneryWidget widget(resources);
+    auto pro = test::makeSceneryPro(geck::SceneryType::Elevator);
     pro->sceneryData.materialId = geck::fallout::enumValue(geck::fallout::MaterialType::Metal);
     pro->sceneryData.soundId = 42;
     pro->sceneryData.elevatorData.elevatorType = 7;
@@ -543,9 +243,12 @@ TEST_CASE("Scenery widget switches subtype editors and preserves subtype values"
 
     widget.loadFromPro(pro);
 
-    auto* typeCombo = findComboBoxByToolTip(widget, "Scenery subtype");
-    auto* doorGroup = findGroupBoxByTitle(widget, "Door Properties");
-    auto* elevatorGroup = findGroupBoxByTitle(widget, "Elevator Properties");
+    auto* typeCombo = test::findByToolTip<QComboBox>(widget, "Scenery subtype");
+    const auto groupTitled = [&widget](const QString& title) {
+        return test::findChildWhere<QGroupBox>(widget, [&title](const QGroupBox& group) { return group.title() == title; });
+    };
+    auto* doorGroup = groupTitled("Door Properties");
+    auto* elevatorGroup = groupTitled("Elevator Properties");
 
     REQUIRE(typeCombo != nullptr);
     REQUIRE(doorGroup != nullptr);
@@ -570,13 +273,13 @@ TEST_CASE("Scenery widget switches subtype editors and preserves subtype values"
 }
 
 TEST_CASE("Critter widget preserves live critter fields after extraction", "[qt][pro]") {
-    ResourceDataScope resources;
-    resources.writeGameMessageFile("text/english/game/proto.msg", buildProtoMsg());
-    resources.writeGameMessageFile("text/english/game/stat.msg", buildStatMsg());
-    resources.mount();
+    test::DataTree data("pro-editor");
+    data.write("text/english/game/proto.msg", test::protoMsg());
+    data.write("text/english/game/stat.msg", test::statMsg());
+    auto& resources = data.mount();
 
-    geck::ProCritterWidget widget(resources.resources());
-    auto pro = makeCritterPro();
+    geck::ProCritterWidget widget(resources);
+    auto pro = test::makeCritterPro();
     pro->critterData.flags = geck::Pro::setFlag(0, geck::Pro::CritterFlags::CRITTER_BARTER);
     pro->critterData.aiPacket = 12;
     pro->critterData.teamNumber = 3;
@@ -590,11 +293,11 @@ TEST_CASE("Critter widget preserves live critter fields after extraction", "[qt]
 
     widget.loadFromPro(pro);
 
-    auto* aiPacketSpin = findSpinBoxByToolTip(widget, "AI packet number for critter behavior");
-    auto* genderCombo = findComboBoxByToolTip(widget, "Critter gender");
-    auto* bodyTypeCombo = findComboBoxByToolTip(widget, "Body type for animations");
-    auto* barterCheck = findCheckBoxByText(widget, "Can Barter");
-    auto* noDropCheck = findCheckBoxByText(widget, "No Drop");
+    auto* aiPacketSpin = test::findByToolTip<QSpinBox>(widget, "AI packet number for critter behavior");
+    auto* genderCombo = test::findByToolTip<QComboBox>(widget, "Critter gender");
+    auto* bodyTypeCombo = test::findByToolTip<QComboBox>(widget, "Body type for animations");
+    auto* barterCheck = test::findButton(widget, "Can Barter");
+    auto* noDropCheck = test::findButton(widget, "No Drop");
 
     REQUIRE(aiPacketSpin != nullptr);
     REQUIRE(genderCombo != nullptr);
@@ -622,20 +325,20 @@ TEST_CASE("Critter widget preserves live critter fields after extraction", "[qt]
 }
 
 TEST_CASE("Info panel derives display state from PRO data", "[qt][pro]") {
-    ResourceDataScope resources;
-    resources.writeGameMessageFile("text/english/game/pro_item.msg",
-        messageLine(200, "10mm JHP")
-            + messageLine(201, "Armor-piercing ammo for pistols"));
-    resources.writeGameMessageFile("proto/items/items.lst", "00000030.pro\n");
-    resources.mount();
+    test::DataTree data("pro-editor");
+    data.write("text/english/game/pro_item.msg",
+        test::msgLine(200, "10mm JHP")
+            + test::msgLine(201, "Armor-piercing ammo for pistols"));
+    data.write("proto/items/items.lst", "00000030.pro\n");
+    auto& resources = data.mount();
 
     geck::ProInfoPanelWidget widget;
-    auto pro = makeItemPro(geck::ItemType::Ammo);
+    auto pro = test::makeItemPro(geck::ItemType::Ammo);
     pro->header.PID = 0x00000001;
     pro->header.message_id = 200;
 
     widget.setPid(static_cast<int>(pro->header.PID));
-    widget.refreshFromPro(resources.resources(), pro, static_cast<uint32_t>(widget.pid()));
+    widget.refreshFromPro(resources, pro, static_cast<uint32_t>(widget.pid()));
 
     REQUIRE(widget.nameText() == "10mm JHP");
     REQUIRE(widget.filenameText() == "00000030.pro");
@@ -658,15 +361,15 @@ TEST_CASE("ScriptSelectorDialog shows index/filename/name/comment columns and re
     // index / filename / name / comment.
     int dudeRow = -1;
     for (int row = 0; row < table->rowCount(); ++row) {
-        if (requireItem(*table, row, 1).text() == "obj_dude.int") {
+        if (test::requireItem(*table, row, 1).text() == "obj_dude.int") {
             dudeRow = row;
             break;
         }
     }
     REQUIRE(dudeRow >= 0);
-    CHECK(requireItem(*table, dudeRow, 0).data(Qt::DisplayRole).toInt() == 0);
-    CHECK(requireItem(*table, dudeRow, 2).text() == "The Chosen One");
-    CHECK(requireItem(*table, dudeRow, 3).text() == "Player script."); // scripts.lst comment column
+    CHECK(test::requireItem(*table, dudeRow, 0).data(Qt::DisplayRole).toInt() == 0);
+    CHECK(test::requireItem(*table, dudeRow, 2).text() == "The Chosen One");
+    CHECK(test::requireItem(*table, dudeRow, 3).text() == "Player script."); // scripts.lst comment column
 
     // currentIndex == 2 is preselected; selectedIndex returns the program index, not the row.
     CHECK(dialog.selectedIndex() == 2);
@@ -683,13 +386,9 @@ TEST_CASE("EditorWidget::canSaveInPlace accepts only real on-disk files, not VFS
     CHECK_FALSE(geck::EditorWidget::canSaveInPlace(std::filesystem::path{}));
 
     // A real, existing file can be saved straight back.
-    QTemporaryDir dir;
-    REQUIRE(dir.isValid());
-    const std::filesystem::path real = std::filesystem::path(dir.path().toStdString()) / "saved.map";
-    {
-        std::ofstream out(real);
-        out << "map";
-    }
+    const test::TempDir dir("save-in-place");
+    const std::filesystem::path real = dir.path() / "saved.map";
+    test::writeFile(real, "map");
     CHECK(geck::EditorWidget::canSaveInPlace(real));
 }
 
@@ -697,10 +396,11 @@ TEST_CASE("CritterPropertiesDialog names the AI packet from ai.txt and falls bac
     geck::AiTxt aiTxt;
     aiTxt.add(geck::AiPacket{ .packetNum = 5, .name = "Coward" });
     aiTxt.add(geck::AiPacket{ .packetNum = 21, .name = "Berserker" });
+    const QString aiPacketTip = "AI behaviour packet: pick by name (from the game's ai.txt) or type a packet number.";
 
     SECTION("current packet is in ai.txt -> shown by name, value round-trips") {
         geck::CritterPropertiesDialog dialog(21, 1, 100, 0, 0, aiTxt);
-        auto* combo = dialog.findChild<QComboBox*>();
+        auto* combo = test::findByToolTip<QComboBox>(dialog, aiPacketTip);
         REQUIRE(combo != nullptr);
         CHECK(combo->count() == 2); // the two packets, no raw fallback entry
         CHECK(combo->currentText().contains("Berserker"));
@@ -709,7 +409,7 @@ TEST_CASE("CritterPropertiesDialog names the AI packet from ai.txt and falls bac
 
     SECTION("current packet not in ai.txt -> a raw fallback entry preserves the value") {
         geck::CritterPropertiesDialog dialog(99, 1, 100, 0, 0, aiTxt);
-        auto* combo = dialog.findChild<QComboBox*>();
+        auto* combo = test::findByToolTip<QComboBox>(dialog, aiPacketTip);
         REQUIRE(combo != nullptr);
         CHECK(combo->count() == 3); // two packets + a raw "Packet 99" entry
         CHECK(combo->currentText().contains("99"));
@@ -718,7 +418,7 @@ TEST_CASE("CritterPropertiesDialog names the AI packet from ai.txt and falls bac
 
     SECTION("an arbitrary number can be typed into the editable combo") {
         geck::CritterPropertiesDialog dialog(5, 1, 100, 0, 0, aiTxt);
-        auto* combo = dialog.findChild<QComboBox*>();
+        auto* combo = test::findByToolTip<QComboBox>(dialog, aiPacketTip);
         REQUIRE(combo != nullptr);
         REQUIRE(combo->isEditable());
         combo->setCurrentText("150"); // not a named packet -> a freely-typed raw number
@@ -727,11 +427,11 @@ TEST_CASE("CritterPropertiesDialog names the AI packet from ai.txt and falls bac
 }
 
 TEST_CASE("ItemSelectorDialog lists items.lst entries by their item PID", "[qt][inventory]") {
-    ResourceDataScope resources;
-    resources.writeGameMessageFile("proto/items/items.lst", "aaa.pro\nbbb.pro\nccc.pro\n");
-    resources.mount();
+    test::DataTree data("item-selector");
+    data.write("proto/items/items.lst", "aaa.pro\nbbb.pro\nccc.pro\n");
+    auto& resources = data.mount();
 
-    geck::ItemSelectorDialog dialog(resources.resources());
+    geck::ItemSelectorDialog dialog(resources);
     auto* tree = dialog.findChild<QTreeWidget*>();
     REQUIRE(tree != nullptr);
     REQUIRE(tree->topLevelItemCount() == 3);
@@ -765,7 +465,7 @@ TEST_CASE("ItemSelectorDialog lists items.lst entries by their item PID", "[qt][
 }
 
 TEST_CASE("Preview panel uses dual item previews and a single object preview", "[qt][pro]") {
-    auto itemPro = makeItemPro(geck::ItemType::Ammo);
+    auto itemPro = test::makeItemPro(geck::ItemType::Ammo);
     itemPro->header.FID = 123;
     itemPro->commonItemData.inventoryFID = 456;
 
@@ -774,7 +474,7 @@ TEST_CASE("Preview panel uses dual item previews and a single object preview", "
     const auto itemPreviews = itemPreview.findChildren<geck::ObjectPreviewWidget*>();
     REQUIRE(itemPreviews.size() == 2);
 
-    auto critterPro = makeCritterPro();
+    auto critterPro = test::makeCritterPro();
     critterPro->header.FID = 789;
 
     geck::ProPreviewPanelWidget critterPreview(resources, critterPro);
@@ -783,19 +483,15 @@ TEST_CASE("Preview panel uses dual item previews and a single object preview", "
 }
 
 TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][mainwindow]") {
-    removeTestSettings();
-
-    auto resources = std::make_shared<geck::resource::GameResources>();
-    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
-    window.show();
-    REQUIRE(QTest::qWaitForWindowExposed(&window));
+    test::MainWindowFixture fixture;
+    geck::MainWindow& window = fixture.window;
 
     auto* mapInfoDock = window.findChild<QDockWidget*>("MapInfoDock");
     auto* selectionDock = window.findChild<QDockWidget*>("SelectionDock");
     auto* tilePaletteDock = window.findChild<QDockWidget*>("TilePaletteDock");
     auto* objectPaletteDock = window.findChild<QDockWidget*>("ObjectPaletteDock");
     auto* fileBrowserDock = window.findChild<QDockWidget*>("FileBrowserDock");
-    auto* selectionAction = findAction(window, "Selection");
+    auto* selectionAction = fixture.menuAction("Selection");
 
     REQUIRE(mapInfoDock != nullptr);
     REQUIRE(selectionDock != nullptr);
@@ -828,12 +524,7 @@ TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][main
 // (ui/input/ActionSpec.cpp). Alt+digit rather than Ctrl+digit so Ctrl+1..3 stays free for the
 // elevations and a panel's filter box never swallows the key.
 TEST_CASE("Panel menu actions carry their Alt shortcuts", "[qt][mainwindow][keys]") {
-    removeTestSettings();
-
-    auto resources = std::make_shared<geck::resource::GameResources>();
-    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
-    window.show();
-    REQUIRE(QTest::qWaitForWindowExposed(&window));
+    test::MainWindowFixture fixture;
 
     struct ExpectedShortcut {
         const char* actionText;
@@ -851,7 +542,7 @@ TEST_CASE("Panel menu actions carry their Alt shortcuts", "[qt][mainwindow][keys
     } };
 
     for (const ExpectedShortcut& entry : expected) {
-        QAction* action = findAction(window, entry.actionText);
+        QAction* action = fixture.menuAction(entry.actionText);
         REQUIRE(action != nullptr);
         CHECK(action->shortcut() == entry.keys);
     }
@@ -861,16 +552,12 @@ TEST_CASE("Panel menu actions carry their Alt shortcuts", "[qt][mainwindow][keys
 // visible may be sitting behind another tab. Toggling would take it away exactly when the user asked
 // to see it.
 TEST_CASE("A panel action raises a tabbed-behind dock instead of hiding it", "[qt][mainwindow][keys]") {
-    removeTestSettings();
-
-    auto resources = std::make_shared<geck::resource::GameResources>();
-    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
-    window.show();
-    REQUIRE(QTest::qWaitForWindowExposed(&window));
+    test::MainWindowFixture fixture;
+    geck::MainWindow& window = fixture.window;
 
     auto* mapInfoDock = window.findChild<QDockWidget*>("MapInfoDock");
     auto* selectionDock = window.findChild<QDockWidget*>("SelectionDock");
-    auto* selectionAction = findAction(window, "Selection");
+    auto* selectionAction = fixture.menuAction("Selection");
     REQUIRE(mapInfoDock != nullptr);
     REQUIRE(selectionDock != nullptr);
     REQUIRE(selectionAction != nullptr);
@@ -901,14 +588,10 @@ TEST_CASE("A panel action raises a tabbed-behind dock instead of hiding it", "[q
 // and triggering it with nothing open must be a safe no-op (no editor spawned, no crash) — the
 // handler guards on hasActiveMap() before touching the teardown path.
 TEST_CASE("File menu offers Close Map, and closing with no map open is a safe no-op", "[qt][mainwindow]") {
-    removeTestSettings();
+    test::MainWindowFixture fixture;
+    geck::MainWindow& window = fixture.window;
 
-    auto resources = std::make_shared<geck::resource::GameResources>();
-    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
-    window.show();
-    REQUIRE(QTest::qWaitForWindowExposed(&window));
-
-    QAction* closeMap = findAction(window, "Close Map");
+    QAction* closeMap = test::findActionByText(window, "Close Map");
     REQUIRE(closeMap != nullptr);
     CHECK(closeMap->shortcut() == QKeySequence(QKeySequence::Close));
 
@@ -937,31 +620,27 @@ TEST_CASE("DataPathsWidget shows highest priority on top and preserves stored or
     auto* table = widget.findChild<QTableWidget*>();
     REQUIRE(table != nullptr);
     REQUIRE(table->rowCount() == 3);
-    CHECK(requireItem(*table, 0, 1).text().toStdString() == "/data/mymod.dat"); // top row = highest priority
-    CHECK(requireItem(*table, 2, 1).text().toStdString() == "/data/base.dat");  // bottom row = lowest
+    CHECK(test::requireItem(*table, 0, 1).text().toStdString() == "/data/mymod.dat"); // top row = highest priority
+    CHECK(test::requireItem(*table, 2, 1).text().toStdString() == "/data/base.dat");  // bottom row = lowest
     // Priority counts from 1 at the top. The cell is right-aligned with the marker arrow leading,
     // so the number is what the text ends with.
-    CHECK(requireItem(*table, 0, 0).text().endsWith("1"));
-    CHECK(requireItem(*table, 2, 0).text().endsWith("3"));
+    CHECK(test::requireItem(*table, 0, 0).text().endsWith("1"));
+    CHECK(test::requireItem(*table, 2, 0).text().endsWith("3"));
 
     // Every row can be reordered: priority is the user's call. The built-in resources folder used
     // to block this - a row directly above it had Move Down greyed out, which stranded any path
     // added after it, since new paths land on top.
     table->setCurrentCell(0, 1);
-    for (QPushButton* b : widget.findChildren<QPushButton*>()) {
-        if (b->text() == "Move Down") {
-            CHECK(b->isEnabled());
-            b->click();
-        }
-    }
-    CHECK(requireItem(*table, 1, 1).text().toStdString() == "/data/mymod.dat"); // moved one step down
-    CHECK(requireItem(*table, 0, 1).text().toStdString() == "/data/patch.dat");
+    QAbstractButton* moveDown = test::findButton(widget, "Move Down");
+    REQUIRE(moveDown != nullptr);
+    CHECK(moveDown->isEnabled());
+    moveDown->click();
+    CHECK(test::requireItem(*table, 1, 1).text().toStdString() == "/data/mymod.dat"); // moved one step down
+    CHECK(test::requireItem(*table, 0, 1).text().toStdString() == "/data/patch.dat");
 }
 
 #ifdef GECK_SCRIPTING_ENABLED
 #include "ui/panels/ScriptConsoleWidget.h"
-#include <QPlainTextEdit>
-#include <QPushButton>
 
 TEST_CASE("Script console setSource loads the editor and feeds Run", "[qt][scripting]") {
     geck::ScriptConsoleWidget console;
@@ -975,44 +654,30 @@ TEST_CASE("Script console setSource loads the editor and feeds Run", "[qt][scrip
         [&runSource](const QString& s) { runSource = s; });
 
     // Pressing Run hands back exactly what setSource put in the editor.
-    const auto buttons = console.findChildren<QPushButton*>();
-    REQUIRE_FALSE(buttons.isEmpty());
-    buttons.first()->click();
+    QAbstractButton* run = test::findButton(console, "Run");
+    REQUIRE(run != nullptr);
+    run->click();
     CHECK(runSource == src);
 }
 #endif
 
 // Phase A of the map-info editor work: the Map Info panel resolves the current map's friendly names
 // (maps.txt lookup_name + the per-elevation map.msg display name) read-only, reusing MapNameResolver.
-namespace {
-
-// A map loaded from `mapName`, with an in-memory MapFile. The header's 16-byte filename field is
-// upper-cased + NUL-padded like real .map files (e.g. "ARTEMPLE.MAP\0\0\0\0"), which does NOT match
-// maps.txt — so the panel must resolve by the file basename (map->filename()), not header.filename.
-std::unique_ptr<geck::Map> makeMap(const std::string& mapName, int elevation = 0) {
-    auto map = std::make_unique<geck::Map>(mapName);
-    auto mapFile = std::make_unique<geck::Map::MapFile>(geck::Map::createEmptyMapFile());
-    QString upper = QString::fromStdString(mapName).toUpper();
-    mapFile->header.filename = upper.toStdString() + std::string(4, '\0'); // mismatched on purpose
-    mapFile->header.player_default_elevation = static_cast<uint32_t>(elevation);
-    map->setMapFile(std::move(mapFile));
-    return map;
-}
-
-} // namespace
+// test::mapOf leaves the header's own filename field ("newmap") unlike the file's, so the panel must
+// resolve by the file basename (map->filename()), not header.filename.
 
 TEST_CASE("MapInfoPanel names the map's own script from scripts.lst and scrname.msg", "[qt][mapinfo]") {
-    ResourceDataScope data;
-    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\nzclrat.int      ; rat\n");
+    test::DataTree data("ui-data");
+    data.write("scripts/scripts.lst", "obj_dude.int    ; player\nzclrat.int      ; rat\n");
     // scriptDisplayName(programIndex 0) reads scrname.msg[0 + 101] = 101.
-    data.writeGameMessageFile("text/english/game/scrname.msg", messageLine(101, QStringLiteral("The Chosen One")));
-    data.mount();
+    data.write("text/english/game/scrname.msg", test::msgLine(101, "The Chosen One"));
+    auto& resources = data.mount();
 
     auto settings = std::make_shared<geck::Settings>();
-    auto map = makeMap("testmap.map");
+    auto map = test::mapOf("testmap.map");
     map->getMapFile().header.script_id = 1; // 1-based -> scripts.lst index 0 (obj_dude.int)
 
-    geck::MapInfoPanel panel(data.resources(), settings);
+    geck::MapInfoPanel panel(resources, settings);
     panel.setMap(map.get());
 
     auto* scriptEdit = panel.findChild<QLineEdit*>("mapScript");
@@ -1022,16 +687,16 @@ TEST_CASE("MapInfoPanel names the map's own script from scripts.lst and scrname.
 }
 
 TEST_CASE("MapInfoPanel shows resolved map.msg display name and maps.txt lookup name", "[qt][mapinfo]") {
-    ResourceDataScope data;
-    data.writeGameMessageFile("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
+    test::DataTree data("ui-data");
+    data.write("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
     // displayName(index 0, elevation 0) reads map.msg[0*3 + 0 + 200] = 200.
-    data.writeGameMessageFile("text/english/game/map.msg", messageLine(200, QStringLiteral("Test Display")));
-    data.mount();
+    data.write("text/english/game/map.msg", test::msgLine(200, "Test Display"));
+    auto& resources = data.mount();
 
     auto settings = std::make_shared<geck::Settings>();
-    auto map = makeMap("testmap.map");
+    auto map = test::mapOf("testmap.map");
 
-    geck::MapInfoPanel panel(data.resources(), settings);
+    geck::MapInfoPanel panel(resources, settings);
     panel.setMap(map.get());
 
     auto* displayEdit = panel.findChild<QLineEdit*>("mapDisplayName");
@@ -1042,29 +707,28 @@ TEST_CASE("MapInfoPanel shows resolved map.msg display name and maps.txt lookup 
     CHECK(lookupEdit->text() == QStringLiteral("Test Town"));
 
     // A map not listed in maps.txt resolves to a placeholder (read-only), not a crash.
-    auto unknown = makeMap("nosuch.map");
+    auto unknown = test::mapOf("nosuch.map");
     panel.setMap(unknown.get());
     CHECK(lookupEdit->text() == QStringLiteral("(not in maps.txt)"));
     CHECK(lookupEdit->isReadOnly());
 }
 
 TEST_CASE("MapInfoPanel persists edited map names to a writable Data Path and reflects them", "[qt][mapinfo]") {
-    ResourceDataScope data;
-    data.writeGameMessageFile("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
-    data.writeGameMessageFile("text/english/game/map.msg", messageLine(200, QStringLiteral("Test Display")));
-    data.mount();
+    test::DataTree data("ui-data");
+    data.write("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
+    data.write("text/english/game/map.msg", test::msgLine(200, "Test Display"));
+    auto& resources = data.mount();
 
     // A writable folder, mounted after the source so its edited copy shadows the source.
-    QTemporaryDir writableDir;
-    REQUIRE(writableDir.isValid());
-    const std::filesystem::path writableRoot = writableDir.path().toStdString();
-    data.resources().files().addDataPath(writableRoot.string());
+    const test::TempDir writableDir("writable");
+    const std::filesystem::path& writableRoot = writableDir.path();
+    resources.files().addDataPath(writableRoot);
 
     auto settings = std::make_shared<geck::Settings>();
     settings->setDataPaths({ writableRoot }); // the writable folder IS the visible Data Path edits go to
 
-    auto map = makeMap("testmap.map");
-    geck::MapInfoPanel panel(data.resources(), settings);
+    auto map = test::mapOf("testmap.map");
+    geck::MapInfoPanel panel(resources, settings);
     panel.setMap(map.get());
 
     auto* lookupEdit = panel.findChild<QLineEdit*>("mapLookupName");
@@ -1103,15 +767,15 @@ TEST_CASE("MapInfoPanel persists edited map names to a writable Data Path and re
 }
 
 TEST_CASE("MapInfoPanel hints to add a writable Data Path when none is configured", "[qt][mapinfo]") {
-    ResourceDataScope data;
-    data.writeGameMessageFile("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
-    data.writeGameMessageFile("text/english/game/map.msg", messageLine(200, QStringLiteral("Test Display")));
-    data.mount();
+    test::DataTree data("ui-data");
+    data.write("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
+    data.write("text/english/game/map.msg", test::msgLine(200, "Test Display"));
+    auto& resources = data.mount();
 
     auto settings = std::make_shared<geck::Settings>(); // no writable folder in the Data Paths
 
-    auto map = makeMap("testmap.map");
-    geck::MapInfoPanel panel(data.resources(), settings);
+    auto map = test::mapOf("testmap.map");
+    geck::MapInfoPanel panel(resources, settings);
     panel.setMap(map.get());
 
     auto* lookupEdit = panel.findChild<QLineEdit*>("mapLookupName");
@@ -1132,20 +796,19 @@ TEST_CASE("MapInfoPanel hints to add a writable Data Path when none is configure
 namespace {
 
 struct ExitGridFixture {
-    ResourceDataScope data;
+    test::DataTree data{ "exit-grid-maps" };
     std::unique_ptr<geck::resource::MapNameResolver> names;
 
     ExitGridFixture() {
         // Map 0 -> klamall.map, Map 1 -> arcaves.map; sorted by filename, arcaves precedes klamall.
-        data.writeGameMessageFile("data/maps.txt",
+        data.write("data/maps.txt",
             "[Map 0]\nlookup_name=Klamath\nmap_name=klamall\n"
             "[Map 1]\nlookup_name=Caves\nmap_name=arcaves\n"
             "[Map -1]\nlookup_name=Sentinel\nmap_name=ignored\n");
         // displayName(index, 0) reads map.msg[index*3 + 200]: Map 0 -> 200, Map 1 -> 203.
-        data.writeGameMessageFile("text/english/game/map.msg",
-            messageLine(200, QStringLiteral("Klamath")) + messageLine(203, QStringLiteral("Arroyo Caves")));
-        data.mount();
-        names = std::make_unique<geck::resource::MapNameResolver>(data.resources());
+        data.write("text/english/game/map.msg",
+            test::msgLine(200, "Klamath") + test::msgLine(203, "Arroyo Caves"));
+        names = std::make_unique<geck::resource::MapNameResolver>(data.mount());
     }
 };
 
@@ -1233,13 +896,13 @@ TEST_CASE("ExitGridPropertiesDialog operates with no resolver and preserves the 
 }
 
 TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name", "[qt][scripts]") {
-    ResourceDataScope data;
-    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\nzclrat.int      ; rat\n");
+    test::DataTree data("ui-data");
+    data.write("scripts/scripts.lst", "obj_dude.int    ; player\nzclrat.int      ; rat\n");
     // scriptDisplayName(programIndex 0) reads scrname.msg[0 + 101] = 101.
-    data.writeGameMessageFile("text/english/game/scrname.msg", messageLine(101, QStringLiteral("The Chosen One")));
-    data.mount();
+    data.write("text/english/game/scrname.msg", test::msgLine(101, "The Chosen One"));
+    auto& resources = data.mount();
 
-    auto map = makeMap("testmap.map");
+    auto map = test::mapOf("testmap.map");
 
     // One CRITTER-section script (program index 0 -> obj_dude.int) owned by object 42, plus a second one
     // so the row count reflects every section's scripts.
@@ -1253,58 +916,33 @@ TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name"
     // (obj_dude.int) and is listed as a separate "Map" row.
     mapFile.header.script_id = 1;
 
-    geck::ScriptsPanel panel(data.resources());
+    geck::ScriptsPanel panel(resources);
     panel.setMap(map.get());
 
     auto* table = panel.findChild<QTableWidget*>("scriptsTable"); // the script list (not the local-vars table)
     REQUIRE(table != nullptr);
     CHECK(table->rowCount() == 3); // 2 section scripts + the map's own header script
 
-    // Find the row whose Script ID cell is 0 (sorting may reorder rows) and check its filename + name.
-    bool foundScriptZero = false;
-    for (int row = 0; row < table->rowCount(); ++row) {
-        const QTableWidgetItem* idItem = table->item(row, 1); // COL_SCRIPT_ID
-        REQUIRE(idItem != nullptr);
-        if (idItem->data(Qt::DisplayRole).toInt() == 0) {
-            foundScriptZero = true;
-            CHECK(requireItem(*table, row, 2).text() == QStringLiteral("obj_dude.int"));   // COL_FILENAME
-            CHECK(requireItem(*table, row, 3).text() == QStringLiteral("The Chosen One")); // COL_NAME
-        }
+    // Rows are found by their section (sorting may reorder them). The critter script (program index
+    // 0) and the map's own script (script_id 1 -> scripts.lst index 0) both resolve to obj_dude.int /
+    // "The Chosen One"; the map's is listed as a distinct "Map"-section row.
+    const auto sectionRow = [table](const QString& section) {
+        return test::findTableRow(*table, 0, [&section](const QTableWidgetItem& item) { return item.text() == section; }); // COL_SECTION
+    };
+    const int critterRow = sectionRow(QStringLiteral("Critter"));
+    const int mapRow = sectionRow(QStringLiteral("Map"));
+    REQUIRE(critterRow >= 0);
+    REQUIRE(mapRow >= 0);
+    for (const int row : { critterRow, mapRow }) {
+        CHECK(test::requireItem(*table, row, 1).data(Qt::DisplayRole).toInt() == 0);         // COL_SCRIPT_ID (0-based)
+        CHECK(test::requireItem(*table, row, 2).text() == QStringLiteral("obj_dude.int"));   // COL_FILENAME
+        CHECK(test::requireItem(*table, row, 3).text() == QStringLiteral("The Chosen One")); // COL_NAME
     }
-    CHECK(foundScriptZero);
-
-    // The map's own script appears as a distinct "Map"-section row resolving to obj_dude.int /
-    // "The Chosen One" (script_id 1 -> scripts.lst index 0).
-    bool foundMapRow = false;
-    for (int row = 0; row < table->rowCount(); ++row) {
-        const QTableWidgetItem* sectionItem = table->item(row, 0); // COL_SECTION
-        REQUIRE(sectionItem != nullptr);
-        if (sectionItem->text() == QStringLiteral("Map")) {
-            foundMapRow = true;
-            CHECK(requireItem(*table, row, 1).data(Qt::DisplayRole).toInt() == 0);         // COL_SCRIPT_ID (0-based)
-            CHECK(requireItem(*table, row, 2).text() == QStringLiteral("obj_dude.int"));   // COL_FILENAME
-            CHECK(requireItem(*table, row, 3).text() == QStringLiteral("The Chosen One")); // COL_NAME
-        }
-    }
-    CHECK(foundMapRow);
 
     // Double-clicking an object-owned row emits scriptObjectActivated carrying that row's SID (stored in
     // the COL_SCRIPT_ID UserRole); double-clicking the ownerless "Map" row emits nothing.
     QSignalSpy activatedSpy(&panel, &geck::ScriptsPanel::scriptObjectActivated);
-    int critterRow = -1;
-    int mapRow = -1;
-    qulonglong critterSid = 0;
-    for (int row = 0; row < table->rowCount(); ++row) {
-        const QString section = requireItem(*table, row, 0).text(); // COL_SECTION
-        if (section == QStringLiteral("Critter")) {
-            critterRow = row;
-            critterSid = requireItem(*table, row, 1).data(Qt::UserRole).toULongLong(); // COL_SCRIPT_ID
-        } else if (section == QStringLiteral("Map")) {
-            mapRow = row;
-        }
-    }
-    REQUIRE(critterRow >= 0);
-    REQUIRE(mapRow >= 0);
+    const qulonglong critterSid = test::requireItem(*table, critterRow, 1).data(Qt::UserRole).toULongLong(); // COL_SCRIPT_ID
     CHECK(critterSid != static_cast<qulonglong>(geck::MapScript::NONE)); // owned row carries a real SID
 
     Q_EMIT table->cellDoubleClicked(critterRow, 1);
@@ -1335,11 +973,11 @@ TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name"
 }
 
 TEST_CASE("ScriptsPanel shows the selected script's local variables", "[qt][scripts]") {
-    ResourceDataScope data;
-    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\n");
-    data.mount();
+    test::DataTree data("ui-data");
+    data.write("scripts/scripts.lst", "obj_dude.int    ; player\n");
+    auto& resources = data.mount();
 
-    auto map = makeMap("testmap.map");
+    auto map = test::mapOf("testmap.map");
     auto& mapFile = map->getMapFile();
 
     // A critter script whose two local variables sit at offset 0 in the map's flat LVAR array.
@@ -1349,7 +987,7 @@ TEST_CASE("ScriptsPanel shows the selected script's local variables", "[qt][scri
     mapFile.map_scripts[static_cast<int>(geck::MapScript::ScriptType::CRITTER)].push_back(script);
     mapFile.map_local_vars = { 111, 222 };
 
-    geck::ScriptsPanel panel(data.resources());
+    geck::ScriptsPanel panel(resources);
     panel.setMap(map.get());
 
     auto* scriptsTable = panel.findChild<QTableWidget*>("scriptsTable");
@@ -1361,18 +999,30 @@ TEST_CASE("ScriptsPanel shows the selected script's local variables", "[qt][scri
 
     scriptsTable->selectRow(0); // selecting the script reveals its local variables
     REQUIRE(lvarTable->rowCount() == 2);
-    CHECK(requireItem(*lvarTable, 0, 1).data(Qt::DisplayRole).toInt() == 111); // column 1 = Value
-    CHECK(requireItem(*lvarTable, 1, 1).data(Qt::DisplayRole).toInt() == 222);
+    CHECK(test::requireItem(*lvarTable, 0, 1).data(Qt::DisplayRole).toInt() == 111); // column 1 = Value
+    CHECK(test::requireItem(*lvarTable, 1, 1).data(Qt::DisplayRole).toInt() == 222);
 }
+
+namespace {
+
+// The Filename cell of the scripts-table row for `programIndex` (sorting may reorder rows), or nullptr.
+QTableWidgetItem* scriptFilenameCell(const QTableWidget& table, int programIndex) {
+    const int row = test::findTableRow(table, 1, [programIndex](const QTableWidgetItem& item) { // COL_SCRIPT_ID
+        return item.data(Qt::DisplayRole).toInt() == programIndex;
+    });
+    return row >= 0 ? table.item(row, 2) : nullptr; // COL_FILENAME
+}
+
+} // namespace
 
 // After the table fills, each script is linted (one per event-loop turn) and its rows get a marker:
 // the lint's findings, and a placed script whose local variable block overlaps another's.
 TEST_CASE("ScriptsPanel marks scripts the lint finds problems in", "[qt][scripts]") {
-    ResourceDataScope data;
-    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player # local_vars=4\nclean.int ; fine # local_vars=1\n");
-    data.mount();
+    test::DataTree data("ui-data");
+    data.write("scripts/scripts.lst", "obj_dude.int    ; player # local_vars=4\nclean.int ; fine # local_vars=1\n");
+    auto& resources = data.mount();
 
-    auto map = makeMap("testmap.map");
+    auto map = test::mapOf("testmap.map");
     auto& mapFile = map->getMapFile();
     auto dude = geck::MapScript::makeObjectScript(geck::MapScript::ScriptType::CRITTER, 0, 0, 42);
     dude.local_var_offset = 0; // 0-3
@@ -1383,7 +1033,7 @@ TEST_CASE("ScriptsPanel marks scripts the lint finds problems in", "[qt][scripts
     mapFile.map_local_vars = { 0, 0, 0, 0 };
 
     std::vector<int> linted; // program indices the panel has asked about, in order
-    geck::ScriptsPanel panel(data.resources());
+    geck::ScriptsPanel panel(resources);
     panel.setStatusProvider([&linted](int programIndex) {
         linted.push_back(programIndex);
         geck::ScriptSourceService::ScriptStatus status;
@@ -1403,40 +1053,32 @@ TEST_CASE("ScriptsPanel marks scripts the lint finds problems in", "[qt][scripts
 
     auto* table = panel.findChild<QTableWidget*>("scriptsTable");
     REQUIRE(table != nullptr);
-    const auto filenameCell = [table](int programIndex) -> QTableWidgetItem* {
-        for (int row = 0; row < table->rowCount(); ++row) {
-            if (requireItem(*table, row, 1).data(Qt::DisplayRole).toInt() == programIndex) {
-                return table->item(row, 2);
-            }
-        }
-        return nullptr;
-    };
     // The provider returns into markRows, so once it has seen script 1 both rows are marked.
     REQUIRE(geck::test::pumpUntil([&linted]() { return std::ranges::find(linted, 1) != linted.end(); }));
-    REQUIRE(filenameCell(0) != nullptr);
-    const QString tip = filenameCell(0)->toolTip();
+    REQUIRE(scriptFilenameCell(*table, 0) != nullptr);
+    const QString tip = scriptFilenameCell(*table, 0)->toolTip();
     CHECK(tip.contains("Its local variables 0-3 overlap those of clean.int, so they share them."));
     CHECK(tip.contains("obj_dude.ssl line 12: message 150 is not in dialog/obj_dude.msg"));
-    CHECK_FALSE(filenameCell(0)->icon().isNull());
-    REQUIRE(filenameCell(1) != nullptr);
-    CHECK(filenameCell(1)->toolTip().isEmpty()); // nothing wrong with the clean script
-    CHECK(filenameCell(1)->icon().isNull());
+    CHECK_FALSE(scriptFilenameCell(*table, 0)->icon().isNull());
+    REQUIRE(scriptFilenameCell(*table, 1) != nullptr);
+    CHECK(scriptFilenameCell(*table, 1)->toolTip().isEmpty()); // nothing wrong with the clean script
+    CHECK(scriptFilenameCell(*table, 1)->icon().isNull());
 }
 
 // The marker also checks each script against where the map places it: the map's own script may not
 // use local variables, and a spatial script needs spatial_p_proc.
 TEST_CASE("ScriptsPanel marks scripts wrong for where the map places them", "[qt][scripts]") {
-    ResourceDataScope data;
-    data.writeGameMessageFile("scripts/scripts.lst", "mapscr.int ; map # local_vars=1\nspot.int ; trigger # local_vars=0\n");
-    data.mount();
+    test::DataTree data("ui-data");
+    data.write("scripts/scripts.lst", "mapscr.int ; map # local_vars=1\nspot.int ; trigger # local_vars=0\n");
+    auto& resources = data.mount();
 
-    auto map = makeMap("testmap.map");
+    auto map = test::mapOf("testmap.map");
     auto& mapFile = map->getMapFile();
     mapFile.header.script_id = 1; // 1-based: mapscr.int
     mapFile.map_scripts[static_cast<int>(geck::MapScript::ScriptType::SPATIAL)].push_back(
         geck::MapScript::makeObjectScript(geck::MapScript::ScriptType::SPATIAL, 1, 1, 0)); // spot.int
 
-    geck::ScriptsPanel panel(data.resources());
+    geck::ScriptsPanel panel(resources);
     panel.setStatusProvider([](int programIndex) {
         geck::ScriptSourceService::ScriptStatus status;
         status.resolved = true;
@@ -1452,35 +1094,26 @@ TEST_CASE("ScriptsPanel marks scripts wrong for where the map places them", "[qt
 
     auto* table = panel.findChild<QTableWidget*>("scriptsTable");
     REQUIRE(table != nullptr);
-    const auto filenameCell = [table](int programIndex) -> QTableWidgetItem* {
-        for (int row = 0; row < table->rowCount(); ++row) {
-            if (requireItem(*table, row, 1).data(Qt::DisplayRole).toInt() == programIndex) {
-                return table->item(row, 2);
-            }
-        }
-        return nullptr;
-    };
-    REQUIRE(geck::test::pumpUntil([&filenameCell]() { return filenameCell(0) != nullptr && !filenameCell(0)->toolTip().isEmpty(); }));
-    CHECK(filenameCell(0)->toolTip().contains("mapscr.ssl line 30: This is a system script"));
-    REQUIRE(geck::test::pumpUntil([&filenameCell]() { return filenameCell(1) != nullptr && !filenameCell(1)->toolTip().isEmpty(); }));
-    CHECK(filenameCell(1)->toolTip().contains("A spatial script without spatial_p_proc"));
+    REQUIRE(geck::test::pumpUntil([table]() { return scriptFilenameCell(*table, 0) != nullptr && !scriptFilenameCell(*table, 0)->toolTip().isEmpty(); }));
+    CHECK(scriptFilenameCell(*table, 0)->toolTip().contains("mapscr.ssl line 30: This is a system script"));
+    REQUIRE(geck::test::pumpUntil([table]() { return scriptFilenameCell(*table, 1) != nullptr && !scriptFilenameCell(*table, 1)->toolTip().isEmpty(); }));
+    CHECK(scriptFilenameCell(*table, 1)->toolTip().contains("A spatial script without spatial_p_proc"));
 }
 
 // Without an .ssl source the status comes from the compiled .int, so a vanilla install is checked too.
 TEST_CASE("ScriptSourceService checks a script's compiled .int when it has no source", "[qt][scripts]") {
-    removeTestSettings();
-    ResourceDataScope data;
-    data.writeGameMessageFile("scripts/scripts.lst", "two.int ; second # local_vars=0\n");
+    test::DataTree data("ui-data");
+    data.write("scripts/scripts.lst", "two.int ; second # local_vars=0\n");
     geck::test::ByteWriter code;
     geck::test::pushInt(code, 0);
     geck::test::pushInt(code, 1);
     code.be16(0x80C2); // op_set_local_var: local variable 0, past the 0 scripts.lst gives
-    data.writeBinaryFile("scripts/two.int", geck::test::compiledScript("talk_p_proc", code.data()));
-    data.mount();
+    data.writeBytes("scripts/two.int", geck::test::compiledScript("talk_p_proc", code.data()));
+    auto& resources = data.mount();
 
     auto settings = std::make_shared<geck::Settings>();
-    geck::ExternalEditorLauncher launcher(data.resources(), settings, nullptr);
-    geck::ScriptSourceService service(data.resources(), settings, launcher, nullptr);
+    geck::ExternalEditorLauncher launcher(resources, settings, nullptr);
+    geck::ScriptSourceService service(resources, settings, launcher, nullptr);
     const auto status = service.scriptStatus(0);
     CHECK(status.compiled);
     REQUIRE(status.report != nullptr);
@@ -1494,18 +1127,16 @@ TEST_CASE("ScriptSourceService checks a script's compiled .int when it has no so
 // "Place single hex") are exclusive: triggering one ticks it, unticks the other, keeps the button
 // checked. (Driving the editor mode needs game data, so that half is covered below against EditorWidget.)
 TEST_CASE("Unified Exit-Grids tool exposes one button with an exclusive sub-mode dropdown", "[qt][exitgrids]") {
-    removeTestSettings();
-
-    auto resources = std::make_shared<geck::resource::GameResources>();
-    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
+    test::MainWindowFixture fixture;
+    geck::MainWindow& window = fixture.window;
 
     // The two former separate buttons are gone, replaced by one "Exit Grids" button.
-    CHECK(findAction(window, "Mark Exits") == nullptr);
-    CHECK(findAction(window, "Place Exit Grids") == nullptr);
+    CHECK(test::findActionByText(window, "Mark Exits") == nullptr);
+    CHECK(test::findActionByText(window, "Place Exit Grids") == nullptr);
 
-    auto* exitGridsAction = findAction(window, "Exit Grids");
-    auto* drawEdge = findAction(window, "Draw edge");
-    auto* placeHex = findAction(window, "Place single hex");
+    auto* exitGridsAction = test::findActionByText(window, "Exit Grids");
+    auto* drawEdge = test::findActionByText(window, "Draw edge");
+    auto* placeHex = test::findActionByText(window, "Place single hex");
     REQUIRE(exitGridsAction != nullptr);
     REQUIRE(drawEdge != nullptr);
     REQUIRE(placeHex != nullptr);
@@ -1536,7 +1167,7 @@ TEST_CASE("Unified Exit-Grids tool exposes one button with an exclusive sub-mode
 // resources/ ships.
 TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exitgrids]") {
     auto resources = geck::test::editorResources();
-    auto editor = std::make_unique<geck::EditorWidget>(*resources, makeMap("exitgrids.map"));
+    auto editor = std::make_unique<geck::EditorWidget>(*resources, test::mapOf("exitgrids.map"));
 
     CHECK(editor->currentMode() == geck::EditorMode::Select);
 
@@ -1554,12 +1185,8 @@ TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exi
 // nothing else notices — the menus and the toolbar both hand out shortcuts, so this sweeps the
 // whole live window rather than just the shipped table.
 TEST_CASE("No two actions in the window share a shortcut", "[qt][mainwindow][keys]") {
-    removeTestSettings();
-
-    auto resources = std::make_shared<geck::resource::GameResources>();
-    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
-    window.show();
-    REQUIRE(QTest::qWaitForWindowExposed(&window));
+    test::MainWindowFixture fixture;
+    geck::MainWindow& window = fixture.window;
 
     QHash<QString, QString> owners; // key text -> the action already holding it
     for (const QAction* action : window.findChildren<QAction*>()) {
@@ -1568,10 +1195,10 @@ TEST_CASE("No two actions in the window share a shortcut", "[qt][mainwindow][key
             continue;
         }
         const QString text = keys.toString();
-        INFO("key " << text.toStdString() << " wanted by " << normalizeActionText(action->text()).toStdString()
+        INFO("key " << text.toStdString() << " wanted by " << test::plainText(*action).toStdString()
                     << " and " << owners.value(text).toStdString());
         CHECK_FALSE(owners.contains(text));
-        owners.insert(text, normalizeActionText(action->text()));
+        owners.insert(text, test::plainText(*action));
     }
 }
 
@@ -1579,12 +1206,8 @@ TEST_CASE("No two actions in the window share a shortcut", "[qt][mainwindow][key
 // panels' Alt+digit. They start disabled and updateElevationMenu() enables only what the open map
 // has, so the key is a no-op on a map without that elevation rather than a switch to nothing.
 TEST_CASE("Elevation actions carry Ctrl+digit and stay no-ops until a map has that elevation", "[qt][mainwindow][keys]") {
-    removeTestSettings();
-
-    auto resources = geck::test::editorResources();
-    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
-    window.show();
-    REQUIRE(QTest::qWaitForWindowExposed(&window));
+    test::MainWindowFixture fixture(test::editorResources());
+    geck::MainWindow& window = fixture.window;
 
     struct ExpectedShortcut {
         const char* actionText;
@@ -1598,22 +1221,20 @@ TEST_CASE("Elevation actions carry Ctrl+digit and stay no-ops until a map has th
     } };
 
     for (const ExpectedShortcut& entry : expected) {
-        QAction* action = findAction(window, entry.actionText);
+        QAction* action = test::findActionByText(window, entry.actionText);
         REQUIRE(action != nullptr);
         CHECK(action->shortcut() == entry.keys);
         CHECK_FALSE(action->isEnabled()); // no map open
     }
 
     // A map with elevations 1 and 2 enables exactly those, and the key switches the editor there.
-    auto map = makeMap("elevations.map");
+    auto map = test::mapOf("elevations.map");
     map->getMapFile().header.flags = geck::Map::elevationFlag(geck::ELEVATION_3);
-    window.setEditorWidget(std::make_unique<geck::EditorWidget>(*resources, std::move(map)));
-    auto* editor = window.findChild<geck::EditorWidget*>();
-    REQUIRE(editor != nullptr);
+    geck::EditorWidget* editor = &fixture.openMap(std::move(map));
 
-    QAction* elevation1 = findAction(window, "Elevation 1");
-    QAction* elevation2 = findAction(window, "Elevation 2");
-    QAction* elevation3 = findAction(window, "Elevation 3");
+    QAction* elevation1 = test::findActionByText(window, "Elevation 1");
+    QAction* elevation2 = test::findActionByText(window, "Elevation 2");
+    QAction* elevation3 = test::findActionByText(window, "Elevation 3");
     REQUIRE(elevation1 != nullptr);
     REQUIRE(elevation2 != nullptr);
     REQUIRE(elevation3 != nullptr);
@@ -1630,21 +1251,17 @@ TEST_CASE("Elevation actions carry Ctrl+digit and stay no-ops until a map has th
 // had focus — typing "b" in such a place started placing scroll blockers. Both now live on the
 // canvas, so the actions themselves must carry no shortcut.
 TEST_CASE("Single-letter tool keys are off the window-scoped actions", "[qt][mainwindow][keys]") {
-    removeTestSettings();
-
-    auto resources = std::make_shared<geck::resource::GameResources>();
-    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
-    window.show();
-    REQUIRE(QTest::qWaitForWindowExposed(&window));
+    test::MainWindowFixture fixture;
+    geck::MainWindow& window = fixture.window;
 
     for (const char* text : { "Scroll Blocker Rectangle", "Rotate" }) {
-        QAction* action = findAction(window, text);
+        QAction* action = test::findActionByText(window, text);
         REQUIRE(action != nullptr);
         CHECK(action->shortcut().isEmpty());
     }
 
     // Ctrl+Shift+E is a command, not a single letter, so it stays window-scoped.
-    QAction* editSource = findAction(window, "Edit Script Source");
+    QAction* editSource = test::findActionByText(window, "Edit Script Source");
     REQUIRE(editSource != nullptr);
     CHECK(editSource->shortcut() == QKeySequence("Ctrl+Shift+E"));
 }
@@ -1655,18 +1272,10 @@ TEST_CASE("Single-letter tool keys are off the window-scoped actions", "[qt][mai
 // (InputHandler). Constructing an EditorWidget eagerly loads art/misc/HEX.frm, which the bundled
 // resources/ ships.
 TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge mode", "[qt][mainwindow][keys]") {
-    removeTestSettings();
+    test::MainWindowFixture fixture(test::editorResources());
+    geck::MainWindow& window = fixture.window;
 
-    auto resources = geck::test::editorResources();
-    geck::MainWindow window(resources, std::make_shared<geck::Settings>());
-    window.show();
-    REQUIRE(QTest::qWaitForWindowExposed(&window));
-
-    window.setEditorWidget(std::make_unique<geck::EditorWidget>(*resources, makeMap("inspect.map")));
-    QApplication::processEvents();
-
-    auto* editorWidget = window.findChild<geck::EditorWidget*>();
-    REQUIRE(editorWidget != nullptr);
+    geck::EditorWidget* editorWidget = &fixture.openMap(test::mapOf("inspect.map"));
     geck::SFMLWidget* canvas = editorWidget->getSFMLWidget();
     REQUIRE(canvas != nullptr);
 
@@ -1686,13 +1295,8 @@ TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge
 
     // Shortcuts are looked up by key rather than swept as a group, so one added later for
     // something else cannot fail this test.
-    const auto shortcutFor = [&canvasShortcuts](const QKeySequence& wanted) -> const QShortcut* {
-        for (const QShortcut* shortcut : canvasShortcuts) {
-            if (shortcut->key() == wanted) {
-                return shortcut;
-            }
-        }
-        return nullptr;
+    const auto shortcutFor = [canvas](const QKeySequence& wanted) -> const QShortcut* {
+        return test::findChildWhere<QShortcut>(*canvas, [&wanted](const QShortcut& shortcut) { return shortcut.key() == wanted; });
     };
 
     const QShortcut* inspectReturn = shortcutFor(QKeySequence(Qt::Key_Return));
@@ -1707,7 +1311,7 @@ TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge
     // button stays enabled — only the key steps aside.
     const QShortcut* rotate = shortcutFor(QKeySequence(Qt::Key_R));
     REQUIRE(rotate != nullptr);
-    QAction* rotateAction = findAction(window, "Rotate");
+    QAction* rotateAction = test::findActionByText(window, "Rotate");
     REQUIRE(rotateAction != nullptr);
 
     editorWidget->setMode(geck::EditorMode::StampPattern);
@@ -1776,33 +1380,47 @@ TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge
     registry->resetAllToDefaults();
 }
 
+namespace {
+
+// Shared scaffolding for the global-variable tests: a map whose .gam is mounted, plus a writable Data
+// Path mounted last so the edited .gam copy shadows the source. The values displayed AND edited are the
+// .gam's MAP_GLOBAL_VARS values, since a BASE map's globals are re-read from the .gam by the engine,
+// ignoring the .map's blocks.
+struct GlobalVarFixture {
+    test::DataTree data{ "map-globals" };
+    test::TempDir writableDir{ "writable" };
+    std::shared_ptr<geck::Settings> settings = std::make_shared<geck::Settings>();
+    std::unique_ptr<geck::Map> map = test::mapOf("testmap.map");
+    geck::resource::GameResources& resources;
+
+    explicit GlobalVarFixture(const char* gamContents)
+        : resources(mountData(data, gamContents)) {
+        resources.files().addDataPath(writableDir.path());
+        settings->setDataPaths({ writableDir.path() }); // the writable folder IS the visible Data Path edits go to
+    }
+
+    // Where persistMapVars() writes the map's .gam (its basename is the map filename's).
+    std::filesystem::path savedGam() const { return writableDir.path() / "maps" / "testmap.gam"; }
+
+private:
+    static geck::resource::GameResources& mountData(test::DataTree& tree, const char* gamContents) {
+        tree.write("scripts/scripts.lst", "obj_dude.int    ; player\n");
+        tree.write("maps/testmap.gam", gamContents);
+        return tree.mount();
+    }
+};
+
+} // namespace
+
 TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map's .gam", "[qt][mapinfo]") {
-    ResourceDataScope data;
-    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\n");
-    // The map's global variables come from its .gam (basename = map filename without extension). The
-    // values displayed AND edited are the .gam's MAP_GLOBAL_VARS values, since a BASE map's globals are
-    // re-read from the .gam by the engine, ignoring the .map's blocks.
-    data.writeGameMessageFile("maps/testmap.gam",
-        "MAP_GLOBAL_VARS:\nMVAR_first := 10;\nMVAR_second := 20;\n");
-    data.mount();
-
-    // A writable folder, mounted last so its edited .gam copy shadows the source.
-    QTemporaryDir writableDir;
-    REQUIRE(writableDir.isValid());
-    const std::filesystem::path writableRoot = writableDir.path().toStdString();
-    data.resources().files().addDataPath(writableRoot.string());
-
-    auto settings = std::make_shared<geck::Settings>();
-    settings->setDataPaths({ writableRoot }); // the writable folder IS the visible Data Path edits go to
-
-    auto map = makeMap("testmap.map");
-    auto& mapFile = map->getMapFile();
+    GlobalVarFixture fixture("MAP_GLOBAL_VARS:\nMVAR_first := 10;\nMVAR_second := 20;\n");
+    auto& mapFile = fixture.map->getMapFile();
     // A real base map's stored block mirrors its .gam (the engine snapshots it on save); start aligned.
     mapFile.map_global_vars = { 10, 20 };
     mapFile.header.num_global_vars = 2;
 
-    geck::MapInfoPanel panel(data.resources(), settings);
-    panel.setMap(map.get());
+    geck::MapInfoPanel panel(fixture.resources, fixture.settings);
+    panel.setMap(fixture.map.get());
 
     auto* tree = panel.findChild<QTreeWidget*>();
     REQUIRE(tree != nullptr);
@@ -1835,62 +1453,18 @@ TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map
     // Persisting writes the .gam to the writable Data Path, with the edited value and the other variable
     // untouched. A re-read reflects the edit.
     panel.persistMapVars();
-    const std::filesystem::path savedGam = writableRoot / "maps" / "testmap.gam";
-    REQUIRE(std::filesystem::exists(savedGam));
-    const std::string saved = geck::io::readFile(savedGam);
+    REQUIRE(std::filesystem::exists(fixture.savedGam()));
+    const std::string saved = geck::io::readFile(fixture.savedGam());
     CHECK(saved.find("MVAR_first := -42;") != std::string::npos);
     CHECK(saved.find("MVAR_second := 20;") != std::string::npos); // the other variable is untouched
 }
-
-namespace {
-
-// Shared scaffolding for the add/remove global-variable tests: mount a map's .gam, configure a writable
-// Data Path, and hand back the bits each test needs. Keeps the new tests under the duplication budget.
-struct GlobalVarFixture {
-    ResourceDataScope data;
-    QTemporaryDir writableDir;
-    std::shared_ptr<geck::Settings> settings;
-    std::unique_ptr<geck::Map> map;
-
-    explicit GlobalVarFixture(const char* gamContents) {
-        data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\n");
-        data.writeGameMessageFile("maps/testmap.gam", gamContents);
-        data.mount();
-
-        REQUIRE(writableDir.isValid());
-        const std::filesystem::path writableRoot = writableDir.path().toStdString();
-        data.resources().files().addDataPath(writableRoot.string());
-
-        settings = std::make_shared<geck::Settings>();
-        settings->setDataPaths({ writableRoot });
-
-        map = makeMap("testmap.map");
-    }
-};
-
-// Click the given button role on the next modal dialog Qt shows. Posted before triggering the action so
-// the (otherwise blocking) confirmation dialog is answered without a human.
-void answerNextDialog(QMessageBox::StandardButton button) {
-    QTimer::singleShot(0, [button]() {
-        for (QWidget* widget : QApplication::topLevelWidgets()) {
-            if (auto* box = qobject_cast<QMessageBox*>(widget)) {
-                if (QAbstractButton* target = box->button(button)) {
-                    target->click();
-                    return;
-                }
-            }
-        }
-    });
-}
-
-} // namespace
 
 TEST_CASE("MapInfoPanel adds a map global variable via the name field and Add button", "[qt][mapinfo]") {
     GlobalVarFixture fixture("MAP_GLOBAL_VARS:\nMVAR_first := 10;\n");
     fixture.map->getMapFile().map_global_vars = { 10 }; // .map block aligned with the .gam
     fixture.map->getMapFile().header.num_global_vars = 1;
 
-    geck::MapInfoPanel panel(fixture.data.resources(), fixture.settings);
+    geck::MapInfoPanel panel(fixture.resources, fixture.settings);
     panel.setMap(fixture.map.get());
 
     auto* nameEdit = panel.findChild<QLineEdit*>("newGlobalVarName");
@@ -1928,9 +1502,8 @@ TEST_CASE("MapInfoPanel adds a map global variable via the name field and Add bu
 
     // Persisting writes the appended variable after the existing one.
     panel.persistMapVars();
-    const std::filesystem::path savedGam = std::filesystem::path(fixture.writableDir.path().toStdString()) / "maps" / "testmap.gam";
-    REQUIRE(std::filesystem::exists(savedGam));
-    const std::string out = geck::io::readFile(savedGam);
+    REQUIRE(std::filesystem::exists(fixture.savedGam()));
+    const std::string out = geck::io::readFile(fixture.savedGam());
     CHECK(out.find("MVAR_first := 10;") != std::string::npos);
     CHECK(out.find("MVAR_new := 0;") != std::string::npos);
     CHECK(out.find("MVAR_first") < out.find("MVAR_new"));
@@ -1941,7 +1514,7 @@ TEST_CASE("MapInfoPanel removes the last map global variable after confirmation"
     fixture.map->getMapFile().map_global_vars = { 10, 99 }; // .map block aligned with the .gam
     fixture.map->getMapFile().header.num_global_vars = 2;
 
-    geck::MapInfoPanel panel(fixture.data.resources(), fixture.settings);
+    geck::MapInfoPanel panel(fixture.resources, fixture.settings);
     panel.setMap(fixture.map.get());
 
     auto* tree = panel.findChild<QTreeWidget*>();
@@ -1960,8 +1533,10 @@ TEST_CASE("MapInfoPanel removes the last map global variable after confirmation"
     QSignalSpy varSpy(&panel, &geck::MapInfoPanel::mapVariablesChanged);
 
     // Confirm the warning -> the row is dropped, the survivor remains, and the map is modified.
-    answerNextDialog(QMessageBox::Yes);
-    removeButton->click();
+    {
+        const test::ScopedDialogAnswer confirm(QMessageBox::Yes);
+        removeButton->click();
+    }
 
     REQUIRE(tree->topLevelItemCount() == 1); // one variable (the summary is a label)
     QTreeWidgetItem* survivor = tree->topLevelItem(0);
@@ -1977,9 +1552,8 @@ TEST_CASE("MapInfoPanel removes the last map global variable after confirmation"
 
     // The removed variable is gone from the persisted .gam.
     panel.persistMapVars();
-    const std::filesystem::path savedGam = std::filesystem::path(fixture.writableDir.path().toStdString()) / "maps" / "testmap.gam";
-    REQUIRE(std::filesystem::exists(savedGam));
-    const std::string out = geck::io::readFile(savedGam);
+    REQUIRE(std::filesystem::exists(fixture.savedGam()));
+    const std::string out = geck::io::readFile(fixture.savedGam());
     CHECK(out.find("MVAR_first := 10;") != std::string::npos);
     CHECK(out.find("MVAR_last") == std::string::npos);
 }
@@ -1989,7 +1563,7 @@ TEST_CASE("MapInfoPanel global-variable edits can be undone through the state it
     fixture.map->getMapFile().map_global_vars = { 10 };
     fixture.map->getMapFile().header.num_global_vars = 1;
 
-    geck::MapInfoPanel panel(fixture.data.resources(), fixture.settings);
+    geck::MapInfoPanel panel(fixture.resources, fixture.settings);
     panel.setMap(fixture.map.get());
     auto* tree = panel.findChild<QTreeWidget*>();
     REQUIRE(tree != nullptr);
@@ -2011,19 +1585,18 @@ TEST_CASE("MapInfoPanel global-variable edits can be undone through the state it
     CHECK(fixture.map->getMapFile().map_global_vars[0] == 10);
     CHECK(row->text(1) == QStringLiteral("10"));
     panel.persistMapVars();
-    const std::filesystem::path savedGam = std::filesystem::path(fixture.writableDir.path().toStdString()) / "maps" / "testmap.gam";
-    CHECK(geck::io::readFile(savedGam).find("MVAR_first := 10;") != std::string::npos);
+    CHECK(geck::io::readFile(fixture.savedGam()).find("MVAR_first := 10;") != std::string::npos);
 }
 
 TEST_CASE("MapInfoPanel requests header and elevation edits instead of writing the map", "[qt][mapinfo][undo]") {
-    ResourceDataScope data;
-    data.writeGameMessageFile("scripts/scripts.lst", "obj_dude.int    ; player\n");
-    data.mount();
+    test::DataTree data("ui-data");
+    data.write("scripts/scripts.lst", "obj_dude.int    ; player\n");
+    auto& resources = data.mount();
     auto settings = std::make_shared<geck::Settings>();
-    auto map = makeMap("testmap.map");
+    auto map = test::mapOf("testmap.map");
     const uint32_t originalPosition = map->getMapFile().header.player_default_position;
 
-    geck::MapInfoPanel panel(data.resources(), settings);
+    geck::MapInfoPanel panel(resources, settings);
     panel.setMap(map.get());
     auto* positionSpin = panel.findChild<QSpinBox*>("playerPosition");
     auto* elevation2 = panel.findChild<QCheckBox*>("elevation2");
@@ -2042,8 +1615,10 @@ TEST_CASE("MapInfoPanel requests header and elevation edits instead of writing t
     CHECK(map->getMapFile().header.player_default_position == originalPosition);
     CHECK(positionSpin->value() == static_cast<int>(originalPosition));
 
-    answerNextDialog(QMessageBox::Yes);
-    elevation2->setChecked(false);
+    {
+        const test::ScopedDialogAnswer confirm(QMessageBox::Yes);
+        elevation2->setChecked(false);
+    }
     REQUIRE(elevationSpy.count() == 1);
     CHECK(elevationSpy.at(0).at(0).toInt() == 1);
     CHECK_FALSE(elevationSpy.at(0).at(1).toBool());
@@ -2085,18 +1660,9 @@ TEST_CASE("Welcome screen buttons request New Map, Browse Maps and Preferences",
     REQUIRE(browseSpy.isValid());
     REQUIRE(preferencesSpy.isValid());
 
-    QPushButton* newMapButton = nullptr;
-    QPushButton* browseButton = nullptr;
-    QPushButton* preferencesButton = nullptr;
-    for (QPushButton* button : welcome.findChildren<QPushButton*>()) {
-        if (button->text().contains("New")) {
-            newMapButton = button;
-        } else if (button->text().contains("Browse")) {
-            browseButton = button;
-        } else if (button->text().contains("Preferences")) {
-            preferencesButton = button;
-        }
-    }
+    QAbstractButton* newMapButton = test::findButton(welcome, "New Map");
+    QAbstractButton* browseButton = test::findButton(welcome, "Browse Maps…");
+    QAbstractButton* preferencesButton = test::findButton(welcome, "Preferences…");
     REQUIRE(newMapButton != nullptr);
     REQUIRE(browseButton != nullptr);
     REQUIRE(preferencesButton != nullptr);

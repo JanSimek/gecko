@@ -163,10 +163,14 @@ target_include_directories(general_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
 
+# The Qt-only helpers (support/Qt*.h: widget lookup, event pumping, dialog answering, MainWindow
+# fixture). Only qt_tests links it, so general_tests stays free of Qt.
+add_library(test_support_qt INTERFACE)
+target_link_libraries(test_support_qt INTERFACE test_support Qt6::Widgets Qt6::Test)
+
 target_link_libraries(qt_tests PRIVATE
     Catch2::Catch2
-    test_support
-    Qt6::Test
+    test_support_qt
     gecko::app
 )
 
