@@ -27,5 +27,5 @@ When adding new documentation:
 ## Quick Links
 
 - [Main Project README](../README.md)
-- [Development Notes (CLAUDE.md)](../CLAUDE.md)
-- [TODO List](../TODO.md)
+- [Agent guidance (AGENTS.md)](../AGENTS.md)
+- [Backlog (PLAN.md)](../PLAN.md)

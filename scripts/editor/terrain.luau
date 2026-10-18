@@ -44,7 +44,7 @@ local EDGE_MARGIN = 6                             -- keep scatter this many hexe
 local CLUMP_SCALE = 0.06                          -- smaller = larger, smoother clumps
 local COVERAGE    = 0.55                          -- 0..1 share of the map that grows vegetation
 
--- Grid sizes (see CLAUDE.md): floor/roof tiles are 100x100, hexes are 200x200.
+-- Grid sizes (see AGENTS.md): floor/roof tiles are 100x100, hexes are 200x200.
 local TILE_W, TILE_H = 100, 100
 local HEX_W,  HEX_H  = 200, 200
 
