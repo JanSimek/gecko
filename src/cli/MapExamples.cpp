@@ -29,6 +29,7 @@
 #include <ostream>
 #include <set>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -63,8 +64,8 @@ namespace {
         }
     }
 
-    bool contains(const std::string& haystack, const std::string& lowerNeedle) {
-        return toLower(haystack).find(lowerNeedle) != std::string::npos;
+    bool contains(std::string_view haystack, std::string_view lowerNeedle) {
+        return toLower(std::string(haystack)).find(lowerNeedle) != std::string::npos;
     }
 
     // "klamall", "KLAMALL.MAP" and "maps/klamall.map" all name the same map.
@@ -94,7 +95,7 @@ namespace {
             , _name(toLower(options.name))
             , _script(toLower(options.script))
             , _carries(toLower(options.carries))
-            , _near(toLower(options.near)) {
+            , _nearName(toLower(options.nearName)) {
             try {
                 _scriptsLst = resources.repository().tryLoad<Lst>(ResourcePaths::Lst::SCRIPTS);
             } catch (const std::exception& e) {
@@ -136,10 +137,12 @@ namespace {
         const std::string& name() const { return _name; }
         const std::string& script() const { return _script; }
         const std::string& carries() const { return _carries; }
-        const std::string& near() const { return _near; }
+        const std::string& nearName() const { return _nearName; }
         bool wantsMap(const std::string& mapPath) const { return _maps.empty() || _maps.contains(mapKey(mapPath)); }
 
-        std::optional<std::set<std::string, std::less<>>> calling; ///< scripts the scriptCalls filter accepts
+        /// The scripts the scriptCalls filter accepts; unset when the query has no scriptCalls.
+        const std::optional<std::set<std::string, std::less<>>>& calling() const { return _calling; }
+        void setCalling(std::set<std::string, std::less<>> scripts) { _calling = std::move(scripts); }
 
     private:
         resource::GameResources& _resources;
@@ -149,8 +152,9 @@ namespace {
         std::string _name;
         std::string _script;
         std::string _carries;
-        std::string _near;
+        std::string _nearName;
         std::set<std::string, std::less<>> _maps;
+        std::optional<std::set<std::string, std::less<>>> _calling;
         std::unordered_map<uint32_t, std::string> _protoNames;
         std::unordered_map<int, bool> _scriptMatches;
     };
@@ -160,8 +164,8 @@ namespace {
     class MapView {
     public:
         explicit MapView(const Map& map) {
-            for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
-                for (const MapScript& script : map.getMapFile().map_scripts[section]) {
+            for (const auto& section : map.getMapFile().map_scripts) {
+                for (const MapScript& script : section) {
                     _programs.try_emplace(script.pid, static_cast<int>(script.script_id));
                 }
             }
@@ -203,7 +207,7 @@ namespace {
 
     private:
         void add(const MapObject& object, int elevation, int hex, const MapObject* holder) {
-            _placed.push_back({ &object, elevation, hex, holder });
+            _placed.emplace_back(&object, elevation, hex, holder);
             if (holder == nullptr) {
                 _floors[elevation].emplace(hex, &object);
             }
@@ -229,7 +233,7 @@ namespace {
         const int radius = context.options().nearRadius;
         return std::ranges::any_of(view.around(placed.elevation, placed.hex, radius), [&context, &placed](const auto& neighbour) {
             const MapObject* object = neighbour.first;
-            return object != placed.object && object != placed.holder && contains(context.protoName(object->pro_pid), context.near());
+            return object != placed.object && object != placed.holder && contains(context.protoName(object->pro_pid), context.nearName());
         });
     }
 
@@ -245,20 +249,20 @@ namespace {
         if (!context.name().empty() && !contains(context.protoName(object.pro_pid), context.name())) {
             return false;
         }
-        if (!context.script().empty() || context.calling.has_value()) {
+        if (!context.script().empty() || context.calling().has_value()) {
             const int programIndex = view.programIndex(object);
             const std::string script = context.scriptName(programIndex);
             if (script.empty() || (!context.script().empty() && !context.scriptMatches(programIndex))) {
                 return false;
             }
-            if (context.calling.has_value() && !context.calling->contains(script)) {
+            if (context.calling().has_value() && !context.calling()->contains(script)) {
                 return false;
             }
         }
         if (!context.carries().empty() && !carriesMatch(context, object)) {
             return false;
         }
-        return context.near().empty() || nearMatch(context, view, placed);
+        return context.nearName().empty() || nearMatch(context, view, placed);
     }
 
     ordered_json scriptJson(Context& context, int programIndex) {
@@ -372,7 +376,7 @@ int findExamples(resource::GameResources& resources, const ExamplesOptions& opti
     Context context(resources, options);
     if (!options.scriptCalls.empty()) {
         std::size_t scriptsRead = 0;
-        context.calling = scriptsCalling(resources, options.scriptCalls, &scriptsRead);
+        context.setCalling(scriptsCalling(resources, options.scriptCalls, &scriptsRead));
         if (scriptsRead == 0) {
             out << "examples: scriptCalls needs a script-source tree (e.g. FRP scripts_src) mounted\n";
             return 1;

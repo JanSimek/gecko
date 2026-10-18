@@ -310,7 +310,7 @@ namespace {
         opts.script = optString(args, "script");
         opts.scriptCalls = optString(args, "scriptCalls");
         opts.carries = optString(args, "carries");
-        opts.near = optString(args, "near");
+        opts.nearName = optString(args, "near");
         opts.nearRadius = static_cast<int>(optInt(args, "nearRadius", opts.nearRadius, 0, 20));
         opts.maps = optMaps(args);
         opts.contextRadius = static_cast<int>(optInt(args, "contextRadius", opts.contextRadius, 0, 10));

@@ -352,7 +352,7 @@ int consumeLintArg(const std::vector<std::string>& args, std::size_t i, CliArgs&
 int consumeExamplesArg(const std::vector<std::string>& args, std::size_t i, geck::cli::ExamplesOptions& out, const char* program) {
     const std::string& arg = args[i];
     const std::map<std::string, std::string*, std::less<>> texts{ { "--kind", &out.kind }, { "--name", &out.name },
-        { "--script", &out.script }, { "--calls", &out.scriptCalls }, { "--carries", &out.carries }, { "--near", &out.near } };
+        { "--script", &out.script }, { "--calls", &out.scriptCalls }, { "--carries", &out.carries }, { "--near", &out.nearName } };
     if (const auto text = texts.find(arg); text != texts.end()) {
         *text->second = args[i + 1];
         return 2;

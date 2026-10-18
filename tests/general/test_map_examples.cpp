@@ -144,10 +144,10 @@ TEST_CASE("find_examples reports matching objects with their script and surround
     SECTION("near, maps and limit narrow the matches") {
         cli::ExamplesOptions options;
         options.kind = "critter";
-        options.near = "no such proto";
+        options.nearName = "no such proto";
         CHECK(run(resources, options, rc)["total"] == 0);
 
-        options.near.clear();
+        options.nearName.clear();
         options.maps = { "elsewhere" };
         CHECK(run(resources, options, rc)["total"] == 0);
         options.maps = { "SHOP" };

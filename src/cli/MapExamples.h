@@ -20,7 +20,8 @@ struct ExamplesOptions {
     std::string script;         ///< substring of the attached script's scripts.lst name or description, any case
     std::string scriptCalls;    ///< the attached script's live code calls this opcode or procedure
     std::string carries;        ///< its inventory holds an item whose name contains this, any case
-    std::string near;           ///< an object whose name contains this stands within nearRadius
+    /// An object whose name contains this stands within nearRadius. (Not `near`: windef.h defines it.)
+    std::string nearName;
     int nearRadius = 5;
     std::vector<std::string> maps; ///< limit to these maps (file names, ".map" optional); empty = all
     int contextRadius = 3;         ///< neighbours reported within this many hexes
