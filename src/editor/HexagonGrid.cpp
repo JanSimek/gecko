@@ -111,7 +111,7 @@ std::optional<int> HexagonGrid::tileIndexForPosition(int position) const {
 }
 
 std::vector<int> HexagonGrid::screenRectangleBorderPositions(float left, float top, float right, float bottom) const {
-    const auto inside = [&](int position) {
+    const auto inside = [this, left, top, right, bottom](int position) {
         const Hex& hex = _grid[static_cast<size_t>(position)];
         const auto x = static_cast<float>(hex.x());
         const auto y = static_cast<float>(hex.y());
@@ -127,7 +127,7 @@ std::vector<int> HexagonGrid::screenRectangleBorderPositions(float left, float t
             continue;
         }
         const hexgrid::Cube center = hexgrid::cubeOfPosition(position);
-        const bool onEdge = std::ranges::any_of(DIRECTIONS, [&](const hexgrid::Cube& direction) {
+        const bool onEdge = std::ranges::any_of(DIRECTIONS, [this, &center, &inside](const hexgrid::Cube& direction) {
             const hexgrid::ColRow cell = hexgrid::cubeToOffset(center + direction);
             const auto neighbour = positionForCoordinates(cell.col, cell.row);
             return !neighbour.has_value() || !inside(*neighbour);
