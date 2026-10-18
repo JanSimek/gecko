@@ -214,9 +214,7 @@ if(DEFINED ENV{CI} OR DEFINED ENV{GITHUB_ACTIONS})
 else()
     # Locally, one ctest entry per case, so a crash in one case does not hide the others' results
     catch_discover_tests(general_tests)
-    # The qt cases share the Qt config location (on macOS it is not redirected by the harness's
-    # temporary HOME), and each case clears it, so they must not run concurrently with each other.
-    catch_discover_tests(qt_tests PROPERTIES RESOURCE_LOCK qt_config_location)
+    catch_discover_tests(qt_tests)
 endif()
 
 
