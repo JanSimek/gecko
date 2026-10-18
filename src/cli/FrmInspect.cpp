@@ -6,6 +6,8 @@
 #include "format/frm/FrmId.h"
 #include "format/lst/Lst.h"
 #include "format/pal/Pal.h"
+#include "reader/TextParsing.h"
+#include "resource/DataFileSystem.h"
 #include "resource/FrmResolver.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
@@ -22,13 +24,13 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <exception>
 #include <memory>
 #include <ostream>
 #include <ranges>
+#include <regex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -55,12 +57,6 @@ namespace {
         { ResourcePaths::Directories::INTERFACE, ResourcePaths::Lst::INTERFACE },
         { ResourcePaths::Directories::INVENTORY, ResourcePaths::Lst::INVENTORY },
     } };
-
-    std::string toLower(std::string s) {
-        std::ranges::transform(s, s.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return s;
-    }
 
     const char* frmTypeName(ObjectType type) {
         using enum ObjectType;
@@ -97,38 +93,7 @@ namespace {
             name.erase(dot);
         }
         // trim surrounding whitespace the reader may have left around a comma-split field
-        const auto notSpace = [](unsigned char c) { return std::isspace(c) == 0; };
-        name.erase(name.begin(), std::ranges::find_if(name, notSpace));
-        name.erase(std::find_if(name.rbegin(), name.rend(), notSpace).base(), name.end());
-        return toLower(name);
-    }
-
-    // A minimal shell-style glob: '*' matches any run (including empty), '?' one character. Both
-    // pattern and text are compared as-is (callers lowercase first). Iterative with backtracking so
-    // it stays O(n*m) worst case and keeps the nesting shallow.
-    bool globMatch(std::string_view pattern, std::string_view text) {
-        std::size_t p = 0;
-        std::size_t t = 0;
-        std::size_t star = std::string_view::npos;
-        std::size_t mark = 0;
-        while (t < text.size()) {
-            if (p < pattern.size() && (pattern[p] == '?' || pattern[p] == text[t])) {
-                ++p;
-                ++t;
-            } else if (p < pattern.size() && pattern[p] == '*') {
-                star = p++;
-                mark = t;
-            } else if (star != std::string_view::npos) {
-                p = star + 1;
-                t = ++mark;
-            } else {
-                return false;
-            }
-        }
-        while (p < pattern.size() && pattern[p] == '*') {
-            ++p;
-        }
-        return p == pattern.size();
+        return text::toLower(text::trim(name));
     }
 
     // --- FRM stitched-texture geometry ------------------------------------------------------------
@@ -294,21 +259,12 @@ namespace {
 } // namespace
 
 std::optional<uint32_t> parseFid(const std::string& token) {
-    // A FID is unsigned. Reject a leading sign up front: std::stoul would otherwise silently wrap a
-    // negative into a huge value instead of failing, turning "-1" into a bogus FID.
-    if (token.empty() || token.front() == '-' || token.front() == '+') {
+    // A FID is unsigned: a negative would otherwise name a bogus FID, so only a 32-bit value is one.
+    const auto value = text::parseInteger(token);
+    if (!value || *value < 0 || *value > static_cast<int64_t>(UINT32_MAX)) {
         return std::nullopt;
     }
-    try {
-        std::size_t consumed = 0;
-        const unsigned long value = std::stoul(token, &consumed, 0); // base 0: 0x.. hex, else decimal
-        if (consumed != token.size()) {
-            return std::nullopt; // trailing non-numeric chars -> not a pure FID
-        }
-        return static_cast<uint32_t>(value);
-    } catch (const std::exception&) {
-        return std::nullopt;
-    }
+    return static_cast<uint32_t>(*value);
 }
 
 std::string normalizeArtToken(const std::string& token) {
@@ -317,7 +273,7 @@ std::string normalizeArtToken(const std::string& token) {
         normalized.erase(0, 1);
     }
     std::ranges::replace(normalized, '\\', '/');
-    normalized = toLower(normalized);
+    normalized = text::toLower(normalized);
     if (!resource::hasFrmExtension(normalized)) {
         normalized += ".frm";
     }
@@ -456,7 +412,8 @@ int resolveFidCommand(resource::GameResources& resources, const std::string& fid
 }
 
 int listFrms(resource::GameResources& resources, const std::string& glob, std::ostream& out) {
-    const std::string pattern = toLower(glob);
+    // Anchored, so the glob names the whole entry; entries are lowercased, so the pattern is too.
+    const std::regex pattern(resource::DataFileSystem::globToRegexPattern(text::toLower(glob)));
     auto entries = json::array();
 
     for (const auto& art : kArtLists) {
@@ -471,7 +428,7 @@ int listFrms(resource::GameResources& resources, const std::string& glob, std::o
         }
         for (const auto& entry : lst->list()) {
             const std::string stem = lstEntryStem(entry);
-            if (stem.empty() || !globMatch(pattern, stem)) {
+            if (stem.empty() || !std::regex_match(stem, pattern)) {
                 continue;
             }
             const std::string artPath = std::string(art.dir) + stem + ".frm";

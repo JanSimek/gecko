@@ -31,39 +31,9 @@ namespace {
     // Compile a glob ('*','?') into a case-insensitive substring matcher. Substring (not fully
     // anchored) so a user pattern matches regardless of the VFS's leading slash / alias prefix:
     // "art/tiles/gras*" and "gras03*" both find "/art/tiles/gras030.frm". Every other regex
-    // metacharacter is escaped so a path is matched literally.
+    // metacharacter is matched literally.
     std::regex compileGlob(const std::string& glob) {
-        std::string pattern;
-        pattern.reserve(glob.size() * 2);
-        for (char ch : glob) {
-            switch (ch) {
-                case '*':
-                    pattern.append(".*");
-                    break;
-                case '?':
-                    pattern.push_back('.');
-                    break;
-                case '.':
-                case '\\':
-                case '+':
-                case '(':
-                case ')':
-                case '[':
-                case ']':
-                case '{':
-                case '}':
-                case '^':
-                case '$':
-                case '|':
-                    pattern.push_back('\\');
-                    pattern.push_back(ch);
-                    break;
-                default:
-                    pattern.push_back(ch);
-                    break;
-            }
-        }
-        return std::regex(pattern, std::regex::icase);
+        return std::regex(resource::DataFileSystem::globToRegexPattern("*" + glob + "*"), std::regex::icase);
     }
 
 } // namespace

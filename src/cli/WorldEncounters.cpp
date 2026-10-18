@@ -2,7 +2,7 @@
 
 #include "resource/ConfigLoad.h"
 #include "cli/GameText.h"
-#include "cli/GlobalVars.h" // loadGameGam
+#include "resource/GameVarsLoader.h"
 #include "format/gam/Gam.h"
 #include "format/worldmap/WorldmapTxt.h"
 #include "reader/worldmap/WorldmapTxtReader.h"
@@ -89,7 +89,7 @@ namespace {
 
         explicit Lookups(resource::GameResources& r)
             : resources(r)
-            , gam(loadGameGam(r))
+            , gam(resource::loadVault13Gam(r))
             , names(r) {}
     };
 

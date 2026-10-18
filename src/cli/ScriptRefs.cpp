@@ -13,7 +13,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <charconv>
 #include <filesystem>
 #include <format>
 #include <functional>
@@ -38,31 +37,11 @@ namespace {
         return std::ranges::equal(a, b, [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
     }
 
-    std::string lower(std::string text) {
-        std::ranges::transform(text, text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return text;
-    }
-
     // A map name as the engine matches it (worldmap.cc wmMapMatchNameToIdx): lowercase, up to the first
     // '.', here also without a directory.
     std::string mapStem(const std::string& name) {
-        const std::string file = lower(std::filesystem::path(name).filename().string());
+        const std::string file = text::toLower(std::filesystem::path(name).filename().string());
         return file.substr(0, file.find('.'));
-    }
-
-    // A whole decimal or 0x-prefixed hexadecimal number, or nullopt.
-    std::optional<int64_t> parseNumber(std::string_view text) {
-        int base = 10;
-        if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) {
-            text.remove_prefix(2);
-            base = 16;
-        }
-        int64_t value = 0;
-        const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value, base);
-        if (error != std::errc() || end != text.data() + text.size() || text.empty()) {
-            return std::nullopt;
-        }
-        return value;
     }
 
     // What a "map" search looks for, and the maps.txt index -> file name table, both read up front so
@@ -75,9 +54,7 @@ namespace {
     };
 
     bool isScript(const std::filesystem::path& path) {
-        std::string ext = path.extension().string();
-        std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return ext == ".ssl";
+        return text::toLower(path.extension().string()) == ".ssl";
     }
 
     // What one script contributes: refs as JSON, in source order.
@@ -179,7 +156,7 @@ namespace {
             const bool any = pid == "*";
             std::optional<int64_t> target;
             if (!any) {
-                target = parseNumber(pid);
+                target = text::parseInteger(pid);
                 if (!target.has_value()) {
                     target = macroValue(pid);
                 }
@@ -300,7 +277,7 @@ namespace {
             maps.fileNames.try_emplace(map.index, map.fileName);
         }
         maps.any = name == "*";
-        if (const auto number = parseNumber(name); number.has_value()) {
+        if (const auto number = text::parseInteger(name); number.has_value()) {
             maps.index = static_cast<int>(*number);
             maps.stem = mapStem(resolver.fileNameOf(*maps.index));
         } else if (!maps.any) {

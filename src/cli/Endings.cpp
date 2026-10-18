@@ -2,7 +2,8 @@
 
 #include "resource/ConfigLoad.h"
 #include "cli/GameText.h"
-#include "cli/GlobalVars.h" // loadGameGam
+#include "cli/JsonText.h"
+#include "resource/GameVarsLoader.h"
 #include "format/endgame/EndDeathTxt.h"
 #include "format/endgame/EndgameTxt.h"
 #include "format/gam/Gam.h"
@@ -41,10 +42,6 @@ namespace {
     std::string gvarLabel(Gam* gam, int gvar) {
         const std::string name = gvarNameOf(gam, gvar);
         return name.empty() ? std::format("gvar {}", gvar) : name;
-    }
-
-    ordered_json orNull(const std::string& s) {
-        return s.empty() ? ordered_json(nullptr) : ordered_json(s);
     }
 
     // A city.txt area condition as {index, name}, or null for -1 (no check).
@@ -100,7 +97,7 @@ int buildEndings(resource::GameResources& resources, std::ostream& out) {
         return 1;
     }
 
-    Gam* gam = loadGameGam(resources); // gvar name dictionary (may be null)
+    Gam* gam = resource::loadVault13Gam(resources); // gvar name dictionary (may be null)
 
     ordered_json root;
     root["endings"] = slidesJson(resources, gam, endgame);

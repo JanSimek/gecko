@@ -64,17 +64,13 @@ namespace {
     // start placed inside solid terrain). Best-effort — a check failure never fails the generate.
     void warnOnUnreachableExits(resource::GameResources& resources, const std::string& mapPath, std::ostream& out) {
         try {
-            std::ostringstream report;
-            if (analyzeReachability(resources, ReachabilityOptions{ mapPath }, report) != 0) {
+            const auto report = reachabilityJson(resources, mapPath);
+            if (!report) {
                 return;
             }
-            const auto json = nlohmann::json::parse(report.str(), nullptr, /*allow_exceptions*/ false);
-            if (!json.is_object() || !json.contains("reachability")) {
-                return;
-            }
-            for (const auto& elevation : json["reachability"]) {
+            for (const auto& elevation : report->at("reachability")) {
                 int unreachable = 0;
-                for (const auto& exit : elevation.value("exits", nlohmann::json::array())) {
+                for (const auto& exit : elevation.value("exits", nlohmann::ordered_json::array())) {
                     // null = the player starts on another elevation; only an explicit false is a finding.
                     const auto reachable = exit.find("reachableFromPlayerStart");
                     if (reachable != exit.end() && reachable->is_boolean() && !reachable->get<bool>()) {

@@ -48,10 +48,10 @@ int renderMap(resource::GameResources& resources, const RenderOptions& options, 
     renderOptions.elevation = options.elevation;
     renderOptions.maxDimension = options.maxDimension;
     renderOptions.showRoof = options.showRoof;
-    renderOptions.showObjects = options.showObjects;
+
     renderOptions.showBlockers = options.showBlockers;
     renderOptions.fullExtent = options.fullExtent;
-    renderOptions.exitDots = options.exitDots;
+
     renderOptions.showUnreachable = options.showUnreachable;
     if (options.cropCenterHex >= 0) {
         // The hex's screen coordinates are the render's world space (sprites are placed there), so

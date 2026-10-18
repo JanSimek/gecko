@@ -117,6 +117,9 @@ public:
     /// with that SID. The SID's section picks which of the five script lists to search.
     std::optional<int> scriptProgramIndexForSid(uint32_t sid) const;
 
+    /// The map script an object's SID names, or nullptr when this map has none with that SID.
+    const MapScript* scriptForSid(uint32_t sid) const;
+
     /// Builds a blank Fallout 2 map: default header, three empty elevations of
     /// EMPTY_TILE tiles, and no scripts or objects.
     static MapFile createEmptyMapFile();

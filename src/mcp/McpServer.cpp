@@ -26,25 +26,22 @@
 #include "cli/ScriptIntrospect.h"
 #include "cli/ScriptLint.h"
 #include "cli/ScriptRefs.h"
-#include "format/msg/Msg.h"
+#include "cli/ProtoName.h"
 #include "scripting/ScriptApiReference.h"
 #include "format/pro/Pro.h"
+#include "reader/TextParsing.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
-#include "util/ProHelper.h"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <functional>
 #include <optional>
-#include <cstdio>
-#include <memory>
 #include <regex>
 #include <sstream>
 #include <string>
@@ -144,9 +141,7 @@ namespace {
     // --- image embedding ----------------------------------------------------------
     // Formats sf::Image writes that are also embeddable as MCP image content (by out extension).
     std::string imageMimeType(const std::string& path) {
-        std::string ext = std::filesystem::path(path).extension().string();
-        std::ranges::transform(ext, ext.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        const std::string ext = text::toLower(std::filesystem::path(path).extension().string());
         if (ext == ".png") {
             return "image/png";
         }
@@ -201,17 +196,7 @@ namespace {
         json maps = json::array();
         try {
             const resource::MapNameResolver names(resources); // maps.txt + map.msg, for friendly names
-            std::vector<std::string> paths;
-            for (const auto& path : resources.files().list("*")) {
-                std::string ext = path.extension().string();
-                std::ranges::transform(ext, ext.begin(),
-                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-                if (ext == ".map") {
-                    paths.push_back(path.generic_string());
-                }
-            }
-            std::ranges::sort(paths);
-            for (const auto& path : paths) {
+            for (const auto& path : cli::listMapPaths(resources.files())) {
                 const int index = names.indexOf(std::filesystem::path(path).filename().string());
                 const std::string display = index >= 0 ? names.displayName(index, 0) : std::string{};
                 maps.push_back({ { "file", path },
@@ -250,13 +235,6 @@ namespace {
         return toolText(oss.str(), rc != 0); // rc != 0 e.g. when no maps are found
     }
 
-    json toolAnalyze(resource::GameResources& resources, const json& args) {
-        return runAnalyze(resources, args, /*paletteOnly*/ false);
-    }
-
-    json toolPalette(resource::GameResources& resources, const json& args) {
-        return runAnalyze(resources, args, /*paletteOnly*/ true);
-    }
 
     // A script selector: 'name' (unambiguous) or the 0-based 'programIndex'. One of the two is
     // required — defaulting to index 0 would silently describe obj_dude instead of erroring.
@@ -500,129 +478,42 @@ namespace {
         return toolText(oss.str(), rc != 0);
     }
 
-    /// Weapon perk ids as the engine numbers them: perk_defs.h opens with PERK_INVALID = -1, so
-    /// every entry sits one below its line position. -1 means the weapon carries no perk.
-    static const char* weaponPerkName(uint32_t perk) {
-        switch (static_cast<int32_t>(perk)) {
-            case 58:
-                return "long_range";
-            case 59:
-                return "accurate";
-            case 60:
-                return "penetrate";
-            case 61:
-                return "knockback";
-            case 64:
-                return "scope_range";
-            case 65:
-                return "fast_reload";
-            case 66:
-                return "night_sight";
-            case 67:
-                return "flameboy";
-            default:
-                return "none";
+    // A critter's stat as the engine reads it (critterGetStat) is base plus bonus, and base alone is
+    // badly misleading: a Turret reads 30 hit points there against the engine's 75, and a critter's
+    // resistances live entirely in the bonus block. Sums two export_protos stat blocks key by key.
+    nlohmann::ordered_json effectiveStats(const nlohmann::ordered_json& base, const nlohmann::ordered_json& bonus) {
+        if (!base.is_object()) {
+            return base.get<int64_t>() + bonus.get<int64_t>();
         }
+        nlohmann::ordered_json sum;
+        for (const auto& [key, value] : base.items()) {
+            sum[key] = effectiveStats(value, bonus.at(key));
+        }
+        return sum;
     }
 
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
         const auto pid = static_cast<uint32_t>(requireInt(args, "pid", 0, UINT32_MAX));
         try {
-            std::string name;
-            bool flat = false;
-            if (const Pro* pro = resources.tryLoadPro(pid); pro != nullptr) {
-                flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
-                if (Msg* msg = ProHelper::msgFile(resources, pro->type()); msg != nullptr) {
-                    name = msg->message(pro->header.message_id).text;
+            const Pro* pro = resources.tryLoadPro(pid);
+            nlohmann::ordered_json info{ { "pid", pid }, { "type", Pro::typeToString(ProtoId(pid).objectType()) },
+                { "name", cli::protoDisplayName(resources, pid) },
+                { "flat", pro != nullptr && Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT) } };
+
+            // The numbers, not just the label: an item or critter also carries its export_protos row,
+            // decoded by loadPro() -- whose pid-to-file mapping is not the identity (00000010.pro holds
+            // pid 11) -- so a caller never has to parse the .pro itself.
+            if (const auto row = pro != nullptr ? cli::protoRow(resources, pid, *pro) : std::nullopt) {
+                for (const auto& [key, value] : row->items()) {
+                    if (!info.contains(key)) {
+                        info[key] = value;
+                    }
                 }
-            }
-            json info{ { "pid", pid }, { "type", Pro::typeToString(ProtoId(pid).objectType()) },
-                { "name", name }, { "flat", flat } };
-
-            // The numbers, not just the label. Without these a caller wanting a critter's
-            // resistances or a weapon's perk has to parse the .pro itself, and a hand-rolled
-            // parser has to re-derive the pid-to-file mapping that loadPro() already does --
-            // which is not the identity: 00000010.pro holds pid 11 and 00000011.pro holds pid 10,
-            // and 14 item protos are transposed that way.
-            if (const Pro* pro = resources.tryLoadPro(pid); pro != nullptr) {
-                static const char* kDamage[] = { "normal", "laser", "fire", "plasma",
-                    "electrical", "emp", "explosion", "radiation", "poison" };
-                static const char* kSpecial[] = { "strength", "perception", "endurance",
-                    "charisma", "intelligence", "agility", "luck" };
-
                 if (ProtoId(pid).objectType() == ObjectType::Critter) {
-                    const auto& c = pro->critterData;
-                    json special = json::object();
-                    for (int i = 0; i < Pro::SPECIAL_STATS_COUNT; ++i) {
-                        special[kSpecial[i]] = c.specialStats[i] + c.bonusSpecialStats[i];
-                    }
-                    // Base plus bonus again, and here the base is usually the empty half: a
-                    // critter's resistances live entirely in the bonus arrays, so reading the
-                    // base alone reports every creature in the game as resisting nothing.
-                    json dt = json::object();
-                    for (int i = 0; i < Pro::DAMAGE_TYPES_ARMOR; ++i) {
-                        dt[kDamage[i]] = c.damageThreshold[i] + c.bonusDamageThreshold[i];
-                    }
-                    // The bonus block stores its 16 resistance words split 8 + 8 (see Pro.h),
-                    // so the 7 DR bonuses straddle the two arrays: the normal-damage one is the
-                    // last word of bonusDamageThreshold, the rest are bonusDamageResistance[0..5].
-                    auto bonusDR = [&c](int i) {
-                        return i == 0 ? c.bonusDamageThreshold[Pro::BONUS_DAMAGE_ARRAYS - 1]
-                                      : c.bonusDamageResistance[i - 1];
-                    };
-                    json dr = json::object();
-                    for (int i = 0; i < Pro::DAMAGE_TYPES_ARMOR; ++i) {
-                        dr[kDamage[i]] = c.damageResist[i] + bonusDR(i);
-                    }
-                    // Effective figures: a proto stat is base plus bonus, and base alone is
-                    // badly misleading -- a Turret reads 30 hit points there against the 75 the
-                    // engine gives it.
-                    // The proto's 18 skill words, in Skill enum order. Indexed positionally on
-                    // purpose: skill_defs.h opens with SKILL_INVALID = -1, so the enum's values
-                    // sit one below their position and using them here would shift every skill.
-                    static const char* kSkills[] = { "small_guns", "big_guns", "energy_weapons",
-                        "unarmed", "melee_weapons", "throwing", "first_aid", "doctor", "sneak",
-                        "lockpick", "steal", "traps", "science", "repair", "speech", "barter",
-                        "gambling", "outdoorsman" };
-                    json skills = json::object();
-                    for (int i = 0; i < Pro::SKILLS_COUNT; ++i) {
-                        skills[kSkills[i]] = c.skills[i];
-                    }
-
-                    info["critter"] = json{
-                        { "hitPoints", c.maxHitPoints + c.bonusHealthPoints },
-                        { "armorClass", c.armorClass + c.bonusArmorClass },
-                        { "actionPoints", c.actionPoints + c.bonusActionPoints },
-                        { "sequence", c.sequence + c.bonusSequence },
-                        { "healingRate", c.healingRate + c.bonusHealingRate },
-                        { "criticalChance", c.criticalChance + c.bonusCriticalChance },
-                        { "betterCriticals", c.betterCriticals + c.bonusBetterCriticals },
-                        { "meleeDamage", c.meleeDamage + c.bonusMeleeDamage },
-                        { "carryWeight", c.carryWeightMax + c.bonusCarryWeight },
-                        { "skills", skills },
-                        { "special", special },
-                        { "damageThreshold", dt },
-                        { "damageResistance", dr },
-                        { "aiPacket", c.aiPacket },
-                        { "teamNumber", c.teamNumber },
-                    };
-                } else if (pro->itemType() == ItemType::Weapon) {
-                    const auto& w = pro->weaponData;
-                    info["weapon"] = json{
-                        { "perk", weaponPerkName(w.perk) },
-                        { "damageMin", w.damageMin },
-                        { "damageMax", w.damageMax },
-                        { "rangePrimary", w.rangePrimary },
-                        { "rangeSecondary", w.rangeSecondary },
-                        { "actionCostPrimary", w.actionCostPrimary },
-                        { "actionCostSecondary", w.actionCostSecondary },
-                        { "minimumStrength", w.minimumStrength },
-                        { "burstRounds", w.burstRounds },
-                        { "ammoCapacity", w.ammoCapacity },
-                    };
+                    info["effective"] = effectiveStats(info.at("base"), info.at("bonus"));
                 }
             }
-            return toolText(info.dump());
+            return toolText(info.dump(-1, ' ', false, nlohmann::ordered_json::error_handler_t::replace));
         } catch (const std::exception& e) {
             return toolText(std::string("proto_info failed for pid ") + std::to_string(pid) + ": " + e.what(), true);
         }
@@ -895,7 +786,7 @@ namespace {
             "also gives each critter its live 'combat' state: cid, hp, ap, damageLastTurn, maneuver and "
             "results with engine flag names, and whoHitMeCid.",
             json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
-            [](resource::GameResources& r, const json& a) { return toolAnalyze(r, a); }, "" });
+            [](resource::GameResources& r, const json& a) { return runAnalyze(r, a, /*paletteOnly*/ false); }, "" });
         t.push_back({ "palette",
             "The weighted generation palette for the given maps (omit 'maps' for all), aggregated: "
             "{ floor:[{id,name,weight}], scenery:[{pid,number,name,weight}] }. Just what a generator "
@@ -903,9 +794,13 @@ namespace {
             "real placement count — without the full analyze report. scenery is scatter-eligible only "
             "(scenery type, non-flat).",
             json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
-            [](resource::GameResources& r, const json& a) { return toolPalette(r, a); }, "" });
+            [](resource::GameResources& r, const json& a) { return runAnalyze(r, a, /*paletteOnly*/ true); }, "" });
         t.push_back({ "proto_info",
-            "Resolve a proto PID to its type, engine display name and 'flat' flag.",
+            "Resolve a proto PID to its type, engine display name and 'flat' flag. An item or critter "
+            "proto also carries its decoded .pro record with the same keys as an export_protos row "
+            "(weapon/armor/... block, perk and damage-type names, a critter's base, bonus and skills), "
+            "and a critter adds 'effective': base plus bonus per stat, what the engine uses -- a "
+            "critter's resistances live entirely in the bonus block. Args: pid.",
             json({ { "type", "object" }, { "properties", { { "pid", { { "type", "integer" } } } } }, { "required", json::array({ "pid" }) } }),
             [](resource::GameResources& r, const json& a) { return toolProtoInfo(r, a); }, "" });
         t.push_back({ "describe_script",
@@ -1273,10 +1168,9 @@ namespace {
             "Which data sources are actually mounted, in order, and which of them wins when two "
             "provide the same file. Answers 'what am I reading?' -- the failure this exists for is a "
             "mount that was asked for and did not happen: nothing else reports it, and every answer "
-            "afterwards comes from whatever did mount while looking exactly like a correct one. A "
-            "directory that is a git work tree also reports gitDescribe, which is what separates "
-            "RPU's released 2.4.x from the development fork. A 'failedMounts' key appears only when "
-            "something did not mount. No args.",
+            "afterwards comes from whatever did mount while looking exactly like a correct one. Each "
+            "entry: {order, kind (dat|directory), path, label}, plus 'bytes' for a DAT. A 'failedMounts' "
+            "key appears only when something did not mount. No args.",
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolMounts(r, a); }, "" });
         t.push_back({ "resource_find",
@@ -1479,9 +1373,6 @@ json McpServer::handleMessage(const json& request) {
         }
         return dispatchRequest(_resources, request, id);
     } catch (const std::exception& e) {
-        if (isNotification) {
-            return json(nullptr);
-        }
         return errorMessage(id, -32603, std::string("internal error: ") + e.what());
     }
 }

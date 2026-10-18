@@ -2,10 +2,12 @@
 
 #include "resource/ConfigLoad.h"
 #include "cli/MapAnalyzer.h" // collectMapExits, listMapPaths, MapExit
+#include "cli/JsonText.h"
 #include "cli/MapLoad.h"     // loadMap
 #include "cli/ScriptLookup.h"
 #include "cli/ScriptRefs.h" // scriptMapTransitions
 #include "format/lst/Lst.h"
+#include "reader/TextParsing.h"
 #include "editor/Reachability.h"
 #include "format/city/CityTxt.h"
 #include "format/map/Map.h"
@@ -18,6 +20,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <filesystem>
 #include <format>
 #include <map>
 #include <memory>
@@ -33,15 +36,6 @@ namespace geck::cli {
 namespace {
 
     using ordered_json = nlohmann::ordered_json;
-
-    std::string baseName(const std::string& path) {
-        const auto slash = path.find_last_of("/\\");
-        return slash == std::string::npos ? path : path.substr(slash + 1);
-    }
-
-    ordered_json orNull(const std::string& s) {
-        return s.empty() ? ordered_json(nullptr) : ordered_json(s);
-    }
 
     // A map node: its friendly name, and whether we actually loaded it (vs only seeing it as an exit
     // destination of another map).
@@ -152,7 +146,7 @@ namespace {
             if (!map) {
                 continue; // unreadable maps simply don't appear as source nodes
             }
-            const std::string fromFile = baseName(mapPath);
+            const std::string fromFile = std::filesystem::path(mapPath).filename().string();
             const int fromIndex = names.indexOf(fromFile);
             NodeInfo& fromNode = nodes[fromFile];
             fromNode.analysed = true;
@@ -308,7 +302,7 @@ namespace {
         std::map<std::string, int, std::less<>> indexOf;
         if (const Lst* lst = script_lookup::loadScriptsLst(resources); lst != nullptr) {
             for (std::size_t i = 0; i < lst->list().size(); ++i) {
-                indexOf.try_emplace(script_lookup::toLower(script_lookup::stem(lst->list()[i])), static_cast<int>(i));
+                indexOf.try_emplace(text::toLower(script_lookup::stem(lst->list()[i])), static_cast<int>(i));
             }
         }
         std::map<int, std::vector<std::string>> mapsPlacing;
@@ -324,7 +318,7 @@ namespace {
             } else if (NodeInfo& toNode = nodes[to]; toNode.displayName.empty()) {
                 toNode.displayName = names.displayName(names.indexOf(to), 0);
             }
-            const auto index = indexOf.find(script_lookup::toLower(script_lookup::stem(call.script)));
+            const auto index = indexOf.find(text::toLower(script_lookup::stem(call.script)));
             const auto from = index != indexOf.end() ? mapsPlacing.find(index->second) : mapsPlacing.end();
             if (from == mapsPlacing.end()) {
                 layer.unplaced.push_back(std::move(call));

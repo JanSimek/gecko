@@ -20,25 +20,6 @@ void printUsage(const char* program) {
               << "  render_map, and more (tools/list has them all).\n";
 }
 
-void mountPath(geck::resource::GameResources& resources, const std::filesystem::path& path) {
-    try {
-        resources.files().addDataPath(path);
-    } catch (const std::exception& e) {
-        std::cerr << "warning: could not mount '" << path.string() << "': " << e.what() << "\n";
-    }
-}
-
-// Mount the user's --data paths plus the bundled resources (blank.frm, scripts, …) so render_map
-// resolves the same fallback assets the editor does — e.g. art/tiles/blank.frm, not in master.dat.
-void mountData(geck::resource::GameResources& resources, const std::vector<std::string>& dataPaths, const char* argv0) {
-    for (const auto& path : dataPaths) {
-        mountPath(resources, path);
-    }
-    if (const auto bundled = geck::cli::findBundledResources(argv0); !bundled.empty()) {
-        mountPath(resources, bundled);
-    }
-}
-
 // MCP stdio transport: one JSON-RPC message per line in, one response line per request out.
 void serveStdio(geck::mcp::McpServer& server) {
     std::string line;
@@ -85,7 +66,11 @@ int main(int argc, char** argv) {
     spdlog::set_level(spdlog::level::off);
 
     geck::resource::GameResources resources;
-    mountData(resources, dataPaths, argv[0]);
+    // The bundled resources (blank.frm, scripts, …) let render_map resolve the same fallback assets
+    // the editor does. A path that fails to mount is reported and the server still starts.
+    geck::cli::mountDataPaths(resources, dataPaths, argv[0], [](const std::filesystem::path& path, const std::exception& e) {
+        std::cerr << "warning: could not mount '" << path.string() << "': " << e.what() << "\n";
+    });
 
     geck::mcp::McpServer server(resources);
     serveStdio(server);

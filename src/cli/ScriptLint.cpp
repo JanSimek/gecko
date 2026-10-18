@@ -1,17 +1,15 @@
 #include "cli/ScriptLint.h"
 
 #include "cli/ScriptLookup.h"
-#include "resource/ResourcePaths.h"
 #include "format/map/MapScript.h"
 #include "format/map/Map.h"
 #include "cli/MapLoad.h"
 #include "format/lst/Lst.h"
+#include "reader/TextParsing.h"
 #include "resource/GameResources.h"
 #include "format/gam/Gam.h"
 #include "resource/GameVarsLoader.h"
 #include "resource/ScriptLint.h"
-
-#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <format>
@@ -32,6 +30,7 @@ namespace {
     using namespace script_lookup;
     using resource::ScriptFinding;
     using resource::ScriptReport;
+    using text::toLower;
 
     constexpr std::size_t kMaxFindings = 1000; // across every script, for `all`
 
@@ -398,12 +397,7 @@ std::optional<nlohmann::ordered_json> analyzeScript(resource::GameResources& res
 
 int lintFiles(resource::GameResources& resources, const std::vector<std::filesystem::path>& files, bool includeNotes,
     const std::string& locale, bool json, std::ostream& out) {
-    const Lst* scripts = nullptr;
-    try {
-        scripts = resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
-    } catch (const std::exception& e) {
-        spdlog::debug("lint: no scripts.lst ({}), so the checks that need it are skipped", e.what());
-    }
+    const Lst* scripts = script_lookup::loadScriptsLst(resources); // null: the checks that need it are skipped
     resource::ScriptLinter linter(resources, scripts, locale);
     const ssl::DiskSourceProvider provider;
 

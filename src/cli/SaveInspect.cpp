@@ -1,18 +1,21 @@
 #include "cli/SaveInspect.h"
 
 #include "cli/CritterCombatFlags.h"
-#include "cli/GlobalVars.h"
+#include "resource/GameVarsLoader.h"
 #include "cli/MapLoad.h"
 #include "format/gam/Gam.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "cli/ProtoName.h"
 #include "format/pro/Pro.h"
-#include "reader/IniParser.h"
+#include "format/party/PartyTxt.h"
+#include "reader/party/PartyTxtReader.h"
 #include "reader/ReaderExceptions.h"
 #include "reader/map/MapReader.h"
+#include "resource/ConfigLoad.h"
 #include "resource/GameResources.h"
 #include "resource/MapFileIO.h"
+#include "util/FileIo.h"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -23,15 +26,9 @@
 #include <exception>
 #include <filesystem>
 #include <format>
-#include <fstream>
-#include <functional>
-#include <iterator>
 #include <map>
 #include <memory>
-#include <optional>
 #include <ostream>
-#include <set>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -143,39 +140,12 @@ namespace {
         std::size_t _pos = 0;
     };
 
-    std::optional<std::vector<uint8_t>> readFile(const std::filesystem::path& path) {
-        if (std::error_code ec; !std::filesystem::is_regular_file(path, ec)) {
-            return std::nullopt;
-        }
-        std::ifstream in(path, std::ios::binary);
-        if (!in) {
-            return std::nullopt;
-        }
-        return std::vector<uint8_t>(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-    }
-
     // gPartyMemberDescriptionsLength: partyMembersInit counts [Party Member N] sections from 0 that carry a
-    // party_member_pid, stopping at the first gap.
-    std::optional<std::size_t> partyMemberCount(resource::GameResources& resources) {
-        const auto bytes = resources.files().readRawBytes("data/party.txt");
-        if (!bytes.has_value()) {
-            return std::nullopt;
-        }
-        std::istringstream in(std::string(bytes->begin(), bytes->end()));
-        std::set<std::string, std::less<>> sectionsWithPid;
-        std::string section;
-        ini::parse(
-            in, [&section](std::string_view name) { section = name; },
-            [&section, &sectionsWithPid](std::string_view key, std::string_view) {
-                if (key == "party_member_pid") {
-                    sectionsWithPid.insert(section);
-                }
-            });
-        std::size_t count = 0;
-        while (sectionsWithPid.contains("Party Member " + std::to_string(count))) {
-            ++count;
-        }
-        return count;
+    // party_member_pid, stopping at the first gap — the rule parsePartyTxt applies.
+    std::size_t partyMemberCount(resource::GameResources& resources) {
+        return resource::loadConfig<PartyTxt>(resources, { "data/party.txt", "party.txt" },
+            [](const std::string& text) { return parsePartyTxt(text); })
+            .members.size();
     }
 
     ordered_json critterJson(resource::GameResources& resources, const MapObject& critter, bool isDude) {
@@ -544,25 +514,26 @@ int describeSave(resource::GameResources& resources, const DescribeSaveOptions& 
     } else {
         slot = slot.parent_path();
     }
-    const auto bytes = readFile(saveDat);
-    if (!bytes.has_value()) {
+    if (std::error_code ec; !std::filesystem::is_regular_file(saveDat, ec)) {
         out << "describe_save: cannot read " << saveDat.string() << "\n";
         return 1;
     }
-    const Gam* gam = loadGameGam(resources);
+    const std::string raw = io::readFile(saveDat);
+    const std::vector<uint8_t> bytes(raw.begin(), raw.end());
+    const Gam* gam = resource::loadVault13Gam(resources);
     if (gam == nullptr) {
         out << "describe_save: data/vault13.gam is not mounted; the save's global-variable blocks have its length\n";
         return 1;
     }
-    const auto partyCount = partyMemberCount(resources);
-    if (!partyCount.has_value() || *partyCount == 0) {
+    const std::size_t partyCount = partyMemberCount(resources);
+    if (partyCount == 0) {
         out << "describe_save: data/party.txt is not mounted or has no [Party Member 0] with a party_member_pid; the "
                "save's perk block has one row per party member\n";
         return 1;
     }
 
     try {
-        const ordered_json root = decodeSave(resources, *bytes, slot, gam->gameGlobalVars(), *partyCount);
+        const ordered_json root = decodeSave(resources, bytes, slot, gam->gameGlobalVars(), partyCount);
         // Names in a save are CP-1252 game text, so emit invalid UTF-8 as replacement characters rather than throwing.
         out << root.dump(2, ' ', false, ordered_json::error_handler_t::replace) << "\n";
         return 0;

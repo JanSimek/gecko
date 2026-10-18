@@ -789,6 +789,7 @@ if(GECK_BUILD_CLI)
         cli/Endings.h
         cli/Endings.cpp
         cli/GameText.h
+        cli/JsonText.h
         cli/GameText.cpp
         cli/GvarRoles.h
         cli/GvarRoles.cpp

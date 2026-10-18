@@ -3,6 +3,7 @@
 #include "cli/CritterCombatFlags.h"
 
 #include "cli/MapLoad.h"
+#include "cli/ScriptLookup.h"
 #include "editor/FloorSynth.h"
 #include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
@@ -15,10 +16,10 @@
 #include "format/map/Tile.h"
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
+#include "reader/TextParsing.h"
 #include "resource/AiTxtLoader.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
-#include "resource/ResourcePaths.h"
 #include "resource/ScriptNames.h"
 #include "util/ProHelper.h"
 
@@ -30,9 +31,9 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <format>
 #include <map>
 #include <memory>
@@ -48,9 +49,8 @@ namespace geck::cli {
 
 namespace {
 
-    std::string baseName(const std::string& path) {
-        const auto slash = path.find_last_of("/\\");
-        return slash == std::string::npos ? path : path.substr(slash + 1);
+    std::string fileNameOf(const std::string& path) {
+        return std::filesystem::path(path).filename().string();
     }
 
     // The object's raw engine PID, "0x%08X" — the actual identifier a generator/MCP client
@@ -190,7 +190,7 @@ namespace {
             std::string file;
             try {
                 const std::string proPath = ProHelper::basePath(_resources, pid);
-                file = baseName(proPath);
+                file = fileNameOf(proPath);
                 if (const Pro* pro = _resources.repository().tryLoad<Pro>(proPath); pro != nullptr) {
                     if (Msg* msg = ProHelper::msgFile(_resources, pro->type()); msg != nullptr) {
                         engineName = msg->message(pro->header.message_id).text;
@@ -212,60 +212,6 @@ namespace {
         std::unordered_map<uint32_t, bool> _resolved;
         std::unordered_map<uint32_t, uint32_t> _critterAiPackets;
     };
-
-    // The mounted scripts.lst (script_id is a 0-based index into list()), or nullptr if absent.
-    const Lst* loadScriptsLst(resource::GameResources& resources) {
-        try {
-            return resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
-        } catch (const std::exception& e) {
-            spdlog::debug("loadScriptsLst: {}", e.what());
-            return nullptr;
-        }
-    }
-
-    // {programIndex, filename} for an object's attached script, or nullopt. The object's SID matches a
-    // MapScript whose script_id is the 0-based scripts.lst index (no offset, as the engine does).
-    std::optional<std::pair<int, std::string>> resolveObjectScript(Map& map, int32_t mapScriptsPid, const Lst* scriptsLst) {
-        if (mapScriptsPid < 0) {
-            return std::nullopt;
-        }
-        const auto sid = static_cast<uint32_t>(mapScriptsPid);
-        const int section = MapScript::sidSection(sid);
-        const auto& sections = map.getMapFile().map_scripts;
-        if (section < 0 || section >= Map::SCRIPT_SECTIONS) {
-            return std::nullopt;
-        }
-        for (const auto& script : sections[section]) {
-            if (script.pid == sid) {
-                const int programIndex = static_cast<int>(script.script_id);
-                std::string name;
-                if (scriptsLst != nullptr && programIndex >= 0 && programIndex < static_cast<int>(scriptsLst->list().size())) {
-                    name = scriptsLst->at(programIndex);
-                }
-                return std::make_pair(programIndex, name);
-            }
-        }
-        return std::nullopt;
-    }
-
-    // The MapScript an object's SID points at, or nullptr. Mirrors resolveObjectScript's lookup so the
-    // caller can read local variables without re-deriving the section.
-    const MapScript* findObjectScript(Map& map, int32_t mapScriptsPid) {
-        if (mapScriptsPid < 0) {
-            return nullptr;
-        }
-        const auto sid = static_cast<uint32_t>(mapScriptsPid);
-        const int section = MapScript::sidSection(sid);
-        if (section < 0 || section >= Map::SCRIPT_SECTIONS) {
-            return nullptr;
-        }
-        for (const auto& script : map.getMapFile().map_scripts[section]) {
-            if (script.pid == sid) {
-                return &script;
-            }
-        }
-        return nullptr;
-    }
 
     // Ordered so the emitted objects keep the field order below (nlohmann's default json sorts keys).
     using ordered_json = nlohmann::ordered_json;
@@ -442,7 +388,7 @@ namespace {
         }
 
         const MapUsage usage = collectUsage(*map);
-        out << "=== " << baseName(mapPath) << " ===\n";
+        out << "=== " << fileNameOf(mapPath) << " ===\n";
         out << "  floor tiles (" << usage.floors.size() << "):\n";
         for (const auto& [id, count] : sortedByCountDesc(usage.floors)) {
             out << "    " << names.tileName(id) << "  x" << count << "\n";
@@ -677,16 +623,19 @@ namespace {
 
     // The attached script as {programIndex, name, localVars} (feed programIndex to describe_script) or
     // null. localVars is the script's slice of the map's LVAR pool.
-    ordered_json critterScriptJson(Map& map, const MapObject& object, const Lst* scriptsLst) {
-        const auto ref = resolveObjectScript(map, object.map_scripts_pid, scriptsLst);
-        if (!ref.has_value()) {
+    ordered_json critterScriptJson(const Map& map, const MapObject& object, const Lst* scriptsLst) {
+        // A SID of -1 (no script) names no section, so it finds nothing.
+        const MapScript* script = map.scriptForSid(static_cast<uint32_t>(object.map_scripts_pid));
+        if (script == nullptr) {
             return nullptr;
         }
-        ordered_json localVars = ordered_json::array();
-        if (const MapScript* script = findObjectScript(map, object.map_scripts_pid); script != nullptr) {
-            localVars = localVarsToJson(*script, map.getMapFile().map_local_vars);
+        const int programIndex = static_cast<int>(script->script_id);
+        std::string name;
+        if (scriptsLst != nullptr && programIndex >= 0 && programIndex < static_cast<int>(scriptsLst->list().size())) {
+            name = scriptsLst->at(programIndex);
         }
-        return { { "programIndex", ref->first }, { "name", ref->second }, { "localVars", std::move(localVars) } };
+        return { { "programIndex", programIndex }, { "name", name },
+            { "localVars", localVarsToJson(*script, map.getMapFile().map_local_vars) } };
     }
 
     // Per-map critter array. `team` is the instance group_id; `aiPacket` falls back to the proto
@@ -694,8 +643,7 @@ namespace {
     // each critter its live combat state.
     ordered_json crittersToJson(Map& map, NameResolver& names, const AiTxt& ai, const Lst* scriptsLst) {
         auto array = ordered_json::array();
-        constexpr uint32_t MAP_HEADER_SAVED = 0x01; // fallout2-ce map_defs.h
-        const bool savedMap = (map.getMapFile().header.flags & MAP_HEADER_SAVED) != 0;
+        const bool savedMap = (map.getMapFile().header.flags & static_cast<uint32_t>(MapHeaderFlags::Saved)) != 0;
         const auto byCid = savedMap ? crittersByCombatId(map) : CombatIdIndex{};
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
@@ -856,7 +804,7 @@ namespace {
     // The analysed map's own friendly name (map.msg at elevation 0), found by matching its filename to
     // a maps.txt section. null when the map isn't in the registry or map.msg isn't mounted.
     ordered_json selfDisplayName(const std::string& mapPath, const AnalyzeContext& ctx) {
-        const int index = ctx.mapNames.indexOf(baseName(mapPath));
+        const int index = ctx.mapNames.indexOf(fileNameOf(mapPath));
         if (index < 0) {
             return nullptr;
         }
@@ -869,7 +817,7 @@ namespace {
     ordered_json mapToJson(const std::string& mapPath, Map& map, const AnalyzeContext& ctx, Aggregate& agg) {
         const MapUsage usage = collectUsage(map);
         ordered_json entry;
-        entry["name"] = baseName(mapPath);
+        entry["name"] = fileNameOf(mapPath);
         entry["path"] = mapPath;
         entry["displayName"] = selfDisplayName(mapPath, ctx);
         entry["floor"] = floorsToJson(usage, ctx.names, agg);
@@ -885,10 +833,10 @@ namespace {
 
     // Machine-readable analyze for an MCP client: per map and an aggregate. `flat` is the
     // structural-vs-decoration hint; `adjacency` lists directional borders; `clusters` groups objects.
-    void emitJson(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
-        NameResolver& names, const AiTxt& ai, std::ostream& out) {
+    ordered_json analyzeJson(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
+        NameResolver& names, const AiTxt& ai) {
         Aggregate agg;
-        const Lst* scriptsLst = loadScriptsLst(resources);   // shared across maps (cached); names attached scripts
+        const Lst* scriptsLst = script_lookup::loadScriptsLst(resources); // shared across maps (cached); names attached scripts
         const resource::MapNameResolver mapNames(resources); // maps.txt + map.msg, loaded once
         const AnalyzeContext ctx{ resources, names, ai, scriptsLst, mapNames };
         auto maps = ordered_json::array();
@@ -909,9 +857,7 @@ namespace {
         aggregate["objects"] = aggObjectsToJson(agg, names);
         aggregate["adjacency"] = aggAdjacencyToJson(agg, names);
         root["aggregate"] = std::move(aggregate);
-        // Fallout 2 text (proto/tile/critter names, AI labels) is CP-1252; `replace` keeps dump() from
-        // throwing on stray non-UTF-8 bytes and emits valid JSON (U+FFFD substitutes).
-        out << root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
+        return root;
     }
 
     // One elevation's floor or roof layer as a flat row-major id array (index = row*COLS + col).
@@ -1000,10 +946,7 @@ std::vector<std::string> listMapPaths(const resource::DataFileSystem& files) {
     // the raw VFS keys (whose case and leading "/" depend on the DAT/mount).
     std::vector<std::string> mapPaths;
     for (const auto& path : files.list("*")) {
-        std::string ext = path.extension().string();
-        std::ranges::transform(ext, ext.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (ext == ".map") {
+        if (text::toLower(path.extension().string()) == ".map") {
             mapPaths.push_back(path.generic_string());
         }
     }
@@ -1012,10 +955,6 @@ std::vector<std::string> listMapPaths(const resource::DataFileSystem& files) {
 }
 
 int dumpMapGrid(resource::GameResources& resources, const DumpGridOptions& options, std::ostream& out) {
-    if (options.map.empty()) {
-        out << "error: dump-grid requires --map <path>\n";
-        return 2;
-    }
     const std::unique_ptr<Map> map = loadMap(resources, options.map);
     if (!map) {
         out << "skip (unreadable or parse failed): " << options.map << "\n";
@@ -1024,7 +963,7 @@ int dumpMapGrid(resource::GameResources& resources, const DumpGridOptions& optio
     NameResolver names(resources);
 
     ordered_json root;
-    root["map"] = baseName(options.map);
+    root["map"] = fileNameOf(options.map);
     root["path"] = options.map;
     root["tileCols"] = Map::COLS;
     root["tileRows"] = Map::ROWS;
@@ -1056,6 +995,11 @@ int dumpMapGrid(resource::GameResources& resources, const DumpGridOptions& optio
     return 0;
 }
 
+ordered_json analyzeMapsJson(resource::GameResources& resources, const std::vector<std::string>& mapPaths) {
+    NameResolver names(resources);
+    return analyzeJson(mapPaths, resources, names, resource::loadAiTxt(resources));
+}
+
 int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& options, std::ostream& out) {
     const std::vector<std::string> mapPaths = collectMapPaths(resources.files(), options, out);
     if (mapPaths.empty()) {
@@ -1069,7 +1013,11 @@ int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& option
         return 0;
     }
     if (options.json) {
-        emitJson(mapPaths, resources, names, resource::loadAiTxt(resources), out);
+        // Fallout 2 text (proto/tile/critter names, AI labels) is CP-1252; `replace` keeps dump() from
+        // throwing on stray non-UTF-8 bytes and emits valid JSON (U+FFFD substitutes).
+        out << analyzeJson(mapPaths, resources, names, resource::loadAiTxt(resources))
+                   .dump(-1, ' ', false, ordered_json::error_handler_t::replace)
+            << "\n";
         return 0;
     }
 

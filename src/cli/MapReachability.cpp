@@ -1,6 +1,7 @@
 #include "cli/MapReachability.h"
 
 #include "cli/MapLoad.h"
+#include "cli/ScriptLookup.h"
 #include "editor/HexGeometry.h"
 #include "editor/Reachability.h"
 #include "format/map/Map.h"
@@ -12,6 +13,7 @@
 #include <spdlog/spdlog.h>
 
 #include <cstdint>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -23,14 +25,6 @@ namespace {
 
     constexpr int kHexCount = hexgrid::WIDTH * hexgrid::HEIGHT;
     constexpr std::size_t kMaxReported = 25; // cap the orphan list; we also report the true total
-
-    // Filename without directory or extension ("maps/vctydwtn.map" -> "vctydwtn").
-    std::string baseName(const std::string& path) {
-        const auto slash = path.find_last_of("/\\");
-        const std::string file = slash == std::string::npos ? path : path.substr(slash + 1);
-        const auto dot = file.find_last_of('.');
-        return dot == std::string::npos ? file : file.substr(0, dot);
-    }
 
     // Only critters and items are gameplay content worth flagging as "orphaned" if cut off.
     bool isGameplayObject(const MapObject& object) {
@@ -135,18 +129,17 @@ namespace {
     }
 } // namespace
 
-int analyzeReachability(resource::GameResources& resources, const ReachabilityOptions& options, std::ostream& out) {
-    const std::unique_ptr<Map> map = loadMap(resources, options.mapPath);
+std::optional<ordered_json> reachabilityJson(resource::GameResources& resources, const std::string& mapPath) {
+    const std::unique_ptr<Map> map = loadMap(resources, mapPath);
     if (!map) {
-        out << "reachability: cannot load map " << options.mapPath << " (is the Fallout 2 data mounted?)\n";
-        return 1;
+        return std::nullopt;
     }
     const auto& mapFile = map->getMapFile();
-    const std::string mapName = baseName(options.mapPath);
+    const std::string mapName = script_lookup::stem(mapPath);
 
     ordered_json root;
     root["map"] = mapName;
-    root["path"] = options.mapPath;
+    root["path"] = mapPath;
     auto elevations = ordered_json::array();
     static const std::vector<std::shared_ptr<MapObject>> kNoObjects;
     for (int elevation = 0; elevation < Map::ELEVATION_COUNT; ++elevation) {
@@ -158,7 +151,16 @@ int analyzeReachability(resource::GameResources& resources, const ReachabilityOp
         elevations.push_back(elevationToJson(resources, mapFile.header, elevation, objects, mapName));
     }
     root["reachability"] = std::move(elevations);
-    out << root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
+    return root;
+}
+
+int analyzeReachability(resource::GameResources& resources, const ReachabilityOptions& options, std::ostream& out) {
+    const auto root = reachabilityJson(resources, options.mapPath);
+    if (!root) {
+        out << "reachability: cannot load map " << options.mapPath << " (is the Fallout 2 data mounted?)\n";
+        return 1;
+    }
+    out << root->dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     return 0;
 }
 
