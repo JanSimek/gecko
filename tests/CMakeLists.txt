@@ -17,6 +17,7 @@ add_executable(general_tests
     general/test_city_txt.cpp
     general/test_worldmap_txt.cpp
     general/test_world_encounters.cpp
+    general/test_map_examples.cpp
     general/test_palette_blend.cpp
     general/test_worldmap_scene.cpp
     general/test_quests_txt.cpp
