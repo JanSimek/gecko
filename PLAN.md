@@ -156,8 +156,14 @@ terrain-derived locations:
     single tiles; nothing paints a repeating multi-tile pattern by dragging.
 
 **Known bugs:**
-- *Reported, unconfirmed from code:* the file browser panel is sometimes hard to resize; placing
-  lights (`light.frm`, preloaded but never drawn) misbehaves.
+- **Light Sources are invisible and unclickable.** The game's lights are "Light Source" scenery
+  (PID `0x0200008D`, 1,848 in shipped maps) drawn with `art/scenery/block.frm`, a transparent
+  1×1 pixel, and `ObjectPicker` only hits opaque pixels, so a placed light vanishes and can't be
+  selected (0 of 22 clickable on `arcaves.map` elevation 2). Fix: draw the bundled
+  `art/misc/light.frm` marker (preloaded, never drawn) on the hex of each light-emitting object
+  whose art has no opaque pixel, pickable through the marker and toggled with the blocker
+  markers; always show the selected light's radius overlay, updating live while its
+  radius/intensity are edited. The in-game look belongs to the preview mode (Lighting below).
 ---
 
 # SSL script editing
@@ -330,11 +336,19 @@ TODO-claim table are in the audit doc.
   `framesPerDirection`, looping idle anims), per-object animation state, and only animating
   on-screen objects for perf at map scale. Per-frame offset handling is already correct
   (frames anchor by `shiftX/shiftY`), so playback won't wobble. No new assets needed.
-- **Lighting / darkness — Medium.** An additive light pass / ambient tint in `RenderingEngine`
-  from per-object light (`light_radius`/`light_intensity`; the hex light overlay already reads
-  them). **Not** from `header.darkness`: the engine never uses it — ambient light is reset on map
-  load and set by scripts (`lightSetAmbientIntensity`), so a preview needs an assumed ambient
-  level.
+- **Lighting / darkness — Medium.** Port the engine's light grid rather than approximate it:
+  per elevation, 40,000 hex intensities starting at 655, each emitter deposited by
+  `_obj_adjust_light` (fallout2-ce `object.cc`: linear per-ring falloff through the six-direction
+  fan, shadowed by objects without `OBJECT_LIGHT_THRU`), in a Qt-free core shared with the hex
+  light overlay so the overlay gains wall shadows too. A pixel then shows at
+  `L = max(ambient, hex intensity)` through `intensityColorTable[colour][L / 512]` — already ported
+  as `BlendTables::intensity` (`util/PaletteBlend.h`); floors interpolate L across the engine's
+  sampled vertices (`tile.cc`), sprites and roofs take their hex's value. On the GPU that is a
+  shader (the renderer already loads one) reading the palette index, a light-grid texture and the
+  intensity LUT. **Not** from `header.darkness`: the engine never uses it — ambient is reset on
+  map load and set by the map script (`set_light_level`, 0→16384, 50→40960, 100→65536), so the
+  preview offers day / cavern / night presets, defaulting to what the map script sets when the
+  SSL front end can read it.
 - **Ambient sound — Large.** SFML audio is currently **disabled** (`SFML_BUILD_AUDIO=FALSE`,
   `cmake/dependencies.cmake`), so step one is enabling it. Fallout 2 sounds are **ACM** files (custom
   ADPCM-style codec) needing a decoder, and ambient audio isn't stored in the `.map`
