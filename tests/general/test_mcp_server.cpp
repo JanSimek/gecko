@@ -71,26 +71,56 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         CHECK(seen == 2);
     }
 
-    // The 0-based programIndex is the engine's own index base (see cli/ScriptIntrospect.h), so the
-    // 1-based SCRIPT_* constants from headers/scripts.h name the NEXT script if passed unadjusted.
-    // Defaulting a missing selector to 0 would describe obj_dude just as silently, so both
-    // script-selecting tools insist on one and say which base they mean.
-    SECTION("the script tools demand a selector and name the index base") {
-        for (const char* tool : { "describe_script", "find_script" }) {
-            const json resp = test::mcpCall(server, tool);
+    // Every tool called without its required arguments, or with no data mounted, answers with a tool
+    // error (not a crash and not a protocol error) that carries no structuredContent.
+    SECTION("a tool missing its arguments or its data reports a tool error") {
+        struct Row {
+            const char* tool;
+            json arguments;
+            const char* fragment; // a substring the error text must contain
+        };
+        const Row rows[] = {
+            // The 0-based programIndex is the engine's own index base (see cli/ScriptIntrospect.h), so
+            // the 1-based SCRIPT_* constants from headers/scripts.h name the NEXT script if passed
+            // unadjusted. Defaulting a missing selector to 0 would describe obj_dude just as silently,
+            // so both script-selecting tools insist on one and say which base they mean.
+            { "describe_script", json::object(), "1-based" },
+            { "find_script", json::object(), "1-based" },
+            // programIndex 0 is accepted: with no data it fails only for the missing scripts.lst.
+            { "describe_script", { { "programIndex", 0 } }, "scripts.lst not found" },
+            // Scenery and walls are ~98% of every map's object records and nobody searches for a wall,
+            // so the export omits them unless asked. With no data mounted the call still answers cleanly.
+            { "export_entities", json::object(), "no maps" },
+            { "find_text", json::object(), "'pattern'" },
+            { "analyze", json::object(), "No .map files" },
+            { "proto_info", json::object(), "'pid'" },
+            { "resource_find", json::object(), "'path'" },
+            { "render_map", json::object(), "'map'" },
+            { "reachability", json::object(), "'map'" },
+            { "describe_map", json::object(), "'map'" },
+            { "world_encounters", { { "x", 10 } }, "'x' and 'y'" },
+            // The data-reading tools print their empty result and still flag the missing data.
+            { "map_graph", json::object(), "" },
+            { "world_map", json::object(), "" },
+            { "world_encounters", json::object(), "" },
+            { "quests", json::object(), "" },
+            { "gvars", json::object(), "" },
+            { "endings", json::object(), "" },
+            { "party", json::object(), "" },
+            { "resolve_fid", { { "fid", "nope" } }, "not a valid FID" },
+            { "frm_info", json::object(), "'frm'" },
+            { "render_frm", { { "frm", "ext2grd1" } }, "'out'" },
+            { "list_frms", json::object(), "'glob'" },
+        };
+        for (const auto& row : rows) {
+            INFO(row.tool << " " << row.arguments.dump());
+            const json resp = test::mcpCall(server, row.tool, row.arguments);
+            REQUIRE(resp.contains("result"));
             CHECK(resp["result"]["isError"] == true);
+            CHECK_FALSE(resp["result"].contains("structuredContent"));
             const auto text = resp["result"]["content"][0]["text"].get<std::string>();
-            CHECK(text.find("1-based") != std::string::npos);
+            CHECK(text.find(row.fragment) != std::string::npos);
         }
-    }
-
-    // Scenery and walls are ~98% of every map's object records and nobody searches for a wall, so the
-    // export omits them unless asked. With no data mounted the call still has to answer cleanly.
-    SECTION("export_entities reports missing data rather than failing oddly") {
-        const json resp = test::mcpCall(server, "export_entities");
-        CHECK(resp["result"]["isError"] == true);
-        const auto text = resp["result"]["content"][0]["text"].get<std::string>();
-        CHECK(text.find("no maps") != std::string::npos);
     }
 
     SECTION("export_protos reports missing data and rejects filters it cannot honour") {
@@ -105,11 +135,6 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             // A rejected filter never reaches the data: the message is about the argument.
             CHECK(resp["result"]["content"][0]["text"].get<std::string>().find("items.lst") == std::string::npos);
         }
-    }
-
-    SECTION("find_text requires a pattern") {
-        const json resp = test::mcpCall(server, "find_text");
-        CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("a notification (no id) gets no response") {
@@ -151,117 +176,12 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
         CHECK_FALSE(resp["result"].contains("structuredContent"));
     }
 
-    SECTION("a tool error carries no structuredContent") {
-        const json resp = test::mcpCall(server, "analyze");
-        REQUIRE(resp["result"]["isError"] == true);
-        CHECK_FALSE(resp["result"].contains("structuredContent"));
-    }
-
-    SECTION("analyze with no data mounted reports a tool error (not a crash)") {
-        const json resp = test::mcpCall(server, "analyze");
-        CHECK(resp["result"]["isError"] == true);
-    }
-
-    SECTION("proto_info without a pid is a tool error") {
-        const json resp = test::mcpCall(server, "proto_info");
-        CHECK(resp["result"]["isError"] == true);
-    }
-
     SECTION("resource_find with no data mounted reports found=false, not an error") {
         const json resp = test::mcpCall(server, "resource_find", { { "path", "art/tiles/gras030.frm" } });
         CHECK(resp["result"]["isError"] == false);
         const json payload = json::parse(resp["result"]["content"][0]["text"].get<std::string>());
         CHECK(payload["found"] == false);
         CHECK(payload["source"].is_null());
-    }
-
-    SECTION("resource_find without a path is a tool error") {
-        const json resp = test::mcpCall(server, "resource_find");
-        CHECK(resp["result"]["isError"] == true);
-    }
-
-    SECTION("render_map without map/out is a tool error") {
-        const json resp = test::mcpCall(server, "render_map");
-        CHECK(resp["result"]["isError"] == true);
-    }
-
-    SECTION("describe_script without programIndex is a tool error") {
-        const json resp = test::mcpCall(server, "describe_script");
-        CHECK(resp["result"]["isError"] == true);
-    }
-
-    SECTION("describe_script accepts index 0 and reports a tool error with no data (not a crash)") {
-        // programIndex is 0-based, so 0 must be accepted (not rejected as the old 1-based guard did);
-        // with no data mounted it fails only for the missing scripts.lst.
-        const json resp = test::mcpCall(server, "describe_script", { { "programIndex", 0 } });
-        CHECK(resp["result"]["isError"] == true);
-    }
-
-    SECTION("reachability without a map is a tool error") {
-        const json resp = test::mcpCall(server, "reachability");
-        CHECK(resp["result"]["isError"] == true);
-    }
-
-    SECTION("describe_map without a map is a tool error") {
-        const json resp = test::mcpCall(server, "describe_map");
-        CHECK(resp["result"]["isError"] == true);
-    }
-
-    SECTION("map_graph with no data mounted reports a tool error (no maps found)") {
-        const json resp = test::mcpCall(server, "map_graph");
-        CHECK(resp["result"]["isError"] == true);
-    }
-
-    SECTION("world_map with no data mounted reports a tool error (no city.txt)") {
-        const json resp = test::mcpCall(server, "world_map");
-        CHECK(resp["result"]["isError"] == true);
-    }
-
-    SECTION("world_encounters needs x and y together") {
-        const json resp = test::mcpCall(server, "world_encounters", { { "x", 10 } });
-        CHECK(resp["result"]["isError"] == true);
-        CHECK(resp["result"]["content"][0]["text"].get<std::string>().find("'x' and 'y'") != std::string::npos);
-    }
-
-    SECTION("world_encounters with no data mounted reports a tool error (no worldmap.txt)") {
-        const json resp = test::mcpCall(server, "world_encounters");
-        CHECK(resp["result"]["isError"] == true);
-    }
-
-    SECTION("quests / gvars / endings / party with no data mounted report tool errors") {
-        const json q = test::mcpCall(server, "quests");
-        CHECK(q["result"]["isError"] == true);
-        const json g = test::mcpCall(server, "gvars");
-        CHECK(g["result"]["isError"] == true);
-        const json e = test::mcpCall(server, "endings");
-        CHECK(e["result"]["isError"] == true);
-        const json p = test::mcpCall(server, "party");
-        CHECK(p["result"]["isError"] == true);
-    }
-
-    SECTION("resolve_fid decodes a FID without any data mounted") {
-        // The type byte + index are pure FID arithmetic, so resolve_fid succeeds even with no data —
-        // only the art-path lookup needs the LSTs (it just reports a null path then).
-        const json resp = test::mcpCall(server, "resolve_fid", { { "fid", "0x05000021" } });
-        CHECK(resp["result"]["isError"] == false);
-        const json decoded = json::parse(resp["result"]["content"][0]["text"].get<std::string>());
-        CHECK(decoded["type"] == "misc");
-        CHECK(decoded["index"] == 33);
-        CHECK(decoded["fid"] == 0x05000021);
-    }
-
-    SECTION("resolve_fid rejects a non-numeric fid as a tool error") {
-        const json resp = test::mcpCall(server, "resolve_fid", { { "fid", "nope" } });
-        CHECK(resp["result"]["isError"] == true);
-    }
-
-    SECTION("frm_info / render_frm / list_frms without their required args are tool errors") {
-        CHECK(test::mcpCall(server, "frm_info")["result"]["isError"]
-            == true);
-        CHECK(test::mcpCall(server, "render_frm", { { "frm", "ext2grd1" } })["result"]["isError"]
-            == true); // missing 'out'
-        CHECK(test::mcpCall(server, "list_frms")["result"]["isError"]
-            == true);
     }
 
     SECTION("list_frms with no data mounted is an empty array, not an error") {

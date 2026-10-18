@@ -8,28 +8,12 @@
 
 namespace fs = std::filesystem;
 
-TEST_CASE("Settings save-location marker: resolution, invariant, persistence", "[settings][writableroot]") {
+TEST_CASE("Settings keeps its save-location marker listed and persists it", "[settings][writableroot]") {
     const geck::test::TempDir temp("settings-paths");
     const fs::path dirA = temp.path() / "a";
     const fs::path dirB = temp.path() / "b";
     fs::create_directories(dirA);
     fs::create_directories(dirB);
-
-    SECTION("marker overrides the positional fallback; clearing restores it") {
-        geck::Settings settings;
-        settings.setDataPaths({ dirA, dirB });
-        REQUIRE(settings.resolveWritableDataPath().has_value());
-        CHECK(*settings.resolveWritableDataPath() == dirB); // positional rule: last directory wins
-
-        settings.setWritableDataPath(dirA);
-        CHECK(settings.getWritableDataPath() == dirA);
-        REQUIRE(settings.resolveWritableDataPath().has_value());
-        CHECK(*settings.resolveWritableDataPath() == dirA);
-
-        settings.setWritableDataPath({});
-        REQUIRE(settings.resolveWritableDataPath().has_value());
-        CHECK(*settings.resolveWritableDataPath() == dirB);
-    }
 
     SECTION("the marker never dangles: it clears when its folder leaves the data paths") {
         geck::Settings settings;
@@ -101,7 +85,6 @@ TEST_CASE("Settings save-location marker: resolution, invariant, persistence", "
         REQUIRE(reloaded.resolveWritableDataPath().has_value());
         CHECK(*reloaded.resolveWritableDataPath() == dirB);
     }
-
 }
 
 TEST_CASE("Settings script-source markers: subset invariant and persistence", "[settings][ssl]") {

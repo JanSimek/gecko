@@ -1,13 +1,15 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
+#include <string>
+#include <vector>
+
 #include "format/gam/Gam.h"
 #include "reader/gam/GamReader.h"
 #include "writer/gam/GamSerializer.h"
 #include "writer/gam/GamValidator.h"
 
 #include "support/Fixtures.h"
-
-#include <string>
 
 using namespace geck;
 
@@ -31,6 +33,59 @@ Gam sampleGam() {
 }
 
 } // namespace
+
+TEST_CASE("GamReader reads the test.gam fixture's gvars and mvars by ordinal", "[gam]") {
+    GamReader gam_reader{};
+    auto gam_file = gam_reader.openFile(test::dataPath("test.gam"));
+
+    constexpr int vars_count = 10;
+
+    for (int index = 0; index < vars_count; index++) {
+        REQUIRE(gam_file->mvarValue(index) == index + 1);
+        REQUIRE(gam_file->gvarValue(index) == vars_count - index);
+    }
+}
+
+TEST_CASE("GamReader parses gvars and mvars, skipping comments and blanks", "[gam]") {
+    GamReader reader;
+    auto gam = reader.openFile("inline.gam", test::bytesOf("GAME_GLOBAL_VARS:\n"
+                                                           "// a comment\n"
+                                                           "GVAR_FOO := 5 ;\n"
+                                                           "\n"
+                                                           "GVAR_NEG := -1 ;\n" // negative default must be read, not skipped
+                                                           "GVAR_BAR := 10 ;\n"
+                                                           "MAP_GLOBAL_VARS:\n"
+                                                           "MVAR_BAZ := 7 ;\n"));
+
+    REQUIRE(gam != nullptr);
+    CHECK(gam->gvarValue("GVAR_FOO") == 5);
+    CHECK(gam->gvarValue("GVAR_NEG") == -1);
+    CHECK(gam->gvarValue("GVAR_BAR") == 10);
+    CHECK(gam->mvarValue("MVAR_BAZ") == 7);
+    // Variables keep their file order — a negative-default gvar must not be dropped, or every later
+    // gvar's ordinal shifts (gvar ordinals are how quests.txt / scripts reference them).
+    CHECK(gam->gvarCount() == 3);
+    CHECK(gam->gvarKey(0) == "GVAR_FOO");
+    CHECK(gam->gvarKey(1) == "GVAR_NEG");
+    CHECK(gam->gvarValue(2) == 10); // GVAR_BAR keeps ordinal 2, not shifted to 1
+    CHECK(gam->mvarValue(0) == 7);
+}
+
+TEST_CASE("GamReader rejects an empty file", "[gam]") {
+    GamReader reader;
+    REQUIRE_THROWS(reader.openFile("empty.gam", std::vector<uint8_t>{}));
+}
+
+TEST_CASE("GamReader rejects a file with no GVARS/MVARS sections", "[gam]") {
+    GamReader reader;
+    REQUIRE_THROWS(reader.openFile("bad.gam", test::bytesOf("SOME_KEY := 1 ;\n")));
+}
+
+TEST_CASE("GamReader rejects a variable declared outside any section", "[gam]") {
+    GamReader reader;
+    // The section marker is present, but a variable precedes it.
+    REQUIRE_THROWS(reader.openFile("bad.gam", test::bytesOf("GVAR_X := 1 ;\nGAME_GLOBAL_VARS:\n")));
+}
 
 TEST_CASE("Gam round-trips a .gam byte-for-byte", "[gam_roundtrip]") {
     const Gam gam = sampleGam();
@@ -63,51 +118,37 @@ TEST_CASE("Gam normalizes CRLF to LF while preserving all data", "[gam_roundtrip
 TEST_CASE("Gam::setMapGlobalVar rewrites only the value substring", "[gam_roundtrip]") {
     Gam gam = sampleGam();
 
-    // Editing the first MAP_GLOBAL_VARS value changes only its integer; name, alignment, and `:=` spacing
-    // are preserved.
-    REQUIRE(gam.setMapGlobalVar(0, 42));
-    const std::string out = writer::serializeGam(gam);
-    CHECK(out.find("MVAR_FIRST      := 42;\n") != std::string::npos); // alignment + spacing preserved
-    CHECK(out.find("MVAR_FIRST      := -1;") == std::string::npos);   // old value gone
-
-    // The second variable's trailing inline comment survives an edit, including a longer (multi-digit)
-    // value that grows the substring.
+    // Grow the value on the line with a trailing comment (1 digit -> 4 digits). Name, `:=` alignment,
+    // the `;` and the trailing `// comment` are all preserved by the parts-based rebuild.
     REQUIRE(gam.setMapGlobalVar(1, 1000));
-    const std::string out2 = writer::serializeGam(gam);
-    CHECK(out2.find("MVAR_SECOND     := 1000;   // a note\n") != std::string::npos);
+    CHECK(writer::serializeGam(gam).find("MVAR_SECOND     := 1000;   // a note\n") != std::string::npos);
 
-    // Untouched lines are byte-identical.
-    CHECK(out2.find("// Test map variables\n") != std::string::npos);
-    CHECK(out2.find("GAME_GLOBAL_VARS:\n") != std::string::npos);
-    CHECK(out2.find("GVAR_TEST       := 5;\n") != std::string::npos); // GVAR section not touched
-    CHECK(out2.find("MAP_GLOBAL_VARS:\n") != std::string::npos);
-
-    // An out-of-range index is reported, not applied.
-    CHECK_FALSE(gam.setMapGlobalVar(2, 7));
-
-    // A re-read of the edited bytes sees the new values.
-    const Gam reread = GamReader::parse(out2);
-    const auto mvars = reread.mapGlobalVars();
-    REQUIRE(mvars.size() == 2);
-    CHECK(mvars[0].second == 42);
-    CHECK(mvars[1].second == 1000);
-}
-
-TEST_CASE("Gam::setMapGlobalVar rebuilds the line as it grows then shrinks", "[gam_roundtrip]") {
-    Gam gam = sampleGam();
-
-    // The line with a trailing comment: grow the value (1 digit -> 4 digits). Name, `:=` alignment, the
-    // `;`, and the trailing `// comment` are all preserved by the parts-based rebuild.
-    REQUIRE(gam.setMapGlobalVar(1, 1000));
-    {
+    SECTION("editing another line keeps every untouched line byte-identical") {
+        REQUIRE(gam.setMapGlobalVar(0, 42));
         const std::string out = writer::serializeGam(gam);
+        CHECK(out.find("MVAR_FIRST      := 42;\n") != std::string::npos); // alignment + spacing preserved
+        CHECK(out.find("MVAR_FIRST      := -1;") == std::string::npos);   // old value gone
         CHECK(out.find("MVAR_SECOND     := 1000;   // a note\n") != std::string::npos);
+        CHECK(out.find("// Test map variables\n") != std::string::npos);
+        CHECK(out.find("GAME_GLOBAL_VARS:\n") != std::string::npos);
+        CHECK(out.find("GVAR_TEST       := 5;\n") != std::string::npos); // GVAR section not touched
+        CHECK(out.find("MAP_GLOBAL_VARS:\n") != std::string::npos);
+
+        // An out-of-range index is reported, not applied.
+        CHECK_FALSE(gam.setMapGlobalVar(2, 7));
+
+        // A re-read of the edited bytes sees the new values.
+        const Gam reread = GamReader::parse(out);
+        const auto mvars = reread.mapGlobalVars();
+        REQUIRE(mvars.size() == 2);
+        CHECK(mvars[0].second == 42);
+        CHECK(mvars[1].second == 1000);
     }
 
-    // Now shrink it and flip the sign (4 digits -> a negative). There is no stored offset to drift, so a
-    // second edit on the same line rebuilds cleanly from the same prefix/suffix.
-    REQUIRE(gam.setMapGlobalVar(1, -7));
-    {
+    SECTION("a second edit shrinks the same line cleanly") {
+        // 4 digits -> a negative. There is no stored offset to drift, so a second edit on the same
+        // line rebuilds cleanly from the same prefix/suffix.
+        REQUIRE(gam.setMapGlobalVar(1, -7));
         const std::string out = writer::serializeGam(gam);
         CHECK(out.find("MVAR_SECOND     := -7;   // a note\n") != std::string::npos);
         CHECK(out.find("1000") == std::string::npos); // the intermediate value is gone

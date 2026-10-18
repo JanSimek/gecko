@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
+#include <array>
 #include <fstream>
 #include <vector>
 
@@ -65,34 +67,38 @@ void checkRealFileRoundTrips(const std::string& name, int expectedZones) {
 
 } // namespace
 
-TEST_CASE("MapEdge round-trips a v1 file with several zones on one elevation", "[map_edge]") {
+TEST_CASE("MapEdge round-trips v1 zone layouts", "[map_edge]") {
+    using Zones = std::vector<MapEdge::Rect>;
+    struct Layout {
+        const char* description;
+        std::array<Zones, MapEdge::ELEVATION_COUNT> zones;
+    };
+    const Layout layout = GENERATE(values<Layout>({
+        { "several zones on one elevation",
+            { Zones{ rect(10, 20, 30, 40), rect(1, 2, 3, 4), rect(-5, -6, -7, -8) }, Zones{}, Zones{} } },
+        // Elevation 1 has no zones: the writer's level indicator must jump 0 -> 2 and the reader must
+        // skip elevation 1 without consuming a phantom zone.
+        { "zones split across elevations, skipping an empty one",
+            { Zones{ rect(1, 1, 1, 1) }, Zones{}, Zones{ rect(2, 2, 2, 2), rect(3, 3, 3, 3) } } },
+        { "zones on every elevation, two on the middle one",
+            { Zones{ rect(0, 0, 10, 10) }, Zones{ rect(11, 11, 22, 22), rect(33, 33, 44, 44) },
+                Zones{ rect(55, 55, 66, 66) } } },
+    }));
+    INFO(layout.description);
+
     MapEdge edge;
     edge.version = 1;
-    edge.elevations[0].zones = { rect(10, 20, 30, 40), rect(1, 2, 3, 4), rect(-5, -6, -7, -8) };
+    for (std::size_t e = 0; e < layout.zones.size(); ++e) {
+        edge.elevations[e].zones = layout.zones[e];
+    }
 
     const MapEdge parsed = roundTrip(edge);
 
     CHECK(parsed == edge);
     CHECK(parsed.version == 1);
-    CHECK(parsed.elevations[0].zones.size() == 3);
-    CHECK(parsed.elevations[1].zones.empty());
-    CHECK(parsed.elevations[2].zones.empty());
-}
-
-TEST_CASE("MapEdge round-trips zones split across elevations, skipping an empty one", "[map_edge]") {
-    // Elevation 1 has no zones — the writer's level indicator must jump 0 -> 2 and the
-    // reader must skip elevation 1 without consuming a phantom zone.
-    MapEdge edge;
-    edge.version = 1;
-    edge.elevations[0].zones = { rect(1, 1, 1, 1) };
-    edge.elevations[2].zones = { rect(2, 2, 2, 2), rect(3, 3, 3, 3) };
-
-    const MapEdge parsed = roundTrip(edge);
-
-    CHECK(parsed == edge);
-    CHECK(parsed.elevations[0].zones.size() == 1);
-    CHECK(parsed.elevations[1].zones.empty());
-    CHECK(parsed.elevations[2].zones.size() == 2);
+    for (std::size_t e = 0; e < layout.zones.size(); ++e) {
+        CHECK(parsed.elevations[e].zones.size() == layout.zones[e].size());
+    }
 }
 
 TEST_CASE("MapEdge omits the terminal indicator when the last zone is on the last elevation", "[map_edge]") {
@@ -157,16 +163,6 @@ TEST_CASE("Map-edge overlay geometry maps real zones to sane world rects", "[map
     // An off-grid corner yields no box rather than an out-of-bounds hex lookup.
     MapEdge::Rect offGrid{ HexagonGrid::POSITION_COUNT, 0, 1, 2 };
     CHECK_FALSE(mapEdgeZoneWorldBounds(grid, offGrid).has_value());
-}
-
-TEST_CASE("MapEdge round-trips zones on every elevation", "[map_edge]") {
-    MapEdge edge;
-    edge.version = 1;
-    edge.elevations[0].zones = { rect(0, 0, 10, 10) };
-    edge.elevations[1].zones = { rect(11, 11, 22, 22), rect(33, 33, 44, 44) };
-    edge.elevations[2].zones = { rect(55, 55, 66, 66) };
-
-    CHECK(roundTrip(edge) == edge);
 }
 
 TEST_CASE("MapEdge round-trips a v2 file with square rect and clip sides", "[map_edge]") {

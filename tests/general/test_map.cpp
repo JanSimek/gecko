@@ -16,6 +16,49 @@
 using namespace geck;
 using namespace geck::test;
 
+// Parses a real shipped map (sfshutl2.map) to guard the reader against
+// assumptions the fully-synthetic round-trip can't exercise: real header
+// values, real per-elevation framing, a real tile block, and real objects.
+//
+// The map references 10 distinct SCENERY protos (scenery indices 1538..1547), all
+// of the GENERIC subtype, and no ITEM objects. Only ITEM/SCENERY objects
+// dereference a PRO during parsing, so a stub provider supplying just those
+// subtypes lets the whole map parse without the (uncommitted) game proto tree.
+TEST_CASE("MapReader parses the shipped sfshutl2 map's header, objects and tiles", "[map]") {
+    const auto map = readMapFile(dataPath("sfshutl2.map"), sfshutl2Provider());
+    const auto& mf = map->getMapFile();
+
+    // Header.
+    CHECK(mf.header.version == 20);
+    CHECK(mf.header.filename.substr(0, 12) == "SFSHUTL2.MAP");
+    CHECK(mf.header.player_default_position == 20100);
+    CHECK(mf.header.player_default_elevation == 0);
+    // The flags mark elevations 1 and 2 as absent; only elevation 0 ships.
+    CHECK(mf.header.flags == (Map::elevationFlag(1) | Map::elevationFlag(2)));
+
+    // Objects are framed as three per-elevation blocks; only elevation 0 holds any.
+    REQUIRE(mf.map_objects.at(0).size() == 227);
+    CHECK(mf.map_objects.at(1).empty());
+    CHECK(mf.map_objects.at(2).empty());
+
+    // Only elevation 0's tile block is present, with a full floor+roof grid.
+    CHECK(mf.tiles.count(0) == 1);
+    CHECK(mf.tiles.count(1) == 0);
+    CHECK(mf.tiles.count(2) == 0);
+    CHECK(mf.tiles.at(0).size() == Map::TILES_PER_ELEVATION);
+
+    // This map carries no scripts in any section.
+    for (const auto& section : mf.map_scripts) {
+        CHECK(section.empty());
+    }
+
+    // Every parsed object belongs to elevation 0.
+    for (const auto& object : mf.map_objects.at(0)) {
+        REQUIRE(object != nullptr);
+        CHECK(object->elevation == 0u);
+    }
+}
+
 // MapWriter/MapReader symmetry guard. Builds one object of every type and item/
 // scenery subtype that has a distinct serialization path (plus a nested inventory
 // item), writes it, reads it back, and asserts the base fields AND every
@@ -147,38 +190,6 @@ TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roun
     CHECK(gotExit.exit_orientation == exitGrid->exit_orientation);
 }
 
-// MapObject::cloneDeep underpins the inventory and copy-elevation undo commands,
-// so its deep-copy semantics (including nested inventory) must hold: the clone
-// matches field-for-field, and mutating the clone never touches the original.
-TEST_CASE("MapObject::cloneDeep deep-copies fields and inventory", "[map][clone]") {
-    MapObject original;
-    fillBase(original, 7);
-    original.pro_pid = ProtoId(ObjectType::Item, 200).pid();
-    original.elevation = 2;
-    original.objects_in_inventory = 1;
-
-    auto child = std::make_unique<MapObject>();
-    fillBase(*child, 8);
-    child->pro_pid = ProtoId(ObjectType::Item, 201).pid();
-    child->elevation = 2;
-    child->amount = 9;
-    original.inventory.push_back(std::move(child));
-
-    auto clone = original.cloneDeep();
-    REQUIRE(clone != nullptr);
-    checkBase(*clone, original);
-    REQUIRE(clone->inventory.size() == 1);
-    checkBase(*clone->inventory[0], *original.inventory[0]);
-    CHECK(clone->inventory[0]->amount == 9);
-
-    // The clone is independent: editing it must not affect the original.
-    CHECK(clone->inventory[0].get() != original.inventory[0].get());
-    clone->inventory[0]->amount = 999;
-    clone->elevation = 0;
-    CHECK(original.inventory[0]->amount == 9);
-    CHECK(original.elevation == 2);
-}
-
 // A map with only elevation 0 enabled (flags disable elevations 1 and 2) must
 // still round-trip. The engine frames the object section as exactly three
 // per-elevation count blocks regardless of which elevations are enabled
@@ -288,7 +299,7 @@ TEST_CASE("MAP round-trip keeps an object whose PID has no known type", "[map][r
 }
 
 TEST_CASE("MAP read -> write reproduces a shipped map byte for byte", "[map][roundtrip]") {
-    // sfshutl2.map: real header words, real per-elevation framing, 227 objects (see test_reading_map).
+    // sfshutl2.map: real header words, real per-elevation framing, 227 objects (see the MapReader sfshutl2 case above).
     const StubProvider provider = sfshutl2Provider();
     const auto original = readAllBytes(dataPath("sfshutl2.map"));
     const auto map = readMapFile(original, provider);
@@ -355,4 +366,52 @@ TEST_CASE("MAP writer derives the inventory count from the inventory", "[map][ro
     CHECK(objects[0]->objects_in_inventory == 1u);
     CHECK(objects[0]->inventory.size() == 1);
     checkBase(*objects[1], *after);
+}
+
+// The engine's _obj_load_obj reads an inventory entry as a full object that may hold its own
+// inventory. A container in a critter's pack must not desynchronise the objects after it.
+TEST_CASE("MAP reader follows nested inventories", "[map][roundtrip]") {
+    StubProvider provider;
+    const uint32_t containerPid = ProtoId(ObjectType::Item, 200).pid();
+    const uint32_t armorPid = ProtoId(ObjectType::Item, 201).pid();
+    provider.addItem(containerPid, ItemType::Container);
+    provider.addItem(armorPid, ItemType::Armor);
+
+    auto mapFile = Map::createEmptyMapFile();
+    const auto addCritter = [&mapFile](int32_t seed, int32_t hex) {
+        auto critter = addSeeded(mapFile, ProtoId(ObjectType::Critter, static_cast<uint32_t>(10 + seed)).pid(), seed, 0);
+        critter->position = hex;
+        return critter;
+    };
+    auto critter = addCritter(1, 18082);
+    auto container = std::make_unique<MapObject>(std::move(*seededObject(containerPid, 2)));
+    container->amount = 1;
+    auto armor = std::make_unique<MapObject>(std::move(*seededObject(armorPid, 3)));
+    armor->amount = 4;
+    container->objects_in_inventory = 1;
+    container->inventory.push_back(std::move(armor));
+    critter->objects_in_inventory = 1;
+    critter->inventory.push_back(std::move(container));
+    auto after = addCritter(4, 18084);
+
+    TempFile out{ "geck_nested_inventory", ".map" };
+    writeMapFile(mapFile, out.path(), provider);
+    const auto reloaded = readMapFile(out.path(), provider);
+    const auto& objects = reloaded->getMapFile().map_objects.at(0);
+    REQUIRE(objects.size() == 2);
+    REQUIRE(objects[0]->inventory.size() == 1);
+    REQUIRE(objects[0]->inventory[0]->inventory.size() == 1);
+    CHECK(objects[0]->inventory[0]->inventory[0]->pro_pid == armorPid);
+    CHECK(objects[0]->inventory[0]->inventory[0]->amount == 4);
+    CHECK(objects[1]->position == after->position);
+}
+
+TEST_CASE("MapHeader::programIndex converts the 1-based header script id", "[map][scripts]") {
+    Map::MapHeader header{};
+    header.script_id = -1;
+    CHECK_FALSE(header.programIndex().has_value());
+    header.script_id = 0;
+    CHECK_FALSE(header.programIndex().has_value());
+    header.script_id = 1414; // SCRIPT_EPAC18 in headers/scripts.h
+    CHECK(header.programIndex() == 1413);
 }

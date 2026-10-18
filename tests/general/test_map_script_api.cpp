@@ -24,7 +24,6 @@
 #include "support/TempFile.h"
 
 using namespace geck;
-using geck::test::ControllerFixture;
 using geck::test::ScriptApiFixture;
 namespace fs = std::filesystem;
 
@@ -269,40 +268,14 @@ TEST_CASE("MapScriptApi headless mode records objects as map data without GL", "
     CHECK(fx.mapFile().map_objects[ELEV].empty());
 }
 
-// A placed object carries the flags its proto prescribes, as the engine's obj_new seeds them: the
-// engine reads them from the map, so flags = 0 made a flat proto stand and a NoBlock one block.
-TEST_CASE("MapScriptApi placement seeds the object's flags from its proto", "[scripting]") {
-    const test::TempDir rootDir{ "geck_place_flags" };
-    const fs::path& root = rootDir.path();
-    test::writeFile(root / "proto" / "walls" / "walls.lst", "flat.pro\n");
-    constexpr uint32_t PRO = 0x03000001;
-    constexpr auto FLAGS = static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_FLAT)
-        | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK);
-    {
-        Pro pro{ root / "proto" / "walls" / "flat.pro" };
-        pro.header.PID = static_cast<int32_t>(PRO);
-        pro.header.FID = 0x03000000;
-        pro.header.flags = FLAGS;
-        test::writePro(root / "proto" / "walls" / "flat.pro", pro);
-    }
-
-    ScriptApiFixture fx{ false };
-    fx.resources.files().addDataPath(root.string());
-
-    REQUIRE(fx.api.placeProto(PRO, 20100, 0));
-    REQUIRE(fx.api.placeObject(PRO, 0x03000000, 20101, 0));
-    const auto& objs = fx.mapFile().map_objects[ELEV];
-    REQUIRE(objs.size() == 2);
-    CHECK(objs[0]->flags == FLAGS);
-    CHECK(objs[1]->flags == FLAGS);
-}
-
 namespace {
 // A data tree with two wall protos: 1 names a script (an item-type SID, program index 68, the way
-// the shipped gravesite protos do) and 2 names none.
+// the shipped gravesite protos do) and 2 names none. Both are flat and NoBlock.
 constexpr uint32_t SCRIPTED_WALL = 0x03000001;
 constexpr uint32_t PLAIN_WALL = 0x03000002;
 constexpr uint32_t PROTO_SID = 0x03000044;
+constexpr auto WALL_FLAGS = static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_FLAT)
+    | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK);
 
 void writeWallProtos(const std::filesystem::path& root) {
     test::writeFile(root / "proto" / "walls" / "walls.lst", "scripted.pro\nplain.pro\n");
@@ -310,6 +283,7 @@ void writeWallProtos(const std::filesystem::path& root) {
         Pro pro{ root / "proto" / "walls" / file };
         pro.header.PID = static_cast<int32_t>(pid);
         pro.header.FID = 0x03000000;
+        pro.header.flags = WALL_FLAGS;
         pro.commonItemData.SID = sid;
         test::writePro(root / "proto" / "walls" / file, pro);
     };
@@ -320,9 +294,10 @@ void writeWallProtos(const std::filesystem::path& root) {
 constexpr int ITEM_SECTION = static_cast<int>(MapScript::ScriptType::ITEM);
 } // namespace
 
-// The engine's obj_new gives every new object the script its proto names (objectSetScriptFromProto),
-// so a placed gravesite runs zigengrv. Placement used to write no script record at all.
-TEST_CASE("MapScriptApi placement gives a new object its proto's script", "[scripting]") {
+// The engine's obj_new seeds a new object from its proto: the flags (the engine reads them from the
+// map, so flags = 0 made a flat proto stand and a NoBlock one block) and the script the proto names
+// (objectSetScriptFromProto), so a placed gravesite runs zigengrv. Placement used to write neither.
+TEST_CASE("MapScriptApi placement seeds a new object's flags and script from its proto", "[scripting]") {
     const test::TempDir rootDir{ "geck_place_proto_script" };
     const fs::path& root = rootDir.path();
     writeWallProtos(root);
@@ -330,28 +305,39 @@ TEST_CASE("MapScriptApi placement gives a new object its proto's script", "[scri
     ScriptApiFixture fx{ false };
     fx.resources.files().addDataPath(root.string());
 
-    REQUIRE(fx.api.placeProto(SCRIPTED_WALL, 20100, 0));
-    REQUIRE(fx.api.placeProto(PLAIN_WALL, 20101, 0));
-    const auto& objs = fx.mapFile().map_objects[ELEV];
-    REQUIRE(objs.size() == 2);
-    const auto& scripts = fx.mapFile().map_scripts[ITEM_SECTION];
-    REQUIRE(scripts.size() == 1);
-    CHECK(fx.mapFile().scripts_in_section[ITEM_SECTION] == 1);
-    CHECK(scripts[0].script_id == 68); // the SID's low 24 bits: the 0-based program index
-    CHECK(MapScript::sidSection(scripts[0].pid) == ITEM_SECTION);
-    CHECK(objs[0]->map_scripts_pid == static_cast<int32_t>(scripts[0].pid));
-    CHECK(scripts[0].script_oid == objs[0]->unknown0);
-    CHECK(objs[1]->map_scripts_pid == -1);
+    SECTION("placeProto and placeObject both carry the proto's flags") {
+        REQUIRE(fx.api.placeProto(PLAIN_WALL, 20100, 0));
+        REQUIRE(fx.api.placeObject(PLAIN_WALL, 0x03000000, 20101, 0));
+        const auto& objs = fx.mapFile().map_objects[ELEV];
+        REQUIRE(objs.size() == 2);
+        CHECK(objs[0]->flags == WALL_FLAGS);
+        CHECK(objs[1]->flags == WALL_FLAGS);
+    }
 
-    // Object and script are one undo entry each placement: undoing the scripted one removes both.
-    REQUIRE(fx.undoStack.undo()); // the plain wall
-    REQUIRE(fx.undoStack.undo());
-    CHECK(fx.mapFile().map_objects[ELEV].empty());
-    CHECK(fx.mapFile().map_scripts[ITEM_SECTION].empty());
-    CHECK(fx.mapFile().scripts_in_section[ITEM_SECTION] == 0);
-    REQUIRE(fx.undoStack.redo());
-    REQUIRE(fx.mapFile().map_objects[ELEV].size() == 1);
-    CHECK(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
+    SECTION("a scripted proto's script is attached in the same undo entry") {
+        REQUIRE(fx.api.placeProto(SCRIPTED_WALL, 20100, 0));
+        REQUIRE(fx.api.placeProto(PLAIN_WALL, 20101, 0));
+        const auto& objs = fx.mapFile().map_objects[ELEV];
+        REQUIRE(objs.size() == 2);
+        const auto& scripts = fx.mapFile().map_scripts[ITEM_SECTION];
+        REQUIRE(scripts.size() == 1);
+        CHECK(fx.mapFile().scripts_in_section[ITEM_SECTION] == 1);
+        CHECK(scripts[0].script_id == 68); // the SID's low 24 bits: the 0-based program index
+        CHECK(MapScript::sidSection(scripts[0].pid) == ITEM_SECTION);
+        CHECK(objs[0]->map_scripts_pid == static_cast<int32_t>(scripts[0].pid));
+        CHECK(scripts[0].script_oid == objs[0]->unknown0);
+        CHECK(objs[1]->map_scripts_pid == -1);
+
+        // Object and script are one undo entry each placement: undoing the scripted one removes both.
+        REQUIRE(fx.undoStack.undo()); // the plain wall
+        REQUIRE(fx.undoStack.undo());
+        CHECK(fx.mapFile().map_objects[ELEV].empty());
+        CHECK(fx.mapFile().map_scripts[ITEM_SECTION].empty());
+        CHECK(fx.mapFile().scripts_in_section[ITEM_SECTION] == 0);
+        REQUIRE(fx.undoStack.redo());
+        REQUIRE(fx.mapFile().map_objects[ELEV].size() == 1);
+        CHECK(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
+    }
 }
 
 // copyObjects follows the engine's _obj_copy: a copy of a scripted object gets its proto's script
@@ -381,20 +367,6 @@ TEST_CASE("MapScriptApi copyObjects re-attaches the proto script only to copies 
     CHECK(scripts[0].script_id == 68); // the proto's, not the source instance's 7
     CHECK(objs[0]->map_scripts_pid == static_cast<int32_t>(scripts[0].pid));
     CHECK(objs[1]->map_scripts_pid == -1);
-}
-
-// The engine's objectSetScript also records a critter's program index in obj->scriptIndex.
-TEST_CASE("Attaching a script to a critter sets its script index", "[scripting]") {
-    ControllerFixture fx;
-    auto critter = std::make_shared<MapObject>();
-    critter->pro_pid = ProtoId(ObjectType::Critter, 1).pid();
-    fx.mapFile().map_objects[ELEV].push_back(critter);
-
-    REQUIRE(fx.controller.attachScript(critter, static_cast<int>(MapScript::ScriptType::CRITTER), 42));
-    CHECK(critter->script_id == 42);
-    REQUIRE(fx.undoStack.undo());
-    CHECK(critter->script_id == -1);
-    CHECK(critter->map_scripts_pid == -1);
 }
 
 TEST_CASE("MapScriptApi newMap resets the bound map to empty", "[scripting]") {
@@ -1042,20 +1014,21 @@ TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[s
         CHECK_FALSE(fx.api.placeProto(0x02000066u, 20100, 0)); // valid hex, but the proto art can't load
         CHECK(fx.api.placedObjects() == 0);
     }
+}
 
-    SECTION("noise2d is pure: in [0,1] and deterministic") {
-        for (int xi = 0; xi < 4; ++xi) {
-            for (int yi = 0; yi < 4; ++yi) {
-                const double x = xi * 1.3;
-                const double y = yi * 1.7;
-                const double n = fx.api.noise2d(x, y);
-                CHECK(n >= 0.0);
-                CHECK(n <= 1.0);
-                CHECK(fx.api.noise2d(x, y) == n); // same input -> same output
-            }
+TEST_CASE("MapScriptApi noise2d is pure: in [0,1] and deterministic", "[scripting]") {
+    ScriptApiFixture fx;
+    for (int xi = 0; xi < 4; ++xi) {
+        for (int yi = 0; yi < 4; ++yi) {
+            const double x = xi * 1.3;
+            const double y = yi * 1.7;
+            const double n = fx.api.noise2d(x, y);
+            CHECK(n >= 0.0);
+            CHECK(n <= 1.0);
+            CHECK(fx.api.noise2d(x, y) == n); // same input -> same output
         }
-        CHECK(fx.api.noise2d(1.5, 2.5) != fx.api.noise2d(40.5, 80.5)); // varies across the field
     }
+    CHECK(fx.api.noise2d(1.5, 2.5) != fx.api.noise2d(40.5, 80.5)); // varies across the field
 }
 
 TEST_CASE("The plan sink caps a run at a multiple of the bound area's footprint", "[scripting][cap]") {

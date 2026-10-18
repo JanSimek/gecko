@@ -3,28 +3,23 @@ add_executable(general_tests
     general/test_engine_ids.cpp
     general/test_hexagon_grid.cpp
     general/test_message_enum_utils.cpp
-    general/test_reading_gam.cpp
     general/test_ai_txt.cpp
     general/test_maps_txt.cpp
-    general/test_maps_txt_roundtrip.cpp
-    general/test_gam_roundtrip.cpp
-    general/test_msg_roundtrip.cpp
+    general/test_gam.cpp
+    general/test_msg.cpp
     general/test_writable_data_root.cpp
     general/test_map_name_editor.cpp
     general/test_map_name_resolver.cpp
     general/test_city_txt.cpp
     general/test_worldmap_txt.cpp
     general/test_world_encounters.cpp
-    general/test_map_examples.cpp
     general/test_palette_blend.cpp
     general/test_worldmap_scene.cpp
     general/test_quests_txt.cpp
     general/test_endgame_txt.cpp
     general/test_gvar_tables_txt.cpp
     general/test_gvar_refs.cpp
-    general/test_reading_msg.cpp
-    general/test_reading_pro_drug.cpp
-    general/test_pro_roundtrip.cpp
+    general/test_pro.cpp
     general/test_pro_helper.cpp
     general/test_tile_utils.cpp
     general/test_reader_factory.cpp
@@ -32,13 +27,14 @@ add_executable(general_tests
     general/test_selection_manager.cpp
     general/test_game_data_path_resolver.cpp
     general/test_data_path_resolution.cpp
-    general/test_map_object_defaults.cpp
+    general/test_map_object.cpp
+    general/test_map_sprite_loader.cpp
     general/test_frm_resolver.cpp
     general/test_viewport_controller.cpp
     general/test_edge_scroll.cpp
     general/test_map_factory.cpp
-    general/test_map_roundtrip.cpp
-    general/test_map_edge_roundtrip.cpp
+    general/test_map.cpp
+    general/test_map_edge.cpp
     general/test_undo_stack.cpp
     general/test_object_command_controller.cpp
     general/test_edge_edit_service.cpp
@@ -50,7 +46,6 @@ add_executable(general_tests
     general/test_spatial_index.cpp
     general/test_object_queries.cpp
     general/test_reading_dat.cpp
-    general/test_reading_map.cpp
     general/test_hex_geometry.cpp
     general/test_hex_line.cpp
     general/test_exit_grid_direction.cpp
@@ -69,7 +64,6 @@ add_executable(general_tests
     general/test_ssl_analysis.cpp
     general/test_object_visibility.cpp
     general/test_dat_archive.cpp
-    general/test_dat_concurrency.cpp
     general/test_map_renderer.cpp
 )
 
@@ -84,18 +78,34 @@ if(GECK_ENABLE_SCRIPTING)
     endif()
 endif()
 
-# Pattern stamp (de)serialization round-trip — needs gecko_cli (cli::serializePattern/loadPattern),
-# no scripting or game data. test_frm_inspect covers the FRM tools' non-GL logic (FID parse/decode,
-# art-name resolution, glob listing) against a temp LST fixture.
+# Tests of the headless CLI library (gecko_cli): the analyze/describe/export/find-examples/lint/frm/
+# resource tools, pattern JSON, reachability, the map graph and saved-map loading. None needs scripting or game data.
 if(TARGET gecko_cli)
-    target_sources(general_tests PRIVATE general/test_pattern_stamp.cpp general/test_map_reachability.cpp general/test_map_analyzer_scripts.cpp general/test_map_analyzer_adjacency.cpp general/test_map_dump_grid.cpp general/test_map_graph.cpp general/test_frm_inspect.cpp general/test_resource_inspect.cpp general/test_proto_export.cpp general/test_engine_tile.cpp general/test_int_disassembler.cpp general/test_ssl_corpus.cpp general/test_script_lint.cpp general/test_map_load_saved.cpp general/test_save_inspect.cpp)
+    target_sources(general_tests PRIVATE
+        general/test_cli_tools.cpp
+        general/test_engine_tile.cpp
+        general/test_find_examples.cpp
+        general/test_frm_inspect.cpp
+        general/test_int_disassembler.cpp
+        general/test_map_analyzer.cpp
+        general/test_map_dump_grid.cpp
+        general/test_map_graph.cpp
+        general/test_map_load_saved.cpp
+        general/test_map_reachability.cpp
+        general/test_pattern_json.cpp
+        general/test_proto_export.cpp
+        general/test_resource_inspect.cpp
+        general/test_save_inspect.cpp
+        general/test_script_lint.cpp
+        general/test_ssl_corpus.cpp
+    )
     target_link_libraries(general_tests PRIVATE gecko_cli)
 endif()
 
 # MCP server dispatch test: only when the MCP server is built (gecko_mcp brings gecko_cli +
 # nlohmann/json). The dispatch is pure, so this needs no scripting and no game data.
 if(TARGET gecko_mcp)
-    target_sources(general_tests PRIVATE general/test_mcp_server.cpp general/test_mcp_tools.cpp general/test_cli_tools.cpp)
+    target_sources(general_tests PRIVATE general/test_mcp_server.cpp general/test_mcp_tools.cpp)
     target_link_libraries(general_tests PRIVATE gecko_mcp)
 endif()
 
@@ -103,8 +113,6 @@ add_executable(qt_tests
     qt/qt_test_main.cpp
     qt/test_ui_regressions.cpp
     qt/test_selection_panel.cpp
-    # GameLauncher is an app-layer Qt class, so its ddraw.ini test links gecko::app.
-    qt/test_ddraw_ini.cpp
     qt/test_game_launcher.cpp
     # Preferences: a macOS .app fixes the game root, so the data-directory field follows it.
     qt/test_game_location_widget.cpp
@@ -131,10 +139,11 @@ add_executable(qt_tests
     qt/test_performance_guards.cpp
 )
 
-# Round-trip the headless pattern writer (gecko_cli) through the editor's Qt PatternSerializer.
-# Only when the CLI lib is built (it owns cli::serializePattern).
+# test_pattern_serializer also round-trips the headless pattern writer (gecko_cli) through the
+# editor's PatternSerializer; that case compiles only when the CLI lib is built (it owns
+# cli::serializePattern).
 if(TARGET gecko_cli)
-    target_sources(qt_tests PRIVATE qt/test_pattern_extract_roundtrip.cpp)
+    target_compile_definitions(qt_tests PRIVATE GECK_TEST_WITH_CLI)
     target_link_libraries(qt_tests PRIVATE gecko_cli)
 endif()
 

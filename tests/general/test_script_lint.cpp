@@ -421,6 +421,8 @@ TEST_CASE("lint_script checks a script's compiled .int when no source is mounted
     CHECK(one["fromBytecode"] == true);
     CHECK(one["summary"]["errors"] == 1); // local variable 0, past the 0 scripts.lst gives two
     CHECK(one["findings"][0]["file"] == "scripts/two.int");
+    CHECK(one["findings"][0]["check"] == "local-vars");
+    CHECK(one["findings"][0]["procedure"] == "talk_p_proc");
 
     options = {};
     options.all = true;

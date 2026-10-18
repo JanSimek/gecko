@@ -2,31 +2,21 @@
 
 #include <nlohmann/json.hpp>
 
-#include <filesystem>
-#include <ostream>
-#include <string>
-
-#include "cli/MapAnalyzer.h"
-#include "editor/HexagonGrid.h"
-#include "format/map/Map.h"
-#include "format/map/MapObject.h"
 #include "format/pro/ProtoTypes.h"
 #include "mcp/McpServer.h"
 #include "resource/GameResources.h"
 
-#include "support/CliJson.h"
 #include "support/DataTree.h"
 #include "support/EngineProtoBytes.h"
 #include "support/Fixtures.h"
 #include "support/MapFileIo.h"
-#include "support/MapObjectBuilder.h"
 #include "support/McpCall.h"
+#include "support/ShopMap.h"
 #include "support/TempFile.h"
 
 using nlohmann::json;
 using namespace geck;
 using namespace geck::test;
-namespace fs = std::filesystem;
 
 // mounts exists because a data path that did not open used to be skipped in silence, and every
 // answer afterwards came from whatever else mounted while reading as confidently as a correct one.
@@ -138,50 +128,6 @@ TEST_CASE("proto_info reports a critter's effective stats and skills", "[mcp][pr
     }
 }
 
-// dump_grid's name filter exists because asking where one object sits meant reading the whole map:
-// epax is 2684 objects, nearly all scroll blockers, so three rows cost 445KB.
-TEST_CASE("dump_grid filters objects by name", "[cli][dump_grid]") {
-    auto mapFile = Map::createEmptyMapFile();
-    for (int i = 0; i < 5; ++i) {
-        // Critters, not scenery: scenery dereferences its Pro in both directions, so reading the
-        // map back without mounted protos fails. Critters carry their pid and nothing else.
-        addObject(mapFile, ProtoId(ObjectType::Critter, static_cast<uint32_t>(40 + i)).pid(),
-            100 * HexagonGrid::GRID_WIDTH + 100 + i);
-    }
-    const TempFile mapPath{ "geck_dump_grid_filter", ".map" };
-    writeMapFile(mapFile, mapPath.path());
-
-    resource::GameResources resources;
-    const auto dump = [&](const std::string& nameFilter) {
-        cli::DumpGridOptions options;
-        options.map = mapPath.path().string();
-        options.floor = false;
-        options.nameFilter = nameFilter;
-        return runJson([&](std::ostream& out) { return cli::dumpMapGrid(resources, options, out); })["elevations"][0]["objects"];
-    };
-
-    const json all = dump("");
-    REQUIRE(all.size() == 5);
-
-    SECTION("a pattern that matches nothing returns nothing, not everything") {
-        CHECK(dump("definitely-not-a-proto-name").empty());
-    }
-
-    SECTION("an unparsable pattern is ignored rather than fatal") {
-        // A filter on a dump: refusing to answer is worse than answering unfiltered.
-        CHECK(dump("[unclosed").size() == all.size());
-    }
-
-    SECTION("the filter matches the name each object actually reports") {
-        // Whatever the names resolve to without mounted data, filtering on one of them must select
-        // at least that object and never more than the unfiltered set.
-        const std::string first = all[0]["name"].get<std::string>();
-        const json some = dump(first);
-        CHECK_FALSE(some.empty());
-        CHECK(some.size() <= all.size());
-    }
-}
-
 // The weapon block is what turned "which weapons carry Long Range?" from opening .pro files by hand
 // into one call — and getting the perk wrong is quiet, because a wrong perk name reads perfectly.
 TEST_CASE("proto_info reports a weapon's perk and numbers", "[mcp][proto_info]") {
@@ -221,4 +167,17 @@ TEST_CASE("proto_info reports a weapon's perk and numbers", "[mcp][proto_info]")
     CHECK(entry["name"] == "Test Rifle");
     CHECK(entry["type"] == "Item");
     CHECK(entry["file"] == "weapon.pro");
+}
+
+TEST_CASE("McpServer answers data-backed tool calls on a map read off disk", "[mcp]") {
+    const TempFile map{ "geck_mcp_tools_map", ".map" };
+    writeMapFile(ShopMap::build(), map.path());
+    resource::GameResources resources;
+    mcp::McpServer server(resources);
+
+    const json grid = mcpToolJson(server, "dump_grid", { { "map", map.path().string() }, { "elevation", 0 } });
+    CHECK(grid.at("elevations").at(0).at("objects").size() == ShopMap::OBJECT_COUNT);
+
+    const json reach = mcpCall(server, "reachability", { { "map", map.path().string() } });
+    CHECK(reach["result"]["isError"] == false);
 }

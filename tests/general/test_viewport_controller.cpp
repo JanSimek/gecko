@@ -23,23 +23,14 @@ sf::Vector2f hexCentre(const HexagonGrid& grid, int position) {
 
 } // namespace
 
-// ViewportController's world->hex/tile conversions are thin wrappers over the real
-// HexagonGrid algorithm; these exercise it headlessly (no SFML window needed), which
-// the gecko_core carve made possible.
-TEST_CASE("ViewportController maps a hex centre back to that hex", "[viewport][hex]") {
+// ViewportController's world->hex conversion is a thin wrapper over HexagonGrid::positionAt (whose
+// behaviour test_hexagon_grid covers); this checks the wrapper passes positions through and maps
+// "no hex" to -1, headlessly (no SFML window needed).
+TEST_CASE("ViewportController converts a world position to the hex under it", "[viewport][hex]") {
     HexagonGrid grid;
     ViewportController viewport(&grid);
 
-    // Mid-grid positions (their world coordinates are safely positive).
-    for (int position : { 8000, 12345, 20000, 25000, 30000 }) {
-        CHECK(viewport.worldPosToHexIndex(hexCentre(grid, position)) == position);
-    }
-}
-
-TEST_CASE("ViewportController rejects out-of-map world positions", "[viewport][hex]") {
-    HexagonGrid grid;
-    ViewportController viewport(&grid);
-
+    CHECK(viewport.worldPosToHexIndex(hexCentre(grid, 12345)) == 12345);
     CHECK(viewport.worldPosToHexIndex(sf::Vector2f(-100000.f, -100000.f)) == -1);
     CHECK(viewport.worldPosToHexIndex(sf::Vector2f(100000.f, 100000.f)) == -1);
 }

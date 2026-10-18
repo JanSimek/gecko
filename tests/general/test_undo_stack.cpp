@@ -3,7 +3,6 @@
 #include <string>
 #include <vector>
 
-#include "ui/core/EditorSession.h"
 #include "util/UndoStack.h"
 
 using namespace geck;
@@ -105,22 +104,6 @@ TEST_CASE("UndoStack clear empties both stacks", "[undo]") {
 
     CHECK_FALSE(stack.canUndo());
     CHECK_FALSE(stack.canRedo());
-}
-
-TEST_CASE("EditorSession::resetToEmptyMap drops the old map's undo history", "[undo]") {
-    geck::EditorSession session;
-    session.resetToEmptyMap();
-    int undone = 0;
-    session.undoStack().push({ .description = "Place", .undo = [&undone] { ++undone; }, .redo = [] { /* never redone */ } });
-    REQUIRE(session.undoStack().canUndo());
-
-    // File > New: replaying a command recorded against the previous map would write its
-    // objects and tiles onto the blank one.
-    session.resetToEmptyMap();
-
-    CHECK_FALSE(session.undoStack().canUndo());
-    CHECK_FALSE(session.undoStack().undo());
-    CHECK(undone == 0);
 }
 
 TEST_CASE("UndoStack folds a push into the newest entry with the same merge key", "[undo]") {

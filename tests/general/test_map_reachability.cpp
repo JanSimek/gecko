@@ -41,22 +41,6 @@ TEST_CASE("blocksMovementByInstance mirrors the engine's instance-flag rule", "[
     CHECK_FALSE(reachability::blocksMovementByInstance(kScenery, kNoBlock));
 }
 
-TEST_CASE("hexgrid::neighbors yields parity-correct, symmetric neighbours", "[reachability]") {
-    // An interior hex has all six neighbours.
-    const std::vector<int> around = hexgrid::neighbors(kCenter);
-    CHECK(around.size() == 6);
-
-    // Neighbour-ness is symmetric: the centre is a neighbour of each of its neighbours.
-    for (const int n : around) {
-        const std::vector<int> back = hexgrid::neighbors(n);
-        CHECK(std::find(back.begin(), back.end(), kCenter) != back.end());
-    }
-
-    // Off-grid positions have no neighbours.
-    CHECK(hexgrid::neighbors(-1).empty());
-    CHECK(hexgrid::neighbors(kCount).empty());
-}
-
 TEST_CASE("hexComponents: an open grid is a single walkable region", "[reachability]") {
     const std::vector<char> blocked(kCount, 0);
     std::vector<int> sizes;

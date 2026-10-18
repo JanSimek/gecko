@@ -41,13 +41,3 @@ TEST_CASE("Map::createEmptyMapFile builds a blank Fallout 2 map", "[map_factory]
         CHECK(mapFile.scripts_in_section[section] == 0);
     }
 }
-
-TEST_CASE("MapHeader::programIndex converts the 1-based header script id", "[map][scripts]") {
-    geck::Map::MapHeader header{};
-    header.script_id = -1;
-    CHECK_FALSE(header.programIndex().has_value());
-    header.script_id = 0;
-    CHECK_FALSE(header.programIndex().has_value());
-    header.script_id = 1414; // SCRIPT_EPAC18 in headers/scripts.h
-    CHECK(header.programIndex() == 1413);
-}

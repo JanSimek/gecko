@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -57,20 +58,21 @@ double maxOffsetFromChord(const HexagonGrid& grid, const std::vector<int>& line)
 
 } // namespace
 
-TEST_CASE("hexLine includes both endpoints", "[hexline]") {
-    const int start = 100 * HexagonGrid::GRID_WIDTH + 80;
-    const int end = 100 * HexagonGrid::GRID_WIDTH + 120;
-
-    const auto line = hexline::hexLine(start, end);
-    REQUIRE(line.size() >= 2);
-    CHECK(line.front() == start);
-    CHECK(line.back() == end);
-}
-
-TEST_CASE("hexLine on a horizontal screen run is gap-free", "[hexline]") {
-    // Two hexes on the same screen row, well apart horizontally.
-    const int start = 100 * HexagonGrid::GRID_WIDTH + 60;
-    const int end = 100 * HexagonGrid::GRID_WIDTH + 140;
+TEST_CASE("hexLine is a straight, gap-free walk between its endpoints", "[hexline]") {
+    constexpr int W = HexagonGrid::GRID_WIDTH;
+    // Edges in different directions: horizontal, vertical, and both diagonals, so the iso staircase
+    // must step in both axes. The old greedy distance-to-endpoint walk bowed hundreds of pixels off
+    // the long ones; a cube line hugs the chord to within about one hex.
+    const auto [start, end] = GENERATE(table<int, int>({
+        { 100 * W + 80, 100 * W + 120 }, // short horizontal
+        { 100 * W + 60, 100 * W + 140 }, // horizontal
+        { 80 * W + 80, 120 * W + 120 },  // diagonal
+        { 100 * W + 40, 100 * W + 160 }, // wide horizontal
+        { 40 * W + 100, 160 * W + 100 }, // tall vertical
+        { 40 * W + 40, 160 * W + 160 },  // down-right diagonal
+        { 40 * W + 160, 160 * W + 40 },  // down-left diagonal
+    }));
+    INFO("start " << start << " end " << end);
 
     const auto line = hexline::hexLine(start, end);
     REQUIRE(line.size() >= 2);
@@ -82,18 +84,10 @@ TEST_CASE("hexLine on a horizontal screen run is gap-free", "[hexline]") {
     auto sorted = line;
     std::ranges::sort(sorted);
     CHECK(std::unique(sorted.begin(), sorted.end()) == sorted.end());
-}
 
-TEST_CASE("hexLine on a diagonal screen run is gap-free and reaches the end", "[hexline]") {
-    // A diagonal: differ in both row and column so the iso staircase must step in both axes.
-    const int start = 80 * HexagonGrid::GRID_WIDTH + 80;
-    const int end = 120 * HexagonGrid::GRID_WIDTH + 120;
-
-    const auto line = hexline::hexLine(start, end);
-    REQUIRE(line.size() >= 2);
-    CHECK(line.front() == start);
-    CHECK(line.back() == end);
-    CHECK(isGapFree(line));
+    // Every hex centre is within roughly one hex width of the chord, i.e. the line is straight.
+    const HexagonGrid grid;
+    CHECK(maxOffsetFromChord(grid, line) <= static_cast<double>(geck::Hex::HEX_WIDTH));
 }
 
 TEST_CASE("hexLine from a hex to itself is just that hex", "[hexline]") {
@@ -107,34 +101,6 @@ TEST_CASE("hexLine with an off-grid endpoint is empty", "[hexline]") {
     const int valid = 100 * HexagonGrid::GRID_WIDTH + 100;
     CHECK(hexline::hexLine(-1, valid).empty());
     CHECK(hexline::hexLine(valid, HexagonGrid::POSITION_COUNT).empty());
-}
-
-TEST_CASE("hexLine stays on the straight chord (no bowing)", "[hexline]") {
-    HexagonGrid grid;
-    // A spread of edges in different directions: horizontal, vertical, and two diagonals. The
-    // old greedy distance-to-endpoint walk bowed hundreds of pixels off these; a cube line hugs
-    // the chord to within about one hex.
-    struct Edge {
-        int start;
-        int end;
-    };
-    const std::vector<Edge> edges = {
-        { 100 * HexagonGrid::GRID_WIDTH + 40, 100 * HexagonGrid::GRID_WIDTH + 160 }, // wide horizontal
-        { 40 * HexagonGrid::GRID_WIDTH + 100, 160 * HexagonGrid::GRID_WIDTH + 100 }, // tall vertical
-        { 40 * HexagonGrid::GRID_WIDTH + 40, 160 * HexagonGrid::GRID_WIDTH + 160 },  // down-right diagonal
-        { 40 * HexagonGrid::GRID_WIDTH + 160, 160 * HexagonGrid::GRID_WIDTH + 40 },  // down-left diagonal
-    };
-
-    for (const Edge& edge : edges) {
-        const auto line = hexline::hexLine(edge.start, edge.end);
-        REQUIRE(line.size() >= 2);
-        CHECK(line.front() == edge.start);
-        CHECK(line.back() == edge.end);
-        CHECK(isGapFree(line));
-
-        // Every hex centre is within roughly one hex width of the chord — i.e. the line is straight.
-        CHECK(maxOffsetFromChord(grid, line) <= static_cast<double>(geck::Hex::HEX_WIDTH));
-    }
 }
 
 TEST_CASE("hexDirection inverts hexgrid::neighbors' order", "[hexline]") {

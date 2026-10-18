@@ -173,30 +173,7 @@ TEST_CASE("Weapon energy checkbox edits sfall's extended-flags bit without clobb
     REQUIRE(pro->commonItemData.flagsExt == (kept | bit(ENERGY) | 0x72u));
 }
 
-TEST_CASE("Drug widget loads stat and perk options from message files", "[qt][pro]") {
-    test::DataTree data("pro-editor");
-    data.write("text/english/game/stat.msg", test::statMsg());
-    data.write("text/english/game/perk.msg",
-        test::perkMsg({ { geck::fallout::PerkId::JetAddiction, "Jet Addiction" } }, true));
-    auto& resources = data.mount();
-
-    geck::ProDrugWidget widget(resources);
-    auto* statCombo = test::findByToolTip<QComboBox>(widget, "Stat 1 to modify (None=no effect)");
-    auto* perkCombo = test::findByToolTip<QComboBox>(widget, "Perk applied when addicted");
-
-    REQUIRE(statCombo != nullptr);
-    REQUIRE(perkCombo != nullptr);
-    REQUIRE(statCombo->count() >= 3);
-    REQUIRE(statCombo->itemText(0) == "None");
-    REQUIRE(statCombo->itemText(1) == "Strength");
-    REQUIRE(statCombo->itemText(2) == "Perception");
-
-    const int addictionIndex = perkCombo->findData(geck::fallout::enumValue(geck::fallout::PerkId::JetAddiction));
-    REQUIRE(addictionIndex >= 0);
-    REQUIRE(perkCombo->itemText(addictionIndex) == "Jet Addiction");
-}
-
-TEST_CASE("Drug widget round-trips stat ids through value mapping, including None", "[qt][pro]") {
+TEST_CASE("Drug widget maps stat and perk labels from message files to engine ids", "[qt][pro]") {
     test::DataTree data("pro-editor");
     data.write("text/english/game/stat.msg", test::statMsg());
     data.write("text/english/game/perk.msg",
@@ -205,28 +182,46 @@ TEST_CASE("Drug widget round-trips stat ids through value mapping, including Non
 
     geck::ProDrugWidget widget(resources);
 
-    auto pro = test::makeItemPro(geck::ItemType::Drug);
-    // stat0 = Perception, stat1 = "no stat" (0xFFFFFFFF sentinel), stat2 = Strength.
-    pro->drugData.stat0 = static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Perception));
-    pro->drugData.stat1 = 0xFFFFFFFFu;
-    pro->drugData.stat2 = static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Strength));
+    SECTION("the stat and perk options come from stat.msg and perk.msg") {
+        auto* statCombo = test::findByToolTip<QComboBox>(widget, "Stat 1 to modify (None=no effect)");
+        auto* perkCombo = test::findByToolTip<QComboBox>(widget, "Perk applied when addicted");
 
-    widget.loadFromPro(pro);
+        REQUIRE(statCombo != nullptr);
+        REQUIRE(perkCombo != nullptr);
+        REQUIRE(statCombo->count() >= 3);
+        REQUIRE(statCombo->itemText(0) == "None");
+        REQUIRE(statCombo->itemText(1) == "Strength");
+        REQUIRE(statCombo->itemText(2) == "Perception");
 
-    auto* stat0Combo = test::findByToolTip<QComboBox>(widget, "Stat 1 to modify (None=no effect)");
-    auto* stat1Combo = test::findByToolTip<QComboBox>(widget, "Stat 2 to modify (None=no effect)");
-    REQUIRE(stat0Combo != nullptr);
-    REQUIRE(stat1Combo != nullptr);
-    // Selection is bound to the engine stat id (itemData), not the list position.
-    REQUIRE(stat0Combo->currentData().toInt() == geck::fallout::enumValue(geck::fallout::StatId::Perception));
-    REQUIRE(stat1Combo->currentText() == "None");
+        const int addictionIndex = perkCombo->findData(geck::fallout::enumValue(geck::fallout::PerkId::JetAddiction));
+        REQUIRE(addictionIndex >= 0);
+        REQUIRE(perkCombo->itemText(addictionIndex) == "Jet Addiction");
+    }
 
-    auto out = test::makeItemPro(geck::ItemType::Drug);
-    widget.saveToPro(out);
+    SECTION("stat ids round-trip through the value mapping, including None") {
+        auto pro = test::makeItemPro(geck::ItemType::Drug);
+        // stat0 = Perception, stat1 = "no stat" (0xFFFFFFFF sentinel), stat2 = Strength.
+        pro->drugData.stat0 = static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Perception));
+        pro->drugData.stat1 = 0xFFFFFFFFu;
+        pro->drugData.stat2 = static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Strength));
 
-    REQUIRE(out->drugData.stat0 == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Perception)));
-    REQUIRE(out->drugData.stat1 == 0xFFFFFFFFu);
-    REQUIRE(out->drugData.stat2 == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Strength)));
+        widget.loadFromPro(pro);
+
+        auto* stat0Combo = test::findByToolTip<QComboBox>(widget, "Stat 1 to modify (None=no effect)");
+        auto* stat1Combo = test::findByToolTip<QComboBox>(widget, "Stat 2 to modify (None=no effect)");
+        REQUIRE(stat0Combo != nullptr);
+        REQUIRE(stat1Combo != nullptr);
+        // Selection is bound to the engine stat id (itemData), not the list position.
+        REQUIRE(stat0Combo->currentData().toInt() == geck::fallout::enumValue(geck::fallout::StatId::Perception));
+        REQUIRE(stat1Combo->currentText() == "None");
+
+        auto out = test::makeItemPro(geck::ItemType::Drug);
+        widget.saveToPro(out);
+
+        REQUIRE(out->drugData.stat0 == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Perception)));
+        REQUIRE(out->drugData.stat1 == 0xFFFFFFFFu);
+        REQUIRE(out->drugData.stat2 == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Strength)));
+    }
 }
 
 TEST_CASE("Scenery widget switches subtype editors and preserves subtype values", "[qt][pro]") {
@@ -520,31 +515,69 @@ TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][main
     REQUIRE_FALSE(selectionAction->isChecked());
 }
 
-// The panel shortcut family: Alt+1..6 on the six managed panels, Alt+` on the Log dock
-// (ui/input/ActionSpec.cpp). Alt+digit rather than Ctrl+digit so Ctrl+1..3 stays free for the
-// elevations and a panel's filter box never swallows the key.
-TEST_CASE("Panel menu actions carry their Alt shortcuts", "[qt][mainwindow][keys]") {
+// One MainWindow serves the three checks on its window-scoped action shortcuts (each block scoped).
+TEST_CASE("Window-scoped actions carry the shortcut table's keys, each key once", "[qt][mainwindow][keys]") {
     test::MainWindowFixture fixture;
+    geck::MainWindow& window = fixture.window;
 
-    struct ExpectedShortcut {
-        const char* actionText;
-        QKeySequence keys;
-    };
+    // The panel shortcut family: Alt+1..6 on the six managed panels, Alt+` on the Log dock
+    // (ui/input/ActionSpec.cpp). Alt+digit rather than Ctrl+digit so Ctrl+1..3 stays free for the
+    // elevations and a panel's filter box never swallows the key.
+    {
+        struct ExpectedShortcut {
+            const char* actionText;
+            QKeySequence keys;
+        };
 
-    const std::array<ExpectedShortcut, 7> expected = { {
-        { "Map Information", QKeySequence(Qt::ALT | Qt::Key_1) },
-        { "Selection", QKeySequence(Qt::ALT | Qt::Key_2) },
-        { "Scripts", QKeySequence(Qt::ALT | Qt::Key_3) },
-        { "Tile Palette", QKeySequence(Qt::ALT | Qt::Key_4) },
-        { "Object Palette", QKeySequence(Qt::ALT | Qt::Key_5) },
-        { "Virtual File System Browser", QKeySequence(Qt::ALT | Qt::Key_6) },
-        { "Log", QKeySequence(Qt::ALT | Qt::Key_QuoteLeft) },
-    } };
+        const std::array<ExpectedShortcut, 7> expected = { {
+            { "Map Information", QKeySequence(Qt::ALT | Qt::Key_1) },
+            { "Selection", QKeySequence(Qt::ALT | Qt::Key_2) },
+            { "Scripts", QKeySequence(Qt::ALT | Qt::Key_3) },
+            { "Tile Palette", QKeySequence(Qt::ALT | Qt::Key_4) },
+            { "Object Palette", QKeySequence(Qt::ALT | Qt::Key_5) },
+            { "Virtual File System Browser", QKeySequence(Qt::ALT | Qt::Key_6) },
+            { "Log", QKeySequence(Qt::ALT | Qt::Key_QuoteLeft) },
+        } };
 
-    for (const ExpectedShortcut& entry : expected) {
-        QAction* action = fixture.menuAction(entry.actionText);
-        REQUIRE(action != nullptr);
-        CHECK(action->shortcut() == entry.keys);
+        for (const ExpectedShortcut& entry : expected) {
+            QAction* action = fixture.menuAction(entry.actionText);
+            REQUIRE(action != nullptr);
+            CHECK(action->shortcut() == entry.keys);
+        }
+    }
+
+    // B and R used to be window-scoped QAction shortcuts, which fired while a palette grid or a tree
+    // had focus: typing "b" in such a place started placing scroll blockers. Both now live on the
+    // canvas, so the actions themselves must carry no shortcut.
+    {
+        for (const char* text : { "Scroll Blocker Rectangle", "Rotate" }) {
+            QAction* action = test::findActionByText(window, text);
+            REQUIRE(action != nullptr);
+            CHECK(action->shortcut().isEmpty());
+        }
+
+        // Ctrl+Shift+E is a command, not a single letter, so it stays window-scoped.
+        QAction* editSource = test::findActionByText(window, "Edit Script Source");
+        REQUIRE(editSource != nullptr);
+        CHECK(editSource->shortcut() == QKeySequence("Ctrl+Shift+E"));
+    }
+
+    // Two enabled actions on one key make Qt fire neither and warn about an ambiguous overload, and
+    // nothing else notices: the menus and the toolbar both hand out shortcuts, so this sweeps the
+    // whole live window rather than just the shipped table.
+    {
+        QHash<QString, QString> owners; // key text -> the action already holding it
+        for (const QAction* action : window.findChildren<QAction*>()) {
+            const QKeySequence keys = action->shortcut();
+            if (keys.isEmpty()) {
+                continue;
+            }
+            const QString text = keys.toString();
+            INFO("key " << text.toStdString() << " wanted by " << test::plainText(*action).toStdString()
+                        << " and " << owners.value(text).toStdString());
+            CHECK_FALSE(owners.contains(text));
+            owners.insert(text, test::plainText(*action));
+        }
     }
 }
 
@@ -814,71 +847,55 @@ struct ExitGridFixture {
 
 } // namespace
 
-TEST_CASE("ExitGridPropertiesDialog lists mounted maps by name, sorted, with maps.txt index as data", "[qt][exitgrid]") {
+TEST_CASE("ExitGridPropertiesDialog picks a destination from the mounted maps", "[qt][exitgrid]") {
     ExitGridFixture fixture;
     geck::ExitGridPropertiesDialog dialog(nullptr, fixture.names.get());
 
     auto* combo = dialog.findChild<QComboBox*>("destinationMap");
     REQUIRE(combo != nullptr);
 
-    // Sorted case-insensitively by filename: arcaves before klamall. The negative section is skipped.
-    // maps.txt's map_name normalizes to a loadable "<name>.map" filename.
-    REQUIRE(combo->count() == 2);
-    CHECK(combo->itemText(0) == QStringLiteral("arcaves.map · Arroyo Caves"));
-    CHECK(combo->itemData(0).toInt() == 1);
-    CHECK(combo->itemText(1) == QStringLiteral("klamall.map · Klamath"));
-    CHECK(combo->itemData(1).toInt() == 0);
-}
+    SECTION("mounted maps are listed by name, sorted, with the maps.txt index as data") {
+        // Sorted case-insensitively by filename: arcaves before klamall. The negative section is skipped.
+        // maps.txt's map_name normalizes to a loadable "<name>.map" filename.
+        REQUIRE(combo->count() == 2);
+        CHECK(combo->itemText(0) == QStringLiteral("arcaves.map · Arroyo Caves"));
+        CHECK(combo->itemData(0).toInt() == 1);
+        CHECK(combo->itemText(1) == QStringLiteral("klamall.map · Klamath"));
+        CHECK(combo->itemData(1).toInt() == 0);
+    }
 
-TEST_CASE("ExitGridPropertiesDialog returns the selected map's index", "[qt][exitgrid]") {
-    ExitGridFixture fixture;
-    geck::ExitGridPropertiesDialog dialog(nullptr, fixture.names.get());
+    SECTION("the selected map's index is returned") {
+        combo->setCurrentIndex(combo->findData(0)); // klamall.map (maps.txt index 0)
+        CHECK(dialog.getProperties().exitMap == 0u);
 
-    auto* combo = dialog.findChild<QComboBox*>("destinationMap");
-    REQUIRE(combo != nullptr);
+        combo->setCurrentIndex(combo->findData(1)); // arcaves.map (maps.txt index 1)
+        CHECK(dialog.getProperties().exitMap == 1u);
+    }
 
-    combo->setCurrentIndex(combo->findData(0)); // klamall.map (maps.txt index 0)
-    CHECK(dialog.getProperties().exitMap == 0u);
+    SECTION("world/town exits disable the picker and report the sentinel") {
+        geck::ExitGridPropertiesDialog::ExitGridProperties world;
+        world.exitMap = geck::ExitGrid::WORLD_MAP_EXIT;
+        dialog.setProperties(world);
+        CHECK_FALSE(combo->isEnabled());
+        CHECK(dialog.getProperties().exitMap == geck::ExitGrid::WORLD_MAP_EXIT);
 
-    combo->setCurrentIndex(combo->findData(1)); // arcaves.map (maps.txt index 1)
-    CHECK(dialog.getProperties().exitMap == 1u);
-}
+        geck::ExitGridPropertiesDialog::ExitGridProperties town;
+        town.exitMap = geck::ExitGrid::TOWN_MAP_EXIT;
+        dialog.setProperties(town);
+        CHECK_FALSE(combo->isEnabled());
+        CHECK(dialog.getProperties().exitMap == geck::ExitGrid::TOWN_MAP_EXIT);
+    }
 
-TEST_CASE("ExitGridPropertiesDialog world/town toggles disable the picker and report the sentinel", "[qt][exitgrid]") {
-    ExitGridFixture fixture;
-    geck::ExitGridPropertiesDialog dialog(nullptr, fixture.names.get());
+    SECTION("a destination not listed in maps.txt is preserved") {
+        geck::ExitGridPropertiesDialog::ExitGridProperties props;
+        props.exitMap = 4242; // a map id that isn't in the mounted maps.txt
+        dialog.setProperties(props);
 
-    auto* combo = dialog.findChild<QComboBox*>("destinationMap");
-    REQUIRE(combo != nullptr);
-
-    geck::ExitGridPropertiesDialog::ExitGridProperties world;
-    world.exitMap = geck::ExitGrid::WORLD_MAP_EXIT;
-    dialog.setProperties(world);
-    CHECK_FALSE(combo->isEnabled());
-    CHECK(dialog.getProperties().exitMap == geck::ExitGrid::WORLD_MAP_EXIT);
-
-    geck::ExitGridPropertiesDialog::ExitGridProperties town;
-    town.exitMap = geck::ExitGrid::TOWN_MAP_EXIT;
-    dialog.setProperties(town);
-    CHECK_FALSE(combo->isEnabled());
-    CHECK(dialog.getProperties().exitMap == geck::ExitGrid::TOWN_MAP_EXIT);
-}
-
-TEST_CASE("ExitGridPropertiesDialog preserves a destination not listed in maps.txt", "[qt][exitgrid]") {
-    ExitGridFixture fixture;
-    geck::ExitGridPropertiesDialog dialog(nullptr, fixture.names.get());
-
-    auto* combo = dialog.findChild<QComboBox*>("destinationMap");
-    REQUIRE(combo != nullptr);
-
-    geck::ExitGridPropertiesDialog::ExitGridProperties props;
-    props.exitMap = 4242; // a map id that isn't in the mounted maps.txt
-    dialog.setProperties(props);
-
-    // An unknown id is preserved as a selected "Map <id>" entry and round-trips unchanged.
-    CHECK(combo->currentText() == QStringLiteral("Map 4242"));
-    CHECK(combo->currentData().toInt() == 4242);
-    CHECK(dialog.getProperties().exitMap == 4242u);
+        // An unknown id is preserved as a selected "Map <id>" entry and round-trips unchanged.
+        CHECK(combo->currentText() == QStringLiteral("Map 4242"));
+        CHECK(combo->currentData().toInt() == 4242);
+        CHECK(dialog.getProperties().exitMap == 4242u);
+    }
 }
 
 TEST_CASE("ExitGridPropertiesDialog operates with no resolver and preserves the destination id", "[qt][exitgrid]") {
@@ -1057,7 +1074,7 @@ TEST_CASE("ScriptsPanel marks scripts the lint finds problems in", "[qt][scripts
     REQUIRE(geck::test::pumpUntil([&linted]() { return std::ranges::find(linted, 1) != linted.end(); }));
     REQUIRE(scriptFilenameCell(*table, 0) != nullptr);
     const QString tip = scriptFilenameCell(*table, 0)->toolTip();
-    CHECK(tip.contains("Its local variables 0-3 overlap those of clean.int, so they share them."));
+    CHECK(tip.contains("clean.int")); // the overlap finding names the other script (exact text: test_script_lint)
     CHECK(tip.contains("obj_dude.ssl line 12: message 150 is not in dialog/obj_dude.msg"));
     CHECK_FALSE(scriptFilenameCell(*table, 0)->icon().isNull());
     REQUIRE(scriptFilenameCell(*table, 1) != nullptr);
@@ -1101,6 +1118,7 @@ TEST_CASE("ScriptsPanel marks scripts wrong for where the map places them", "[qt
 }
 
 // Without an .ssl source the status comes from the compiled .int, so a vanilla install is checked too.
+// What the bytecode lint finds is covered by test_script_lint; this checks the service hands it on.
 TEST_CASE("ScriptSourceService checks a script's compiled .int when it has no source", "[qt][scripts]") {
     test::DataTree data("ui-data");
     data.write("scripts/scripts.lst", "two.int ; second # local_vars=0\n");
@@ -1118,9 +1136,7 @@ TEST_CASE("ScriptSourceService checks a script's compiled .int when it has no so
     CHECK(status.compiled);
     REQUIRE(status.report != nullptr);
     CHECK(status.report->fromBytecode);
-    REQUIRE(status.findings.size() == 1);
-    CHECK(status.findings[0].check == "local-vars");
-    CHECK(status.findings[0].procedure == "talk_p_proc");
+    CHECK(status.findings.size() == 1);
 }
 
 // The unified Exit-Grids tool is one checkable button plus a dropdown whose two items ("Draw edge" /
@@ -1181,27 +1197,6 @@ TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exi
     CHECK(editor->currentMode() == geck::EditorMode::Select);
 }
 
-// Two enabled actions on one key make Qt fire neither and warn about an ambiguous overload, and
-// nothing else notices — the menus and the toolbar both hand out shortcuts, so this sweeps the
-// whole live window rather than just the shipped table.
-TEST_CASE("No two actions in the window share a shortcut", "[qt][mainwindow][keys]") {
-    test::MainWindowFixture fixture;
-    geck::MainWindow& window = fixture.window;
-
-    QHash<QString, QString> owners; // key text -> the action already holding it
-    for (const QAction* action : window.findChildren<QAction*>()) {
-        const QKeySequence keys = action->shortcut();
-        if (keys.isEmpty()) {
-            continue;
-        }
-        const QString text = keys.toString();
-        INFO("key " << text.toStdString() << " wanted by " << test::plainText(*action).toStdString()
-                    << " and " << owners.value(text).toStdString());
-        CHECK_FALSE(owners.contains(text));
-        owners.insert(text, test::plainText(*action));
-    }
-}
-
 // The editor-navigation keys. Elevation is the everyday one: Ctrl+digit, the counterpart of the
 // panels' Alt+digit. They start disabled and updateElevationMenu() enables only what the open map
 // has, so the key is a no-op on a map without that elevation rather than a switch to nothing.
@@ -1245,25 +1240,6 @@ TEST_CASE("Elevation actions carry Ctrl+digit and stay no-ops until a map has th
 
     elevation2->trigger();
     CHECK(editor->getCurrentElevation() == geck::ELEVATION_2);
-}
-
-// B and R used to be window-scoped QAction shortcuts, which fired while a palette grid or a tree
-// had focus — typing "b" in such a place started placing scroll blockers. Both now live on the
-// canvas, so the actions themselves must carry no shortcut.
-TEST_CASE("Single-letter tool keys are off the window-scoped actions", "[qt][mainwindow][keys]") {
-    test::MainWindowFixture fixture;
-    geck::MainWindow& window = fixture.window;
-
-    for (const char* text : { "Scroll Blocker Rectangle", "Rotate" }) {
-        QAction* action = test::findActionByText(window, text);
-        REQUIRE(action != nullptr);
-        CHECK(action->shortcut().isEmpty());
-    }
-
-    // Ctrl+Shift+E is a command, not a single letter, so it stays window-scoped.
-    QAction* editSource = test::findActionByText(window, "Edit Script Source");
-    REQUIRE(editSource != nullptr);
-    CHECK(editSource->shortcut() == QKeySequence("Ctrl+Shift+E"));
 }
 
 // "Inspect the selection": Return (and numpad Enter, a distinct key code) reveals the Selection

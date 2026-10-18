@@ -7,7 +7,6 @@
 #include <string>
 
 #include "cli/MapExamples.h"
-#include "editor/HexGeometry.h"
 #include "resource/GameResources.h"
 
 #include "support/CliJson.h"
@@ -26,21 +25,12 @@ namespace fs = std::filesystem;
 namespace {
 
 constexpr int SHOPKEEPER_HEX = test::ShopMap::SHOPKEEPER_HEX;
-constexpr int WALL_HEX = test::ShopMap::WALL_HEX;
-constexpr int OTHER_CRITTER_HEX = test::ShopMap::OTHER_CRITTER_HEX;
 
 json run(resource::GameResources& resources, const cli::ExamplesOptions& options, int* rc = nullptr) {
     return test::runJson([&](std::ostream& out) { return cli::findExamples(resources, options, out); }, rc);
 }
 
 } // namespace
-
-TEST_CASE("hexgrid::distance counts hex steps", "[hex_geometry]") {
-    CHECK(hexgrid::distance(SHOPKEEPER_HEX, SHOPKEEPER_HEX) == 0);
-    CHECK(hexgrid::distance(SHOPKEEPER_HEX, WALL_HEX) == 1);
-    CHECK(hexgrid::distance(SHOPKEEPER_HEX, OTHER_CRITTER_HEX) == 4);
-    CHECK(hexgrid::distance(OTHER_CRITTER_HEX, SHOPKEEPER_HEX) == 4);
-}
 
 TEST_CASE("find_examples reports matching objects with their script and surroundings", "[cli][examples]") {
     test::DataTree tree{ "map_examples_data" };

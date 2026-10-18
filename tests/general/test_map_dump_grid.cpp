@@ -4,11 +4,13 @@
 
 #include <cstdint>
 #include <ostream>
+#include <string>
 
 #include "cli/MapAnalyzer.h"
 #include "editor/HexagonGrid.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
+#include "format/pro/ProtoTypes.h"
 #include "resource/GameResources.h"
 
 #include "support/CliJson.h"
@@ -105,4 +107,43 @@ TEST_CASE("dump-grid --no-floor / --no-objects drop those sections", "[cli][dump
     CHECK_FALSE(e.contains("floor"));
     CHECK_FALSE(e.contains("objects"));
     CHECK_FALSE(e.contains("roof")); // roof defaults off
+}
+
+// The name filter exists because asking where one object sits meant reading the whole map: epax is
+// 2684 objects, nearly all scroll blockers, so three rows cost 445KB.
+TEST_CASE("dump-grid filters objects by name", "[cli][dump-grid]") {
+    auto mapFile = Map::createEmptyMapFile();
+    for (int i = 0; i < 5; ++i) {
+        // Critters, not scenery: scenery dereferences its Pro in both directions, so reading the
+        // map back without mounted protos fails. Critters carry their pid and nothing else.
+        addObject(mapFile, ProtoId(ObjectType::Critter, static_cast<uint32_t>(40 + i)).pid(),
+            100 * HexagonGrid::GRID_WIDTH + 100 + i);
+    }
+    const auto dump = [&mapFile](const std::string& nameFilter) {
+        cli::DumpGridOptions opts;
+        opts.floor = false;
+        opts.nameFilter = nameFilter;
+        return dumpWrittenMap(mapFile, "geck_dump_grid_filter", opts)["elevations"][0]["objects"];
+    };
+
+    const json all = dump("");
+    REQUIRE(all.size() == 5);
+
+    SECTION("a pattern that matches nothing returns nothing, not everything") {
+        CHECK(dump("definitely-not-a-proto-name").empty());
+    }
+
+    SECTION("an unparsable pattern is ignored rather than fatal") {
+        // A filter on a dump: refusing to answer is worse than answering unfiltered.
+        CHECK(dump("[unclosed").size() == all.size());
+    }
+
+    SECTION("the filter matches the name each object actually reports") {
+        // Whatever the names resolve to without mounted data, filtering on one of them must select
+        // at least that object and never more than the unfiltered set.
+        const std::string first = all[0]["name"].get<std::string>();
+        const json some = dump(first);
+        CHECK_FALSE(some.empty());
+        CHECK(some.size() <= all.size());
+    }
 }

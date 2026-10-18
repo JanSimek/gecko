@@ -83,6 +83,16 @@ TEST_CASE("resolveFidCommand emits decoded JSON for a FID", "[frm][cli]") {
     CHECK(decoded["artPath"] == "art/misc/ext2grd1.frm");
 }
 
+TEST_CASE("resolveFidCommand decodes a FID with no data mounted", "[frm][cli]") {
+    // The type and index are pure FID arithmetic; only the art path needs the LSTs, so it is null.
+    resource::GameResources resources;
+    const json decoded = geck::test::runJson([&](std::ostream& out) { return cli::resolveFidCommand(resources, "0x05000021", out); });
+    CHECK(decoded["type"] == "misc");
+    CHECK(decoded["index"] == 33);
+    CHECK(decoded["fid"] == 0x05000021);
+    CHECK(decoded["artPath"].is_null());
+}
+
 TEST_CASE("resolveFidCommand rejects a non-numeric token", "[frm][cli]") {
     geck::test::ArtLstTree fx{ "geck_frminspect_test" };
     std::ostringstream oss;

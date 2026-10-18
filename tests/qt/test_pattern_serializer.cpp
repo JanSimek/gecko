@@ -3,6 +3,9 @@
 #include <QByteArray>
 #include <QString>
 
+#ifdef GECK_TEST_WITH_CLI
+#include "cli/PatternJson.h"
+#endif
 #include "pattern/Pattern.h"
 #include "pattern/PatternSerializer.h"
 
@@ -184,3 +187,47 @@ TEST_CASE("PatternSerializer rejects malformed and out-of-spec input", "[pattern
         checkRejected(variantDoc(R"("objects": [ { "dxHex": 0, "dyHex": 0, "proPid": 1, "frmPid": 2, "direction": 6 } ])"), "direction");
     }
 }
+
+#ifdef GECK_TEST_WITH_CLI
+// The headless extractor (gecko_cli) writes stamps with geck::cli::serializePattern, hand-rolled to avoid
+// Qt. This proves the editor's PatternSerializer — the real reader, behind the pattern library —
+// loads that output and every field survives, so a stamp captured by gecko-mcp/gecko-cli can be used
+// in the editor unchanged.
+TEST_CASE("headless-serialized pattern round-trips through the editor's PatternSerializer", "[pattern]") {
+    Pattern source;
+    source.name = "desert_tent";
+    PatternVariant variant;
+    variant.label = "default";
+    variant.anchorHex = 18098;
+    variant.objects.push_back(PatternObject{ 1, -2, 50332269U, 50332614U, 3U, 0U });
+    variant.objects.push_back(PatternObject{ 0, 0, 50332270U, 50332615U, 0U, 8U });
+    variant.floor.push_back(PatternTile{ 2, -1, 191 });
+    variant.roof.push_back(PatternTile{ 0, 0, 200 });
+    source.variants.push_back(variant);
+
+    const std::string json = geck::cli::serializePattern(source);
+
+    QString error;
+    const std::optional<Pattern> loaded = PatternSerializer::deserialize(QByteArray::fromStdString(json), &error);
+
+    REQUIRE(loaded.has_value()); // the editor accepts the headless JSON
+    CHECK(loaded->name == "desert_tent");
+    CHECK(loaded->version == Pattern::CURRENT_VERSION);
+    REQUIRE(loaded->variants.size() == 1);
+
+    const PatternVariant& result = loaded->variants.front();
+    CHECK(result.anchorHex == 18098);
+    REQUIRE(result.objects.size() == 2);
+    CHECK(result.objects[0].dxHex == 1);
+    CHECK(result.objects[0].dyHex == -2);
+    CHECK(result.objects[0].proPid == 50332269U);
+    CHECK(result.objects[0].frmPid == 50332614U);
+    CHECK(result.objects[0].direction == 3U);
+    CHECK(result.objects[1].flags == 8U);
+    REQUIRE(result.floor.size() == 1);
+    CHECK(result.floor[0].dxTile == 2);
+    CHECK(result.floor[0].tileId == 191);
+    REQUIRE(result.roof.size() == 1);
+    CHECK(result.roof[0].tileId == 200);
+}
+#endif // GECK_TEST_WITH_CLI

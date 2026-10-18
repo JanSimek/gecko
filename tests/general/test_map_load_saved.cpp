@@ -134,36 +134,3 @@ TEST_CASE("a truncated gzip map fails with the reason", "[cli][map][saved]") {
     CHECK(cli::loadMap(resources, gz.path().string(), &error) == nullptr);
     CHECK(error.find("gzip") != std::string::npos);
 }
-
-// The engine's _obj_load_obj reads an inventory entry as a full object that may hold its own
-// inventory. A container in a critter's pack must not desynchronise the objects after it.
-TEST_CASE("MAP reader follows nested inventories", "[map][roundtrip]") {
-    StubProvider provider;
-    const uint32_t containerPid = ProtoId(ObjectType::Item, 200).pid();
-    const uint32_t armorPid = ProtoId(ObjectType::Item, 201).pid();
-    provider.addItem(containerPid, ItemType::Container);
-    provider.addItem(armorPid, ItemType::Armor);
-
-    auto mapFile = Map::createEmptyMapFile();
-    auto critter = addCritter(mapFile, 1, 0, 18082);
-    auto container = std::make_unique<MapObject>(std::move(*seededObject(containerPid, 2)));
-    container->amount = 1;
-    auto armor = std::make_unique<MapObject>(std::move(*seededObject(armorPid, 3)));
-    armor->amount = 4;
-    container->objects_in_inventory = 1;
-    container->inventory.push_back(std::move(armor));
-    critter->objects_in_inventory = 1;
-    critter->inventory.push_back(std::move(container));
-    auto after = addCritter(mapFile, 4, 1, 18084);
-
-    TempFile out{ "geck_nested_inventory", ".map" };
-    writeMapFile(mapFile, out.path(), provider);
-    const auto reloaded = readMapFile(out.path(), provider);
-    const auto& objects = reloaded->getMapFile().map_objects.at(0);
-    REQUIRE(objects.size() == 2);
-    REQUIRE(objects[0]->inventory.size() == 1);
-    REQUIRE(objects[0]->inventory[0]->inventory.size() == 1);
-    CHECK(objects[0]->inventory[0]->inventory[0]->pro_pid == armorPid);
-    CHECK(objects[0]->inventory[0]->inventory[0]->amount == 4);
-    CHECK(objects[1]->position == after->position);
-}

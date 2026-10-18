@@ -1,8 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "resource/DataFileSystem.h"
 #include "support/Fixtures.h"
@@ -135,4 +138,54 @@ TEST_CASE("DAT2 archive reports a missing file as absent", "[dat][vfs]") {
 
     REQUIRE_FALSE(dfs.exists("does/not/exist.xyz"));
     REQUIRE_FALSE(dfs.readRawBytes("does/not/exist.xyz").has_value());
+}
+
+// Regression for the crash when selecting a map "quickly" in the browser: the background
+// map-loader thread and the UI thread both read the DAT's shared reader, and an unsynchronised
+// seek+read corrupted each other -> zlib inflate failed -> uncaught throw -> abort(). Reads
+// through the DAT2 filesystem must therefore be safe to run concurrently.
+TEST_CASE("DAT2 archive serves concurrent reads without corruption", "[dat][vfs][concurrency]") {
+    DataFileSystem dfs;
+    dfs.addDataPath(geck::test::f2ResDat());
+
+    // A large, zlib-compressed entry: the bigger the inflate, the more reliably a corrupted
+    // concurrent read is detected.
+    const auto found = geck::test::findBySuffix(dfs, geck::test::HR_ALLTLK);
+    REQUIRE(found.has_value());
+    const std::filesystem::path path = *found;
+
+    // The correct content, established single-threaded.
+    const auto expected = dfs.readRawBytes(path);
+    REQUIRE(expected.has_value());
+    const size_t expectedSize = expected->size();
+    const uint64_t expectedSum = byteSum(*expected);
+    REQUIRE(expectedSize == geck::test::HR_ALLTLK_SIZE);
+
+    constexpr int kThreads = 16;
+    constexpr int kReadsPerThread = 60;
+    std::atomic mismatches{ 0 };
+
+    {
+        // std::thread (not std::jthread): jthread is absent from the macOS CI toolchain's
+        // libc++. Join every worker explicitly before the check below.
+        std::vector<std::thread> workers;
+        workers.reserve(kThreads);
+        for (int t = 0; t < kThreads; ++t) {
+            workers.emplace_back([&dfs, &path, expectedSize, expectedSum, &mismatches] {
+                for (int i = 0; i < kReadsPerThread; ++i) {
+                    // readRawBytes catches read failures and returns nullopt, so a corrupted
+                    // concurrent read surfaces as missing/short/wrong data rather than a throw.
+                    const auto data = dfs.readRawBytes(path);
+                    if (!data || data->size() != expectedSize || byteSum(*data) != expectedSum) {
+                        ++mismatches;
+                    }
+                }
+            });
+        }
+        for (auto& worker : workers) {
+            worker.join();
+        }
+    }
+
+    CHECK(mismatches.load() == 0);
 }

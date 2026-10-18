@@ -40,6 +40,106 @@ TEST_CASE("findGameExecutable names the binary inside a detected installation", 
     }
 }
 
+TEST_CASE("applyStartingMapToDdrawIni sets the starting map", "[game_launcher]") {
+    SECTION("StartingMap is added when the key is absent in an existing [Misc] section") {
+        const std::string input = "[Misc]\n"
+                                  "Foo=1\n"
+                                  "[Sound]\n"
+                                  "Volume=5\n";
+
+        const std::string result = applyStartingMapToDdrawIni(input, "artemple.map");
+
+        // The new key is inserted into [Misc], before the next section starts
+        REQUIRE(result.find("StartingMap=artemple.map") != std::string::npos);
+
+        const size_t startingMapPos = result.find("StartingMap=artemple.map");
+        const size_t soundSectionPos = result.find("[Sound]");
+        REQUIRE(startingMapPos < soundSectionPos);
+
+        // Unrelated content is preserved
+        REQUIRE(result.find("Foo=1") != std::string::npos);
+        REQUIRE(result.find("Volume=5") != std::string::npos);
+    }
+
+    SECTION("StartingMap is replaced when present with a different value") {
+        const std::string input = "[Misc]\n"
+                                  "StartingMap=oldmap.map\n";
+
+        const std::string result = applyStartingMapToDdrawIni(input, "newmap.map");
+
+        REQUIRE(result.find("StartingMap=newmap.map") != std::string::npos);
+        REQUIRE(result.find("oldmap.map") == std::string::npos);
+        // Only a single StartingMap entry should exist
+        REQUIRE(result.find("StartingMap=", result.find("StartingMap=") + 1) == std::string::npos);
+    }
+
+    SECTION("A commented-out ;StartingMap entry is activated") {
+        const std::string input = "[Misc]\n"
+                                  ";StartingMap=disabled.map\n";
+
+        const std::string result = applyStartingMapToDdrawIni(input, "enabled.map");
+
+        REQUIRE(result.find("StartingMap=enabled.map") != std::string::npos);
+        REQUIRE(result.find(";StartingMap=") == std::string::npos);
+    }
+
+    SECTION("A [Misc] section and StartingMap are created when neither exists") {
+        const std::string input = "[Graphics]\n"
+                                  "Mode=2\n";
+
+        const std::string result = applyStartingMapToDdrawIni(input, "fresh.map");
+
+        REQUIRE(result.find("[Misc]") != std::string::npos);
+        REQUIRE(result.find("StartingMap=fresh.map") != std::string::npos);
+        // The existing section is preserved
+        REQUIRE(result.find("[Graphics]") != std::string::npos);
+        REQUIRE(result.find("Mode=2") != std::string::npos);
+    }
+
+    SECTION("Unrelated lines outside [Misc] are preserved verbatim") {
+        const std::string input = "[Graphics]\n"
+                                  "GraphicsMode=0\n"
+                                  "[Misc]\n"
+                                  "StartingMap=old.map\n"
+                                  "ScrollDist=10\n";
+
+        const std::string result = applyStartingMapToDdrawIni(input, "target.map");
+
+        REQUIRE(result.find("[Graphics]") != std::string::npos);
+        REQUIRE(result.find("GraphicsMode=0") != std::string::npos);
+        REQUIRE(result.find("ScrollDist=10") != std::string::npos);
+        REQUIRE(result.find("StartingMap=target.map") != std::string::npos);
+        REQUIRE(result.find("old.map") == std::string::npos);
+    }
+
+    // A real ddraw.ini ships CRLF. Section headers must still match, and the terminators of
+    // untouched lines must be preserved.
+    SECTION("A CRLF [Misc] section is recognised rather than duplicated") {
+        const std::string input
+            = "[Misc]\r\n"
+              "StartingMap=old.map\r\n"
+              "ScrollDist=10\r\n";
+
+        const std::string result = applyStartingMapToDdrawIni(input, "new.map");
+
+        REQUIRE(result.find("StartingMap=new.map") != std::string::npos);
+        REQUIRE(result.find("old.map") == std::string::npos);
+        REQUIRE(result.find("ScrollDist=10\r\n") != std::string::npos);
+        // Exactly one [Misc] section: the header must not have been appended a second time.
+        REQUIRE(result.find("[Misc]", result.find("[Misc]") + 1) == std::string::npos);
+    }
+
+    SECTION("A key added to a CRLF file uses CRLF too") {
+        const std::string input
+            = "[Misc]\r\n"
+              "ScrollDist=10\r\n";
+
+        const std::string result = applyStartingMapToDdrawIni(input, "new.map");
+
+        REQUIRE(result.find("StartingMap=new.map\r\n") != std::string::npos);
+    }
+}
+
 TEST_CASE("applyStartingMapToContentConfig sets the fallout2-ce start map", "[game_launcher]") {
     SECTION("The section and key are created for an empty config") {
         const std::string result = applyStartingMapToContentConfig("", "artemple.map");
@@ -89,34 +189,25 @@ TEST_CASE("applyStartingMapToContentConfig sets the fallout2-ce start map", "[ga
         REQUIRE(result.find("map=leave.me") != std::string::npos);
         REQUIRE(result.find("map=target.map") != std::string::npos);
     }
-}
 
-TEST_CASE("Starting-map rewrites survive CRLF config files", "[game_launcher]") {
-    // A real ddraw.ini ships CRLF. Section headers must still match, and the terminators of
-    // untouched lines must be preserved.
-    SECTION("A CRLF [Misc] section is recognised rather than duplicated") {
+    SECTION("A key written with spaces is replaced in place, not duplicated") {
+        // fallout2-ce trims around '=' and applies assignments in order, so an appended duplicate
+        // would be overwritten by the stale line below it and the old map would still win.
         const std::string input
-            = "[Misc]\r\n"
-              "StartingMap=old.map\r\n"
-              "ScrollDist=10\r\n";
+            = "[start]\n"
+              "map = old.map\n";
 
-        const std::string result = applyStartingMapToDdrawIni(input, "new.map");
+        const std::string result = applyStartingMapToContentConfig(input, "new.map");
 
-        REQUIRE(result.find("StartingMap=new.map") != std::string::npos);
+        REQUIRE(result.find("map=new.map") != std::string::npos);
         REQUIRE(result.find("old.map") == std::string::npos);
-        REQUIRE(result.find("ScrollDist=10\r\n") != std::string::npos);
-        // Exactly one [Misc] section: the header must not have been appended a second time.
-        REQUIRE(result.find("[Misc]", result.find("[Misc]") + 1) == std::string::npos);
     }
 
-    SECTION("A key added to a CRLF file uses CRLF too") {
-        const std::string input
-            = "[Misc]\r\n"
-              "ScrollDist=10\r\n";
+    SECTION("An indented section header is still recognised") {
+        const std::string result = applyStartingMapToContentConfig("  [start]\n  map=old.map\n", "new.map");
 
-        const std::string result = applyStartingMapToDdrawIni(input, "new.map");
-
-        REQUIRE(result.find("StartingMap=new.map\r\n") != std::string::npos);
+        REQUIRE(result.find("map=new.map") != std::string::npos);
+        REQUIRE(result.find("old.map") == std::string::npos);
     }
 }
 
@@ -211,28 +302,6 @@ TEST_CASE("planEditorDataMounts maps editor data paths onto the mod load order",
 
         REQUIRE(plan.modsOrderEntries.size() == 1);
         REQUIRE(plan.alreadyLoadedByGame.empty());
-    }
-}
-
-TEST_CASE("Starting-map rewrites honour the engine's key parsing", "[game_launcher]") {
-    SECTION("A key written with spaces is replaced in place, not duplicated") {
-        // fallout2-ce trims around '=' and applies assignments in order, so an appended duplicate
-        // would be overwritten by the stale line below it and the old map would still win.
-        const std::string input
-            = "[start]\n"
-              "map = old.map\n";
-
-        const std::string result = applyStartingMapToContentConfig(input, "new.map");
-
-        REQUIRE(result.find("map=new.map") != std::string::npos);
-        REQUIRE(result.find("old.map") == std::string::npos);
-    }
-
-    SECTION("An indented section header is still recognised") {
-        const std::string result = applyStartingMapToContentConfig("  [start]\n  map=old.map\n", "new.map");
-
-        REQUIRE(result.find("map=new.map") != std::string::npos);
-        REQUIRE(result.find("old.map") == std::string::npos);
     }
 }
 

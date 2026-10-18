@@ -11,7 +11,9 @@
 #include "format/frm/Frm.h"
 #include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
+#include "format/pro/ProtoTypes.h"
 #include "editing/commands/ObjectCommandController.h"
+#include "ui/core/EditorSession.h"
 #include "util/BuiltTile.h"
 
 #include "support/ControllerFixture.h"
@@ -162,34 +164,50 @@ TEST_CASE("registerInstanceEdit rejects a null object", "[undo][controller]") {
 
 TEST_CASE("attachScript and detachScript are undoable", "[undo][controller]") {
     ControllerFixture fx;
-    auto obj = std::make_shared<MapObject>();
-    REQUIRE(fx.mapFile().map_scripts[ITEM_SECTION].empty());
 
-    // First ITEM script in an empty section gets index 0, so the SID is deterministic.
-    const int32_t expectedSid = static_cast<int32_t>(MapScript::makeSid(MapScript::ScriptType::ITEM, 0));
+    SECTION("an item script links, unlinks and relinks the object") {
+        auto obj = std::make_shared<MapObject>();
+        REQUIRE(fx.mapFile().map_scripts[ITEM_SECTION].empty());
 
-    REQUIRE(fx.controller.attachScript(obj, ITEM_SECTION, /*programIndex*/ 42));
-    REQUIRE(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
-    CHECK(obj->map_scripts_pid == expectedSid);
+        // First ITEM script in an empty section gets index 0, so the SID is deterministic.
+        const int32_t expectedSid = static_cast<int32_t>(MapScript::makeSid(MapScript::ScriptType::ITEM, 0));
 
-    // Undo removes the script and unlinks the object.
-    REQUIRE(fx.undoStack.undo());
-    CHECK(fx.mapFile().map_scripts[ITEM_SECTION].empty());
-    CHECK(obj->map_scripts_pid == -1);
+        REQUIRE(fx.controller.attachScript(obj, ITEM_SECTION, /*programIndex*/ 42));
+        REQUIRE(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
+        CHECK(obj->map_scripts_pid == expectedSid);
 
-    // Redo re-attaches the same script.
-    REQUIRE(fx.undoStack.redo());
-    CHECK(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
-    CHECK(obj->map_scripts_pid == expectedSid);
+        // Undo removes the script and unlinks the object.
+        REQUIRE(fx.undoStack.undo());
+        CHECK(fx.mapFile().map_scripts[ITEM_SECTION].empty());
+        CHECK(obj->map_scripts_pid == -1);
 
-    // Detaching removes it again, and undo restores the linkage.
-    REQUIRE(fx.controller.detachScript(obj));
-    CHECK(fx.mapFile().map_scripts[ITEM_SECTION].empty());
-    CHECK(obj->map_scripts_pid == -1);
+        // Redo re-attaches the same script.
+        REQUIRE(fx.undoStack.redo());
+        CHECK(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
+        CHECK(obj->map_scripts_pid == expectedSid);
 
-    REQUIRE(fx.undoStack.undo());
-    CHECK(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
-    CHECK(obj->map_scripts_pid == expectedSid);
+        // Detaching removes it again, and undo restores the linkage.
+        REQUIRE(fx.controller.detachScript(obj));
+        CHECK(fx.mapFile().map_scripts[ITEM_SECTION].empty());
+        CHECK(obj->map_scripts_pid == -1);
+
+        REQUIRE(fx.undoStack.undo());
+        CHECK(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
+        CHECK(obj->map_scripts_pid == expectedSid);
+    }
+
+    // The engine's objectSetScript also records a critter's program index in obj->scriptIndex.
+    SECTION("a critter's script also sets its script index") {
+        auto critter = std::make_shared<MapObject>();
+        critter->pro_pid = ProtoId(ObjectType::Critter, 1).pid();
+        fx.mapFile().map_objects[0].push_back(critter);
+
+        REQUIRE(fx.controller.attachScript(critter, static_cast<int>(MapScript::ScriptType::CRITTER), 42));
+        CHECK(critter->script_id == 42);
+        REQUIRE(fx.undoStack.undo());
+        CHECK(critter->script_id == -1);
+        CHECK(critter->map_scripts_pid == -1);
+    }
 }
 
 TEST_CASE("editSpatialScript edits in place, keeps the SID, and is undoable", "[undo][controller][spatial]") {
@@ -437,6 +455,22 @@ TEST_CASE("newEmptyMap drops the undo history recorded against the old map", "[u
     CHECK(fx.mapFile().map_objects[0].empty());
 }
 
+TEST_CASE("EditorSession::resetToEmptyMap drops the old map's undo history", "[undo]") {
+    EditorSession session;
+    session.resetToEmptyMap();
+    int undone = 0;
+    session.undoStack().push({ .description = "Place", .undo = [&undone] { ++undone; }, .redo = [] { /* never redone */ } });
+    REQUIRE(session.undoStack().canUndo());
+
+    // File > New: replaying a command recorded against the previous map would write its
+    // objects and tiles onto the blank one.
+    session.resetToEmptyMap();
+
+    CHECK_FALSE(session.undoStack().canUndo());
+    CHECK_FALSE(session.undoStack().undo());
+    CHECK(undone == 0);
+}
+
 TEST_CASE("newEmptyMap inside a batch discards the edits buffered before it", "[undo][controller][batch]") {
     ControllerFixture fx;
     {
@@ -536,16 +570,6 @@ TEST_CASE("setElevationPresent adds an empty elevation and refuses to remove the
     REQUIRE(fx.undoStack.undo());
     CHECK_FALSE(Map::elevationIsPresent(fx.mapFile().header.flags, 2));
     CHECK_FALSE(fx.mapFile().tiles.contains(2));
-}
-
-TEST_CASE("Loading the objects of an absent elevation leaves the view empty", "[controller]") {
-    // Removing the shown elevation refreshes it before the editor switches to another one.
-    ControllerFixture fx;
-    REQUIRE(fx.controller.setElevationPresent(1, false));
-    REQUIRE_FALSE(fx.mapFile().map_objects.contains(1));
-
-    REQUIRE_NOTHROW(fx.spriteLoader.loadObjectSprites(*fx.map, 1, fx.objects, fx.overlays));
-    CHECK(fx.objects.empty());
 }
 
 TEST_CASE("Move and rotate undo edit the map data even after the wrappers were rebuilt", "[undo][controller]") {

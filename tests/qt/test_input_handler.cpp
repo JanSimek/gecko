@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <SFML/Graphics/RenderTarget.hpp>
 #include <SFML/Window/Event.hpp>
@@ -6,6 +7,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <functional>
 #include <vector>
 
 #include "ui/input/InputHandler.h"
@@ -62,44 +64,33 @@ struct Harness {
 // tool mode. They are the safety net for collapsing the per-mode bool flags into
 // the single EditorMode enum: the same callbacks must fire afterwards.
 
-TEST_CASE("InputHandler routes a click to the player-position callback and exits the mode", "[input]") {
+TEST_CASE("InputHandler routes a click to the active placement mode's callback", "[input]") {
+    using EnterMode = void (InputHandler::*)(bool);
+    using ClickSlot = std::function<void(sf::Vector2f)> InputHandler::Callbacks::*;
+    struct Route {
+        const char* mode;
+        EnterMode enter;
+        ClickSlot callback;
+    };
+    const Route route = GENERATE(values<Route>({
+        { "player position", &InputHandler::setPlayerPositionMode, &InputHandler::Callbacks::onPlayerPositionSelect },
+        { "exit-grid placement", &InputHandler::setExitGridPlacementMode, &InputHandler::Callbacks::onExitGridPlacement },
+        { "stamp pattern", &InputHandler::setStampPatternMode, &InputHandler::Callbacks::onStampPattern },
+    }));
+    INFO(route.mode);
+
     Harness h;
-    bool called = false;
+    int calls = 0;
     InputHandler::Callbacks cb;
-    cb.onPlayerPositionSelect = [&](sf::Vector2f) { called = true; };
+    cb.*route.callback = [&calls](sf::Vector2f) { ++calls; };
     h.handler.setCallbacks(cb);
-    h.handler.setPlayerPositionMode(true);
+    (h.handler.*route.enter)(true);
 
     h.leftClick(100, 100);
 
-    CHECK(called);
+    CHECK(calls == 1);
+    // Setting the player position is one click: the mode exits after it.
     CHECK_FALSE(h.handler.isInPlayerPositionMode());
-}
-
-TEST_CASE("InputHandler routes a click to the exit-grid placement callback", "[input]") {
-    Harness h;
-    int calls = 0;
-    InputHandler::Callbacks cb;
-    cb.onExitGridPlacement = [&](sf::Vector2f) { ++calls; };
-    h.handler.setCallbacks(cb);
-    h.handler.setExitGridPlacementMode(true);
-
-    h.leftClick(100, 100);
-
-    CHECK(calls == 1);
-}
-
-TEST_CASE("InputHandler routes a click to the stamp-pattern callback", "[input]") {
-    Harness h;
-    int calls = 0;
-    InputHandler::Callbacks cb;
-    cb.onStampPattern = [&](sf::Vector2f) { ++calls; };
-    h.handler.setCallbacks(cb);
-    h.handler.setStampPatternMode(true);
-
-    h.leftClick(100, 100);
-
-    CHECK(calls == 1);
 }
 
 TEST_CASE("InputHandler forwards mouse events to the active registered-tool branch", "[input][tools]") {

@@ -1,8 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <filesystem>
+#include <string>
+#include <vector>
 
-#include "resource/DataFileSystem.h"
 #include "util/GameDataPathResolver.h"
 
 #include "support/TempFile.h"
@@ -27,37 +29,25 @@ void createFallout2DataLayout(const std::filesystem::path& base) {
 // hasFallout2DataLayout
 // =============================================================================
 
-TEST_CASE("hasFallout2DataLayout returns false for non-existent path", "[paths]") {
-    REQUIRE_FALSE(geck::util::hasFallout2DataLayout("/nonexistent/path"));
-}
+TEST_CASE("hasFallout2DataLayout recognises a data/ folder or any engine archive", "[paths]") {
+    CHECK_FALSE(geck::util::hasFallout2DataLayout("/nonexistent/path"));
 
-TEST_CASE("hasFallout2DataLayout returns false for empty directory", "[paths]") {
+    // The one entry created in an otherwise empty folder ("" creates nothing; a trailing '/' a folder).
+    const auto [entry, expected] = GENERATE(table<std::string, bool>({
+        { "", false },
+        { "data/", true },
+        { "master.dat", true },
+        { "critter.dat", true },
+        { "patch000.dat", true },
+    }));
+    INFO("entry: " << entry);
     const geck::test::TempDir tmp{ "gdpr" };
-    REQUIRE_FALSE(geck::util::hasFallout2DataLayout(tmp.path()));
-}
-
-TEST_CASE("hasFallout2DataLayout detects data/ subdirectory", "[paths]") {
-    const geck::test::TempDir tmp{ "gdpr" };
-    mkdirs(tmp.path() / "data");
-    REQUIRE(geck::util::hasFallout2DataLayout(tmp.path()));
-}
-
-TEST_CASE("hasFallout2DataLayout detects master.dat", "[paths]") {
-    const geck::test::TempDir tmp{ "gdpr" };
-    writeFile(tmp.path() / "master.dat", "");
-    REQUIRE(geck::util::hasFallout2DataLayout(tmp.path()));
-}
-
-TEST_CASE("hasFallout2DataLayout detects critter.dat", "[paths]") {
-    const geck::test::TempDir tmp{ "gdpr" };
-    writeFile(tmp.path() / "critter.dat", "");
-    REQUIRE(geck::util::hasFallout2DataLayout(tmp.path()));
-}
-
-TEST_CASE("hasFallout2DataLayout detects patch000.dat", "[paths]") {
-    const geck::test::TempDir tmp{ "gdpr" };
-    writeFile(tmp.path() / "patch000.dat", "");
-    REQUIRE(geck::util::hasFallout2DataLayout(tmp.path()));
+    if (entry.ends_with('/')) {
+        mkdirs(tmp.path() / entry);
+    } else if (!entry.empty()) {
+        writeFile(tmp.path() / entry, "");
+    }
+    CHECK(geck::util::hasFallout2DataLayout(tmp.path()) == expected);
 }
 
 // =============================================================================
@@ -104,39 +94,15 @@ TEST_CASE("looseDataDirectory leaves a data tree that is not an install alone", 
     REQUIRE(geck::util::looseDataDirectory(tmp.path()) == tmp.path());
 }
 
-TEST_CASE("DataFileSystem mounts a data tree as given", "[paths][vfs]") {
-    const geck::test::TempDir tmp{ "gdpr" };
-    writeFile(tmp.path() / "data/maps.txt", ""); // the data tree's own data/maps.txt
-    writeFile(tmp.path() / "proto/scenery/scenery.lst", "");
-
-    geck::resource::DataFileSystem dfs;
-    dfs.addDataPath(tmp.path());
-
-    CHECK(dfs.exists("data/maps.txt"));
-    CHECK(dfs.exists("proto/scenery/scenery.lst"));
-}
-
-// Regression: choosing the install folder as a data path mounted the folder itself, so its loose
-// `data` files landed at "/data/proto/..." - a path nothing looks up - and master.dat answered
-// instead. A Restoration Project map then hit PIDs past the end of vanilla's proto lists and failed
-// to load at all ("PID index out of range").
-TEST_CASE("DataFileSystem mounts an install folder's loose data files", "[paths][vfs]") {
-    const geck::test::TempDir tmp{ "gdpr" };
-    writeFile(tmp.path() / "master.dat", "");
-    writeFile(tmp.path() / "data/proto/scenery/scenery.lst", "");
-
-    geck::resource::DataFileSystem dfs;
-    dfs.addDataPath(tmp.path());
-
-    REQUIRE(dfs.exists("proto/scenery/scenery.lst"));
-}
-
 // =============================================================================
 // resolveGameDataRoot
 // =============================================================================
 
-TEST_CASE("resolveGameDataRoot returns nullopt for empty path", "[paths]") {
-    REQUIRE_FALSE(geck::util::resolveGameDataRoot(std::filesystem::path{}).has_value());
+TEST_CASE("resolveGameDataRoot rejects an empty, unrecognised or missing path", "[paths]") {
+    const geck::test::TempDir tmp{ "gdpr" }; // empty: no data layout
+    CHECK_FALSE(geck::util::resolveGameDataRoot(std::filesystem::path{}).has_value());
+    CHECK_FALSE(geck::util::resolveGameDataRoot(tmp.path()).has_value());
+    CHECK_FALSE(geck::util::resolveGameDataRoot("/nonexistent/path/to/nowhere").has_value());
 }
 
 TEST_CASE("resolveGameDataRoot returns .dat files as-is", "[paths]") {
@@ -167,17 +133,6 @@ TEST_CASE("resolveGameDataRoot strips trailing 'data' directory component", "[pa
     REQUIRE(*result == tmp.path());
 }
 
-TEST_CASE("resolveGameDataRoot returns nullopt for unrecognized directory", "[paths]") {
-    const geck::test::TempDir tmp{ "gdpr" };
-    // Empty directory — no data layout
-    REQUIRE_FALSE(geck::util::resolveGameDataRoot(tmp.path()).has_value());
-}
-
-TEST_CASE("resolveGameDataRoot handles non-existent paths", "[paths]") {
-    const std::filesystem::path bogus = "/nonexistent/path/to/nowhere";
-    REQUIRE_FALSE(geck::util::resolveGameDataRoot(bogus).has_value());
-}
-
 TEST_CASE("resolveGameDataRoot: directory named 'Resources' with valid layout resolves to itself", "[paths]") {
     const geck::test::TempDir tmp{ "gdpr" };
     const auto resourcesDir = tmp.path() / "Resources";
@@ -193,24 +148,24 @@ TEST_CASE("resolveGameDataRoot: directory named 'Resources' with valid layout re
 // pathsEquivalent
 // =============================================================================
 
-TEST_CASE("pathsEquivalent detects identical paths", "[paths]") {
+TEST_CASE("pathsEquivalent compares paths by the game root they resolve to", "[paths]") {
     const geck::test::TempDir tmp{ "gdpr" };
-    createFallout2DataLayout(tmp.path());
-    REQUIRE(geck::util::pathsEquivalent(tmp.path(), tmp.path()));
-}
 
-TEST_CASE("pathsEquivalent detects equivalent paths via resolution", "[paths]") {
-    const geck::test::TempDir tmp{ "gdpr" };
-    createFallout2DataLayout(tmp.path());
-    // tmp.path()/data should resolve to tmp.path()
-    REQUIRE(geck::util::pathsEquivalent(tmp.path(), tmp.path() / "data"));
-}
+    SECTION("identical paths") {
+        createFallout2DataLayout(tmp.path());
+        CHECK(geck::util::pathsEquivalent(tmp.path(), tmp.path()));
+    }
 
-TEST_CASE("pathsEquivalent returns false for unrelated paths", "[paths]") {
-    const geck::test::TempDir tmp{ "gdpr" };
-    mkdirs(tmp.path() / "a");
-    mkdirs(tmp.path() / "b");
-    REQUIRE_FALSE(geck::util::pathsEquivalent(tmp.path() / "a", tmp.path() / "b"));
+    SECTION("an install root and its data folder") {
+        createFallout2DataLayout(tmp.path());
+        CHECK(geck::util::pathsEquivalent(tmp.path(), tmp.path() / "data"));
+    }
+
+    SECTION("unrelated folders") {
+        mkdirs(tmp.path() / "a");
+        mkdirs(tmp.path() / "b");
+        CHECK_FALSE(geck::util::pathsEquivalent(tmp.path() / "a", tmp.path() / "b"));
+    }
 }
 
 // =============================================================================
@@ -222,7 +177,14 @@ TEST_CASE("expandDataPaths makes a folder's DATs explicit, ordered entries", "[p
     writeFile(tmp.path() / "master.dat", "x");
     writeFile(tmp.path() / "critter.dat", "x");
 
-    const auto out = geck::util::expandDataPaths({ tmp.path() });
+    // The folder alone, or with one of its DATs already listed: the explicit duplicate is dropped.
+    const bool listMasterToo = GENERATE(false, true);
+    std::vector<std::filesystem::path> in{ tmp.path() };
+    if (listMasterToo) {
+        in.push_back(tmp.path() / "master.dat");
+    }
+
+    const auto out = geck::util::expandDataPaths(in);
     REQUIRE(out.size() == 3);
     CHECK(out[0] == tmp.path() / "master.dat"); // DATs first so the folder's loose files (last) override them
     CHECK(out[1] == tmp.path() / "critter.dat");
@@ -244,18 +206,6 @@ TEST_CASE("expandDataPaths leaves a DAT-less folder alone", "[paths]") {
     const auto out = geck::util::expandDataPaths({ tmp.path() });
     REQUIRE(out.size() == 1);
     CHECK(out[0] == tmp.path());
-}
-
-TEST_CASE("expandDataPaths does not duplicate an already-listed DAT", "[paths]") {
-    const geck::test::TempDir tmp{ "gdpr" };
-    writeFile(tmp.path() / "master.dat", "x");
-    writeFile(tmp.path() / "critter.dat", "x");
-
-    const auto out = geck::util::expandDataPaths({ tmp.path(), tmp.path() / "master.dat" });
-    REQUIRE(out.size() == 3);
-    CHECK(out[0] == tmp.path() / "master.dat"); // the folder's DATs come first; the explicit dup is dropped
-    CHECK(out[1] == tmp.path() / "critter.dat");
-    CHECK(out[2] == tmp.path());
 }
 
 // =============================================================================

@@ -18,7 +18,7 @@ using namespace geck::selection;
 // SECTION: SelectionState Tests
 //==============================================================================
 
-TEST_CASE("SelectionState basic functionality", "[selection_state]") {
+TEST_CASE("SelectionState adds, removes and clears typed items", "[selection_state]") {
     SelectionState state;
 
     SECTION("Initial state is empty") {
@@ -62,21 +62,20 @@ TEST_CASE("SelectionState basic functionality", "[selection_state]") {
         REQUIRE(state.isEmpty());
         REQUIRE(state.count() == 0);
     }
-}
 
-TEST_CASE("SelectionState keeps floor, roof and hex items apart by type", "[selection_state]") {
-    SelectionState state;
-    // A floor and a roof tile share an index; the hex lies past the tile range (hexes run to 39,999).
-    state.addItem({ SelectionType::FLOOR_TILE, 1500 });
-    state.addItem({ SelectionType::ROOF_TILE, 1500 });
-    state.addItem({ SelectionType::HEX, 15000 });
+    SECTION("floor, roof and hex items stay apart by type") {
+        // A floor and a roof tile share an index; the hex lies past the tile range (hexes run to 39,999).
+        state.addItem({ SelectionType::FLOOR_TILE, 1500 });
+        state.addItem({ SelectionType::ROOF_TILE, 1500 });
+        state.addItem({ SelectionType::HEX, 15000 });
 
-    REQUIRE(state.count() == 3);
-    CHECK(state.getFloorTileIndices() == std::vector<int>{ 1500 });
-    CHECK(state.getRoofTileIndices() == std::vector<int>{ 1500 });
-    CHECK(state.getHexIndices() == std::vector<int>{ 15000 });
-    CHECK(state.hasItem({ SelectionType::HEX, 15000 }));
-    CHECK_FALSE(state.hasItem({ SelectionType::HEX, 1500 }));
+        REQUIRE(state.count() == 3);
+        CHECK(state.getFloorTileIndices() == std::vector<int>{ 1500 });
+        CHECK(state.getRoofTileIndices() == std::vector<int>{ 1500 });
+        CHECK(state.getHexIndices() == std::vector<int>{ 15000 });
+        CHECK(state.hasItem({ SelectionType::HEX, 15000 }));
+        CHECK_FALSE(state.hasItem({ SelectionType::HEX, 1500 }));
+    }
 }
 
 //==============================================================================
@@ -97,7 +96,7 @@ TEST_CASE("selectionModeToString names every selection mode", "[selection_modes]
 // SECTION: SelectedItem Tests
 //==============================================================================
 
-TEST_CASE("SelectedItem functionality", "[selection_state]") {
+TEST_CASE("SelectedItem reports its type and data and compares by both", "[selection_state]") {
     SECTION("Item type checking") {
         SelectedItem floorTile{ SelectionType::FLOOR_TILE, 100 };
         SelectedItem roofTile{ SelectionType::ROOF_TILE, 200 };

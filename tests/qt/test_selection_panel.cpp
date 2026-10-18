@@ -149,7 +149,7 @@ TEST_CASE("Script section shows the script's lint findings and an overlapping lo
 
     for (const QString& expected : { QStringLiteral("Sets the AI packet to AI_CALM (2) on map entry (map_enter_p_proc, line 12), replacing the map's 1"),
              QStringLiteral("shared.h line 30: message 150 is not in dialog/one.msg"),
-             QStringLiteral("Its local variables 0-3 overlap those of other.int, so they share them.") }) {
+             QStringLiteral("other.int") }) { // the overlap finding names the other script (exact text: test_script_lint)
         INFO(expected.toStdString());
         const QLabel* label = test::labelContaining(section, expected);
         REQUIRE(label != nullptr);

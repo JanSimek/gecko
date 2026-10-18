@@ -12,19 +12,17 @@
 #include "cli/MapExport.h"
 #include "cli/PatternExtract.h"
 #include "cli/ScriptIntrospect.h"
-#include "mcp/McpServer.h"
 #include "resource/GameResources.h"
 
 #include "support/CliJson.h"
 #include "support/MapFileIo.h"
-#include "support/McpCall.h"
 #include "support/ShopMap.h"
 #include "support/TempFile.h"
 
 using nlohmann::json;
 using namespace geck;
 
-// Smoke tests for the CLI tools the MCP server exposes, run on test::ShopMap written to disk. Its
+// Smoke tests for the CLI tools the MCP server exposes, called directly, run on test::ShopMap written to disk. Its
 // critters and walls need no proto to read back, so the tools run with no game data mounted.
 namespace {
 
@@ -109,17 +107,4 @@ TEST_CASE("find_text with no data mounted finds nothing and says so", "[cli][mcp
     options.pattern = "(unclosed";
     std::ostringstream bad;
     CHECK(cli::findText(resources, options, bad) != 0);
-}
-
-TEST_CASE("McpServer answers data-backed tool calls on a map read off disk", "[mcp]") {
-    test::TempFile map{ "geck_mcp_tools_map", ".map" };
-    writeTestMap(map.path());
-    resource::GameResources resources;
-    mcp::McpServer server(resources);
-
-    const json grid = test::mcpToolJson(server, "dump_grid", { { "map", map.path().string() }, { "elevation", 0 } });
-    CHECK(grid.at("elevations").at(0).at("objects").size() == ShopMap::OBJECT_COUNT);
-
-    const json reach = test::mcpCall(server, "reachability", { { "map", map.path().string() } });
-    CHECK(reach["result"]["isError"] == false);
 }
