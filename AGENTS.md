@@ -53,7 +53,8 @@ newer local clang-format reformats untouched code. CI does not check formatting.
   `#include "ui/theme/ThemeManager.h"`.
 - **MSVC builds with `/W4 /WX`**; Clang/GCC warn without `-Werror`. So a warning that is silent
   locally (unused variable, `class`/`struct` forward-declaration mismatch, shadowing) fails only
-  the Windows job.
+  the Windows job. Windows headers also define macros such as `near`, `far`, `min`, `max`,
+  `ERROR` and `small`; don't use them as identifiers.
 - Linux: Release + Debug with scripting, Release without, Debug with ASan+UBSan; tests under
   `xvfb-run` with `QT_QPA_PLATFORM=offscreen`. Windows: MSVC Release on PRs. macOS: not on PRs.
 - Changes touching only `*.md` / `docs/` skip CI.

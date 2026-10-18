@@ -21,15 +21,15 @@ TEST_CASE("SpatialIndex queryArea returns only items whose bounds intersect", "[
     index.addItem(2, sf::FloatRect({ 500.f, 500.f }, { 10.f, 10.f })); // cell (5,5)
     index.addItem(3, sf::FloatRect({ 50.f, 50.f }, { 10.f, 10.f }));   // cell (0,0)
 
-    const auto near = index.queryArea(sf::FloatRect({ 0.f, 0.f }, { 100.f, 100.f }));
-    CHECK(near.size() == 2);
-    CHECK(contains(near, 1));
-    CHECK(contains(near, 3));
-    CHECK_FALSE(contains(near, 2));
+    const auto nearOrigin = index.queryArea(sf::FloatRect({ 0.f, 0.f }, { 100.f, 100.f }));
+    CHECK(nearOrigin.size() == 2);
+    CHECK(contains(nearOrigin, 1));
+    CHECK(contains(nearOrigin, 3));
+    CHECK_FALSE(contains(nearOrigin, 2));
 
-    const auto far = index.queryArea(sf::FloatRect({ 490.f, 490.f }, { 50.f, 50.f }));
-    CHECK(far.size() == 1);
-    CHECK(contains(far, 2));
+    const auto farCorner = index.queryArea(sf::FloatRect({ 490.f, 490.f }, { 50.f, 50.f }));
+    CHECK(farCorner.size() == 1);
+    CHECK(contains(farCorner, 2));
 
     CHECK(index.queryArea(sf::FloatRect({ 2000.f, 2000.f }, { 10.f, 10.f })).empty());
 }

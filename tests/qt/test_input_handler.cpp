@@ -350,23 +350,23 @@ TEST_CASE("InputHandler's Draw-edge preview leaves the cursor unsnapped when Shi
 
     // Two vertices make a committed segment, so the live one from the last vertex is snappable.
     // Clicks map pixel -> world through the view, so positions compare within a float tolerance.
-    const auto near = [](sf::Vector2f a, sf::Vector2f b) { return std::abs(a.x - b.x) < 0.01f && std::abs(a.y - b.y) < 0.01f; };
+    const auto isNear = [](sf::Vector2f a, sf::Vector2f b) { return std::abs(a.x - b.x) < 0.01f && std::abs(a.y - b.y) < 0.01f; };
     h.leftClick(100, 100);
     h.leftClick(300, 100);
     const sf::Vector2f raw{ 337.f, 161.f };
     const auto [snappedX, snappedY] = geck::snapToExitGridAngle(300.0, 100.0, raw.x, raw.y);
-    REQUIRE_FALSE(near({ static_cast<float>(snappedX), static_cast<float>(snappedY) }, raw)); // Shift would move it
+    REQUIRE_FALSE(isNear({ static_cast<float>(snappedX), static_cast<float>(snappedY) }, raw)); // Shift would move it
 
     h.mouseMove(static_cast<int>(raw.x), static_cast<int>(raw.y));
     REQUIRE(lastVertices.size() == 2);
-    CHECK(near(lastVertices[0], { 100.f, 100.f }));
-    CHECK(near(lastVertices[1], { 300.f, 100.f }));
-    CHECK(near(lastCursor, raw));
+    CHECK(isNear(lastVertices[0], { 100.f, 100.f }));
+    CHECK(isNear(lastVertices[1], { 300.f, 100.f }));
+    CHECK(isNear(lastCursor, raw));
 
     // The flip key's re-fire passes the same raw cursor.
     lastCursor = { -1.f, -1.f };
     pressKeyDirect(h.handler, sf::Keyboard::Key::Space);
-    CHECK(near(lastCursor, raw));
+    CHECK(isNear(lastCursor, raw));
 }
 
 TEST_CASE("InputHandler's flip key does nothing outside Draw-edge mode, and resets on mode change", "[input][line][flip]") {
