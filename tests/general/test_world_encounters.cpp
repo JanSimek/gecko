@@ -55,7 +55,8 @@ TEST_CASE("world encounters report the tables and the odds at a worldmap positio
         CHECK(entry["groups"][0]["name"] == "Raiders");
         CHECK(entry["conditionGvars"][0]["index"] == 1);
         CHECK(entry["conditionGvars"][0]["name"] == "GVAR_HUNTERS");
-        CHECK(entry["description"] == "A party of raiders."); // worldmap.msg 3000 + 50 * table + entry
+        // worldmap.msg 3000 + 50 * table + entry.
+        CHECK(entry["description"] == "A party of raiders.");
         CHECK(j["encounterTables"][1]["entries"][0]["description"].is_null()); // 3050: no message
         CHECK(j["encounterTables"][1]["entries"][1]["description"] == "Some rats.");
     }
