@@ -798,6 +798,8 @@ if(GECK_BUILD_CLI)
         cli/GvarRoles.cpp
         cli/Party.h
         cli/Party.cpp
+        cli/MapExamples.h
+        cli/MapExamples.cpp
         cli/GvarRefs.h
         cli/GvarRefs.cpp
         cli/CritterCombatFlags.h

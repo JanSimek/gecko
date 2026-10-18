@@ -104,6 +104,12 @@ inline std::vector<HexAtDistance> hexDiscByDistance(int centerPosition, int radi
     return hexes;
 }
 
+// The hex-step distance between two positions, the engine's tileDistanceBetween (see hexDiscByDistance).
+inline int distance(int fromPosition, int toPosition) {
+    const Cube d = cubeOfPosition(fromPosition) - cubeOfPosition(toPosition);
+    return (std::abs(d.x) + std::abs(d.y) + std::abs(d.z)) / 2;
+}
+
 // All grid positions within hex-distance `radius` of `centerPosition` — the same filled disc as
 // hexDiscByDistance with the per-hex distance dropped. Matches the engine's spatial-script trigger
 // test `tileDistanceBetween(centre, h) <= radius`.

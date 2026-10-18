@@ -9,6 +9,7 @@
 #include "cli/Quests.h"
 #include "cli/Endings.h"
 #include "cli/Party.h"
+#include "cli/MapExamples.h"
 #include "cli/GvarRefs.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
@@ -26,6 +27,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <limits>
 #include <optional>
 #include <string>
@@ -47,6 +49,7 @@ struct CliArgs {
     bool quests = false;
     bool endings = false;
     bool party = false;
+    bool examples = false;
     bool findGvar = false;
     bool dumpGrid = false;
     bool lintScript = false;
@@ -66,6 +69,7 @@ struct CliArgs {
     geck::cli::DescribeMapOptions describeMapOpts;
     geck::cli::MapGraphOptions graphOpts;
     geck::cli::WorldMapOptions worldOpts;
+    geck::cli::ExamplesOptions examplesOpts;
     int encountersX = -1; ///< map encounters --x/--y: describe this worldmap position instead
     int encountersY = -1;
 };
@@ -153,6 +157,12 @@ void printUsage(const char* program) {
               << "  " << program << " map endings --data <dir-or-.dat> [--data <...>]\n"
               << "      The endgame slides (endgame.txt) and death endings (enddeath.txt) with their conditions\n"
               << "      and narration subtitles.\n"
+              << "  " << program << " map examples [--kind K] [--pid N ...] [--name S] [--script S] [--calls S]\n"
+              << "      [--carries S] [--near S [--near-radius N]] [--radius N] [--limit N] [map ...]\n"
+              << "      --data <dir-or-.dat> [--data <...>]\n"
+              << "      Shipped examples of a placement: every object matching all the filters, across the maps\n"
+              << "      (or the ones named), with its script, inventory and what stands within --radius hexes.\n"
+              << "      --calls keeps objects whose script calls that opcode/procedure (needs .ssl sources).\n"
               << "  " << program << " map party --data <dir-or-.dat> [--data <...>]\n"
               << "      The companions (party.txt): pid, combat options, level-up protos.\n"
               << "  " << program << " map find-gvar <GVAR_NAME> --data <dir-or-.dat> [--data <...>]\n"
@@ -261,7 +271,7 @@ bool isKnownSubcommand(const std::vector<std::string>& args) {
         && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern"
             || args[1] == "describe-script" || args[1] == "reachability" || args[1] == "describe-map"
             || args[1] == "graph" || args[1] == "world" || args[1] == "encounters"
-            || args[1] == "gvars" || args[1] == "quests" || args[1] == "endings" || args[1] == "party" || args[1] == "find-gvar"
+            || args[1] == "gvars" || args[1] == "quests" || args[1] == "endings" || args[1] == "party" || args[1] == "examples" || args[1] == "find-gvar"
             || args[1] == "dump-grid" || args[1] == "lint-script" || args[1] == "script-refs");
 }
 
@@ -338,6 +348,37 @@ int consumeLintArg(const std::vector<std::string>& args, std::size_t i, CliArgs&
     return 1;
 }
 
+// One `map examples` argument (its value already checked to exist): a filter flag, or a map to limit to.
+int consumeExamplesArg(const std::vector<std::string>& args, std::size_t i, geck::cli::ExamplesOptions& out, const char* program) {
+    const std::string& arg = args[i];
+    const std::map<std::string, std::string*, std::less<>> texts{ { "--kind", &out.kind }, { "--name", &out.name },
+        { "--script", &out.script }, { "--calls", &out.scriptCalls }, { "--carries", &out.carries }, { "--near", &out.near } };
+    if (const auto text = texts.find(arg); text != texts.end()) {
+        *text->second = args[i + 1];
+        return 2;
+    }
+    const std::map<std::string, int*, std::less<>> numbers{ { "--near-radius", &out.nearRadius },
+        { "--radius", &out.contextRadius }, { "--limit", &out.limit } };
+    if (const auto number = numbers.find(arg); number != numbers.end()) {
+        return parseIntFlag(arg, args[i + 1], *number->second, program) ? 2 : 0;
+    }
+    if (arg == "--pid") {
+        int pid = 0;
+        if (!parseIntFlag(arg, args[i + 1], pid, program)) {
+            return 0;
+        }
+        out.pids.push_back(static_cast<uint32_t>(pid));
+        return 2;
+    }
+    if (arg.starts_with("--")) {
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
+    out.maps.push_back(arg);
+    return 1;
+}
+
 int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out, const char* program) {
     const std::string& arg = args[i];
     const bool valueFlag = arg == "--data"
@@ -348,6 +389,9 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         || (out.lintScript && (arg == "--index" || arg == "--locale" || arg == "--map"))
         || (out.world && arg == "--render")
         || (out.encounters && (arg == "--x" || arg == "--y"))
+        || (out.examples
+            && (arg == "--kind" || arg == "--pid" || arg == "--name" || arg == "--script" || arg == "--calls" || arg == "--carries"
+                || arg == "--near" || arg == "--near-radius" || arg == "--radius" || arg == "--limit"))
         || (out.reachability && arg == "--map")
         || (out.describeMap && arg == "--map")
         || (out.dumpGrid && (arg == "--map" || arg == "--elevation"));
@@ -605,6 +649,9 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.examples) {
+        return consumeExamplesArg(args, i, out.examplesOpts, program);
+    }
     if (out.encounters && arg == "--x") {
         return parseIntFlag(arg, args[i + 1], out.encountersX, program) ? 2 : 0;
     }
@@ -673,6 +720,7 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     out.quests = args[1] == "quests";
     out.endings = args[1] == "endings";
     out.party = args[1] == "party";
+    out.examples = args[1] == "examples";
     out.findGvar = args[1] == "find-gvar";
     out.dumpGrid = args[1] == "dump-grid";
     out.lintScript = args[1] == "lint-script";
@@ -1126,6 +1174,9 @@ int runAnalysisCommand(geck::resource::GameResources& resources, const CliArgs& 
     }
     if (cli.party) {
         return geck::cli::buildParty(resources, std::cout);
+    }
+    if (cli.examples) {
+        return geck::cli::findExamples(resources, cli.examplesOpts, std::cout);
     }
     if (cli.findGvar) {
         if (cli.findGvarName.empty()) {

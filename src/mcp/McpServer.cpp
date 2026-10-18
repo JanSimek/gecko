@@ -11,6 +11,7 @@
 #include "cli/Quests.h"
 #include "cli/Endings.h"
 #include "cli/Party.h"
+#include "cli/MapExamples.h"
 #include "cli/GvarRefs.h"
 #include "cli/HexSightline.h"
 #include "cli/FrmInspect.h"
@@ -298,6 +299,24 @@ namespace {
         opts.groupExits = optBool(args, "groupExits", true);
         std::ostringstream oss;
         const int rc = cli::exportEntities(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolFindExamples(resource::GameResources& resources, const json& args) {
+        cli::ExamplesOptions opts;
+        opts.kind = optString(args, "kind");
+        parsePidArray(args, "pids", opts.pids);
+        opts.name = optString(args, "name");
+        opts.script = optString(args, "script");
+        opts.scriptCalls = optString(args, "scriptCalls");
+        opts.carries = optString(args, "carries");
+        opts.near = optString(args, "near");
+        opts.nearRadius = static_cast<int>(optInt(args, "nearRadius", opts.nearRadius, 0, 20));
+        opts.maps = optMaps(args);
+        opts.contextRadius = static_cast<int>(optInt(args, "contextRadius", opts.contextRadius, 0, 10));
+        opts.limit = static_cast<int>(optInt(args, "limit", opts.limit, 1, 200));
+        std::ostringstream oss;
+        const int rc = cli::findExamples(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -936,6 +955,30 @@ namespace {
             "Args: optional maps (array; default every mounted map), includeScenery, groupExits.",
             json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } }, { "includeScenery", { { "type", "boolean" } } }, { "groupExits", { { "type", "boolean" } } } } } }),
             [](resource::GameResources& r, const json& a) { return toolExportEntities(r, a); }, "" });
+        t.push_back({ "find_examples", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
+            "Find shipped examples of a placement across every map — 'how do the shipped maps do X' in one "
+            "call. Returns each object (inventories included) matching ALL the given filters: 'kind' (item, "
+            "critter, scenery, wall, misc, exitgrid), 'pids', 'name' (proto name substring), 'script' "
+            "(substring of the attached script's name or description, e.g. 'shopkeeper'), 'scriptCalls' (the attached script's live code "
+            "calls this opcode or procedure, e.g. gdialog_mod_barter for shopkeepers or use_obj_on_p_proc — "
+            "needs a script-source tree mounted), 'carries' (holds an item whose name contains this), "
+            "'near' (an object whose name contains this stands within 'nearRadius' hexes, default 5). "
+            "Each match: map + displayName, elevation, hex/col/row, kind, pid, name, 'script' "
+            "{programIndex,name,description}, 'holder' when carried, 'critter' {team, aiPacket, "
+            "aiPacketName}, its 'inventory', and 'neighbours' — what stands within 'contextRadius' hexes "
+            "(default 3), one row per proto {kind,pid,name,count,nearest,scripts}, nearest first. 'total' "
+            "counts every match and 'byMap' how they spread over maps; 'limit' (default 20, max 200) caps "
+            "the detailed matches. At least one of kind/pids/name/script/scriptCalls/carries is required. "
+            "Scans every map (about two seconds); 'maps' limits it.",
+            json({ { "type", "object" },
+                { "properties",
+                    { { "kind", { { "type", "string" } } }, { "pids", { { "type", "array" }, { "items", { { "type", "integer" } } } } },
+                        { "name", { { "type", "string" } } }, { "script", { { "type", "string" } } },
+                        { "scriptCalls", { { "type", "string" } } }, { "carries", { { "type", "string" } } },
+                        { "near", { { "type", "string" } } }, { "nearRadius", { { "type", "integer" } } },
+                        { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } },
+                        { "contextRadius", { { "type", "integer" } } }, { "limit", { { "type", "integer" } } } } } }),
+            [](resource::GameResources& r, const json& a) { return toolFindExamples(r, a); }, "" });
         t.push_back({ "export_protos", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
             "Emit EVERY item and critter proto the game can load — each entry of proto/items/items.lst "
             "and proto/critters/critters.lst — with the full stats its .pro stores, decoded the way "

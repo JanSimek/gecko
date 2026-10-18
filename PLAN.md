@@ -13,14 +13,13 @@
 
 1. **Minimap / overview panel** (feature-gap audit).
 2. **In-game preview mode** — idle animations first.
-3. **Analysis/MCP tail** — small, self-contained items.
-4. **Editor UX** — customizable toolbar (driven by the `ActionSpec` table); undo residuals;
+3. **Editor UX** — customizable toolbar (driven by the `ActionSpec` table); undo residuals;
    log-panel follow-ups.
-5. **Biome script library** — `town.luau`, `coast.luau`. Note: generating
+4. **Biome script library** — `town.luau`, `coast.luau`. Note: generating
    random caves proved not possible (every synthesised rim broke the wall art, see Caves), so
    `cave.luau` only copies an existing shipped cave map; expect the same limit for other biomes
    whose look depends on hand-laid wall art.
-6. **SSL script editing** *(possible)* — only if an in-app editor is still wanted now that
+5. **SSL script editing** *(possible)* — only if an in-app editor is still wanted now that
    compiling lives in VS Code + BGforge MLS (see the SSL section).
 
 ---
@@ -261,9 +260,6 @@ quest logic and static win-path extraction would be brittle; the MCP supplies gr
 
 Open items:
 
-- **Corpus / world index** — index `analyze` + the semantic facts across all shipped maps so an
-  agent can query *examples* ("how do shipped towns place and wire shopkeepers?") — improves
-  generation, not just analysis.
 - **`worldmap.msg`** — random-encounter descriptions (`[3000 + 50*tableId + entryId]`,
   fallout2-ce worldmap.cc:3595); runtime-index-tied to the encounter table/entry ordering, so
   not a small add. (Area/city labels turned out to live in map.msg and are already surfaced.)

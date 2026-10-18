@@ -403,6 +403,29 @@ int findScriptRefs(resource::GameResources& resources, const ScriptRefsOptions& 
     return scripts.empty() ? 1 : 0;
 }
 
+std::set<std::string, std::less<>> scriptsCalling(resource::GameResources& resources, const std::string& name,
+    std::size_t* scriptsRead) {
+    const std::vector<std::filesystem::path> scripts = mountedScripts(resources);
+    if (scriptsRead != nullptr) {
+        *scriptsRead = scripts.size();
+    }
+    const ScriptRefsOptions options{ "call", name };
+    std::vector<char> calls(scripts.size(), 0);
+    const resource::VfsSourceProvider provider(resources.files());
+    ssl::loadScripts(provider, scripts, [&calls, &options, &scripts](std::size_t index, const ssl::ScriptUnit& unit) {
+        if (unit.scriptFile().has_value()) {
+            calls[index] = ScriptSearch(unit, scripts[index], MapTarget{}).run(options).empty() ? 0 : 1;
+        }
+    });
+    std::set<std::string, std::less<>> stems;
+    for (std::size_t i = 0; i < scripts.size(); ++i) {
+        if (calls[i] != 0) {
+            stems.insert(text::toLower(scripts[i].stem().string()));
+        }
+    }
+    return stems;
+}
+
 std::vector<ScriptMapTransition> scriptMapTransitions(resource::GameResources& resources, std::size_t* scriptsRead) {
     const MapTarget maps = mapTarget(resources, "*");
     const std::vector<std::filesystem::path> scripts = mountedScripts(resources);

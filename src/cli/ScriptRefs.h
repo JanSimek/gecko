@@ -3,7 +3,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <iosfwd>
+#include <functional>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -34,6 +36,12 @@ struct ScriptRefsOptions {
 /// branches on a constant are not reported. Emits a JSON object to `out`; returns 0 on success
 /// (including "not used"), nonzero for a bad kind or name or when no .ssl source is mounted.
 int findScriptRefs(resource::GameResources& resources, const ScriptRefsOptions& options, std::ostream& out);
+
+/// The scripts whose live code calls `name(...)` (an opcode or procedure, as script_refs kind "call"),
+/// as lowercase stems such as "dcmerch" — the form a scripts.lst entry takes once its extension is
+/// dropped. `scriptsRead` (optional) gets how many sources were read, 0 meaning no source tree is mounted.
+std::set<std::string, std::less<>> scriptsCalling(resource::GameResources& resources, const std::string& name,
+    std::size_t* scriptsRead = nullptr);
 
 /// One load_map call in code a compiled script runs: a script-driven map transition.
 struct ScriptMapTransition {
