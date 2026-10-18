@@ -30,11 +30,11 @@ add_executable(general_tests
     general/test_pro_helper.cpp
     general/test_tile_utils.cpp
     general/test_reader_factory.cpp
-    general/test_selection_system.cpp
     general/test_selection_state.cpp
     general/test_selection_manager.cpp
     general/test_tile_hex_conversion.cpp
     general/test_game_data_path_resolver.cpp
+    general/test_data_path_resolution.cpp
     general/test_map_object_defaults.cpp
     general/test_frm_resolver.cpp
     general/test_viewport_controller.cpp
@@ -71,6 +71,7 @@ add_executable(general_tests
     general/test_ssl_parser.cpp
     general/test_ssl_analysis.cpp
     general/test_object_visibility.cpp
+    general/test_dat_archive.cpp
     general/test_dat_concurrency.cpp
     general/test_map_renderer.cpp
 )
@@ -101,17 +102,10 @@ if(TARGET gecko_mcp)
     target_link_libraries(general_tests PRIVATE gecko_mcp)
 endif()
 
-# Performance tests (Catch2 with benchmarking) - Reader performance tests
-add_executable(performance_tests
-    performance/test_reader_performance.cpp
-)
-
 add_executable(qt_tests
     qt/qt_test_main.cpp
-    qt/test_data_path_resolution.cpp
     qt/test_ui_regressions.cpp
     qt/test_selection_panel.cpp
-    qt/test_dat_archive.cpp
     # GameLauncher is an app-layer Qt class, so its ddraw.ini test links gecko::app.
     qt/test_ddraw_ini.cpp
     qt/test_game_launcher.cpp
@@ -126,7 +120,6 @@ add_executable(qt_tests
     qt/test_keybindings.cpp
     qt/test_tool_registry.cpp
     qt/test_fill_brush_tool.cpp
-    qt/test_plugin_ui_registration.cpp
     # hintForContext is the pure status-bar key-hint provider (lives in gecko_app).
     qt/test_editor_hints.cpp
     # Log panel plumbing: the LogModel store (cap, threading), the spdlog sink, the filter proxy.
@@ -173,14 +166,6 @@ target_include_directories(general_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
 
-target_link_libraries(performance_tests PRIVATE
-    Catch2::Catch2WithMain
-    test_support
-    gecko::spdlog
-    vault
-    SFML::System SFML::Graphics
-)
-
 target_link_libraries(qt_tests PRIVATE
     Catch2::Catch2
     test_support
@@ -202,11 +187,9 @@ include(Catch)
 if(DEFINED ENV{CI} OR DEFINED ENV{GITHUB_ACTIONS})
     # Register tests without discovery - this avoids running the executable during configure
     add_test(NAME general_tests COMMAND general_tests)
-    add_test(NAME performance_tests COMMAND performance_tests)
 else()
     # Use automatic test discovery for local development
     catch_discover_tests(general_tests)
-    catch_discover_tests(performance_tests)
 endif()
 
 add_test(NAME qt_tests COMMAND qt_tests)
@@ -216,7 +199,7 @@ add_test(NAME qt_tests COMMAND qt_tests)
 # CMakeLists), which copies the union of every executable's DLLs once — doing it per-target here
 # raced with gecko's identical copies into the shared output dir.
 
-# general_tests / performance_tests resolve fixtures by absolute path
+# general_tests resolves fixtures by absolute path
 # (GECK_TEST_DATA_DIR via test_support), so no tests/data copy is needed for them.
 
 # qt_tests needs resources/ staged next to it at runtime. Single-config builds share the one

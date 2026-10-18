@@ -103,8 +103,6 @@ set(GECK_APP_SOURCES
     ui/dialogs/SettingsDialog.cpp
     ui/dialogs/ProEditorDialog.h
     ui/dialogs/ProEditorDialog.cpp
-    ui/dialogs/InventoryViewerDialog.h
-    ui/dialogs/InventoryViewerDialog.cpp
     ui/dialogs/MessageSelectorDialog.h
     ui/dialogs/MessageSelectorDialog.cpp
     ui/dialogs/ExitGridPropertiesDialog.h
@@ -219,7 +217,6 @@ set(GECK_APP_SOURCES
     ui/tools/ExitGridPlacementManager.cpp
     ui/tools/FillBrushTool.h
     ui/tools/ITool.h
-    ui/tools/PluginToolHost.h
     ui/tools/ToolRegistry.h
     ui/tools/ToolRegistry.cpp
     # Loaders (kept from state system)

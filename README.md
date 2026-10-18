@@ -171,7 +171,6 @@ ctest --output-on-failure
 
 # …or run a suite directly
 ./general_tests       # formats, readers/writers, editor logic
-./performance_tests   # reader benchmarks
 ./qt_tests            # Qt UI regressions
 ```
 

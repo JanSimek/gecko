@@ -73,6 +73,19 @@ TEST_CASE("SelectionState basic functionality", "[selection_state]") {
     }
 }
 
+TEST_CASE("SelectionState keeps floor, roof and hex items apart by type", "[selection_state]") {
+    SelectionState state;
+    // A floor and a roof tile share an index; the hex lies past the tile range (hexes run to 39,999).
+    state.addItem({ SelectionType::FLOOR_TILE, 1500 });
+    state.addItem({ SelectionType::ROOF_TILE, 1500 });
+    state.addItem({ SelectionType::HEX, 15000 });
+
+    REQUIRE(state.count() == 3);
+    CHECK(state.getFloorTileIndices() == std::vector<int>{ 1500 });
+    CHECK(state.getRoofTileIndices() == std::vector<int>{ 1500 });
+    CHECK(state.getHexIndices() == std::vector<int>{ 15000 });
+}
+
 //==============================================================================
 // SECTION: Selection Mode Tests
 //==============================================================================

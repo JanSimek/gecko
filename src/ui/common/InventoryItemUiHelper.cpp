@@ -199,47 +199,12 @@ QPixmap loadItemIcon(resource::GameResources& resources, uint32_t pid, int iconS
     return QPixmap();
 }
 
-bool itemExists(resource::GameResources& resources, uint32_t pid) {
-    try {
-        return loadPro(resources, pid) != nullptr;
-    } catch (const std::exception&) {
-        return false;
-    }
-}
-
-std::unique_ptr<MapObject> createMapInventoryItem(resource::GameResources& resources, uint32_t pid, int amount) {
-    if (amount < 1) {
-        throw std::invalid_argument("Inventory item amount must be positive");
-    }
-
-    const Pro* pro = loadPro(resources, pid);
-    if (!pro) {
-        throw std::runtime_error("Inventory item PRO does not exist");
-    }
-
-    // Art, flags and item data as the engine creates an item from its proto (obj_pid_new).
-    auto item = std::make_unique<MapObject>();
-    item->pro_pid = pid;
-    item->frm_pid = static_cast<uint32_t>(pro->header.FID);
-    item->applyProtoDefaults(*pro);
-    item->position = 0;
-    item->elevation = 0;
-    item->direction = 0;
-    item->amount = static_cast<uint32_t>(amount);
-    item->objects_in_inventory = 0;
-    item->max_inventory_size = 0;
-    item->inventory.clear();
-
-    return item;
-}
-
 void populateInventoryTree(QTreeWidget* tree,
     resource::GameResources& resources,
     const std::vector<std::unique_ptr<MapObject>>& inventory,
     const InventoryTreeOptions& options) {
 
-    for (size_t i = 0; i < inventory.size(); ++i) {
-        const auto& item = inventory[i];
+    for (const auto& item : inventory) {
         if (!item) {
             continue;
         }
@@ -250,14 +215,7 @@ void populateInventoryTree(QTreeWidget* tree,
         row->setText(COLUMN_NAME, details.name);
         row->setText(COLUMN_TYPE, details.typeName);
         row->setText(COLUMN_AMOUNT, QString::number(displayAmount(resources, *item)));
-        if (options.showPidColumn) {
-            row->setText(COLUMN_PID, details.pidText);
-        }
-
-        const QVariant payload = options.userRoleIsPid
-            ? QVariant(item->pro_pid)
-            : QVariant(static_cast<int>(i));
-        row->setData(options.userRoleColumn, Qt::UserRole, payload);
+        row->setData(options.userRoleColumn, Qt::UserRole, QVariant(item->pro_pid));
 
         const QPixmap pixmap = options.iconProvider
             ? options.iconProvider(*item)

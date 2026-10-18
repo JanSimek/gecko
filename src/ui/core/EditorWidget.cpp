@@ -407,10 +407,6 @@ void EditorWidget::deleteSpatialScript(uint32_t sid) {
     }
 }
 
-int EditorWidget::currentElevation() const {
-    return _session.currentElevation();
-}
-
 const std::optional<MapEdge>& EditorWidget::mapEdge() const {
     return _controller.commandController().mapEdge();
 }

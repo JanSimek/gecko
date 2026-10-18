@@ -36,7 +36,6 @@
 #include "pattern/FillPlan.h"
 #include "scripting/EditArea.h"
 #include "ui/tools/ExitGridContext.h"
-#include "ui/tools/PluginToolHost.h"
 #include "ui/dragdrop/DragDropContext.h"
 #include "editor/TileChange.h"
 #include "VisibilitySettings.h"
@@ -64,7 +63,7 @@ struct ToolMouseEvent;
 struct ObjectInfo;
 enum class ObjectCategory;
 
-class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext, public ExitGridContext, public DragDropContext, public PluginToolHost {
+class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext, public ExitGridContext, public DragDropContext {
     Q_OBJECT
 
     friend class TilePlacementManager;
@@ -140,11 +139,7 @@ public:
     void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
 
     Map* getMap() const override { return _session.map(); }
-    Map* map() const override { return _session.map(); }
-    const HexagonGrid& hexgrid() const override { return _session.hexgrid(); }
-    ViewportController& viewport() const override { return _controller.viewport(); }
-    selection::SelectionManager* selectionManager() const override { return _session.selectionManager(); }
-    ObjectCommandController& commandController() override { return _controller.commandController(); }
+    ViewportController& viewport() const { return _controller.viewport(); }
 
     // Qt6 toolbar actions
     void setSelectionMode(SelectionMode mode);
@@ -377,7 +372,6 @@ public:
     void upgradeMapEdgeToVersion2();
     void resetMapEdgeSquare();
     [[nodiscard]] int selectedEdgeZone() const { return _selectedEdgeZone; }
-    [[nodiscard]] int currentElevation() const override;
     [[nodiscard]] const std::optional<MapEdge>& mapEdge() const;
 
 signals:

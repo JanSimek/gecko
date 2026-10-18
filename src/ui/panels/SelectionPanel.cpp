@@ -1416,7 +1416,6 @@ void SelectionPanel::populateInventoryTree() {
     options.iconSize = ICON_SIZE;
     options.editable = true;
     options.setIconSizeHint = true;
-    options.userRoleIsPid = true;
     options.userRoleColumn = ui::inventory::COLUMN_ICON;
     options.iconProvider = [this](const MapObject& item) { return getItemIcon(item); };
     // Block itemChanged while we repopulate so the per-row amount handler does not

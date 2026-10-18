@@ -10,39 +10,6 @@ using namespace geck;
 // SECTION: Tile Selection Tests
 //==============================================================================
 
-TEST_CASE("Tile coordinate conversions for selection", "[tile_selection]") {
-    SECTION("Index to coordinates conversion") {
-        // Test key positions
-        auto coords_0 = indexToCoordinates(0);
-        REQUIRE(coords_0.x == 0);
-        REQUIRE(coords_0.y == 0);
-
-        auto coords_middle = indexToCoordinates(5050); // Middle of 100x100 grid
-        REQUIRE(coords_middle.x == 50);
-        REQUIRE(coords_middle.y == 50);
-
-        auto coords_last = indexToCoordinates(TILES_PER_ELEVATION - 1);
-        REQUIRE(coords_last.x == MAP_HEIGHT - 1);
-        REQUIRE(coords_last.y == MAP_WIDTH - 1);
-    }
-
-    SECTION("Coordinates to index conversion") {
-        REQUIRE(coordinatesToIndex(TileCoordinates(0, 0)) == 0);
-        REQUIRE(coordinatesToIndex(TileCoordinates(50, 50)) == 5050);
-        REQUIRE(coordinatesToIndex(TileCoordinates(MAP_HEIGHT - 1, MAP_WIDTH - 1)) == TILES_PER_ELEVATION - 1);
-    }
-
-    SECTION("Round-trip conversion consistency") {
-        std::vector<int> testIndices = { 0, 150, 2500, 5050, 7500, TILES_PER_ELEVATION - 1 };
-
-        for (int index : testIndices) {
-            auto coords = indexToCoordinates(index);
-            auto backToIndex = coordinatesToIndex(coords);
-            REQUIRE(backToIndex == index);
-        }
-    }
-}
-
 TEST_CASE("Tile-to-hex coordinate conversion", "[tile_selection]") {
     const HexagonGrid grid;
 

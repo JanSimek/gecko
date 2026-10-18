@@ -370,8 +370,7 @@ the running game (day/night, critter wander/AI) is **Large** and probably not wo
   ~150–180-line function; round-trip coverage (byte-for-byte on a shipped map) is already there,
   so the split is safe whenever it's wanted.
 - **Inventory edits.** `SelectionPanel` mutates `holder->inventory` itself and only records the
-  snapshot through `InventoryEditService`; `InventoryViewerDialog` mutates with no undo and is
-  used only by a test — delete it or route it through the service.
+  snapshot through `InventoryEditService`; move the mutation into the service.
 - One `const_cast` left: `SFMLWidget.cpp` `ensureRenderTexture` from a const method.
 
 **Evaluated and intentionally NOT pursued (guard — churn > value):**

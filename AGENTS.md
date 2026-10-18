@@ -25,9 +25,9 @@ ctest --test-dir build-claude --output-on-failure             # everything ctest
   it the Luau runtime and map-generator tests don't compile. `GECK_BUILD_CLI` /
   `GECK_BUILD_MCP` default ON.
 - Executables: `gecko` (a `gecko.app` bundle on macOS), `gecko-cli`, `gecko-mcp`, and the Catch2
-  v3 suites `general_tests` (formats, readers/writers, editor logic — **no Qt**),
-  `performance_tests`, `qt_tests` (Qt UI, headless harness in `tests/qt/qt_test_main.cpp`).
-- Tests need no game data. New test files go under `tests/{general,performance,qt}/test_<feature>.cpp`
+  v3 suites `general_tests` (formats, readers/writers, editor logic — **no Qt**) and
+  `qt_tests` (Qt UI, headless harness in `tests/qt/qt_test_main.cpp`).
+- Tests need no game data. New test files go under `tests/{general,qt}/test_<feature>.cpp`
   and must be added to `tests/CMakeLists.txt` by hand; fixtures live in `tests/data/`.
 - Real game data for manual checks: `--data <dir-or-.dat>` (repeatable) on `gecko-cli` /
   `gecko-mcp`; the editor takes `-d/--data`, `-m/--map`, `--debug`, but ignores `--data` once a

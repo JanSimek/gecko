@@ -9,7 +9,6 @@
 #include <QFileInfo>
 #include <QGroupBox>
 #include <QLabel>
-#include <QStackedWidget>
 #include <QShortcut>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -35,7 +34,6 @@
 #include "ui/dialogs/CritterPropertiesDialog.h"
 #include "ui/dialogs/ExitGridPropertiesDialog.h"
 #include "ui/dialogs/FrmSelectorDialog.h"
-#include "ui/dialogs/InventoryViewerDialog.h"
 #include "ui/dialogs/ItemSelectorDialog.h"
 #include "ui/dialogs/LightPropertiesDialog.h"
 #include "ui/dialogs/ScriptSelectorDialog.h"
@@ -324,18 +322,6 @@ QCheckBox* findCheckBoxByText(QWidget& root, const QString& text) {
     return nullptr;
 }
 
-QLabel* findCenteredLabelByText(QWidget& root, const QString& text) {
-    const QString wanted = text;
-    const auto labels = root.findChildren<QLabel*>();
-    for (QLabel* label : labels) {
-        if (label->text() == wanted && label->alignment().testFlag(Qt::AlignHCenter) && label->alignment().testFlag(Qt::AlignVCenter)) {
-            return label;
-        }
-    }
-
-    return nullptr;
-}
-
 QGroupBox* findGroupBoxByTitle(QWidget& root, const QString& title) {
     const auto groups = root.findChildren<QGroupBox*>();
     for (QGroupBox* group : groups) {
@@ -378,24 +364,6 @@ std::shared_ptr<geck::Pro> makeCritterPro() {
 }
 
 } // namespace
-
-TEST_CASE("Inventory viewer shows empty inventory state instead of an empty table", "[qt][inventory]") {
-    auto mapObject = std::make_shared<geck::MapObject>();
-    mapObject->objects_in_inventory = 0;
-
-    geck::resource::GameResources resources;
-    geck::InventoryViewerDialog dialog(resources, mapObject);
-
-    auto* stack = dialog.findChild<QStackedWidget*>();
-    auto* emptyLabel = findCenteredLabelByText(dialog, "No inventory items");
-    auto* tree = dialog.findChild<QTreeWidget*>();
-
-    REQUIRE(stack != nullptr);
-    REQUIRE(emptyLabel != nullptr);
-    REQUIRE(tree != nullptr);
-    REQUIRE(stack->currentWidget() == emptyLabel);
-    REQUIRE(tree->topLevelItemCount() == 0);
-}
 
 TEST_CASE("Ammo widget uses caliber labels loaded from proto.msg", "[qt][pro]") {
     ResourceDataScope resources;

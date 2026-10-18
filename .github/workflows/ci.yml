@@ -151,13 +151,11 @@ jobs:
         # Xvfb gives SFML a display (Mesa GL), so the render tests run instead of skipping;
         # Qt keeps the offscreen platform rather than needing the xcb plugin's libraries.
         export QT_QPA_PLATFORM=offscreen
-        # Under the sanitizers: fail on the first UB report, skip LeakSanitizer (Qt and the GL driver
-        # hold process-lifetime allocations), and leave out the timing-based performance suite.
+        # Under the sanitizers: fail on the first UB report and skip LeakSanitizer (Qt and the GL
+        # driver hold process-lifetime allocations).
         export ASAN_OPTIONS=detect_leaks=0
         export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
-        exclude=""
-        if [ "${{ matrix.sanitizers }}" = "ON" ]; then exclude="-E performance_tests"; fi
-        xvfb-run -a -s "-screen 0 1280x1024x24" ctest --test-dir build --output-on-failure --parallel --timeout 600 $exclude
+        xvfb-run -a -s "-screen 0 1280x1024x24" ctest --test-dir build --output-on-failure --parallel --timeout 600
 
   build-macos:
     name: macOS - ${{ matrix.build_type }}

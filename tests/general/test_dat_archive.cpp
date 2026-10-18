@@ -9,15 +9,11 @@
 #include <vector>
 
 #include "resource/DataFileSystem.h"
-
-#ifndef GECK_TEST_DATA_DIR
-#define GECK_TEST_DATA_DIR "data"
-#endif
+#include "support/Fixtures.h"
 
 // Characterisation tests for the Fallout 2 DAT2 reading stack
-// (DataFileSystem -> GeckDat2FileSystem -> Dat2File -> vfspp). These lock the
-// observable behaviour (entry count and byte-for-byte decompression) so the
-// vfspp API migration can be proven not to change anything.
+// (DataFileSystem -> GeckDat2FileSystem -> Dat2File -> vfspp): entry count and
+// byte-for-byte decompression.
 //
 // Fixture: tests/data/f2_res.dat (the Fallout2-CE hi-res resource archive),
 // a valid DAT2 with 178 zlib-compressed entries.
@@ -25,10 +21,6 @@
 using geck::resource::DataFileSystem;
 
 namespace {
-
-std::filesystem::path fixturePath() {
-    return std::filesystem::path(GECK_TEST_DATA_DIR) / "f2_res.dat";
-}
 
 std::string toLower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
@@ -61,17 +53,17 @@ uint64_t byteSum(const std::vector<uint8_t>& data) {
 } // namespace
 
 TEST_CASE("DAT2 archive lists every entry", "[dat][vfs]") {
-    REQUIRE(std::filesystem::exists(fixturePath()));
+    REQUIRE(std::filesystem::exists(geck::test::dataPath("f2_res.dat")));
 
     DataFileSystem dfs;
-    dfs.addDataPath(fixturePath());
+    dfs.addDataPath(geck::test::dataPath("f2_res.dat"));
 
     REQUIRE(dfs.list("*").size() == 178);
 }
 
 TEST_CASE("DAT2 archive decompresses a small entry byte-for-byte", "[dat][vfs]") {
     DataFileSystem dfs;
-    dfs.addDataPath(fixturePath());
+    dfs.addDataPath(geck::test::dataPath("f2_res.dat"));
 
     const auto path = findBySuffix(dfs, "artemple.edg");
     REQUIRE(path.has_value());
@@ -158,7 +150,7 @@ TEST_CASE("DAT2 archive decompresses a small entry byte-for-byte", "[dat][vfs]")
 
 TEST_CASE("DAT2 archive decompresses a large entry", "[dat][vfs]") {
     DataFileSystem dfs;
-    dfs.addDataPath(fixturePath());
+    dfs.addDataPath(geck::test::dataPath("f2_res.dat"));
 
     const auto path = findBySuffix(dfs, "hr_alltlk.frm");
     REQUIRE(path.has_value());
@@ -171,7 +163,7 @@ TEST_CASE("DAT2 archive decompresses a large entry", "[dat][vfs]") {
 
 TEST_CASE("DAT2 archive reports a missing file as absent", "[dat][vfs]") {
     DataFileSystem dfs;
-    dfs.addDataPath(fixturePath());
+    dfs.addDataPath(geck::test::dataPath("f2_res.dat"));
 
     REQUIRE_FALSE(dfs.exists("does/not/exist.xyz"));
     REQUIRE_FALSE(dfs.readRawBytes("does/not/exist.xyz").has_value());

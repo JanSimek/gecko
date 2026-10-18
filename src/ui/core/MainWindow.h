@@ -5,7 +5,6 @@
 #include <QMenuBar>
 #include <QToolBar>
 #include <QDockWidget>
-#include <QHash>
 #include <QIcon>
 #include <QTimer>
 #include <QKeyEvent>
@@ -100,16 +99,6 @@ public:
     // window; the in-app spdlog sink feeds it from application startup on).
     void setLogModel(LogModel* model);
 
-    // Plugin UI contributions, keyed by a unique id. Each add* returns nullptr (without
-    // taking any ownership) on an empty id/text or a duplicate id. addPluginDock takes
-    // ownership of `widget` on success — removePluginUi deletes the dock and the widget
-    // with it; on failure the widget stays with the caller.
-    QAction* addPluginMenuItem(const QString& id, const QString& text);
-    QAction* addPluginToolButton(const QString& id, const QString& text, const QIcon& icon = {});
-    QDockWidget* addPluginDock(const QString& id, const QString& title, QWidget* widget,
-        Qt::DockWidgetArea area = Qt::RightDockWidgetArea);
-    void removePluginUi(const QString& id);
-
     // Re-scan the open map's referenced resources against the mounted data and refresh the Log
     // dock's "Map" tab (clears it when no map is open). Cheap — in-memory index lookups only.
     void refreshCompleteness();
@@ -176,19 +165,6 @@ public slots:
 
 private:
     using DockActionPair = std::pair<QDockWidget*, QAction*>;
-    struct PluginUiRegistration {
-        enum class Kind {
-            MenuAction,
-            ToolBarAction,
-            Dock,
-        };
-
-        Kind kind;
-        QPointer<QAction> action;
-        QPointer<QMenu> menu;
-        QPointer<QDockWidget> dock;
-    };
-
     void setupUI();
     void setupMenuBar();
     void setupToolBar();
@@ -230,7 +206,6 @@ private:
     /// Play writes the map as it stands into the game folder, so unsaved edits are played either
     /// way. This asks whether to save them to the user's own file as well.
     QIcon themedIcon(const QString& iconPath) const;
-    QMenu* ensurePluginMenu();
     // A map just opened: re-apply the persisted dock layout that was transiently hidden for the
     // welcome screen (no map). Restores from the saved Qt dock state, the single source of truth.
     void showPanelsForMap();
@@ -329,7 +304,6 @@ private:
     QMenu* _viewMenu;
     QMenu* _panelsMenu;
     QMenu* _elevationMenu;
-    QMenu* _pluginMenu = nullptr;
     QMenu* _helpMenu;
 
     // Toolbar
@@ -376,7 +350,6 @@ private:
     // saved state and refreshed on every genuine user change. See saveDockWidgetState/showPanelsForMap.
     QByteArray _restoredDockState;
     bool _mapModified = false; // current map has edits not yet written to disk
-    QHash<QString, PluginUiRegistration> _pluginUi;
 
     // Panel widgets
     SelectionPanel* _selectionPanel;
