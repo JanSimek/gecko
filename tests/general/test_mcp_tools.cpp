@@ -3,7 +3,6 @@
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
-#include <fstream>
 #include <string>
 
 #include "cli/MapAnalyzer.h"
@@ -14,6 +13,7 @@
 #include "format/map/MapObject.h"
 #include "writer/map/MapWriter.h"
 #include "support/ProStubProvider.h"
+#include "support/DataTree.h"
 #include "support/TempFile.h"
 #include "support/ByteWriter.h"
 #include "support/Fixtures.h"
@@ -34,30 +34,17 @@ json callTool(mcp::McpServer& server, const std::string& name, const json& argum
     return json::parse(text);
 }
 
-void writeBytes(const fs::path& path, const test::ByteWriter& bytes) {
-    fs::create_directories(path.parent_path());
-    std::ofstream file(path, std::ios::binary);
-    file.write(reinterpret_cast<const char*>(bytes.data().data()), static_cast<std::streamsize>(bytes.size()));
-}
-
-void writeText(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream(path) << contents;
-}
-
 } // namespace
 
 // mounts exists because a data path that did not open used to be skipped in silence, and every
 // answer afterwards came from whatever else mounted while reading as confidently as a correct one.
 TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]") {
     SECTION("a healthy server reports its mounts and no failures") {
-        const test::TempDir tmp{ "gecko_mounts_ok" };
-        const fs::path& root = tmp.path();
-        writeText(root / "text/english/dialog/patchinf.msg",
+        test::DataTree tree{ "gecko_mounts_ok" };
+        tree.write("text/english/dialog/patchinf.msg",
             "{100}{}{You are running RPU v2.4.34. based on killap's F2 Restoration Project.}\n");
 
-        resource::GameResources resources;
-        resources.files().addDataPath(root.string());
+        auto& resources = tree.mount();
         mcp::McpServer server(resources);
 
         const json out = callTool(server, "mounts", json::object());
@@ -69,13 +56,11 @@ TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]")
     }
 
     SECTION("a source tree reports the placeholder version, which is the answer") {
-        const test::TempDir tmp{ "gecko_mounts_src" };
-        const fs::path& root = tmp.path();
-        writeText(root / "text/english/dialog/patchinf.msg",
+        test::DataTree tree{ "gecko_mounts_src" };
+        tree.write("text/english/dialog/patchinf.msg",
             "{100}{}{You are running RPU v2.x.x, based on killap's F2 Restoration Project.}\n");
 
-        resource::GameResources resources;
-        resources.files().addDataPath(root.string());
+        auto& resources = tree.mount();
         mcp::McpServer server(resources);
 
         const json out = callTool(server, "mounts", json::object());
@@ -89,7 +74,7 @@ TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]")
         // gitDescribe used to answer this and could say nothing about a .dat, which is the mount
         // whose version actually matters. Reading the data covers both kinds.
         resource::GameResources resources;
-        resources.files().addDataPath(test::dataPath("f2_res.dat").string());
+        resources.files().addDataPath(test::f2ResDat());
         mcp::McpServer server(resources);
 
         const json out = callTool(server, "mounts", json::object());
@@ -144,14 +129,12 @@ test::ByteWriter critterProto() {
 // against the 75 the engine gives it, and every critter in the game as resisting nothing, because a
 // critter's resistances live entirely in the bonus arrays.
 TEST_CASE("proto_info reports a critter's effective stats and skills", "[mcp][proto_info]") {
-    const test::TempDir tmp{ "gecko_proto_info" };
-    const fs::path& root = tmp.path();
-    writeText(root / "proto/critters/critters.lst", "critter.pro\n");
-    writeText(root / "text/english/game/pro_crit.msg", "{200}{}{Test Critter}\n");
-    writeBytes(root / "proto/critters/critter.pro", critterProto());
+    test::DataTree tree{ "gecko_proto_info" };
+    tree.write("proto/critters/critters.lst", "critter.pro\n");
+    tree.write("text/english/game/pro_crit.msg", "{200}{}{Test Critter}\n");
+    tree.writeBytes("proto/critters/critter.pro", critterProto().data());
 
-    resource::GameResources resources;
-    resources.files().addDataPath(root.string());
+    auto& resources = tree.mount();
     mcp::McpServer server(resources);
 
     const json out = callTool(server, "proto_info", { { "pid", 0x01000001 } });
@@ -198,7 +181,7 @@ TEST_CASE("dump_grid filters objects by name", "[cli][dump_grid]") {
     for (int i = 0; i < 5; ++i) {
         // Critters, not scenery: scenery dereferences its Pro in both directions, so reading the
         // map back without mounted protos fails. Critters carry their pid and nothing else.
-        const uint32_t pid = pidOf(ObjectType::Critter, static_cast<uint32_t>(40 + i));
+        const uint32_t pid = ProtoId(ObjectType::Critter, static_cast<uint32_t>(40 + i)).pid();
         auto object = std::make_shared<MapObject>();
         object->pro_pid = pid;
         object->elevation = 0;
@@ -268,12 +251,11 @@ test::ByteWriter itemHeader(std::int32_t pid, std::int32_t messageId, std::int32
 // The weapon block is what turned "which weapons carry Long Range?" from opening .pro files by hand
 // into one call — and getting the perk wrong is quiet, because a wrong perk name reads perfectly.
 TEST_CASE("proto_info reports a weapon's perk and numbers", "[mcp][proto_info]") {
-    const test::TempDir tmp{ "gecko_proto_weapon" };
-    const fs::path& root = tmp.path();
-    writeText(root / "proto/items/items.lst", "weapon.pro\n");
-    writeText(root / "text/english/game/pro_item.msg", "{100}{}{Test Rifle}\n{101}{}{A rifle.}\n");
-    writeText(root / "text/english/game/proto.msg", "{101}{}{Metal}\n{251}{}{laser}\n{308}{}{10mm}\n");
-    writeText(root / "text/english/game/perk.msg", "{159}{}{Long Range}\n");
+    test::DataTree tree{ "gecko_proto_weapon" };
+    tree.write("proto/items/items.lst", "weapon.pro\n");
+    tree.write("text/english/game/pro_item.msg", "{100}{}{Test Rifle}\n{101}{}{A rifle.}\n");
+    tree.write("text/english/game/proto.msg", "{101}{}{Metal}\n{251}{}{laser}\n{308}{}{10mm}\n");
+    tree.write("text/english/game/perk.msg", "{159}{}{Long Range}\n");
 
     // animationCode, damageMin 10, damageMax 20, damageType laser, rangePrimary 25,
     // rangeSecondary 20, projectile, minStrength 4, actionCostPrimary 5, actionCostSecondary 6,
@@ -284,10 +266,9 @@ TEST_CASE("proto_info reports a weapon's perk and numbers", "[mcp][proto_info]")
     }
     weapon.u8('A');
     REQUIRE(weapon.size() == 122);
-    writeBytes(root / "proto/items/weapon.pro", weapon);
+    tree.writeBytes("proto/items/weapon.pro", weapon.data());
 
-    resource::GameResources resources;
-    resources.files().addDataPath(root.string());
+    auto& resources = tree.mount();
     mcp::McpServer server(resources);
 
     const json out = callTool(server, "proto_info", { { "pid", 1 } });

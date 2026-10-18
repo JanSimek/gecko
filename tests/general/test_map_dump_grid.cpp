@@ -52,7 +52,7 @@ TEST_CASE("dump-grid emits the raw floor grid, roof grid and object positions", 
     StubProvider provider;
     // A WALL object: walls/critters/misc don't dereference their proto on (de)serialization, so this
     // round-trips headlessly through cli::loadMap (no data) — unlike scenery, which needs its proto.
-    const uint32_t wallPid = pidOf(ObjectType::Wall, 50);
+    const uint32_t wallPid = ProtoId(ObjectType::Wall, 50).pid();
 
     auto mapFile = Map::createEmptyMapFile();
 

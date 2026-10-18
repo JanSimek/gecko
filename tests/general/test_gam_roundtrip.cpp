@@ -5,6 +5,8 @@
 #include "writer/gam/GamSerializer.h"
 #include "writer/gam/GamValidator.h"
 
+#include "support/Fixtures.h"
+
 #include <string>
 
 using namespace geck;
@@ -52,13 +54,7 @@ TEST_CASE("Gam round-trips a .gam byte-for-byte", "[gam_roundtrip]") {
 }
 
 TEST_CASE("Gam normalizes CRLF to LF while preserving all data", "[gam_roundtrip]") {
-    std::string crlf;
-    for (const char* p = kGamLf; *p != '\0'; ++p) {
-        if (*p == '\n') {
-            crlf += '\r';
-        }
-        crlf += *p;
-    }
+    const std::string crlf = geck::test::toCrlf(kGamLf);
 
     const Gam gam = GamReader::parse(crlf);
     CHECK(writer::serializeGam(gam) == std::string{ kGamLf });

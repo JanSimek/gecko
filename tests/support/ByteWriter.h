@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 #include <vector>
 
 namespace geck::test {
@@ -26,6 +27,23 @@ public:
         _bytes.push_back(static_cast<uint8_t>(v >> 16));
         _bytes.push_back(static_cast<uint8_t>(v >> 8));
         _bytes.push_back(static_cast<uint8_t>(v));
+        return *this;
+    }
+
+    /// Appends `text` and its NUL terminator.
+    ByteWriter& cstring(std::string_view text) {
+        _bytes.insert(_bytes.end(), text.begin(), text.end());
+        _bytes.push_back(0);
+        return *this;
+    }
+
+    /// Overwrites the four bytes at `at` with big-endian `v`, for an offset known only once the
+    /// bytes it points at are written.
+    ByteWriter& patchBe32(size_t at, uint32_t v) {
+        _bytes.at(at + 3) = static_cast<uint8_t>(v);
+        _bytes[at + 2] = static_cast<uint8_t>(v >> 8);
+        _bytes[at + 1] = static_cast<uint8_t>(v >> 16);
+        _bytes[at] = static_cast<uint8_t>(v >> 24);
         return *this;
     }
 

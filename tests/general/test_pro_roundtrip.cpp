@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 
 #include "format/pro/Pro.h"
 #include "reader/pro/ProReader.h"
@@ -295,10 +294,7 @@ TEST_CASE("PRO weapon rewrites the engine's 122-byte record byte for byte and ig
     padded.be32(0x00000001u);
 
     TempFile source{ "test_pro_weapon_engine_layout", ".pro" };
-    {
-        std::ofstream file(source.path(), std::ios::binary);
-        file.write(reinterpret_cast<const char*>(padded.data().data()), static_cast<std::streamsize>(padded.size()));
-    }
+    writeBytes(source.path(), padded.data());
 
     geck::ProReader reader{};
     auto pro = reader.openFile(source.path());

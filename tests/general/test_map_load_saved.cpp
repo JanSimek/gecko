@@ -35,7 +35,7 @@ constexpr uint32_t MAP_HEADER_SAVED = 0x01;
 std::shared_ptr<MapObject> addCritter(Map::MapFile& mapFile, int32_t seed, int32_t cid, int32_t hex, int elevation = 0) {
     auto critter = std::make_shared<MapObject>();
     fillBase(*critter, seed);
-    critter->pro_pid = pidOf(ObjectType::Critter, static_cast<uint32_t>(10 + seed));
+    critter->pro_pid = ProtoId(ObjectType::Critter, static_cast<uint32_t>(10 + seed)).pid();
     critter->elevation = static_cast<uint32_t>(elevation);
     critter->critter_index = cid;
     critter->position = hex;
@@ -83,7 +83,7 @@ TEST_CASE("a save slot's gzip map loads and reports live critter combat state", 
     TempFile plain{ "geck_saved_map_plain", ".map" };
     writeMap(mapFile, plain.path(), provider);
     TempFile gz{ "geck_saved_map_gzip", ".SAV" };
-    writeAllBytes(gz.path(), gzipBytes(readAllBytes(plain.path())));
+    writeBytes(gz.path(), gzipBytes(readAllBytes(plain.path())));
 
     resource::GameResources resources;
     std::string error;
@@ -162,7 +162,7 @@ TEST_CASE("a truncated gzip map fails with the reason", "[cli][map][saved]") {
     auto compressed = gzipBytes(readAllBytes(plain.path()));
     compressed.resize(compressed.size() / 2);
     TempFile gz{ "geck_truncated_gzip", ".SAV" };
-    writeAllBytes(gz.path(), compressed);
+    writeBytes(gz.path(), compressed);
 
     resource::GameResources resources;
     std::string error;
@@ -174,8 +174,8 @@ TEST_CASE("a truncated gzip map fails with the reason", "[cli][map][saved]") {
 // inventory. A container in a critter's pack must not desynchronise the objects after it.
 TEST_CASE("MAP reader follows nested inventories", "[map][roundtrip]") {
     StubProvider provider;
-    const uint32_t containerPid = pidOf(ObjectType::Item, 200);
-    const uint32_t armorPid = pidOf(ObjectType::Item, 201);
+    const uint32_t containerPid = ProtoId(ObjectType::Item, 200).pid();
+    const uint32_t armorPid = ProtoId(ObjectType::Item, 201).pid();
     provider.addItem(containerPid, ItemType::Container);
     provider.addItem(armorPid, ItemType::Armor);
 

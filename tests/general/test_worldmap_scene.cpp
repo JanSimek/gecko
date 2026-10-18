@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -12,21 +11,16 @@
 #include "format/pal/Pal.h"
 #include "resource/GameResources.h"
 
-namespace fs = std::filesystem;
+#include "support/DataTree.h"
+
 using namespace geck;
 
 namespace {
 
-void writeFile(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream out(path, std::ios::binary);
-    out << contents;
-}
-
 // A structurally valid color.pal: 256 RGB triplets in the palette's 6-bit range, then the
 // 32,768-entry RGB555 -> index conversion table. The colours themselves do not matter here; what
 // matters is that PalReader accepts the file, so the scene gets as far as the art it cannot find.
-void writePal(const fs::path& path) {
+std::vector<std::uint8_t> palBytes() {
     std::vector<std::uint8_t> bytes;
     bytes.reserve(768 + Pal::NUM_CONVERSION_VALUES);
     for (int index = 0; index < 256; ++index) {
@@ -34,10 +28,7 @@ void writePal(const fs::path& path) {
         bytes.insert(bytes.end(), { channel, channel, channel });
     }
     bytes.resize(768 + Pal::NUM_CONVERSION_VALUES, 1);
-
-    fs::create_directories(path.parent_path());
-    std::ofstream out(path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    return bytes;
 }
 
 constexpr const char* kCityTxt = R"(
@@ -63,36 +54,13 @@ art_idx=999999
 0_0=Desert, No_Fill, None, None, None, Desert1
 )";
 
-// A data path holding whatever the test writes into it, mounted into its own GameResources.
-struct FixtureResources {
-    fs::path root;
-    resource::GameResources resources;
-
-    explicit FixtureResources(const std::string& name)
-        : root(fs::temp_directory_path() / name) { // NOSONAR: throwaway test dir, not security-sensitive
-        std::error_code ec;
-        fs::remove_all(root, ec);
-        fs::create_directories(root, ec);
-    }
-
-    ~FixtureResources() {
-        std::error_code ec;
-        fs::remove_all(root, ec);
-    }
-
-    FixtureResources(const FixtureResources&) = delete;
-    FixtureResources& operator=(const FixtureResources&) = delete;
-
-    void mount() { resources.files().addDataPath(root.string()); }
-};
-
 // city.txt, worldmap.txt and color.pal, but an intrface.lst too short for any worldmap art index (the
 // tile's 999999, the markers' 336-338), so resolve() throws on each.
-void writeArtlessWorldmapData(FixtureResources& fixture) {
-    writeFile(fixture.root / "data/city.txt", kCityTxt);
-    writeFile(fixture.root / "data/worldmap.txt", kWorldmapTxt);
-    writePal(fixture.root / "color.pal");
-    writeFile(fixture.root / "art/intrface/intrface.lst", "iface0.frm\niface1.frm\n");
+void writeArtlessWorldmapData(test::DataTree& fixture) {
+    fixture.write("data/city.txt", kCityTxt);
+    fixture.write("data/worldmap.txt", kWorldmapTxt);
+    fixture.writeBytes("color.pal", palBytes());
+    fixture.write("art/intrface/intrface.lst", "iface0.frm\niface1.frm\n");
     fixture.mount();
 }
 
@@ -103,24 +71,24 @@ void writeArtlessWorldmapData(FixtureResources& fixture) {
 // to absorb that, because in the editor load() runs inside a Qt slot, where an escaping exception
 // is a terminate() rather than an error message.
 TEST_CASE("WorldMapScene reports missing worldmap data instead of throwing", "[worldmap][scene]") {
-    FixtureResources fixture("geck_worldmap_scene_nodata_test");
-    writeFile(fixture.root / "data/city.txt", kCityTxt);
-    writeFile(fixture.root / "data/worldmap.txt", kWorldmapTxt);
+    test::DataTree fixture{ "geck_worldmap_scene_nodata_test" };
+    fixture.write("data/city.txt", kCityTxt);
+    fixture.write("data/worldmap.txt", kWorldmapTxt);
     fixture.mount();
 
     // The text files are there, the art and the palette are not — a data folder added without
     // master.dat next to it. color.pal is what the scene cannot do without.
     std::unique_ptr<worldmap::WorldMapScene> scene;
-    REQUIRE_NOTHROW(scene = worldmap::WorldMapScene::load(fixture.resources));
+    REQUIRE_NOTHROW(scene = worldmap::WorldMapScene::load(fixture.mount()));
     CHECK(scene == nullptr);
 }
 
 TEST_CASE("WorldMapScene draws what it can and lists the art it could not load", "[worldmap][scene]") {
-    FixtureResources fixture("geck_worldmap_scene_noart_test");
+    test::DataTree fixture{ "geck_worldmap_scene_noart_test" };
     writeArtlessWorldmapData(fixture);
 
     std::unique_ptr<worldmap::WorldMapScene> scene;
-    REQUIRE_NOTHROW(scene = worldmap::WorldMapScene::load(fixture.resources));
+    REQUIRE_NOTHROW(scene = worldmap::WorldMapScene::load(fixture.mount()));
     REQUIRE(scene != nullptr);
 
     // The canvas is still the size worldmap.txt describes, just black where the tile would be.
@@ -152,10 +120,10 @@ TEST_CASE("WorldMapScene draws what it can and lists the art it could not load",
 // (wmGenDataSetStartWorldPos), and that has to be inside Arroyo. Only the biased rectangle contains
 // it, and puts it within two pixels of the circle's centre.
 TEST_CASE("WorldMapScene places area markers WM_VIEW_X/Y before their world_pos", "[worldmap][scene]") {
-    FixtureResources fixture("geck_worldmap_scene_bias_test");
+    test::DataTree fixture{ "geck_worldmap_scene_bias_test" };
     writeArtlessWorldmapData(fixture);
 
-    const std::unique_ptr<worldmap::WorldMapScene> scene = worldmap::WorldMapScene::load(fixture.resources);
+    const std::unique_ptr<worldmap::WorldMapScene> scene = worldmap::WorldMapScene::load(fixture.mount());
     REQUIRE(scene != nullptr);
     REQUIRE(scene->areas().size() == 1);
     const worldmap::AreaMarker& arroyo = scene->areas().front();

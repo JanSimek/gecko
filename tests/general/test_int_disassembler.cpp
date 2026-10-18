@@ -4,69 +4,47 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include "ssl/IntProgram.h"
+#include "support/ByteWriter.h"
 #include "support/CompiledScript.h"
 
 using namespace geck;
 
 namespace {
 
-void put32(std::vector<uint8_t>& bytes, std::size_t at, int32_t value) {
-    const auto v = static_cast<uint32_t>(value);
-    bytes[at] = static_cast<uint8_t>(v >> 24);
-    bytes[at + 1] = static_cast<uint8_t>(v >> 16);
-    bytes[at + 2] = static_cast<uint8_t>(v >> 8);
-    bytes[at + 3] = static_cast<uint8_t>(v);
-}
-
-void push32(std::vector<uint8_t>& bytes, int32_t value) {
-    bytes.resize(bytes.size() + 4);
-    put32(bytes, bytes.size() - 4, value);
-}
-
-void push16(std::vector<uint8_t>& bytes, uint16_t value) {
-    bytes.push_back(static_cast<uint8_t>(value >> 8));
-    bytes.push_back(static_cast<uint8_t>(value));
-}
-
-void pushCString(std::vector<uint8_t>& bytes, std::string_view text) {
-    bytes.insert(bytes.end(), text.begin(), text.end());
-    bytes.push_back(0);
-}
-
 // A one-procedure program laid out as fallout2-ce's programCreateByPath reads it: 42 header bytes,
 // the procedure table, the identifier table (names addressed from its length field), the static-string
 // table (strings addressed 4 bytes past its length field), then code.
 std::vector<uint8_t> buildProgram() {
-    std::vector<uint8_t> bytes(42, 0);
-    push32(bytes, 1);
+    test::ByteWriter bytes;
+    bytes.fill(0, 42);
+    bytes.be32(1);
     const std::size_t record = bytes.size();
-    bytes.resize(bytes.size() + 24, 0);
+    bytes.fill(0, 24);
 
-    push32(bytes, 6);
-    pushCString(bytes, "start");
-    push32(bytes, 6);
-    pushCString(bytes, "hello");
+    bytes.be32(6);
+    bytes.cstring("start");
+    bytes.be32(6);
+    bytes.cstring("hello");
 
     const std::size_t body = bytes.size();
-    push16(bytes, 0xC001);
-    push32(bytes, 1);
-    push16(bytes, 0x80C5); // op_get_global_var
-    push16(bytes, 0xC001);
-    push32(bytes, 0);
-    push16(bytes, 0xC001);
-    push32(bytes, 42);
-    push16(bytes, 0x80C6); // op_set_global_var pops the value, then the index
-    push16(bytes, 0x9001);
-    push32(bytes, 0);
-    push16(bytes, 0x8010); // OPCODE_EXIT_PROGRAM
+    bytes.be16(0xC001);
+    bytes.be32(1);
+    bytes.be16(0x80C5); // op_get_global_var
+    bytes.be16(0xC001);
+    bytes.be32(0);
+    bytes.be16(0xC001);
+    bytes.be32(42);
+    bytes.be16(0x80C6); // op_set_global_var pops the value, then the index
+    bytes.be16(0x9001);
+    bytes.be32(0);
+    bytes.be16(0x8010); // OPCODE_EXIT_PROGRAM
 
-    put32(bytes, record, 4); // "start" sits just past the identifier table's length field
-    put32(bytes, record + 16, static_cast<int32_t>(body));
-    return bytes;
+    bytes.patchBe32(record, 4); // "start" sits just past the identifier table's length field
+    bytes.patchBe32(record + 16, static_cast<uint32_t>(body));
+    return bytes.data();
 }
 
 } // namespace
@@ -94,25 +72,26 @@ TEST_CASE("disassembleInt decodes the procedure table, pushes and global-variabl
 
 TEST_CASE("disassembleInt names only literal global-variable indices", "[int_disassembler]") {
     // push 1, push 1, OPCODE_ADD, op_get_global_var: the index is computed, so it is left unnamed.
-    std::vector<uint8_t> bytes(42, 0);
-    push32(bytes, 1);
+    test::ByteWriter bytes;
+    bytes.fill(0, 42);
+    bytes.be32(1);
     const std::size_t record = bytes.size();
-    bytes.resize(bytes.size() + 24, 0);
-    push32(bytes, 6);
-    pushCString(bytes, "start");
-    push32(bytes, 0);
+    bytes.fill(0, 24);
+    bytes.be32(6);
+    bytes.cstring("start");
+    bytes.be32(0);
     const std::size_t body = bytes.size();
-    push16(bytes, 0xC001);
-    push32(bytes, 1);
-    push16(bytes, 0xC001);
-    push32(bytes, 1);
-    push16(bytes, 0x8039); // OPCODE_ADD
-    push16(bytes, 0x80C5); // op_get_global_var
-    put32(bytes, record, 4);
-    put32(bytes, record + 16, static_cast<int32_t>(body));
+    bytes.be16(0xC001);
+    bytes.be32(1);
+    bytes.be16(0xC001);
+    bytes.be32(1);
+    bytes.be16(0x8039); // OPCODE_ADD
+    bytes.be16(0x80C5); // op_get_global_var
+    bytes.patchBe32(record, 4);
+    bytes.patchBe32(record + 16, static_cast<uint32_t>(body));
 
     const std::vector<std::string> globals{ "GVAR_A", "GVAR_B", "GVAR_C" };
-    const auto program = ssl::disassembleInt(bytes, &globals);
+    const auto program = ssl::disassembleInt(bytes.data(), &globals);
     REQUIRE(program.procedures.at(0).code.size() == 4);
     CHECK(program.procedures[0].code[2].name == "OPCODE_ADD");
     CHECK(program.procedures[0].code[3].name == "op_get_global_var");
@@ -125,19 +104,20 @@ TEST_CASE("disassembleInt names only literal global-variable indices", "[int_dis
 
 TEST_CASE("disassembleInt accepts a script without static strings", "[int_disassembler]") {
     // Shipped scripts with no string literals store -1 as the static-string table length.
-    std::vector<uint8_t> bytes(42, 0);
-    push32(bytes, 1);
+    test::ByteWriter bytes;
+    bytes.fill(0, 42);
+    bytes.be32(1);
     const std::size_t record = bytes.size();
-    bytes.resize(bytes.size() + 24, 0);
-    push32(bytes, 6);
-    pushCString(bytes, "start");
-    push32(bytes, -1);
+    bytes.fill(0, 24);
+    bytes.be32(6);
+    bytes.cstring("start");
+    bytes.be32(0xFFFFFFFF);
     const std::size_t body = bytes.size();
-    push16(bytes, 0x8010); // OPCODE_EXIT_PROGRAM
-    put32(bytes, record, 4);
-    put32(bytes, record + 16, static_cast<int32_t>(body));
+    bytes.be16(0x8010); // OPCODE_EXIT_PROGRAM
+    bytes.patchBe32(record, 4);
+    bytes.patchBe32(record + 16, static_cast<uint32_t>(body));
 
-    const auto program = ssl::disassembleInt(bytes);
+    const auto program = ssl::disassembleInt(bytes.data());
     REQUIRE(program.procedures.at(0).code.size() == 1);
     CHECK(program.procedures[0].code[0].name == "OPCODE_EXIT_PROGRAM");
 }
@@ -145,25 +125,26 @@ TEST_CASE("disassembleInt accepts a script without static strings", "[int_disass
 TEST_CASE("disassembleInt disassembles a conditional procedure's condition", "[int_disassembler]") {
     // The body (OPCODE_EXIT_PROGRAM) is followed by the condition (push 1, OPCODE_POP_RETURN). The
     // condition offset only bounds the body; the condition itself must still come back.
-    std::vector<uint8_t> bytes(42, 0);
-    push32(bytes, 1);
+    test::ByteWriter bytes;
+    bytes.fill(0, 42);
+    bytes.be32(1);
     const std::size_t record = bytes.size();
-    bytes.resize(bytes.size() + 24, 0);
-    push32(bytes, 6);
-    pushCString(bytes, "start");
-    push32(bytes, -1);
+    bytes.fill(0, 24);
+    bytes.be32(6);
+    bytes.cstring("start");
+    bytes.be32(0xFFFFFFFF);
     const std::size_t body = bytes.size();
-    push16(bytes, 0x8010); // OPCODE_EXIT_PROGRAM
+    bytes.be16(0x8010); // OPCODE_EXIT_PROGRAM
     const std::size_t condition = bytes.size();
-    push16(bytes, 0xC001);
-    push32(bytes, 1);
-    push16(bytes, 0x801C); // OPCODE_POP_RETURN
-    put32(bytes, record, 4);
-    put32(bytes, record + 4, 0x02); // PROCEDURE_FLAG_CONDITIONAL
-    put32(bytes, record + 12, static_cast<int32_t>(condition));
-    put32(bytes, record + 16, static_cast<int32_t>(body));
+    bytes.be16(0xC001);
+    bytes.be32(1);
+    bytes.be16(0x801C); // OPCODE_POP_RETURN
+    bytes.patchBe32(record, 4);
+    bytes.patchBe32(record + 4, 0x02); // PROCEDURE_FLAG_CONDITIONAL
+    bytes.patchBe32(record + 12, static_cast<uint32_t>(condition));
+    bytes.patchBe32(record + 16, static_cast<uint32_t>(body));
 
-    const auto program = ssl::disassembleInt(bytes);
+    const auto program = ssl::disassembleInt(bytes.data());
     const auto& procedure = program.procedures.at(0);
     REQUIRE(procedure.code.size() == 1);
     CHECK(procedure.code[0].name == "OPCODE_EXIT_PROGRAM");

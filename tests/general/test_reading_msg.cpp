@@ -11,12 +11,6 @@
 
 using Catch::Matchers::Equals;
 
-namespace {
-std::vector<uint8_t> msgBytes(std::string_view s) {
-    return std::vector<uint8_t>(s.begin(), s.end());
-}
-} // namespace
-
 TEST_CASE("Parse .msg file", "[msg]") {
     geck::MsgReader msg_reader{};
     auto msg_file = msg_reader.openFile(geck::test::dataPath("test.msg"));
@@ -31,7 +25,7 @@ TEST_CASE("Parse .msg file", "[msg]") {
 
 TEST_CASE("MsgReader parses id, audio and text from inline content", "[msg]") {
     geck::MsgReader reader;
-    auto msg = reader.openFile("inline.msg", msgBytes("{100}{snd.acm}{Hello}\n{200}{}{World}\n"));
+    auto msg = reader.openFile("inline.msg", geck::test::bytesOf("{100}{snd.acm}{Hello}\n{200}{}{World}\n"));
 
     REQUIRE(msg != nullptr);
     CHECK(msg->message(100).id == 100);
@@ -45,10 +39,10 @@ TEST_CASE("MsgReader parses id, audio and text from inline content", "[msg]") {
 // up to its '}' across line breaks and drops the breaks (message.cc _message_load_field).
 TEST_CASE("MsgReader reads a message whose text runs over several lines", "[msg]") {
     geck::MsgReader reader;
-    auto msg = reader.openFile("wrapped.msg", msgBytes("{160}{}{One line.}\r\n"
-                                                       "{161}{}{Talk to Mynoc, the guardian of the\r\n"
-                                                       " caravans.}  # trailing comment\r\n"
-                                                       "{162}{}{Next.}\r\n"));
+    auto msg = reader.openFile("wrapped.msg", geck::test::bytesOf("{160}{}{One line.}\r\n"
+                                                                  "{161}{}{Talk to Mynoc, the guardian of the\r\n"
+                                                                  " caravans.}  # trailing comment\r\n"
+                                                                  "{162}{}{Next.}\r\n"));
     REQUIRE(msg != nullptr);
     CHECK(msg->message(160).text == "One line.");
     CHECK(msg->message(161).text == "Talk to Mynoc, the guardian of the caravans.");
@@ -58,7 +52,7 @@ TEST_CASE("MsgReader reads a message whose text runs over several lines", "[msg]
 
 TEST_CASE("MsgReader returns an empty message for an unknown id", "[msg]") {
     geck::MsgReader reader;
-    auto msg = reader.openFile("inline.msg", msgBytes("{1}{}{Only}\n"));
+    auto msg = reader.openFile("inline.msg", geck::test::bytesOf("{1}{}{Only}\n"));
 
     REQUIRE(msg != nullptr);
     const auto& missing = msg->message(999);
@@ -69,7 +63,7 @@ TEST_CASE("MsgReader returns an empty message for an unknown id", "[msg]") {
 
 TEST_CASE("MsgReader keeps the last entry for a duplicate id", "[msg]") {
     geck::MsgReader reader;
-    auto msg = reader.openFile("inline.msg", msgBytes("{5}{}{First}\n{5}{}{Second}\n"));
+    auto msg = reader.openFile("inline.msg", geck::test::bytesOf("{5}{}{First}\n{5}{}{Second}\n"));
 
     REQUIRE(msg != nullptr);
     CHECK(msg->message(5).text == "Second");

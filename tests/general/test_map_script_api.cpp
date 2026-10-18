@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <fstream>
 #include <set>
 
 #include "editor/HexagonGrid.h"
@@ -20,38 +19,17 @@
 #include "support/ByteWriter.h"
 #include "support/ControllerFixture.h"
 #include "support/QuiltReference.h"
+#include "support/TempFile.h"
 
 using namespace geck;
 using geck::test::ControllerFixture;
+namespace fs = std::filesystem;
 
 namespace {
 constexpr int ELEV = 0;
 constexpr uint16_t SOME_TILE = 271;
 constexpr uint16_t EMPTY = static_cast<uint16_t>(Map::EMPTY_TILE);
 
-// A throwaway data tree holding just a tiles.lst, mounted so the tiles.lst-backed queries
-// (tileId, tilesByPrefix) have real entries to resolve — the pattern of the frm-inspect tests.
-struct TilesLstFixture {
-    std::filesystem::path root;
-
-    TilesLstFixture()
-        : root(std::filesystem::temp_directory_path() / "geck_scriptapi_tiles") { // NOSONAR: throwaway test dir, not security-sensitive
-        std::error_code ec;
-        std::filesystem::remove_all(root, ec);
-        const auto dir = root / "art/tiles";
-        std::filesystem::create_directories(dir);
-        std::ofstream out(dir / "tiles.lst", std::ios::binary);
-        out << "edg5000.frm\nedg5001.frm\ncav1000.frm\n";
-    }
-
-    TilesLstFixture(const TilesLstFixture&) = delete;
-    TilesLstFixture& operator=(const TilesLstFixture&) = delete;
-
-    ~TilesLstFixture() {
-        std::error_code ec;
-        std::filesystem::remove_all(root, ec);
-    }
-};
 } // namespace
 
 TEST_CASE("MapScriptApi query surface", "[scripting]") {
@@ -298,10 +276,9 @@ TEST_CASE("MapScriptApi headless mode records objects as map data without GL", "
 // A placed object carries the flags its proto prescribes, as the engine's obj_new seeds them: the
 // engine reads them from the map, so flags = 0 made a flat proto stand and a NoBlock one block.
 TEST_CASE("MapScriptApi placement seeds the object's flags from its proto", "[scripting]") {
-    const auto root = std::filesystem::path{ GECK_TEST_TMP_DIR } / "geck_place_flags"; // inside the build tree
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root / "proto" / "walls");
-    std::ofstream(root / "proto" / "walls" / "walls.lst") << "flat.pro\n";
+    const test::TempDir rootDir{ "geck_place_flags" };
+    const fs::path& root = rootDir.path();
+    test::writeFile(root / "proto" / "walls" / "walls.lst", "flat.pro\n");
     constexpr uint32_t PRO = 0x03000001;
     constexpr auto FLAGS = static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_FLAT)
         | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK);
@@ -325,8 +302,6 @@ TEST_CASE("MapScriptApi placement seeds the object's flags from its proto", "[sc
     REQUIRE(objs.size() == 2);
     CHECK(objs[0]->flags == FLAGS);
     CHECK(objs[1]->flags == FLAGS);
-
-    std::filesystem::remove_all(root);
 }
 
 namespace {
@@ -337,8 +312,7 @@ constexpr uint32_t PLAIN_WALL = 0x03000002;
 constexpr uint32_t PROTO_SID = 0x03000044;
 
 void writeWallProtos(const std::filesystem::path& root) {
-    std::filesystem::create_directories(root / "proto" / "walls");
-    std::ofstream(root / "proto" / "walls" / "walls.lst") << "scripted.pro\nplain.pro\n";
+    test::writeFile(root / "proto" / "walls" / "walls.lst", "scripted.pro\nplain.pro\n");
     const auto write = [&root](const char* file, uint32_t pid, uint32_t sid) {
         Pro pro{ root / "proto" / "walls" / file };
         pro.header.PID = static_cast<int32_t>(pid);
@@ -358,8 +332,8 @@ constexpr int ITEM_SECTION = static_cast<int>(MapScript::ScriptType::ITEM);
 // The engine's obj_new gives every new object the script its proto names (objectSetScriptFromProto),
 // so a placed gravesite runs zigengrv. Placement used to write no script record at all.
 TEST_CASE("MapScriptApi placement gives a new object its proto's script", "[scripting]") {
-    const auto root = std::filesystem::path{ GECK_TEST_TMP_DIR } / "geck_place_proto_script";
-    std::filesystem::remove_all(root);
+    const test::TempDir rootDir{ "geck_place_proto_script" };
+    const fs::path& root = rootDir.path();
     writeWallProtos(root);
 
     ControllerFixture fx;
@@ -388,15 +362,13 @@ TEST_CASE("MapScriptApi placement gives a new object its proto's script", "[scri
     REQUIRE(fx.undoStack.redo());
     REQUIRE(fx.mapFile().map_objects[ELEV].size() == 1);
     CHECK(fx.mapFile().map_scripts[ITEM_SECTION].size() == 1);
-
-    std::filesystem::remove_all(root);
 }
 
 // copyObjects follows the engine's _obj_copy: a copy of a scripted object gets its proto's script
 // (never the source's instance script, which belongs to the source map), an unscripted one none.
 TEST_CASE("MapScriptApi copyObjects re-attaches the proto script only to copies of scripted objects", "[scripting]") {
-    const auto root = std::filesystem::path{ GECK_TEST_TMP_DIR } / "geck_copy_proto_script";
-    std::filesystem::remove_all(root);
+    const test::TempDir rootDir{ "geck_copy_proto_script" };
+    const fs::path& root = rootDir.path();
     writeWallProtos(root);
     std::filesystem::create_directories(root / "maps");
     {
@@ -424,8 +396,6 @@ TEST_CASE("MapScriptApi copyObjects re-attaches the proto script only to copies 
     CHECK(scripts[0].script_id == 68); // the proto's, not the source instance's 7
     CHECK(objs[0]->map_scripts_pid == static_cast<int32_t>(scripts[0].pid));
     CHECK(objs[1]->map_scripts_pid == -1);
-
-    std::filesystem::remove_all(root);
 }
 
 // The engine's objectSetScript also records a critter's program index in obj->scriptIndex.
@@ -724,9 +694,8 @@ TEST_CASE("MapScriptApi reads a reference map's full floor and typed objects", "
     // Author the reference with the api itself — floor paints plus exit grids (MISC markers need
     // no proto to write or parse) — then mount it at the production layout (maps/<name>.map) and
     // read it back through the reference queries. Self-contained: no proto stubs, no shipped data.
-    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_refmap"; // NOSONAR: throwaway test dir
-    std::error_code ec;
-    std::filesystem::remove_all(root, ec);
+    const test::TempDir rootDir{ "geck_scriptapi_refmap" };
+    const fs::path& root = rootDir.path();
     std::filesystem::create_directories(root / "maps");
     {
         ControllerFixture author;
@@ -765,12 +734,11 @@ TEST_CASE("MapScriptApi reads a reference map's full floor and typed objects", "
 
     CHECK_THROWS(api.mapObjectsAt("maps/ref.map", 0, "gizmo")); // unknown type name
     CHECK_THROWS(api.mapObjectsAt("no/such/map.map", 0, "wall"));
-
-    std::filesystem::remove_all(root, ec);
 }
 
 TEST_CASE("MapScriptApi quilts a floor learned from a reference map", "[scripting][quilt]") {
-    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_quilt"; // NOSONAR: throwaway test dir
+    const test::TempDir rootDir{ "geck_scriptapi_quilt" };
+    const fs::path& root = rootDir.path();
     geck::test::writeCheckerboardReference(root);
 
     ControllerFixture fx;
@@ -867,13 +835,11 @@ TEST_CASE("MapScriptApi quilts a floor learned from a reference map", "[scriptin
         // An elevation the reference lacks — or carries with an all-empty floor — teaches nothing.
         CHECK_THROWS(api.quiltFloorRect("maps/ref.map", 1, 0, 0, 3, 3));
     }
-
-    std::error_code ec;
-    std::filesystem::remove_all(root, ec);
 }
 
 TEST_CASE("MapScriptApi quiltExclude masks filler ids out of the reference", "[scripting][quilt]") {
-    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_quilt_excl"; // NOSONAR: throwaway test dir
+    const test::TempDir rootDir{ "geck_scriptapi_quilt_excl" };
+    const fs::path& root = rootDir.path();
     geck::test::writeCheckerboardReference(root);
 
     ControllerFixture fx;
@@ -912,17 +878,13 @@ TEST_CASE("MapScriptApi quiltExclude masks filler ids out of the reference", "[s
         api.quiltExclude({ 271, 272 });
         CHECK_THROWS(api.quiltFloorRect("maps/ref.map", 0, 0, 0, 3, 3));
     }
-
-    std::error_code ec;
-    std::filesystem::remove_all(root, ec);
 }
 
 TEST_CASE("MapScriptApi quiltObjects transplants the reference objects on copied cells", "[scripting][quilt]") {
     // Author the checkerboard reference PLUS misc exit-grid markers standing on it (MISC needs no
     // proto to author or transplant headlessly), then quilt and pull the markers across.
-    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_quilt_obj"; // NOSONAR: throwaway test dir
-    std::error_code ec;
-    std::filesystem::remove_all(root, ec);
+    const test::TempDir rootDir{ "geck_scriptapi_quilt_obj" };
+    const fs::path& root = rootDir.path();
     std::filesystem::create_directories(root / "maps");
     uint32_t markerPid = 0;
     {
@@ -979,15 +941,12 @@ TEST_CASE("MapScriptApi quiltObjects transplants the reference objects on copied
         api.quiltFloorRect("maps/ref.map", 0, 0, 0, 3, 3);
         CHECK_THROWS(api.quiltObjects("gizmo", {})); // unknown type name
     }
-
-    std::filesystem::remove_all(root, ec);
 }
 
 TEST_CASE("MapScriptApi copyObjects copies a reference elevation's objects onto the same hexes", "[scripting]") {
     // A reference with misc exit-grid markers (MISC needs no proto to author or copy headlessly).
-    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_copy_obj"; // NOSONAR: throwaway test dir
-    std::error_code ec;
-    std::filesystem::remove_all(root, ec);
+    const test::TempDir rootDir{ "geck_scriptapi_copy_obj" };
+    const fs::path& root = rootDir.path();
     std::filesystem::create_directories(root / "maps");
     uint32_t markerPid = 0;
     std::vector<int> markerHexes;
@@ -1048,15 +1007,12 @@ TEST_CASE("MapScriptApi copyObjects copies a reference elevation's objects onto 
         CHECK_THROWS(api.copyObjects("maps/ref.map", ELEV, { "misc", "gizmo" }, {})); // unknown type name
         CHECK_THROWS(api.copyObjects("maps/nope.map", ELEV, { "misc" }, {})); // unreadable map
     }
-
-    std::filesystem::remove_all(root, ec);
 }
 
 TEST_CASE("MapScriptApi quiltSource learns only from the reference sub-rectangle", "[scripting][quilt]") {
     // Two vocabularies side by side: left half checkerboard 271/272, right half 273/274.
-    const auto root = std::filesystem::temp_directory_path() / "geck_scriptapi_quilt_src"; // NOSONAR: throwaway test dir
-    std::error_code ec;
-    std::filesystem::remove_all(root, ec);
+    const test::TempDir rootDir{ "geck_scriptapi_quilt_src" };
+    const fs::path& root = rootDir.path();
     std::filesystem::create_directories(root / "maps");
     {
         ControllerFixture author;
@@ -1089,14 +1045,14 @@ TEST_CASE("MapScriptApi quiltSource learns only from the reference sub-rectangle
 
     api.quiltSource(-1, -1, -1, -1); // cleared: the whole reference is learnable again
     REQUIRE(api.quiltFloorRect("maps/ref.map", 0, 20, 20, 29, 29) == 100);
-
-    std::filesystem::remove_all(root, ec);
 }
 
 TEST_CASE("MapScriptApi tilesByPrefix resolves a tile family from tiles.lst", "[scripting]") {
-    TilesLstFixture data;
+    // A data tree holding just a tiles.lst, so tileId/tilesByPrefix have real entries to resolve.
+    const test::TempDir data{ "geck_scriptapi_tiles" };
+    test::writeFile(data.path() / "art/tiles/tiles.lst", "edg5000.frm\nedg5001.frm\ncav1000.frm\n");
     ControllerFixture fx;
-    fx.resources.files().addDataPath(data.root.string());
+    fx.resources.files().addDataPath(data.path());
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
 
     const auto edges = api.tilesByPrefix("EDG"); // case-insensitive, like tileId
@@ -1252,12 +1208,10 @@ TEST_CASE("A sink with no bound area stays uncapped", "[scripting][cap]") {
 // centred on x with its bottom on y. Cave rims are laid by abutting these rects pixel-exactly, so the
 // geometry is pinned on three neighbouring hexes of one 16x120 strip with a (8, -4) shift.
 TEST_CASE("MapScriptApi artRect gives the screen rectangle the engine draws a proto's art in", "[scripting]") {
-    const auto root = std::filesystem::path{ GECK_TEST_TMP_DIR } / "geck_artrect"; // inside the build tree
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root / "proto" / "walls");
-    std::filesystem::create_directories(root / "art" / "walls");
-    std::ofstream(root / "proto" / "walls" / "walls.lst") << "piece.pro\n";
-    std::ofstream(root / "art" / "walls" / "walls.lst") << "piece.frm\n";
+    const test::TempDir rootDir{ "geck_artrect" };
+    const fs::path& root = rootDir.path();
+    test::writeFile(root / "proto" / "walls" / "walls.lst", "piece.pro\n");
+    test::writeFile(root / "art" / "walls" / "walls.lst", "piece.frm\n");
     {
         Pro pro{ root / "proto" / "walls" / "piece.pro" };
         pro.header.PID = 0x03000001;
@@ -1280,8 +1234,7 @@ TEST_CASE("MapScriptApi artRect gives the screen rectangle the engine draws a pr
         }
         frm.be32(12 + 16 * 120);
         frm.be16(16).be16(120).be32(16 * 120).be16(0).be16(0).fill(1, 16 * 120);
-        std::ofstream(root / "art" / "walls" / "piece.frm", std::ios::binary)
-            .write(reinterpret_cast<const char*>(frm.data().data()), static_cast<std::streamsize>(frm.size()));
+        test::writeBytes(root / "art" / "walls" / "piece.frm", frm.data());
     }
 
     ControllerFixture fx;
@@ -1296,6 +1249,4 @@ TEST_CASE("MapScriptApi artRect gives the screen rectangle the engine draws a pr
     // Two columns left (even again): 48px right and 12px up — and it starts on the pixel after 2198 ends.
     CHECK(api.artRect(0x03000001, 2197) == std::vector<int>{ 224, -7, 239, 112 });
     CHECK_THROWS(api.artRect(0x03000001, -1));
-
-    std::filesystem::remove_all(root);
 }

@@ -4,21 +4,19 @@
 #include "resource/WritableDataRoot.h"
 #include "util/FileIo.h"
 
+#include "support/TempFile.h"
+
 #include <filesystem>
 #include <string>
 
-#ifndef GECK_TEST_TMP_DIR
-#error "GECK_TEST_TMP_DIR must be defined for this test target (see tests/CMakeLists.txt)"
-#endif
-
 using namespace geck;
 using geck::io::readFile;
-using geck::io::writeFile;
+using geck::test::writeFile;
 namespace fs = std::filesystem;
 
 TEST_CASE("ensureWritableCopy copies a mounted file out (CRLF preserved) and is idempotent", "[writableroot]") {
-    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "wr_test";
-    fs::remove_all(base);
+    const test::TempDir baseDir{ "wr_test" };
+    const fs::path& base = baseDir.path();
     const fs::path source = base / "source";
     const fs::path root = base / "writable";
     writeFile(source / "data" / "maps.txt", "HELLO\r\nWORLD\r\n");
@@ -35,20 +33,18 @@ TEST_CASE("ensureWritableCopy copies a mounted file out (CRLF preserved) and is 
     const fs::path again = resource::ensureWritableCopy(files, root, "data/maps.txt");
     CHECK(again == dest);
     CHECK(readFile(again) == "EDITED\r\n");
-
-    fs::remove_all(base);
 }
 
 TEST_CASE("ensureWritableCopy throws when the file is not in the mounted data", "[writableroot]") {
-    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "wr_empty";
-    fs::remove_all(root);
+    const test::TempDir rootDir{ "wr_empty" };
+    const fs::path& root = rootDir.path();
     resource::DataFileSystem files; // nothing mounted
     CHECK_THROWS(resource::ensureWritableCopy(files, root, "data/nope.txt"));
 }
 
 TEST_CASE("findWritableDataPath returns the last directory, skipping archives", "[writableroot]") {
-    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "fwdp";
-    fs::remove_all(base);
+    const test::TempDir baseDir{ "fwdp" };
+    const fs::path& base = baseDir.path();
     const fs::path dirA = base / "a";
     const fs::path dirB = base / "b";
     fs::create_directories(dirA);
@@ -70,12 +66,11 @@ TEST_CASE("findWritableDataPath returns the last directory, skipping archives", 
         CHECK_FALSE(resource::findWritableDataPath({ fakeDat }).has_value());
         CHECK_FALSE(resource::findWritableDataPath({}).has_value());
     }
-    fs::remove_all(base);
 }
 
 TEST_CASE("findWritableDataPath writes into an install folder's data tree", "[writableroot]") {
-    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "fwdp_install";
-    fs::remove_all(base);
+    const test::TempDir baseDir{ "fwdp_install" };
+    const fs::path& base = baseDir.path();
     writeFile(base / "master.dat", "x"); // an archive next to data/ is what makes it an install
     fs::create_directories(base / "data" / "proto");
 
@@ -85,13 +80,11 @@ TEST_CASE("findWritableDataPath writes into an install folder's data tree", "[wr
     // (master_patches) reads them back from.
     CHECK(resource::findWritableDataPath({ base }) == base / "data");
     CHECK(resource::findWritableDataPath({ base }, base) == base / "data");
-
-    fs::remove_all(base);
 }
 
 TEST_CASE("findWritableDataPath honours an explicit save-location marker", "[writableroot]") {
-    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "fwdp_marker";
-    fs::remove_all(base);
+    const test::TempDir baseDir{ "fwdp_marker" };
+    const fs::path& base = baseDir.path();
     const fs::path dirA = base / "a";
     const fs::path dirB = base / "b";
     fs::create_directories(dirA);
@@ -131,5 +124,4 @@ TEST_CASE("findWritableDataPath honours an explicit save-location marker", "[wri
     SECTION("marker set but no usable directory at all -> nullopt") {
         CHECK_FALSE(resource::findWritableDataPath({ fakeDat }, fakeDat).has_value());
     }
-    fs::remove_all(base);
 }

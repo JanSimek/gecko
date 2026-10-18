@@ -14,14 +14,11 @@
 #include "format/map/MapScript.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
-#include "util/FileIo.h"
 #include "writer/map/MapWriter.h"
 
 #include "support/ProStubProvider.h"
-
-#ifndef GECK_TEST_TMP_DIR
-#error "GECK_TEST_TMP_DIR must be defined for this test target (see tests/CMakeLists.txt)"
-#endif
+#include "support/DataTree.h"
+#include "support/TempFile.h"
 
 using nlohmann::json;
 using namespace geck;
@@ -47,7 +44,7 @@ std::shared_ptr<MapObject> makeExitGrid(int position, int destMap, int destHex, 
 std::shared_ptr<MapObject> makeWall(int position) {
     auto wall = std::make_shared<MapObject>();
     wall->position = position;
-    wall->pro_pid = pidOf(ObjectType::Wall, 1);
+    wall->pro_pid = ProtoId(ObjectType::Wall, 1).pid();
     return wall;
 }
 
@@ -74,7 +71,7 @@ const json* findEdge(const json& edges, const std::string& from, const std::stri
 // destination exercises one one-way verdict.
 void writeFixture(const fs::path& base) {
     fs::create_directories(base / "maps");
-    geck::io::writeFile(base / "data" / "maps.txt",
+    test::writeFile(base / "data" / "maps.txt",
         "[Map 0]\nlookup_name=A\nmap_name=mapa\n"
         "[Map 1]\nlookup_name=B\nmap_name=mapb\n"
         "[Map 2]\nlookup_name=C\nmap_name=mapc\n"
@@ -134,12 +131,11 @@ void writeFixture(const fs::path& base) {
 // flagged. Built on a written-map fixture: maps.txt gives the destination indices names, and the
 // .map files are read back through cli::loadMap's disk fallback.
 TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapgraph]") {
-    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "mapgraph";
-    fs::remove_all(base);
+    test::DataTree tree{ "mapgraph" };
+    const fs::path& base = tree.root();
     writeFixture(base);
 
-    resource::GameResources resources;
-    resources.files().addDataPath(base.string());
+    auto& resources = tree.mount();
 
     cli::MapGraphOptions options;
     for (const char* name : { "mapa.map", "mapb.map", "mapc.map", "mape.map", "mapf.map", "mapg.map" }) {
@@ -209,23 +205,21 @@ TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapg
         CHECK(findEdge(oneWay, "mapa.map", "mapc.map") != nullptr);
         CHECK(findEdge(oneWay, "mapa.map", "mape.map") != nullptr);
     }
-
-    fs::remove_all(base);
 }
 
 // Script transitions: a load_map call becomes an edge from every map that places its script — the
 // map's own (header) script, 1-based, or a map_scripts entry, 0-based — whichever way the script
 // names the target. A script no map places keeps its call in unplacedScriptCalls.
 TEST_CASE("map_graph adds load_map transitions from the maps that place each script", "[cli][mapgraph]") {
-    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "mapgraph_scripts";
-    fs::remove_all(base);
+    test::DataTree tree{ "mapgraph_scripts" };
+    const fs::path& base = tree.root();
     fs::create_directories(base / "maps");
-    geck::io::writeFile(base / "data" / "maps.txt",
+    tree.write("data/maps.txt",
         "[Map 0]\nlookup_name=A\nmap_name=mapa\n[Map 1]\nlookup_name=B\nmap_name=mapb\n[Map 2]\nlookup_name=C\nmap_name=mapc\n");
-    geck::io::writeFile(base / "scripts" / "scripts.lst", "town.int ; a's map script\nguard.int ; b's guard\nloner.int ; nowhere\n");
-    geck::io::writeFile(base / "scripts_src" / "town.ssl", "procedure map_enter_p_proc begin load_map(\"MapC.map\", 3); end\n");
-    geck::io::writeFile(base / "scripts_src" / "guard.ssl", "procedure talk_p_proc begin load_map(0, 555); end\n");
-    geck::io::writeFile(base / "scripts_src" / "loner.ssl", "procedure use_p_proc begin load_map(\"mapb.map\", 0); end\n");
+    tree.write("scripts/scripts.lst", "town.int ; a's map script\nguard.int ; b's guard\nloner.int ; nowhere\n");
+    tree.write("scripts_src/town.ssl", "procedure map_enter_p_proc begin load_map(\"MapC.map\", 3); end\n");
+    tree.write("scripts_src/guard.ssl", "procedure talk_p_proc begin load_map(0, 555); end\n");
+    tree.write("scripts_src/loner.ssl", "procedure use_p_proc begin load_map(\"mapb.map\", 0); end\n");
 
     auto a = Map::createEmptyMapFile();
     a.header.script_id = 1; // town.int, 1-based in the header
@@ -237,8 +231,7 @@ TEST_CASE("map_graph adds load_map transitions from the maps that place each scr
     writeMap(base / "maps" / "mapb.map", std::move(b));
     writeMap(base / "maps" / "mapc.map", Map::createEmptyMapFile());
 
-    resource::GameResources resources;
-    resources.files().addDataPath(base.string());
+    auto& resources = tree.mount();
     cli::MapGraphOptions options;
     for (const char* name : { "mapa.map", "mapb.map", "mapc.map" }) {
         options.maps.push_back((base / "maps" / name).string());
@@ -275,5 +268,4 @@ TEST_CASE("map_graph adds load_map transitions from the maps that place each scr
     std::ostringstream plain;
     REQUIRE(cli::buildMapGraph(resources, options, plain) == 0);
     CHECK_FALSE(json::parse(plain.str()).contains("scriptEdges"));
-    fs::remove_all(base);
 }

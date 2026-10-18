@@ -4,56 +4,17 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <sstream>
 #include <string>
 
 #include "cli/FrmInspect.h"
 #include "resource/GameResources.h"
 
+#include "support/ArtLstTree.h"
+
 namespace fs = std::filesystem;
 using nlohmann::json;
 using namespace geck;
-
-namespace {
-
-void writeFile(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream out(path, std::ios::binary);
-    out << contents;
-}
-
-// A temp data tree with minimal art LSTs, mounted into a GameResources — the same LSTs the
-// FrmResolver and the frm tools read. No FRM bytes are written: these tests cover the non-GL
-// path-resolution / FID-decode / listing logic, not the (GL-bound) pixel render.
-struct FixtureResources {
-    fs::path root;
-    resource::GameResources resources;
-
-    FixtureResources()
-        : root(fs::temp_directory_path() / "geck_frminspect_test") { // NOSONAR: throwaway test dir, not security-sensitive
-        std::error_code ec;
-        fs::remove_all(root, ec);
-
-        writeFile(root / "art/items/items.lst", "knife.frm\nrock.frm\n");
-        writeFile(root / "art/scenery/scenery.lst", "tree1.frm\ntree2.frm\n");
-        writeFile(root / "art/walls/walls.lst", "wall1.frm\nwall2.frm\n");
-        writeFile(root / "art/tiles/tiles.lst", "floor.frm\ngrass.frm\n");
-        // misc.lst: index 0 'thing', a filler at index 1 (FrmResolver::resolve treats misc baseId 1 as
-        // the scroll-blocker special case, so keep the test entries off it), then the exit-grid family
-        // so the glob/list/resolve cases have a real group. ext2grd1 is index 2 here.
-        writeFile(root / "art/misc/misc.lst", "thing.frm\nscrblk.frm\next2grd1.frm\next2grd2.frm\nexitgrd1.frm\n");
-
-        resources.files().addDataPath(root.string());
-    }
-
-    ~FixtureResources() {
-        std::error_code ec;
-        fs::remove_all(root, ec);
-    }
-};
-
-} // namespace
 
 TEST_CASE("parseFid accepts hex and decimal, rejects junk", "[frm][cli]") {
     using cli::parseFid;
@@ -79,43 +40,43 @@ TEST_CASE("normalizeArtToken canonicalizes path + extension", "[frm][cli]") {
 }
 
 TEST_CASE("resolveFrmTarget finds a bare name across art LSTs", "[frm][cli]") {
-    FixtureResources fx;
+    geck::test::ArtLstTree fx{ "geck_frminspect_test" };
     std::string error;
 
-    const auto miscName = cli::resolveFrmTarget(fx.resources, "ext2grd1", error);
+    const auto miscName = cli::resolveFrmTarget(fx.mount(), "ext2grd1", error);
     REQUIRE(miscName.has_value());
     CHECK(*miscName == "art/misc/ext2grd1.frm");
 
-    const auto sceneryName = cli::resolveFrmTarget(fx.resources, "tree2", error);
+    const auto sceneryName = cli::resolveFrmTarget(fx.mount(), "tree2", error);
     REQUIRE(sceneryName.has_value());
     CHECK(*sceneryName == "art/scenery/tree2.frm");
 
     // A name not in any LST fails (no heuristic fallback), and sets an explanatory error.
-    const auto missing = cli::resolveFrmTarget(fx.resources, "doesnotexist", error);
+    const auto missing = cli::resolveFrmTarget(fx.mount(), "doesnotexist", error);
     CHECK_FALSE(missing.has_value());
     CHECK_FALSE(error.empty());
 }
 
 TEST_CASE("resolveFrmTarget resolves a FID and a full art path", "[frm][cli]") {
-    FixtureResources fx;
+    geck::test::ArtLstTree fx{ "geck_frminspect_test" };
     std::string error;
 
     // ext2grd1 is misc index 2 -> FID 0x05000002 (index 1 is the scroll-blocker special case).
-    const auto byFid = cli::resolveFrmTarget(fx.resources, "0x05000002", error);
+    const auto byFid = cli::resolveFrmTarget(fx.mount(), "0x05000002", error);
     REQUIRE(byFid.has_value());
     CHECK(*byFid == "art/misc/ext2grd1.frm");
 
     // A full path under a known art dir is taken as-is (normalized).
-    const auto byPath = cli::resolveFrmTarget(fx.resources, "art/walls/wall1.frm", error);
+    const auto byPath = cli::resolveFrmTarget(fx.mount(), "art/walls/wall1.frm", error);
     REQUIRE(byPath.has_value());
     CHECK(*byPath == "art/walls/wall1.frm");
 }
 
 TEST_CASE("resolveFidCommand emits decoded JSON for a FID", "[frm][cli]") {
-    FixtureResources fx;
+    geck::test::ArtLstTree fx{ "geck_frminspect_test" };
     std::ostringstream oss;
     // 0x05000002: type byte 5 (misc), index 2 -> ext2grd1 in the fixture misc.lst.
-    const int rc = cli::resolveFidCommand(fx.resources, "0x05000002", oss);
+    const int rc = cli::resolveFidCommand(fx.mount(), "0x05000002", oss);
     CHECK(rc == 0);
     const json decoded = json::parse(oss.str());
     CHECK(decoded["type"] == "misc");
@@ -125,16 +86,16 @@ TEST_CASE("resolveFidCommand emits decoded JSON for a FID", "[frm][cli]") {
 }
 
 TEST_CASE("resolveFidCommand rejects a non-numeric token", "[frm][cli]") {
-    FixtureResources fx;
+    geck::test::ArtLstTree fx{ "geck_frminspect_test" };
     std::ostringstream oss;
-    CHECK(cli::resolveFidCommand(fx.resources, "notafid", oss) != 0);
+    CHECK(cli::resolveFidCommand(fx.mount(), "notafid", oss) != 0);
 }
 
 TEST_CASE("listFrms matches a glob across the art LSTs", "[frm][cli]") {
-    FixtureResources fx;
+    geck::test::ArtLstTree fx{ "geck_frminspect_test" };
 
     std::ostringstream ext;
-    CHECK(cli::listFrms(fx.resources, "ext2grd*", ext) == 0);
+    CHECK(cli::listFrms(fx.mount(), "ext2grd*", ext) == 0);
     const json extList = json::parse(ext.str());
     REQUIRE(extList.size() == 2);
     CHECK(extList[0]["name"] == "ext2grd1");
@@ -144,18 +105,18 @@ TEST_CASE("listFrms matches a glob across the art LSTs", "[frm][cli]") {
 
     // '?' matches exactly one character; 'tree?' matches tree1/tree2 but not a longer name.
     std::ostringstream trees;
-    CHECK(cli::listFrms(fx.resources, "tree?", trees) == 0);
+    CHECK(cli::listFrms(fx.mount(), "tree?", trees) == 0);
     CHECK(json::parse(trees.str()).size() == 2);
 
     // A non-matching glob is an empty array (success, not an error).
     std::ostringstream none;
-    CHECK(cli::listFrms(fx.resources, "zzz*", none) == 0);
+    CHECK(cli::listFrms(fx.mount(), "zzz*", none) == 0);
     CHECK(json::parse(none.str()).empty());
 }
 
 TEST_CASE("frmInfo reports a clear error for an unresolvable target", "[frm][cli]") {
-    FixtureResources fx;
+    geck::test::ArtLstTree fx{ "geck_frminspect_test" };
     std::ostringstream oss;
-    CHECK(cli::frmInfo(fx.resources, "nope", oss) != 0);
+    CHECK(cli::frmInfo(fx.mount(), "nope", oss) != 0);
     CHECK(oss.str().find("could not resolve") != std::string::npos);
 }

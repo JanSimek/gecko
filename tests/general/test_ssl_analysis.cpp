@@ -8,20 +8,13 @@
 #include "ssl/Corpus.h"
 #include "ssl/VariableRefs.h"
 
+#include "support/SslParse.h"
+
 using namespace geck::ssl;
-
-namespace {
-
-ScriptUnit parseText(const std::string& text) {
-    MemorySourceProvider files;
-    files.add("script.ssl", text);
-    return ScriptUnit::load(files, "script.ssl");
-}
-
-} // namespace
+using geck::test::parseSsl;
 
 TEST_CASE("CallGraph keeps what sslc compiles: entry points and what they reach", "[ssl][analysis]") {
-    const ScriptUnit unit = parseText(R"ssl(
+    const ScriptUnit unit = parseSsl(R"ssl(
 #define USE_OLD false
 variable mode;
 export procedure shared;
@@ -62,7 +55,7 @@ procedure Node003 begin end
 }
 
 TEST_CASE("ConstantFolder folds literals, sslc's true/false and globals nothing assigns", "[ssl][analysis]") {
-    const ScriptUnit unit = parseText(R"ssl(
+    const ScriptUnit unit = parseSsl(R"ssl(
 variable fixed := 4;
 variable changed;
 import variable shared;
@@ -88,7 +81,7 @@ end
 }
 
 TEST_CASE("globalVariableRefs and localVariableRefs report each access with its number and macro", "[ssl][analysis]") {
-    const ScriptUnit unit = parseText(R"ssl(
+    const ScriptUnit unit = parseSsl(R"ssl(
 #define GVAR_SEED (12)
 #define LVAR_Hostile (5)
 #define set_seed(x) set_global_var(GVAR_SEED, x)

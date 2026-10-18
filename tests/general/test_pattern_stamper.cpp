@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <optional>
 #include <vector>
 
@@ -17,6 +16,7 @@
 #include "writer/pro/ProWriter.h"
 
 #include "support/ControllerFixture.h"
+#include "support/TempFile.h"
 
 using namespace geck;
 using namespace geck::pattern;
@@ -169,10 +169,9 @@ TEST_CASE("PatternStamper records objects as data when buildSprites is false", "
 // stamp captured its own), its light and its script. A hand-written stamp without "flags" used to
 // land with flags 0, so a flat proto stood and a NoBlock one blocked.
 TEST_CASE("PatternStamper seeds stamped objects from their proto", "[pattern][stamper]") {
-    const auto root = std::filesystem::path{ GECK_TEST_TMP_DIR } / "geck_stamp_proto_defaults";
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root / "proto" / "walls");
-    std::ofstream(root / "proto" / "walls" / "walls.lst") << "lamp.pro\n";
+    const test::TempDir rootDir{ "geck_stamp_proto_defaults" };
+    const std::filesystem::path& root = rootDir.path();
+    test::writeFile(root / "proto" / "walls" / "walls.lst", "lamp.pro\n");
     constexpr uint32_t PRO = 0x03000001;
     constexpr auto PROTO_FLAGS = static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_FLAT)
         | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK);
@@ -216,6 +215,4 @@ TEST_CASE("PatternStamper seeds stamped objects from their proto", "[pattern][st
     CHECK(fx.mapFile().map_objects.at(0).empty());
     CHECK(fx.mapFile().map_scripts[static_cast<int>(MapScript::ScriptType::ITEM)].empty());
     CHECK_FALSE(fx.undoStack.canUndo());
-
-    std::filesystem::remove_all(root);
 }

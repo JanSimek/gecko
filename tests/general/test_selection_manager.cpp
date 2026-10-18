@@ -595,11 +595,7 @@ TEST_CASE("SelectionManager area selection honors host elevation (regression)", 
     constexpr int TARGET_ROOF_TILE = 4242;
 
     // 1x1 texture shared by every tile sprite (bounds are what the spatial index uses).
-    sf::Texture texture;
-    sf::Image image{ sf::Vector2u{ 1, 1 }, sf::Color::White };
-    if (!texture.loadFromImage(image)) {
-        FAIL("Failed to create test texture");
-    }
+    const sf::Texture texture = geck::test::whiteTexture();
 
     MockEditorWidget mockWidget;
 

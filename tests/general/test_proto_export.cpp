@@ -4,33 +4,20 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <initializer_list>
 #include <sstream>
 #include <string>
-#include <system_error>
 
 #include "cli/ProtoExport.h"
 #include "resource/GameResources.h"
 #include "support/ByteWriter.h"
+#include "support/DataTree.h"
 
 using json = nlohmann::json;
 using geck::test::ByteWriter;
-namespace fs = std::filesystem;
 using namespace geck;
 
 namespace {
-
-void writeText(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream(path) << contents;
-}
-
-void writeBytes(const fs::path& path, const ByteWriter& bytes) {
-    fs::create_directories(path.parent_path());
-    std::ofstream file(path, std::ios::binary);
-    file.write(reinterpret_cast<const char*>(bytes.data().data()), static_cast<std::streamsize>(bytes.size()));
-}
 
 ByteWriter& be32s(ByteWriter& w, std::initializer_list<std::int32_t> values) {
     for (const auto value : values) {
@@ -57,40 +44,37 @@ ByteWriter itemHeader(std::int32_t pid, std::int32_t messageId, std::uint32_t ex
 class ProtoFixture {
 public:
     ProtoFixture() {
-        std::error_code ec;
-        fs::remove_all(_root, ec);
-
-        writeText(_root / "proto/items/items.lst", "weapon.pro\nmissing.pro\nammo.pro\narmor.pro\nmisc.pro\n");
-        writeText(_root / "proto/critters/critters.lst", "critter.pro\n");
-        writeText(_root / "scripts/scripts.lst", "a.int\nb.int\nc.int\nd.int\ne.int\ntest.int\n");
-        writeText(_root / "text/english/game/pro_item.msg",
+        _tree.write("proto/items/items.lst", "weapon.pro\nmissing.pro\nammo.pro\narmor.pro\nmisc.pro\n");
+        _tree.write("proto/critters/critters.lst", "critter.pro\n");
+        _tree.write("scripts/scripts.lst", "a.int\nb.int\nc.int\nd.int\ne.int\ntest.int\n");
+        _tree.write("text/english/game/pro_item.msg",
             "{100}{}{Test Rifle}\n{101}{}{A rifle.}\n{300}{}{Test Ammo}\n{400}{}{Test Armor}\n{500}{}{Test Cell}\n");
-        writeText(_root / "text/english/game/pro_crit.msg", "{200}{}{Test Critter}\n");
-        writeText(_root / "text/english/game/proto.msg",
+        _tree.write("text/english/game/pro_crit.msg", "{200}{}{Test Critter}\n");
+        _tree.write("text/english/game/proto.msg",
             "{101}{}{Metal}\n{251}{}{laser}\n{252}{}{fire}\n{308}{}{10mm}\n{401}{}{Quadruped}\n");
-        writeText(_root / "text/english/game/perk.msg", "{159}{}{Long Range}\n");
+        _tree.write("text/english/game/perk.msg", "{159}{}{Long Range}\n");
 
         // Primary attack mode 6, secondary 7, Big Gun, Two Handed and sfall's Energy bit.
         ByteWriter weapon = itemHeader(1, 100, 0x00000776, 3);
         be32s(weapon, { 6, 10, 20, 1 /* laser */, 25, 20, -1, 4, 5, 6, 2, 58 /* Weapon Long Range */, 10, 8 /* 10mm */, 3, 30 });
         weapon.u8('A');
         REQUIRE(weapon.size() == 122);
-        writeBytes(_root / "proto/items/weapon.pro", weapon);
+        _tree.writeBytes("proto/items/weapon.pro", weapon.data());
 
         ByteWriter ammo = itemHeader(3, 300, 0, 4);
         be32s(ammo, { 8, 24, -10, 25, 2, 1 });
         REQUIRE(ammo.size() == 81);
-        writeBytes(_root / "proto/items/ammo.pro", ammo);
+        _tree.writeBytes("proto/items/ammo.pro", ammo.data());
 
         ByteWriter armor = itemHeader(4, 400, 0, 0);
         be32s(armor, { 20, 30, 20, 20, 10, 30, 500, 20, 4, 0, 0, 0, 0, 0, 0, -1, 0x0100000C, 0x01000005 });
         REQUIRE(armor.size() == 129);
-        writeBytes(_root / "proto/items/armor.pro", armor);
+        _tree.writeBytes("proto/items/armor.pro", armor.data());
 
         ByteWriter misc = itemHeader(5, 500, 0, 5);
         be32s(misc, { 38, 3, 200 });
         REQUIRE(misc.size() == 69);
-        writeBytes(_root / "proto/items/misc.pro", misc);
+        _tree.writeBytes("proto/items/misc.pro", misc.data());
 
         // The critter layout of fallout2-ce protoRead + protoCritterDataRead. Base stat i holds 100 + i
         // and bonus stat i holds 200 + i, so each value names the stat slot it was read from.
@@ -108,28 +92,17 @@ public:
         }
         be32s(critter, { 1 /* quadruped */, 150, 3, 2 /* fire */ });
         REQUIRE(critter.size() == 416);
-        writeBytes(_root / "proto/critters/critter.pro", critter);
-
-        _resources.files().addDataPath(_root.string());
+        _tree.writeBytes("proto/critters/critter.pro", critter.data());
     }
-
-    ~ProtoFixture() {
-        std::error_code ec;
-        fs::remove_all(_root, ec);
-    }
-
-    ProtoFixture(const ProtoFixture&) = delete;
-    ProtoFixture& operator=(const ProtoFixture&) = delete;
 
     json run(const cli::ProtoExportOptions& options = {}) {
         std::ostringstream oss;
-        REQUIRE(cli::exportProtos(_resources, options, oss) == 0);
+        REQUIRE(cli::exportProtos(_tree.mount(), options, oss) == 0);
         return json::parse(oss.str());
     }
 
 private:
-    fs::path _root = fs::path(GECK_TEST_TMP_DIR) / "geck_proto_export_test";
-    resource::GameResources _resources;
+    test::DataTree _tree{ "geck_proto_export_test" };
 };
 
 const json& protoByPid(const json& out, std::uint32_t pid) {

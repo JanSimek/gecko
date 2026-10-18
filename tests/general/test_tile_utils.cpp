@@ -201,12 +201,7 @@ TEST_CASE("Sprite highlight functions", "[tile_utils]") {
     GECK_SKIP_IF_HEADLESS_CI();
 
     SECTION("Apply and remove preview highlight") {
-        // Create a minimal 1x1 texture for testing
-        sf::Texture texture;
-        sf::Image image{ sf::Vector2u{ 1, 1 }, sf::Color::White };
-        if (!texture.loadFromImage(image)) {
-            FAIL("Failed to create test texture");
-        }
+        const sf::Texture texture = geck::test::whiteTexture();
 
         sf::Sprite sprite(texture);
 

@@ -5,6 +5,8 @@
 #include "writer/maps/MapsTxtSerializer.h"
 #include "writer/maps/MapsTxtValidator.h"
 
+#include "support/Fixtures.h"
+
 #include <algorithm>
 #include <string>
 
@@ -44,13 +46,7 @@ TEST_CASE("MapsTxt round-trips an LF file byte-for-byte (no trailing newline)", 
 }
 
 TEST_CASE("MapsTxt normalizes CRLF to LF while preserving all data", "[maps_roundtrip]") {
-    std::string crlf;
-    for (const char* p = kMapsTxtLf; *p != '\0'; ++p) {
-        if (*p == '\n') {
-            crlf += '\r';
-        }
-        crlf += *p;
-    }
+    const std::string crlf = geck::test::toCrlf(kMapsTxtLf);
 
     const MapsTxt doc = parseMapsTxt(crlf);
     // Round-trips to the LF form: data identical, line endings normalized.

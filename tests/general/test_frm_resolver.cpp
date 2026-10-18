@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <string>
 
 #include "format/frm/Frm.h"
@@ -10,56 +9,19 @@
 #include "resource/FrmResolver.h"
 #include "resource/GameResources.h"
 
+#include "support/ArtLstTree.h"
 #include "support/Fixtures.h"
 
 namespace fs = std::filesystem;
 using geck::Frm;
 using geck::resource::GameResources;
 
-namespace {
-
-void writeFile(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream out(path, std::ios::binary);
-    out << contents;
-}
-
-// A temp data tree with one minimal LST per art type, mounted into a GameResources.
-// resolveFid reads these LSTs the same way it reads the shipped game archives.
-struct FixtureResources {
-    fs::path root;
-    GameResources resources;
-
-    FixtureResources() {
-        root = fs::temp_directory_path() / "geck_frmresolver_test";
-        std::error_code ec;
-        fs::remove_all(root, ec);
-
-        writeFile(root / "art/items/items.lst", "knife.frm\nrock.frm\n");
-        writeFile(root / "art/critters/critters.lst", "hmwarr,Tribal Warrior\nnmwarr,Raider\n");
-        writeFile(root / "art/scenery/scenery.lst", "tree.frm\nbush.frm\n");
-        writeFile(root / "art/walls/walls.lst", "wall1.frm\nwall2.frm\nwall3.frm\n");
-        writeFile(root / "art/tiles/tiles.lst", "floor.frm\ngrass.frm\n");
-        // Single entry at index 0: avoids resolve()'s scroll-blocker special case (baseId 1).
-        writeFile(root / "art/misc/misc.lst", "thing.frm\n");
-
-        resources.files().addDataPath(root.string());
-    }
-
-    ~FixtureResources() {
-        std::error_code ec;
-        fs::remove_all(root, ec);
-    }
-};
-
-} // namespace
-
 // The regression guard: the FID type must be the ObjectType / engine OBJ_TYPE
 // ordinal. WALL is 3, not 4 (the old frmTypeMap encoded 4/5/6/7/8, which the
 // engine reads as the next type up).
 TEST_CASE("resolveFid encodes the engine FRM type byte", "[resource][frm]") {
-    FixtureResources fx;
-    auto& resolver = fx.resources.frmResolver();
+    geck::test::ArtLstTree fx{ "geck_frmresolver_test" };
+    auto& resolver = fx.mount().frmResolver();
 
     using geck::FrmId;
     using geck::ObjectType;
@@ -88,15 +50,15 @@ TEST_CASE("resolveFid encodes the engine FRM type byte", "[resource][frm]") {
 
 // resolveFid is the inverse of resolve() for non-critter types.
 TEST_CASE("resolveFid round-trips through resolve for non-critters", "[resource][frm]") {
-    FixtureResources fx;
-    auto& resolver = fx.resources.frmResolver();
+    geck::test::ArtLstTree fx{ "geck_frmresolver_test" };
+    auto& resolver = fx.mount().frmResolver();
 
     for (const auto& path : {
              std::string("art/items/knife.frm"),
              std::string("art/walls/wall1.frm"),
              std::string("art/walls/wall3.frm"),
              std::string("art/tiles/floor.frm"),
-             std::string("art/scenery/tree.frm"),
+             std::string("art/scenery/tree1.frm"),
              std::string("art/misc/thing.frm"),
          }) {
         const auto fid = resolver.resolveFid(path);
@@ -109,16 +71,16 @@ TEST_CASE("resolveFid round-trips through resolve for non-critters", "[resource]
 // normalized, and the filename is matched case-insensitively. The directory
 // prefix is matched in canonical lower case (paths in the game data are lower).
 TEST_CASE("resolveFid tolerates leading slash, backslashes, and filename case", "[resource][frm]") {
-    FixtureResources fx;
-    auto& resolver = fx.resources.frmResolver();
+    geck::test::ArtLstTree fx{ "geck_frmresolver_test" };
+    auto& resolver = fx.mount().frmResolver();
 
     CHECK(resolver.resolveFid("/art\\walls\\WALL1.FRM").has_value());
     CHECK(resolver.resolveFid("art/walls/WALL1.FRM") == resolver.resolveFid("art/walls/wall1.frm"));
 }
 
 TEST_CASE("resolveFid returns nullopt without a heuristic fallback", "[resource][frm]") {
-    FixtureResources fx;
-    auto& resolver = fx.resources.frmResolver();
+    geck::test::ArtLstTree fx{ "geck_frmresolver_test" };
+    auto& resolver = fx.mount().frmResolver();
 
     CHECK_FALSE(resolver.resolveFid("art/walls/missing.frm").has_value()); // under art/ but not in LST
     CHECK_FALSE(resolver.resolveFid("scripts/foo.int").has_value());       // outside any art directory
@@ -129,8 +91,8 @@ TEST_CASE("resolveFid returns nullopt without a heuristic fallback", "[resource]
 // Critters carry the engine critter type (1); their FID is animation-encoded
 // and lossy, so only the type is asserted (not a resolve() round-trip).
 TEST_CASE("resolveFid resolves critters by base name", "[resource][frm]") {
-    FixtureResources fx;
-    auto& resolver = fx.resources.frmResolver();
+    geck::test::ArtLstTree fx{ "geck_frmresolver_test" };
+    auto& resolver = fx.mount().frmResolver();
 
     const auto fid = resolver.resolveFid("art/critters/hmwarraa.frm");
     REQUIRE(fid.has_value());
@@ -161,36 +123,26 @@ TEST_CASE("hasFrmExtension recognizes .frm and directional .fr0-.fr5", "[resourc
 // editor's wallblock.frm, mistaking the index of wall proto 620 (itself just a wall, nec128.frm) for
 // art of a "wall blocker".
 TEST_CASE("resolve draws wall art 620 from walls.lst like any other wall", "[resource][frm]") {
-    const fs::path root = fs::temp_directory_path() / "geck_frmresolver_wall620_test";
-    std::error_code ec;
-    fs::remove_all(root, ec);
-
+    geck::test::DataTree tree{ "geck_frmresolver_wall620_test" };
     std::string walls;
     for (int i = 0; i < 622; ++i) {
         walls += (i == 620 ? std::string("rl11000.frm") : "wall" + std::to_string(i) + ".frm") + "\n";
     }
-    writeFile(root / "art/walls/walls.lst", walls);
+    tree.write("art/walls/walls.lst", walls);
+    auto& resolver = tree.mount().frmResolver();
 
-    {
-        GameResources resources;
-        resources.files().addDataPath(root.string());
-        auto& resolver = resources.frmResolver();
-
-        CHECK(resolver.resolve(0x0300026Cu) == "art/walls/rl11000.frm");
-        CHECK(resolver.resolveFid("art/walls/rl11000.frm") == 0x0300026Cu);
-    }
-
-    fs::remove_all(root, ec);
+    CHECK(resolver.resolve(0x0300026Cu) == "art/walls/rl11000.frm");
+    CHECK(resolver.resolveFid("art/walls/rl11000.frm") == 0x0300026Cu);
 }
 
 TEST_CASE("resolve picks a critter's art from the FID's weapon and animation codes", "[resource][frm]") {
-    FixtureResources fixture;
+    geck::test::ArtLstTree fixture{ "geck_frmresolver_test" };
     // Any parseable FRM stands in for the art; resolve only needs the file to be there.
-    const auto art = fixture.root / "art/critters";
+    const auto art = fixture.root() / "art/critters";
     fs::copy_file(geck::test::dataPath("flower.frm"), art / "hmwarrda.frm"); // standing, holding a knife
     fs::copy_file(geck::test::dataPath("flower.frm"), art / "hmwarrra.frm"); // dead, single frame
-    fixture.resources.files().refresh(); // the mount lists what existed when it was made
-    auto& resolver = fixture.resources.frmResolver();
+    fixture.mount().files().refresh();                                       // the mount lists what existed when it was made
+    auto& resolver = fixture.mount().frmResolver();
     const auto critter = [](uint32_t animation, uint32_t weapon) {
         return geck::FrmId(geck::ObjectType::Critter, 0, animation, weapon, geck::Rotation::NE).fid();
     };

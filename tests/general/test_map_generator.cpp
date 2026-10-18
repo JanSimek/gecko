@@ -1,9 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <array>
 #include <cstdint>
-#include <fstream>
 #include <sstream>
+#include <string>
 
 #include "cli/MapGenerator.h"
 #include "format/map/Map.h"
@@ -18,25 +17,13 @@
 
 using namespace geck;
 
-namespace {
-
-// Writes `source` to a scratch .luau file and returns its path.
-std::filesystem::path writeScript(geck::test::TempFile& file, const std::string& source) {
-    std::ofstream out(file.path(), std::ios::binary);
-    out << source;
-    out.close();
-    return file.path();
-}
-
-} // namespace
-
 TEST_CASE("gecko-cli generate runs a tile script and writes a reloadable map", "[cli][generate]") {
     geck::test::TempFile scriptFile{ "geck_gen_script", ".luau" };
     geck::test::TempFile mapFile{ "geck_gen_out", ".map" };
 
     // Tile-only generation needs no game data (paintFloor takes a literal id) and no proto
     // provider on write (no objects), so the whole pipeline is exercised headlessly in CI.
-    writeScript(scriptFile, "for i = 0, 99 do api:paintFloor(i, 271) end");
+    geck::test::writeFile(scriptFile.path(), "for i = 0, 99 do api:paintFloor(i, 271) end");
 
     geck::resource::GameResources resources; // nothing mounted
     geck::cli::GenerateOptions options;
@@ -68,7 +55,7 @@ TEST_CASE("gecko-cli generate --in decorates an existing map", "[cli][generate]"
     geck::resource::GameResources resources; // nothing mounted: --in reads straight off disk
 
     // First run: a base map with tiles 0..49 painted.
-    writeScript(baseScript, "for i = 0, 49 do api:paintFloor(i, 271) end");
+    geck::test::writeFile(baseScript.path(), "for i = 0, 49 do api:paintFloor(i, 271) end");
     geck::cli::GenerateOptions base;
     base.scriptPath = baseScript.path().string();
     base.outPath = baseMap.path().string();
@@ -76,7 +63,7 @@ TEST_CASE("gecko-cli generate --in decorates an existing map", "[cli][generate]"
     REQUIRE(geck::cli::generateMap(resources, base, log) == 0);
 
     // Second run: decorate the base map with tiles 50..99; the original tiles must survive.
-    writeScript(decorScript, "for i = 50, 99 do api:paintFloor(i, 300) end");
+    geck::test::writeFile(decorScript.path(), "for i = 50, 99 do api:paintFloor(i, 300) end");
     geck::cli::GenerateOptions decorate;
     decorate.scriptPath = decorScript.path().string();
     decorate.inPath = baseMap.path().string();
@@ -99,19 +86,17 @@ TEST_CASE("gecko-cli generate --in decorates an existing map", "[cli][generate]"
 
 TEST_CASE("gecko-cli generate --count writes N maps with consecutive seeds", "[cli][generate]") {
     geck::test::TempFile scriptFile{ "geck_gen_batch_script", ".luau" };
-    // count=3 derives <out>_1.map .. <out>_3.map from the base out path; declare each derived
-    // name as a TempFile so stale copies are removed up front and the outputs are cleaned up.
-    geck::test::TempFile out1{ "geck_gen_batch_1", ".map" };
-    geck::test::TempFile out2{ "geck_gen_batch_2", ".map" };
-    geck::test::TempFile out3{ "geck_gen_batch_3", ".map" };
+    // count=3 derives <out>_1.map .. <out>_3.map from the base out path, all in a scratch directory
+    // that removes them afterwards.
+    const geck::test::TempDir outDir{ "geck_gen_batch" };
 
     // Encode the run's seed in a tile so each output proves which seed generated it.
-    writeScript(scriptFile, "api:paintFloor(0, tonumber(args.seed))");
+    geck::test::writeFile(scriptFile.path(), "api:paintFloor(0, tonumber(args.seed))");
 
     geck::resource::GameResources resources;
     geck::cli::GenerateOptions options;
     options.scriptPath = scriptFile.path().string();
-    options.outPath = (out1.path().parent_path() / "geck_gen_batch.map").string();
+    options.outPath = (outDir.path() / "batch.map").string();
     options.count = 3;
     options.args["seed"] = "500";
 
@@ -121,9 +106,8 @@ TEST_CASE("gecko-cli generate --count writes N maps with consecutive seeds", "[c
 
     geck::test::StubProvider provider;
     MapReader reader{ [&provider](uint32_t pid) { return provider.load(pid); } };
-    const std::array<const std::filesystem::path*, 3> outs{ &out1.path(), &out2.path(), &out3.path() };
     for (int i = 0; i < 3; ++i) {
-        auto reloaded = reader.openFile(*outs[i]);
+        auto reloaded = reader.openFile(outDir.path() / ("batch_" + std::to_string(i + 1) + ".map"));
         REQUIRE(reloaded != nullptr);
         CHECK(reloaded->getMapFile().tiles.at(0)[0].getFloor() == 500 + i); // seed = base + i
     }
@@ -146,7 +130,7 @@ TEST_CASE("gecko-cli generate validates its inputs", "[cli][generate]") {
 
     SECTION("out-of-range elevation is rejected") {
         geck::test::TempFile scriptFile{ "geck_gen_elev", ".luau" };
-        writeScript(scriptFile, "api:paintFloor(0, 271)");
+        geck::test::writeFile(scriptFile.path(), "api:paintFloor(0, 271)");
         geck::cli::GenerateOptions options;
         options.scriptPath = scriptFile.path().string();
         options.outPath = outPath;
@@ -156,7 +140,7 @@ TEST_CASE("gecko-cli generate validates its inputs", "[cli][generate]") {
 
     SECTION("non-positive count is rejected") {
         geck::test::TempFile scriptFile{ "geck_gen_count", ".luau" };
-        writeScript(scriptFile, "api:paintFloor(0, 271)");
+        geck::test::writeFile(scriptFile.path(), "api:paintFloor(0, 271)");
         geck::cli::GenerateOptions options;
         options.scriptPath = scriptFile.path().string();
         options.outPath = outPath;
@@ -166,7 +150,7 @@ TEST_CASE("gecko-cli generate validates its inputs", "[cli][generate]") {
 
     SECTION("an unreadable --in map is reported") {
         geck::test::TempFile scriptFile{ "geck_gen_bad_in", ".luau" };
-        writeScript(scriptFile, "api:paintFloor(0, 271)");
+        geck::test::writeFile(scriptFile.path(), "api:paintFloor(0, 271)");
         geck::cli::GenerateOptions options;
         options.scriptPath = scriptFile.path().string();
         options.outPath = outPath;
@@ -178,7 +162,7 @@ TEST_CASE("gecko-cli generate validates its inputs", "[cli][generate]") {
 TEST_CASE("gecko-cli generate stops a script that outruns its time budget", "[cli][generate]") {
     geck::test::TempFile scriptFile{ "geck_gen_loop", ".luau" };
     geck::test::TempFile mapFile{ "geck_gen_loop_out", ".map" };
-    writeScript(scriptFile, "while true do end");
+    geck::test::writeFile(scriptFile.path(), "while true do end");
 
     geck::resource::GameResources resources;
     geck::cli::GenerateOptions options;
@@ -199,7 +183,7 @@ TEST_CASE("gecko-cli generate --in keeps the map edge of the map it decorates", 
     geck::test::TempFile outEdge{ "geck_gen_edge_out", ".EDG" };
     geck::resource::GameResources resources;
 
-    writeScript(baseScript, "api:paintFloor(0, 271)");
+    geck::test::writeFile(baseScript.path(), "api:paintFloor(0, 271)");
     geck::cli::GenerateOptions base;
     base.scriptPath = baseScript.path().string();
     base.outPath = baseMap.path().string();

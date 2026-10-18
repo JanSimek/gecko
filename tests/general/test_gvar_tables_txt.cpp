@@ -3,7 +3,6 @@
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
-#include <fstream>
 #include <sstream>
 #include <string>
 
@@ -18,19 +17,13 @@
 #include "reader/party/PartyTxtReader.h"
 #include "resource/GameResources.h"
 
-#ifndef GECK_TEST_TMP_DIR
-#error "GECK_TEST_TMP_DIR must be defined for this test target (see tests/CMakeLists.txt)"
-#endif
+#include "support/TempFile.h"
 
 using namespace geck;
 namespace fs = std::filesystem;
+using geck::test::writeFile;
 
 namespace {
-
-void writeFile(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream(path) << contents;
-}
 
 template <typename Build>
 nlohmann::json run(const fs::path& root, Build build, int& rc) {
@@ -95,8 +88,8 @@ TEST_CASE("Party member level fields need level_up_every", "[gvar_tables]") {
 }
 
 TEST_CASE("The endings, gvars and party tools surface the engine tables", "[gvar_tables]") {
-    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "gvar_tables_data";
-    fs::remove_all(root);
+    const test::TempDir rootDir{ "gvar_tables_data" };
+    const fs::path& root = rootDir.path();
     writeFile(root / "data" / "vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_REP :=0;\nGVAR_DISK :=0;\nGVAR_END :=0;\n");
     writeFile(root / "data" / "karmavar.txt", "0, 48, 1000, 1100\n");
     writeFile(root / "data" / "holodisk.txt", "1, 401, 2000\n");

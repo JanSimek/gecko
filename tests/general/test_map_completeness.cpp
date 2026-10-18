@@ -11,14 +11,11 @@
 
 using namespace geck;
 
-namespace {
-
-// f2_res.dat is the committed DAT fixture. It carries interface art but no tiles.lst,
+// The scans mount f2_res.dat, the committed DAT fixture. It carries interface art but no tiles.lst,
 // scripts.lst, or tile art, so every index-backed check degrades to its "not mounted" reason —
 // exactly the state the scan must report rather than throw on.
-void mountFixtureDat(resource::GameResources& resources) {
-    resources.files().addDataPath(geck::test::dataPath("f2_res.dat"));
-}
+
+namespace {
 
 std::unique_ptr<Map> emptyMap() {
     auto map = std::make_unique<Map>("test.map");
@@ -30,7 +27,7 @@ std::unique_ptr<Map> emptyMap() {
 
 TEST_CASE("scanMapCompleteness reports an empty map as complete", "[completeness]") {
     resource::GameResources resources;
-    mountFixtureDat(resources);
+    resources.files().addDataPath(test::f2ResDat());
     auto map = emptyMap();
 
     const auto report = resource::scanMapCompleteness(resources, *map);
@@ -49,7 +46,7 @@ TEST_CASE("scanMapCompleteness reports an empty map as complete", "[completeness
 
 TEST_CASE("scanMapCompleteness reports used tiles that no index can resolve", "[completeness]") {
     resource::GameResources resources;
-    mountFixtureDat(resources);
+    resources.files().addDataPath(test::f2ResDat());
     auto map = emptyMap();
     map->getMapFile().tiles.at(0)[100].setFloor(50);
     map->getMapFile().tiles.at(0)[200].setRoof(60);
@@ -67,7 +64,7 @@ TEST_CASE("scanMapCompleteness reports used tiles that no index can resolve", "[
 
 TEST_CASE("scanMapCompleteness reports unresolvable object sprites, skipping inventory children", "[completeness]") {
     resource::GameResources resources;
-    mountFixtureDat(resources);
+    resources.files().addDataPath(test::f2ResDat());
     auto map = emptyMap();
 
     auto placed = std::make_shared<MapObject>();
@@ -91,7 +88,7 @@ TEST_CASE("scanMapCompleteness reports unresolvable object sprites, skipping inv
 
 TEST_CASE("scanMapCompleteness reports script references from the header and the script sections", "[completeness]") {
     resource::GameResources resources;
-    mountFixtureDat(resources);
+    resources.files().addDataPath(test::f2ResDat());
     auto map = emptyMap();
     map->getMapFile().header.script_id = 42; // 1-based -> program index 41
     map->getMapFile().map_scripts[static_cast<int>(MapScript::ScriptType::CRITTER)].push_back(

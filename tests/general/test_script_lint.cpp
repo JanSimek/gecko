@@ -10,7 +10,6 @@
 #include <utility>
 #include <vector>
 #include <format>
-#include <fstream>
 #include <sstream>
 #include <string>
 
@@ -24,25 +23,17 @@
 #include "resource/ScriptLint.h"
 #include "ssl/IntProgram.h"
 #include "support/CompiledScript.h"
-
-#ifndef GECK_TEST_TMP_DIR
-#error "GECK_TEST_TMP_DIR must be defined for this test target (see tests/CMakeLists.txt)"
-#endif
+#include "support/DataTree.h"
+#include "support/TempFile.h"
 
 using namespace geck;
 namespace fs = std::filesystem;
+using geck::test::writeFile;
 
 namespace {
 
-void writeFile(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream(path) << contents;
-}
-
-// A data tree with scripts.lst, one script's dialog .msg and its .ssl source.
-fs::path makeTree(const std::string& name) {
-    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / name;
-    fs::remove_all(root);
+// Fills `root` with scripts.lst, one script's dialog .msg and its .ssl source.
+void makeTree(const fs::path& root) {
     writeFile(root / "scripts" / "scripts.lst", "one.int ; first   # local_vars=2\ntwo.int ; second  # local_vars=0\n");
     writeFile(root / "text" / "english" / "dialog" / "one.msg", "{100}{}{Hello.}\n{101}{}{Bye.}\n");
     writeFile(root / "src" / "one.ssl",
@@ -60,7 +51,6 @@ fs::path makeTree(const std::string& name) {
         "end\n"
         "procedure helper begin load_map(\"town.map\", 0); end\n" // line 13
         "procedure unused begin load_map(\"never.map\", 0); end\n");
-    return root;
 }
 
 nlohmann::json run(const fs::path& root, const std::function<int(resource::GameResources&, std::ostream&)>& tool, int& rc) {
@@ -74,7 +64,9 @@ nlohmann::json run(const fs::path& root, const std::function<int(resource::GameR
 } // namespace
 
 TEST_CASE("lint_script reports local variables past scripts.lst's count, missing messages and unused code", "[script_lint]") {
-    const fs::path root = makeTree("script_lint");
+    const test::TempDir rootDir{ "script_lint" };
+    const fs::path& root = rootDir.path();
+    makeTree(root);
     cli::LintOptions options;
     options.name = "one";
     int rc = -1;
@@ -100,11 +92,12 @@ TEST_CASE("lint_script reports local variables past scripts.lst's count, missing
     CHECK(find("messages", 9)["message"] == "message 150 is not in dialog/one.msg; the engine shows \"Error\" instead");
     CHECK_FALSE(find("messages", 10).is_null());
     CHECK(find("unused-procedure", 14)["procedure"] == "unused");
-    fs::remove_all(root);
 }
 
 TEST_CASE("lint_script all=true checks every script it can read and leaves notes out", "[script_lint]") {
-    const fs::path root = makeTree("script_lint_all");
+    const test::TempDir rootDir{ "script_lint_all" };
+    const fs::path& root = rootDir.path();
+    makeTree(root);
     cli::LintOptions options;
     options.all = true;
     options.includeNotes = false;
@@ -115,11 +108,12 @@ TEST_CASE("lint_script all=true checks every script it can read and leaves notes
     CHECK(j["unchecked"] == 1);
     CHECK(j["summary"]["errors"] == 3);
     CHECK_FALSE(j["summary"].contains("notes"));
-    fs::remove_all(root);
 }
 
 TEST_CASE("describe_script analyze=true summarises the parsed script", "[script_lint]") {
-    const fs::path root = makeTree("script_analyze");
+    const test::TempDir rootDir{ "script_analyze" };
+    const fs::path& root = rootDir.path();
+    makeTree(root);
     cli::DescribeScriptOptions options;
     options.name = "one";
     options.analyze = true;
@@ -139,11 +133,12 @@ TEST_CASE("describe_script analyze=true summarises the parsed script", "[script_
     CHECK(analysis["localVariables"]["uses"].size() == 2);
     CHECK(analysis["messageUses"] == 4);
     CHECK(analysis["findings"].size() == 6);
-    fs::remove_all(root);
 }
 
 TEST_CASE("script_refs finds calls, procedure references and macro uses in code that runs", "[script_lint]") {
-    const fs::path root = makeTree("script_refs");
+    const test::TempDir rootDir{ "script_refs" };
+    const fs::path& root = rootDir.path();
+    makeTree(root);
     int rc = -1;
 
     const auto calls = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "call", "load_map" }, out); }, rc);
@@ -162,14 +157,13 @@ TEST_CASE("script_refs finds calls, procedure references and macro uses in code 
     std::ostringstream bad;
     resource::GameResources resources;
     CHECK(cli::findScriptRefs(resources, { "nonsense", "x" }, bad) != 0);
-    fs::remove_all(root);
 }
 
 // A load_map target is found whether the script names it as a string or as a maps.txt index, and a
 // PID through any opcode that takes one or an obj_pid() comparison.
 TEST_CASE("script_refs finds a PID's uses and the load_map calls into a map", "[script_lint]") {
-    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "script_refs_objects";
-    fs::remove_all(root);
+    const test::TempDir rootDir{ "script_refs_objects" };
+    const fs::path& root = rootDir.path();
     writeFile(root / "data" / "maps.txt", "[Map 000]\nlookup_name=Town\nmap_name=town\n[Map 001]\nlookup_name=Cave\nmap_name=cave\n");
     writeFile(root / "src" / "obj.ssl",
         "#define PID_ROCK (0x0200004B)\n"
@@ -214,15 +208,12 @@ TEST_CASE("script_refs finds a PID's uses and the load_map calls into a map", "[
     CHECK(byIndex["refs"][0]["map"] == "cave.map");
     const auto allMaps = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "map", "*" }, out); }, rc);
     CHECK(allMaps["stats"]["refs"] == 3);
-    fs::remove_all(root);
 }
 
 TEST_CASE("localVarBlockProblems follows the engine's block sizes and finds overlaps and overruns", "[script_lint]") {
-    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "lvar_blocks";
-    fs::remove_all(root);
-    writeFile(root / "scripts" / "scripts.lst", "a.int ; # local_vars=3\nb.int ; # local_vars=2\nc.int ; # local_vars=1\n");
-    resource::GameResources resources;
-    resources.files().addDataPath(root.string());
+    test::DataTree tree{ "lvar_blocks" };
+    tree.write("scripts/scripts.lst", "a.int ; # local_vars=3\nb.int ; # local_vars=2\nc.int ; # local_vars=1\n");
+    auto& resources = tree.mount();
     const Lst* lst = resources.repository().load<Lst>("scripts/scripts.lst");
     REQUIRE(lst != nullptr);
 
@@ -253,12 +244,11 @@ TEST_CASE("localVarBlockProblems follows the engine's block sizes and finds over
     problems = resource::localVarBlockProblems(map, *lst);
     CHECK_FALSE(problems.contains(a));
     CHECK_FALSE(problems.contains(b));
-    fs::remove_all(root);
 }
 
 TEST_CASE("lint_script checks global variables, timers, created objects and tiles", "[script_lint]") {
-    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "script_lint_calls";
-    fs::remove_all(root);
+    const test::TempDir rootDir{ "script_lint_calls" };
+    const fs::path& root = rootDir.path();
     writeFile(root / "scripts" / "scripts.lst", "one.int ; first # local_vars=1\n");
     writeFile(root / "data" / "vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_A :=0;\nGVAR_B :=0;\n");
     writeFile(root / "src" / "one.ssl",
@@ -291,7 +281,6 @@ TEST_CASE("lint_script checks global variables, timers, created objects and tile
     CHECK(at(6, "objects") == 2); // no proto, and script 9 is not a scripts.lst line
     CHECK(at(6, "tiles") == 2);   // hex 40000 and elevation 3
     CHECK(at(7, "tiles") == 1);
-    fs::remove_all(root);
 }
 
 TEST_CASE("placementFindings checks a script against where the map places it", "[script_lint]") {
@@ -403,9 +392,10 @@ TEST_CASE("reportInt reads a compiled script's procedures and literal variable a
     CHECK(report.calls[0].ref.args[1] == 10);
 
     // The lint's checks run on it as on a source; the write of unknown index keeps "never read" notes away.
-    const fs::path root = makeTree("script_lint_int");
-    resource::GameResources resources;
-    resources.files().addDataPath(root.string());
+    test::DataTree tree{ "script_lint_int" };
+    const fs::path& root = tree.root();
+    makeTree(root);
+    auto& resources = tree.mount();
     const Lst* lst = resources.repository().load<Lst>("scripts/scripts.lst");
     resource::ScriptLinter linter(resources, lst, "english");
     std::vector<std::string> checks;
@@ -416,7 +406,6 @@ TEST_CASE("reportInt reads a compiled script's procedures and literal variable a
     CHECK(checks == std::vector<std::string>{ "local-vars scripts/one.int:0", "messages scripts/one.int:0", "timers scripts/one.int:0" });
     // As the map's own script, its local variables read -1.
     CHECK(resource::placementFindings(report, resource::ScriptPlacement::Map).size() == 1);
-    fs::remove_all(root);
 }
 
 namespace {
@@ -434,9 +423,11 @@ std::vector<uint8_t> compiledTwo() {
 } // namespace
 
 TEST_CASE("lint_script checks a script's compiled .int when no source is mounted", "[script_lint]") {
-    const fs::path root = makeTree("script_lint_compiled");
+    const test::TempDir rootDir{ "script_lint_compiled" };
+    const fs::path& root = rootDir.path();
+    makeTree(root);
     const auto bytes = compiledTwo();
-    std::ofstream(root / "scripts" / "two.int", std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    test::writeBytes(root / "scripts" / "two.int", bytes);
 
     cli::LintOptions options;
     options.name = "two";
@@ -454,7 +445,6 @@ TEST_CASE("lint_script checks a script's compiled .int when no source is mounted
     CHECK(all["scripts"] == 2);
     CHECK(all["fromBytecode"] == 1);
     CHECK(all["unchecked"] == 0);
-    fs::remove_all(root);
 }
 
 TEST_CASE("reportInt leaves out a branch under a constant condition and folds constant arguments", "[script_lint]") {

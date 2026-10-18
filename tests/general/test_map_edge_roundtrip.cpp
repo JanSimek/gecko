@@ -278,10 +278,7 @@ TEST_CASE("MapEdgeReader rejects malformed headers", "[map_edge]") {
     auto parseThrows = [](const std::vector<uint8_t>& bytes) {
         // The filesystem path preserves ParseException (the VFS overload rewraps as IOException).
         TempFile tmp{ "map_edge_bad", ".edg" };
-        {
-            std::ofstream out{ tmp.path(), std::ios::binary };
-            out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-        }
+        geck::test::writeBytes(tmp.path(), bytes);
         MapEdgeReader reader;
         reader.openFile(tmp.path());
     };

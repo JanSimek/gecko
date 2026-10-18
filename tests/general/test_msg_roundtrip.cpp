@@ -4,6 +4,8 @@
 #include "reader/msg/MsgReader.h"
 #include "writer/msg/MsgSerializer.h"
 
+#include "support/Fixtures.h"
+
 #include <string>
 
 using namespace geck;
@@ -31,13 +33,7 @@ TEST_CASE("Msg round-trips LF byte-for-byte (no trailing newline)", "[msg_roundt
 }
 
 TEST_CASE("Msg normalizes CRLF to LF preserving data", "[msg_roundtrip]") {
-    std::string crlf;
-    for (const char* p = kMsgLf; *p != '\0'; ++p) {
-        if (*p == '\n') {
-            crlf += '\r';
-        }
-        crlf += *p;
-    }
+    const std::string crlf = geck::test::toCrlf(kMsgLf);
     CHECK(writer::serializeMsg(parseMsg("test.msg", crlf)) == std::string{ kMsgLf });
 }
 

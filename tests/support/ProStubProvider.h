@@ -9,13 +9,6 @@
 
 namespace geck::test {
 
-/// Builds a PID from an object type (high byte) and a per-type index, matching
-/// the engine's `(type << 24) | index` layout. The MapReader/MapWriter and the
-/// PRO suites all need this to fabricate typed objects without a .pro on disk.
-inline uint32_t pidOf(ObjectType type, uint32_t index) {
-    return ProtoId(type, index).pid();
-}
-
 /// In-memory PRO provider for MapReader/MapWriter. Only ITEM/SCENERY objects
 /// dereference their Pro during (de)serialization (for objectSubtypeId());
 /// walls/critters/misc do not. A minimal Pro carrying just the subtype is

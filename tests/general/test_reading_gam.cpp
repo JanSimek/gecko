@@ -8,12 +8,6 @@
 #include "reader/gam/GamReader.h"
 #include "support/Fixtures.h"
 
-namespace {
-std::vector<uint8_t> gamBytes(std::string_view s) {
-    return std::vector<uint8_t>(s.begin(), s.end());
-}
-} // namespace
-
 TEST_CASE("Parse .gam file", "[gam]") {
     geck::GamReader gam_reader{};
     auto gam_file = gam_reader.openFile(geck::test::dataPath("test.gam"));
@@ -28,14 +22,14 @@ TEST_CASE("Parse .gam file", "[gam]") {
 
 TEST_CASE("GamReader parses gvars and mvars, skipping comments and blanks", "[gam]") {
     geck::GamReader reader;
-    auto gam = reader.openFile("inline.gam", gamBytes("GAME_GLOBAL_VARS:\n"
-                                                      "// a comment\n"
-                                                      "GVAR_FOO := 5 ;\n"
-                                                      "\n"
-                                                      "GVAR_NEG := -1 ;\n" // negative default must be read, not skipped
-                                                      "GVAR_BAR := 10 ;\n"
-                                                      "MAP_GLOBAL_VARS:\n"
-                                                      "MVAR_BAZ := 7 ;\n"));
+    auto gam = reader.openFile("inline.gam", geck::test::bytesOf("GAME_GLOBAL_VARS:\n"
+                                                                 "// a comment\n"
+                                                                 "GVAR_FOO := 5 ;\n"
+                                                                 "\n"
+                                                                 "GVAR_NEG := -1 ;\n" // negative default must be read, not skipped
+                                                                 "GVAR_BAR := 10 ;\n"
+                                                                 "MAP_GLOBAL_VARS:\n"
+                                                                 "MVAR_BAZ := 7 ;\n"));
 
     REQUIRE(gam != nullptr);
     CHECK(gam->gvarValue("GVAR_FOO") == 5);
@@ -58,11 +52,11 @@ TEST_CASE("GamReader rejects an empty file", "[gam]") {
 
 TEST_CASE("GamReader rejects a file with no GVARS/MVARS sections", "[gam]") {
     geck::GamReader reader;
-    REQUIRE_THROWS(reader.openFile("bad.gam", gamBytes("SOME_KEY := 1 ;\n")));
+    REQUIRE_THROWS(reader.openFile("bad.gam", geck::test::bytesOf("SOME_KEY := 1 ;\n")));
 }
 
 TEST_CASE("GamReader rejects a variable declared outside any section", "[gam]") {
     geck::GamReader reader;
     // The section marker is present, but a variable precedes it.
-    REQUIRE_THROWS(reader.openFile("bad.gam", gamBytes("GVAR_X := 1 ;\nGAME_GLOBAL_VARS:\n")));
+    REQUIRE_THROWS(reader.openFile("bad.gam", geck::test::bytesOf("GVAR_X := 1 ;\nGAME_GLOBAL_VARS:\n")));
 }

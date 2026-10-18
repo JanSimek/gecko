@@ -1,7 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
-#include <fstream>
 #include <sstream>
 #include <string>
 
@@ -21,6 +20,7 @@
 #include "writer/map/MapWriter.h"
 
 #include "support/ControllerFixture.h"
+#include "support/Fixtures.h"
 #include "support/ProStubProvider.h"
 #include "support/QuiltReference.h"
 #include "support/TempFile.h"
@@ -204,11 +204,7 @@ TEST_CASE("The bundled biome fills paint the selection's floor by tile id, headl
     for (const std::string& script :
         { std::string("desert"), std::string("woods"), std::string("badlands"), std::string("overgrown") }) {
         INFO("script: " << script);
-        std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/fills/" + script + ".luau");
-        REQUIRE(file.is_open());
-        std::stringstream buffer;
-        buffer << file.rdbuf();
-        const std::string source = buffer.str();
+        const std::string source = geck::test::bundledScript("fills/" + script + ".luau");
 
         ControllerFixture fx;
         MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
@@ -241,16 +237,13 @@ TEST_CASE("The bundled quilt fills synthesize the selection's floor from a refer
     // Unlike the palette fills, the quilt fills learn from a reference MAP, so mount one (the
     // shared checkerboard) and point args.ref at it. No tiles.lst is mounted: the bld2043
     // exclusion inside the scripts must degrade gracefully (pcall), not abort the fill.
-    const auto root = std::filesystem::temp_directory_path() / "geck_lua_quilt_fill"; // NOSONAR: throwaway test dir
+    const geck::test::TempDir ref{ "geck_lua_quilt_fill" };
+    const auto& root = ref.path();
     geck::test::writeCheckerboardReference(root);
 
     for (const std::string& script : { std::string("quilt_desert") }) {
         INFO("script: " << script);
-        std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/fills/" + script + ".luau");
-        REQUIRE(file.is_open());
-        std::stringstream buffer;
-        buffer << file.rdbuf();
-        const std::string source = buffer.str();
+        const std::string source = geck::test::bundledScript("fills/" + script + ".luau");
 
         ControllerFixture fx;
         fx.resources.files().addDataPath(root);
@@ -346,7 +339,8 @@ TEST_CASE("Luau passes a Lua table into quiltFloorTiles and quilts the region", 
     // The inverse marshaling direction of the hexNeighbors case: quiltFloorTiles takes a
     // std::vector<int> PARAMETER, so a Lua array must convert on the way in. The reference is a
     // 12x12 checkerboard authored to disk; the quilted region must reproduce its vocabulary.
-    const auto root = std::filesystem::temp_directory_path() / "geck_lua_quilt"; // NOSONAR: throwaway test dir
+    const geck::test::TempDir ref{ "geck_lua_quilt" };
+    const auto& root = ref.path();
     geck::test::writeCheckerboardReference(root);
 
     ControllerFixture fx;
@@ -565,11 +559,7 @@ TEST_CASE("The run's seed is published as args.seed", "[scripting][lua]") {
 }
 
 TEST_CASE("The shipped terrain.luau fails clearly when data is missing", "[scripting][lua]") {
-    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/editor/terrain.luau");
-    REQUIRE(file.is_open());
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    const std::string source = buffer.str();
+    const std::string source = geck::test::bundledScript("editor/terrain.luau");
 
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
@@ -586,11 +576,7 @@ TEST_CASE("The shipped terrain.luau fails clearly when data is missing", "[scrip
 }
 
 TEST_CASE("The shipped scatter.luau requires a palette and tile", "[scripting][lua]") {
-    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/editor/scatter.luau");
-    REQUIRE(file.is_open());
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    const std::string source = buffer.str();
+    const std::string source = geck::test::bundledScript("editor/scatter.luau");
 
     ControllerFixture fx;
     MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
@@ -795,11 +781,7 @@ TEST_CASE("Script seeds parse the same for single runs and batches", "[scripting
 
 TEST_CASE("scripts/README.md documents every bound script_api function", "[scripting][lua]") {
     // The README's API table is written by hand; this keeps it in step with the bound surface.
-    std::ifstream file(std::string(GECK_SCRIPTS_DIR) + "/README.md");
-    REQUIRE(file.is_open());
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    const std::string readme = buffer.str();
+    const std::string readme = geck::test::bundledScript("README.md");
     for (const ScriptApiEntry& entry : scriptApiEntries()) {
         INFO("api:" << entry.name);
         CHECK(readme.find("api:" + std::string(entry.name) + "(") != std::string::npos);

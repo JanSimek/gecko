@@ -3,47 +3,33 @@
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
-#include <fstream>
 #include <sstream>
 #include <string>
 
 #include "cli/WorldEncounters.h"
 #include "resource/GameResources.h"
 
-#ifndef GECK_TEST_TMP_DIR
-#error "GECK_TEST_TMP_DIR must be defined for this test target (see tests/CMakeLists.txt)"
-#endif
+#include "support/DataTree.h"
 
 using namespace geck;
 namespace fs = std::filesystem;
 
-namespace {
-
-void writeFile(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream(path) << contents;
-}
-
-} // namespace
-
 TEST_CASE("world encounters report the tables and the odds at a worldmap position", "[world_encounters]") {
-    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "world_encounters_data";
-    fs::remove_all(root);
-    writeFile(root / "data" / "vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_REP :=0;\nGVAR_HUNTERS :=0;\n");
-    writeFile(root / "data" / "worldmap.txt", "[Data]\nNone=0%\nRare=4%\nUncommon=12%\nCommon=22%\nFrequent=38%\nForced=100%\n"
-                                              "terrain_types=Desert:1\n"
-                                              "[Encounter Table 0]\nlookup_name=DstN\nmaps=Desert Encounter 1\n"
-                                              "enc_00=Chance:50%,Enc:(2-5) Raiders AMBUSH Player,If(Global(1) > 1)\n"
-                                              "[Encounter Table 1]\nlookup_name=DstS\n"
-                                              "enc_00=Chance:50%,Enc:(2-5) Raiders AMBUSH Player\n"
-                                              "enc_01=Chance:50%,Enc:(3-8) Rats AMBUSH Player\n"
-                                              "[Tile Data]\nnum_horizontal_tiles=1\n"
-                                              "[Tile 0]\nart_idx=339\nencounter_difficulty=2\n"
-                                              "1_0=Desert, Fill_N, Common, Frequent, Rare, dstn\n");
-    writeFile(root / "text" / "english" / "game" / "worldmap.msg", "{3000}{}{A party of raiders.}\n{3051}{}{Some rats.}\n");
+    test::DataTree tree{ "world_encounters_data" };
+    tree.write("data/vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_REP :=0;\nGVAR_HUNTERS :=0;\n");
+    tree.write("data/worldmap.txt", "[Data]\nNone=0%\nRare=4%\nUncommon=12%\nCommon=22%\nFrequent=38%\nForced=100%\n"
+                                    "terrain_types=Desert:1\n"
+                                    "[Encounter Table 0]\nlookup_name=DstN\nmaps=Desert Encounter 1\n"
+                                    "enc_00=Chance:50%,Enc:(2-5) Raiders AMBUSH Player,If(Global(1) > 1)\n"
+                                    "[Encounter Table 1]\nlookup_name=DstS\n"
+                                    "enc_00=Chance:50%,Enc:(2-5) Raiders AMBUSH Player\n"
+                                    "enc_01=Chance:50%,Enc:(3-8) Rats AMBUSH Player\n"
+                                    "[Tile Data]\nnum_horizontal_tiles=1\n"
+                                    "[Tile 0]\nart_idx=339\nencounter_difficulty=2\n"
+                                    "1_0=Desert, Fill_N, Common, Frequent, Rare, dstn\n");
+    tree.write("text/english/game/worldmap.msg", "{3000}{}{A party of raiders.}\n{3051}{}{Some rats.}\n");
 
-    resource::GameResources resources;
-    resources.files().addDataPath(root.string());
+    auto& resources = tree.mount();
 
     SECTION("the whole table set, with the gvars a condition reads") {
         std::ostringstream oss;

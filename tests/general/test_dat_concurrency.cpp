@@ -1,26 +1,19 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
-#include <numeric>
+#include <string>
 #include <thread>
 #include <vector>
 
 #include "resource/DataFileSystem.h"
 #include "support/Fixtures.h"
-#include "util/FileIo.h"
+#include "support/TempFile.h"
+#include "support/VfsLookup.h"
 
 using geck::resource::DataFileSystem;
-
-namespace {
-
-uint64_t byteSum(const std::vector<uint8_t>& data) {
-    return std::accumulate(data.begin(), data.end(), uint64_t{ 0 });
-}
-
-} // namespace
+using geck::test::byteSum;
 
 // Regression for the crash when selecting a map "quickly" in the browser: the background
 // map-loader thread and the UI thread both read the DAT's shared reader, and an unsynchronised
@@ -28,23 +21,20 @@ uint64_t byteSum(const std::vector<uint8_t>& data) {
 // through the DAT2 filesystem must therefore be safe to run concurrently.
 TEST_CASE("DAT2 archive serves concurrent reads without corruption", "[dat][vfs][concurrency]") {
     DataFileSystem dfs;
-    dfs.addDataPath(geck::test::dataPath("f2_res.dat"));
+    dfs.addDataPath(geck::test::f2ResDat());
 
     // A large, zlib-compressed entry: the bigger the inflate, the more reliably a corrupted
     // concurrent read is detected.
-    const auto files = dfs.list("*");
-    const auto it = std::ranges::find_if(files, [](const std::filesystem::path& f) {
-        return f.generic_string().ends_with("hr_alltlk.frm");
-    });
-    REQUIRE(it != files.end());
-    const std::filesystem::path path = *it;
+    const auto found = geck::test::findBySuffix(dfs, geck::test::HR_ALLTLK);
+    REQUIRE(found.has_value());
+    const std::filesystem::path path = *found;
 
     // The correct content, established single-threaded.
     const auto expected = dfs.readRawBytes(path);
     REQUIRE(expected.has_value());
     const size_t expectedSize = expected->size();
     const uint64_t expectedSum = byteSum(*expected);
-    REQUIRE(expectedSize == 307274);
+    REQUIRE(expectedSize == geck::test::HR_ALLTLK_SIZE);
 
     constexpr int kThreads = 16;
     constexpr int kReadsPerThread = 60;
@@ -80,26 +70,22 @@ TEST_CASE("DAT2 archive serves concurrent reads without corruption", "[dat][vfs]
 // a writable data path) stays invisible to readRawBytes — the archived copy is read back instead.
 // refresh() must re-expose it.
 TEST_CASE("DataFileSystem::refresh exposes files written after mount", "[vfs][refresh]") {
-    namespace fs = std::filesystem;
-    const fs::path root = fs::temp_directory_path() / "geck_refresh_test"; // NOSONAR: throwaway test dir, not security-sensitive
-    fs::remove_all(root);
-    fs::create_directories(root / "maps");
+    const geck::test::TempDir tmp{ "geck_refresh_test" };
+    const auto& root = tmp.path();
 
     // A file present at mount time is in the native filesystem's cached listing.
-    geck::io::writeFile(root / "maps" / "initial.gam", "MAP_GLOBAL_VARS:\nMVAR_A := 1;\n");
+    geck::test::writeFile(root / "maps" / "initial.gam", "MAP_GLOBAL_VARS:\nMVAR_A := 1;\n");
 
     DataFileSystem dfs;
     dfs.addDataPath(root);
     REQUIRE(dfs.readRawBytes("maps/initial.gam").has_value()); // the mount is live and initialised
 
     // A file created AFTER the mount is invisible until a rescan.
-    geck::io::writeFile(root / "maps" / "test.gam", "MAP_GLOBAL_VARS:\nMVAR_B := 7;\n");
+    geck::test::writeFile(root / "maps" / "test.gam", "MAP_GLOBAL_VARS:\nMVAR_B := 7;\n");
     CHECK_FALSE(dfs.readRawBytes("maps/test.gam").has_value());
 
     dfs.refresh();
     const auto bytes = dfs.readRawBytes("maps/test.gam");
     REQUIRE(bytes.has_value());
     CHECK(std::string(bytes->begin(), bytes->end()).find("MVAR_B := 7;") != std::string::npos);
-
-    fs::remove_all(root);
 }

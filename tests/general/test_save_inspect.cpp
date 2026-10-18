@@ -5,7 +5,6 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <functional>
 #include <memory>
 #include <sstream>
@@ -34,11 +33,6 @@ namespace {
 
 constexpr uint32_t DUDE_PID = 0x01000000;
 constexpr int32_t DUDE_OBJECT_ID = 900;
-
-void writeText(const fs::path& path, const std::string& text) {
-    fs::create_directories(path.parent_path());
-    std::ofstream(path) << text;
-}
 
 void fixedString(ByteWriter& w, const std::string& text, std::size_t length) {
     for (std::size_t i = 0; i < length; ++i) {
@@ -110,7 +104,7 @@ std::vector<uint8_t> buildSaveDat(const std::vector<int32_t>& globals) {
 std::shared_ptr<MapObject> unlistedCritter(int32_t seed, int32_t cid, int elevation, uint32_t flags) {
     auto critter = std::make_shared<MapObject>();
     fillBase(*critter, seed);
-    critter->pro_pid = pidOf(ObjectType::Critter, 20);
+    critter->pro_pid = ProtoId(ObjectType::Critter, 20).pid();
     critter->elevation = static_cast<uint32_t>(elevation);
     critter->flags = flags;
     critter->critter_index = cid;
@@ -128,7 +122,7 @@ void writeSlotMap(const fs::path& slot, const std::function<void(Map::MapFile&)>
     for (int32_t cid : { 1, 2 }) {
         auto critter = std::make_shared<MapObject>();
         fillBase(*critter, cid);
-        critter->pro_pid = pidOf(ObjectType::Critter, 20);
+        critter->pro_pid = ProtoId(ObjectType::Critter, 20).pid();
         critter->elevation = 0;
         critter->critter_index = cid;
         critter->position = 17000 + cid;
@@ -147,7 +141,7 @@ void writeSlotMap(const fs::path& slot, const std::function<void(Map::MapFile&)>
         writer.openFile(plain.path());
         REQUIRE(writer.write(mapFile));
     }
-    writeAllBytes(slot / "TEST.SAV", gzipBytes(readAllBytes(plain.path())));
+    writeBytes(slot / "TEST.SAV", gzipBytes(readAllBytes(plain.path())));
 }
 
 json describe(const fs::path& dataRoot, const fs::path& slot, int& rc, std::string& text) {
@@ -164,13 +158,13 @@ json describe(const fs::path& dataRoot, const fs::path& slot, int& rc, std::stri
 } // namespace
 
 TEST_CASE("describeSave decodes a slot and joins the combat list to the slot map", "[cli][save]") {
-    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "save_inspect";
-    fs::remove_all(root);
+    const test::TempDir rootDir{ "save_inspect" };
+    const fs::path& root = rootDir.path();
     const fs::path data = root / "gamedata";
-    writeText(data / "data" / "vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_A :=0;\nGVAR_B :=5;\n");
-    writeText(data / "data" / "party.txt", "[Party Member 0]\nparty_member_pid=16777216\n");
+    writeFile(data / "data" / "vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_A :=0;\nGVAR_B :=5;\n");
+    writeFile(data / "data" / "party.txt", "[Party Member 0]\nparty_member_pid=16777216\n");
     const fs::path slot = root / "SLOT01";
-    writeAllBytes(slot / "SAVE.DAT", buildSaveDat({ 0, 7 }));
+    writeBytes(slot / "SAVE.DAT", buildSaveDat({ 0, 7 }));
     writeSlotMap(slot);
 
     int rc = 0;
@@ -212,13 +206,13 @@ TEST_CASE("describeSave decodes a slot and joins the combat list to the slot map
 // combatLoad lists only the non-hidden critters of the player's elevation and looks each saved combat id up among
 // them; a hidden critter, or one on another floor, keeps a stale id that can duplicate a listed critter's.
 TEST_CASE("describeSave joins combat ids among the critters combatLoad lists", "[cli][save]") {
-    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "save_inspect_unlisted";
-    fs::remove_all(root);
+    const test::TempDir rootDir{ "save_inspect_unlisted" };
+    const fs::path& root = rootDir.path();
     const fs::path data = root / "gamedata";
-    writeText(data / "data" / "vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_A :=0;\nGVAR_B :=5;\n");
-    writeText(data / "data" / "party.txt", "[Party Member 0]\nparty_member_pid=16777216\n");
+    writeFile(data / "data" / "vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_A :=0;\nGVAR_B :=5;\n");
+    writeFile(data / "data" / "party.txt", "[Party Member 0]\nparty_member_pid=16777216\n");
     const fs::path slot = root / "SLOT01";
-    writeAllBytes(slot / "SAVE.DAT", buildSaveDat({ 0, 7 }));
+    writeBytes(slot / "SAVE.DAT", buildSaveDat({ 0, 7 }));
     writeSlotMap(slot, [](Map::MapFile& mapFile) {
         // Ahead of the listed critters in object order, so a first-match join over every critter would pick it.
         auto& ground = mapFile.map_objects[0];
@@ -253,13 +247,13 @@ TEST_CASE("describeSave joins combat ids among the critters combatLoad lists", "
 }
 
 TEST_CASE("describeSave reports a vault13.gam that does not match the save", "[cli][save]") {
-    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "save_inspect_mismatch";
-    fs::remove_all(root);
+    const test::TempDir rootDir{ "save_inspect_mismatch" };
+    const fs::path& root = rootDir.path();
     const fs::path data = root / "gamedata";
-    writeText(data / "data" / "vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_A :=0;\nGVAR_B :=5;\nGVAR_C :=0;\n");
-    writeText(data / "data" / "party.txt", "[Party Member 0]\nparty_member_pid=16777216\n");
+    writeFile(data / "data" / "vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_A :=0;\nGVAR_B :=5;\nGVAR_C :=0;\n");
+    writeFile(data / "data" / "party.txt", "[Party Member 0]\nparty_member_pid=16777216\n");
     const fs::path slot = root / "SLOT01";
-    writeAllBytes(slot / "SAVE.DAT", buildSaveDat({ 0, 7 }));
+    writeBytes(slot / "SAVE.DAT", buildSaveDat({ 0, 7 }));
 
     int rc = 0;
     std::string text;

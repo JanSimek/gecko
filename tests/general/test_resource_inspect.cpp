@@ -12,19 +12,13 @@
 using json = nlohmann::json;
 using namespace geck;
 
-namespace {
-// f2_res.dat is the committed DAT fixture; art/intrface/hr_alltlk.frm is a known entry
-// (see test_reading_dat). GameResources is non-copyable, so mount into a caller-owned instance.
-void mountFixtureDat(resource::GameResources& resources) {
-    resources.files().addDataPath(geck::test::dataPath("f2_res.dat"));
-}
-} // namespace
+// Each case mounts f2_res.dat, the committed DAT fixture, of which test::HR_ALLTLK is a known entry.
 
 TEST_CASE("resourceFind locates a DAT entry and names its source", "[resource]") {
     resource::GameResources resources;
-    mountFixtureDat(resources);
+    resources.files().addDataPath(test::f2ResDat());
     std::ostringstream oss;
-    CHECK(cli::resourceFind(resources, "art/intrface/hr_alltlk.frm", oss) == 0);
+    CHECK(cli::resourceFind(resources, std::string(test::HR_ALLTLK), oss) == 0);
 
     const json j = json::parse(oss.str());
     CHECK(j["found"] == true);
@@ -35,7 +29,7 @@ TEST_CASE("resourceFind locates a DAT entry and names its source", "[resource]")
 
 TEST_CASE("resourceFind reports an absent path as found=false, not an error", "[resource]") {
     resource::GameResources resources;
-    mountFixtureDat(resources);
+    resources.files().addDataPath(test::f2ResDat());
     std::ostringstream oss;
     CHECK(cli::resourceFind(resources, "art/tiles/nope12345.frm", oss) == 0);
 
@@ -46,7 +40,7 @@ TEST_CASE("resourceFind reports an absent path as found=false, not an error", "[
 
 TEST_CASE("resourceList matches case-insensitively and tags each entry's source", "[resource]") {
     resource::GameResources resources;
-    mountFixtureDat(resources);
+    resources.files().addDataPath(test::f2ResDat());
     std::ostringstream oss;
     // Upper-case glob against a lower-case entry exercises the case-insensitive match.
     CHECK(cli::resourceList(resources, "*HR_ALLTLK*", oss) == 0);
@@ -67,7 +61,7 @@ TEST_CASE("resourceList matches case-insensitively and tags each entry's source"
 
 TEST_CASE("resourceMissing reports an unreadable map as an error", "[resource]") {
     resource::GameResources resources;
-    mountFixtureDat(resources);
+    resources.files().addDataPath(test::f2ResDat());
     std::ostringstream oss;
     CHECK(cli::resourceMissing(resources, "maps/does_not_exist.map", oss) == 1);
 

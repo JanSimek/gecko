@@ -1,8 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
-#include <fstream>
-#include <iterator>
 #include <vector>
 
 #include "reader/ReaderFactory.h"
@@ -13,6 +11,7 @@
 #include "format/lst/Lst.h"
 #include "format/pal/Pal.h"
 #include "support/Fixtures.h"
+#include "support/TempFile.h"
 
 TEST_CASE("ReaderFactory picks the reader by file extension", "[reader_factory]") {
     using namespace geck;
@@ -39,9 +38,7 @@ TEST_CASE("ReaderFactory picks the reader by file extension", "[reader_factory]"
 TEST_CASE("ReaderFactory reads a directional .fr0 FRM from memory", "[reader_factory]") {
     using namespace geck;
 
-    std::ifstream file(test::dataPath("flower.frm"), std::ios::binary);
-    REQUIRE(file.is_open());
-    const std::vector<uint8_t> data{ std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>() };
+    const std::vector<uint8_t> data = test::readAllBytes(test::dataPath("flower.frm"));
 
     const auto frm = ReaderFactory::readFileFromMemory<Frm>(data, "art/critters/flower.fr0");
     REQUIRE(frm != nullptr);

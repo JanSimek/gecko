@@ -1,22 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
-#include <fstream>
 
 #include "resource/DataFileSystem.h"
 #include "support/TempFile.h"
 
 namespace fs = std::filesystem;
-
-namespace {
-
-/// Create an empty regular file, creating parent directories as needed.
-void touchFile(const fs::path& path) {
-    fs::create_directories(path.parent_path());
-    std::ofstream(path, std::ios::binary);
-}
-
-} // namespace
 
 // =============================================================================
 // DataFileSystem::addDataPath tests
@@ -48,7 +37,7 @@ TEST_CASE("DataFileSystem resolves macOS .app bundle to GOG wrapper path", "[pat
     const geck::test::TempDir root("dfs_gog_app");
 
     const fs::path gogPath = root.path() / "Test.app/Contents/Resources/game/Fallout 2.app/Contents/Resources/drive_c/Program Files/GOG.com/Fallout 2";
-    touchFile(gogPath / "data/maps/test.map");
+    geck::test::writeFile(gogPath / "data/maps/test.map", "");
 
     geck::resource::DataFileSystem dfs;
     dfs.addDataPath(root.path() / "Test.app");
@@ -61,7 +50,7 @@ TEST_CASE("DataFileSystem rejects macOS .app bundle with data/ but no GOG wrappe
 
     // This mimics the CrossOver wrapper case where the .app has a data/ directory
     // but no actual Fallout 2 game data in the GOG wrapper path
-    touchFile(root.path() / "Fake.app/data/maps/test.map");
+    geck::test::writeFile(root.path() / "Fake.app/data/maps/test.map", "");
 
     geck::resource::DataFileSystem dfs;
     dfs.addDataPath(root.path() / "Fake.app");
@@ -80,8 +69,8 @@ TEST_CASE("DataFileSystem handles multiple addDataPath calls", "[paths][dfs]") {
     const geck::test::TempDir root1("dfs_multi_1");
     const geck::test::TempDir root2("dfs_multi_2");
 
-    touchFile(root1.path() / "data/maps/map1.map");
-    touchFile(root2.path() / "data/maps/map2.map");
+    geck::test::writeFile(root1.path() / "data/maps/map1.map", "");
+    geck::test::writeFile(root2.path() / "data/maps/map2.map", "");
 
     geck::resource::DataFileSystem dfs;
     dfs.addDataPath(root1.path());
@@ -94,7 +83,7 @@ TEST_CASE("DataFileSystem handles multiple addDataPath calls", "[paths][dfs]") {
 TEST_CASE("DataFileSystem clear removes all mounted paths", "[paths][dfs]") {
     const geck::test::TempDir root("dfs_clear");
 
-    touchFile(root.path() / "data/maps/test.map");
+    geck::test::writeFile(root.path() / "data/maps/test.map", "");
 
     geck::resource::DataFileSystem dfs;
     dfs.addDataPath(root.path());

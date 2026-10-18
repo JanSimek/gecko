@@ -1,11 +1,12 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
-#include <fstream>
 #include <string>
 
 #include "cli/PatternJson.h"
 #include "pattern/Pattern.h"
+
+#include "support/TempFile.h"
 
 using namespace geck;
 
@@ -25,12 +26,9 @@ TEST_CASE("loadPattern reads back what serializePattern writes", "[pattern]") {
     variant.floor.push_back(pattern::PatternTile{ 1, 0, 191 });
     source.variants.push_back(variant);
 
-    const std::filesystem::path path = std::filesystem::path(GECK_TEST_TMP_DIR) / "stamp_roundtrip.json";
-    std::filesystem::create_directories(path.parent_path());
-    {
-        std::ofstream file(path, std::ios::binary);
-        file << cli::serializePattern(source);
-    }
+    const test::TempFile file{ "stamp_roundtrip", ".json" };
+    const std::filesystem::path& path = file.path();
+    test::writeFile(path, cli::serializePattern(source));
 
     std::string error;
     const std::optional<pattern::Pattern> loaded = cli::loadPattern(path.string(), &error);
@@ -58,14 +56,11 @@ TEST_CASE("loadPattern fails cleanly on a missing or malformed file", "[pattern]
 // A stamp the MCP/scripts feed to generate must have its required fields — a missing proPid is
 // rejected as an error, not silently defaulted to PID 0 (which would place a wrong/empty object).
 TEST_CASE("loadPattern rejects a stamp object missing a required field", "[pattern]") {
-    const std::filesystem::path path = std::filesystem::path(GECK_TEST_TMP_DIR) / "stamp_malformed.json";
-    std::filesystem::create_directories(path.parent_path());
-    {
-        std::ofstream file(path, std::ios::binary);
-        // object has dxHex/dyHex/frmPid but no proPid.
-        file << R"({"name":"bad","version":1,"variants":[{"anchorHex":0,)"
-             << R"("objects":[{"dxHex":0,"dyHex":0,"frmPid":123}],"floor":[],"roof":[]}]})";
-    }
+    const test::TempFile file{ "stamp_malformed", ".json" };
+    const std::filesystem::path& path = file.path();
+    // object has dxHex/dyHex/frmPid but no proPid.
+    test::writeFile(path, R"({"name":"bad","version":1,"variants":[{"anchorHex":0,)"
+                          R"("objects":[{"dxHex":0,"dyHex":0,"frmPid":123}],"floor":[],"roof":[]}]})");
 
     std::string error;
     const auto loaded = cli::loadPattern(path.string(), &error);

@@ -354,10 +354,7 @@ TEST_CASE("McpServer generate stops a runaway script and stays responsive", "[mc
     mcp::McpServer server(resources);
     geck::test::TempFile script{ "geck_mcp_loop", ".luau" };
     geck::test::TempFile out{ "geck_mcp_loop_out", ".map" };
-    {
-        std::ofstream file(script.path(), std::ios::binary);
-        file << "while true do end";
-    }
+    geck::test::writeFile(script.path(), "while true do end");
 
     const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 40 }, { "method", "tools/call" },
         { "params", { { "name", "generate" },
@@ -373,10 +370,7 @@ TEST_CASE("McpServer returns a tool's exception as a tool error, not a protocol 
     resource::GameResources resources;
     mcp::McpServer server(resources);
     geck::test::TempFile script{ "geck_mcp_throw", ".luau" };
-    {
-        std::ofstream file(script.path(), std::ios::binary);
-        file << "api:paintFloor(0, 271)";
-    }
+    geck::test::writeFile(script.path(), "api:paintFloor(0, 271)");
 
     // The out path names a directory, which the map writer cannot open as a file and throws.
     const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 42 }, { "method", "tools/call" },

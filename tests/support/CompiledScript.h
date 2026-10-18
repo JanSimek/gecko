@@ -17,11 +17,8 @@ inline std::vector<uint8_t> compiledScript(const std::string& procedure, const s
     ByteWriter bytes;
     bytes.fill(0, 42).be32(1);                                // procedure count
     bytes.be32(4).be32(0).be32(0).be32(0).be32(body).be32(0); // name, flags, time, condition, body, args
-    bytes.be32(names);
-    for (const char c : procedure) {
-        bytes.u8(static_cast<uint8_t>(c));
-    }
-    bytes.u8(0).be32(0xFFFFFFFF); // no static strings
+    bytes.be32(names).cstring(procedure);
+    bytes.be32(0xFFFFFFFF); // no static strings
     std::vector<uint8_t> out = bytes.data();
     out.insert(out.end(), code.begin(), code.end());
     return out;
