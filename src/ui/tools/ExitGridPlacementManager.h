@@ -109,32 +109,18 @@ private:
     std::size_t createExitGridsForLine(const std::vector<int>& hexes,
         const std::vector<ExitGridArt>& art, const std::set<int>& freshHexes);
 
-    // One immutably-captured polyline segment: its gap-free hex run and the parallel per-hex art it was
-    // frozen with. Never recomputes, so flips/cursor moves on later segments can't disturb it.
-    struct CommittedSegment {
-        std::vector<int> hexes;
-        std::vector<ExitGridArt> art;
-    };
-
-    // Capture one world-space segment at `flipSide`: its hex-line walk and the parallel per-hex art.
-    // Empty for a degenerate or off-grid pair.
-    CommittedSegment classifySegment(sf::Vector2f from, sf::Vector2f to, bool flipSide) const;
+    // Capture one world-space segment at `flipSide`: its hex-line walk (plus a diagonal band's second
+    // row) and the parallel per-hex art. Empty for a degenerate or off-grid pair.
+    ExitGridSegment classifySegment(sf::Vector2f from, sf::Vector2f to, bool flipSide) const;
     // The geometry (hexes + screen axis + outward facing) of one segment, or nullopt for degenerate/
     // off-grid. The per-segment classification input.
     std::optional<ExitGridSegmentRun> buildSegmentRun(sf::Vector2f from, sf::Vector2f to) const;
     // The art for one classified segment run: Auto -> its own screen axis + side (optionally flipped),
     // or the marker-direction override. Shared by freeze and live recompute so they agree hex-for-hex.
     ExitGridArt segmentArt(const ExitGridSegmentRun& run, bool flipSide) const;
-    // Flatten the frozen segments then the live one into deduped parallel vectors, first-seen winning,
-    // so committed art stays pixel-stable as the live segment moves. Pure and static for testing.
-    static void flattenSegments(const std::vector<CommittedSegment>& committed,
-        const CommittedSegment& live, std::vector<int>& outHexes, std::vector<ExitGridArt>& outArt);
     // The existing exit-grid objects sitting on any of `hexPositions`.
     std::vector<std::shared_ptr<Object>> collectExitGridsOnHexes(const std::vector<int>& hexPositions) const;
-    // One auto art for a whole stroke: axis from first to last hex, side once from the midpoint's
-    // outward facing. `flipSide` inverts it; a lone hex falls back to the centre-facing classifier.
-    ExitGridArt autoArtForLine(const std::vector<int>& orderedHexes, bool flipSide) const;
-    // The art for a whole stroke honouring the override: Auto -> autoArtForLine (optionally flipped),
+    // The art for a whole stroke honouring the override: Auto -> exitGridArtForStroke (optionally flipped),
     // explicit -> that direction. Family from the destination kind. Shared by commit and preview.
     ExitGridArt artForLine(const std::vector<int>& orderedHexes,
         ExitGridPropertiesDialog::ExitGridProperties::MarkerArt markerArt, bool flipSide) const;
@@ -157,7 +143,7 @@ private:
         = ExitGridPropertiesDialog::ExitGridProperties::MarkerArt::Auto;
     // The FROZEN committed segments of the in-progress line, one per closing click; never recomputed.
     // Reset on line begin/finalize/cancel.
-    std::vector<CommittedSegment> _committedSegments;
+    std::vector<ExitGridSegment> _committedSegments;
 };
 
 } // namespace geck

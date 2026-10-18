@@ -197,63 +197,6 @@ TEST_CASE("screenToTileIndex resolves clicks to the tile under them", "[tile_uti
     }
 }
 
-TEST_CASE("Color utilities", "[tile_utils]") {
-    SECTION("Preview colors") {
-        auto preview_fill = TileColors::previewFill();
-        REQUIRE(preview_fill.r == Colors::PREVIEW_R);
-        REQUIRE(preview_fill.g == Colors::PREVIEW_G);
-        REQUIRE(preview_fill.b == Colors::PREVIEW_B);
-        REQUIRE(preview_fill.a == Colors::PREVIEW_ALPHA);
-
-        auto preview_outline = TileColors::previewOutline();
-        REQUIRE(preview_outline.r == Colors::PREVIEW_R);
-        REQUIRE(preview_outline.g == Colors::PREVIEW_G);
-        REQUIRE(preview_outline.b == Colors::PREVIEW_B);
-        REQUIRE(preview_outline.a == Colors::PREVIEW_OUTLINE_ALPHA);
-    }
-
-    SECTION("Error colors") {
-        auto error_fill = TileColors::errorFill();
-        REQUIRE(error_fill.r == Colors::ERROR_R);
-        REQUIRE(error_fill.g == Colors::ERROR_G);
-        REQUIRE(error_fill.b == Colors::ERROR_B);
-        REQUIRE(error_fill.a == Colors::ERROR_ALPHA);
-
-        auto error_outline = TileColors::errorOutline();
-        REQUIRE(error_outline.r == Colors::ERROR_R);
-        REQUIRE(error_outline.g == Colors::ERROR_G);
-        REQUIRE(error_outline.b == Colors::ERROR_B);
-        REQUIRE(error_outline.a == Colors::ERROR_OUTLINE_ALPHA);
-    }
-
-    SECTION("Selection colors") {
-        auto selection_fill = TileColors::selectionFill();
-        REQUIRE(selection_fill.r == Colors::SELECTION_R);
-        REQUIRE(selection_fill.g == Colors::SELECTION_G);
-        REQUIRE(selection_fill.b == Colors::SELECTION_B);
-        REQUIRE(selection_fill.a == Colors::SELECTION_RECT_FILL_ALPHA);
-
-        auto selection_outline = TileColors::selectionOutline();
-        REQUIRE(selection_outline.r == Colors::SELECTION_R);
-        REQUIRE(selection_outline.g == Colors::SELECTION_G);
-        REQUIRE(selection_outline.b == Colors::SELECTION_B);
-        REQUIRE(selection_outline.a == Colors::SELECTION_RECT_OUTLINE_ALPHA);
-    }
-
-    SECTION("White color") {
-        auto white = TileColors::white();
-        REQUIRE(white == sf::Color::White);
-    }
-
-    SECTION("Transparent color") {
-        auto transparent = TileColors::transparent();
-        REQUIRE(transparent.r == 255);
-        REQUIRE(transparent.g == 255);
-        REQUIRE(transparent.b == 255);
-        REQUIRE(transparent.a == 0);
-    }
-}
-
 TEST_CASE("Sprite highlight functions", "[tile_utils]") {
     GECK_SKIP_IF_HEADLESS_CI();
 
@@ -283,15 +226,6 @@ TEST_CASE("Sprite highlight functions", "[tile_utils]") {
 }
 
 TEST_CASE("Mathematical property validation", "[tile_utils]") {
-    SECTION("Ensure coordinates stay within bounds") {
-        // Test that all valid tile indices produce valid coordinates
-        for (int index = 0; index < kTileCount; ++index) {
-            auto coords = indexToCoordinates(index);
-            REQUIRE(coords.x < MAP_HEIGHT);
-            REQUIRE(coords.y < MAP_WIDTH);
-        }
-    }
-
     SECTION("Isometric projection consistency") {
         // Test that coordinates that differ by 1 in x have predictable screen position differences
         auto screen_00 = coordinatesToScreenPosition(TileCoordinates(0, 0));

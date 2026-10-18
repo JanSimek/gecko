@@ -52,40 +52,38 @@ struct FixtureResources {
     }
 };
 
-uint32_t typeByte(uint32_t fid) {
-    return fid >> 24;
-}
-
-uint32_t baseId(uint32_t fid) {
-    return fid & 0x00FFFFFF;
-}
-
 } // namespace
 
-// The regression guard: the FID type byte must be the ObjectType / engine OBJ_TYPE
+// The regression guard: the FID type must be the ObjectType / engine OBJ_TYPE
 // ordinal. WALL is 3, not 4 (the old frmTypeMap encoded 4/5/6/7/8, which the
 // engine reads as the next type up).
 TEST_CASE("resolveFid encodes the engine FRM type byte", "[resource][frm]") {
     FixtureResources fx;
     auto& resolver = fx.resources.frmResolver();
 
+    using geck::FrmId;
+    using geck::ObjectType;
+
+    // The whole FID, so the type nibble, the frame id and the zero rotation/animation bits all count.
     const auto wall = resolver.resolveFid("art/walls/wall2.frm");
     REQUIRE(wall.has_value());
-    CHECK(typeByte(*wall) == static_cast<uint32_t>(geck::ObjectType::Wall)); // 3, not 4
-    CHECK(baseId(*wall) == 1);                                               // wall2 is index 1
+    CHECK(FrmId(*wall).objectType() == ObjectType::Wall); // 3, not 4
+    CHECK(*wall == FrmId(ObjectType::Wall, 1).fid());     // wall2 is index 1
 
     const auto tile = resolver.resolveFid("art/tiles/grass.frm");
     REQUIRE(tile.has_value());
-    CHECK(typeByte(*tile) == static_cast<uint32_t>(geck::ObjectType::Tile)); // 4, not 5
+    CHECK(FrmId(*tile).objectType() == ObjectType::Tile); // 4, not 5
+    CHECK(*tile == FrmId(ObjectType::Tile, 1).fid());
 
     const auto misc = resolver.resolveFid("art/misc/thing.frm");
     REQUIRE(misc.has_value());
-    CHECK(typeByte(*misc) == static_cast<uint32_t>(geck::ObjectType::Misc)); // 5, not 6
+    CHECK(FrmId(*misc).objectType() == ObjectType::Misc); // 5, not 6
+    CHECK(*misc == FrmId(ObjectType::Misc, 0).fid());
 
     const auto item = resolver.resolveFid("art/items/rock.frm");
     REQUIRE(item.has_value());
-    CHECK(typeByte(*item) == static_cast<uint32_t>(geck::ObjectType::Item)); // 0 (unaffected)
-    CHECK(baseId(*item) == 1);
+    CHECK(FrmId(*item).objectType() == ObjectType::Item); // 0 (unaffected)
+    CHECK(*item == FrmId(ObjectType::Item, 1).fid());
 }
 
 // resolveFid is the inverse of resolve() for non-critter types.
@@ -128,15 +126,15 @@ TEST_CASE("resolveFid returns nullopt without a heuristic fallback", "[resource]
     CHECK_FALSE(resolver.resolveFid("").has_value());
 }
 
-// Critters carry the engine critter type byte (1); their FID is animation-encoded
-// and lossy, so only the type byte is asserted (not a resolve() round-trip).
+// Critters carry the engine critter type (1); their FID is animation-encoded
+// and lossy, so only the type is asserted (not a resolve() round-trip).
 TEST_CASE("resolveFid resolves critters by base name", "[resource][frm]") {
     FixtureResources fx;
     auto& resolver = fx.resources.frmResolver();
 
     const auto fid = resolver.resolveFid("art/critters/hmwarraa.frm");
     REQUIRE(fid.has_value());
-    CHECK(typeByte(*fid) == static_cast<uint32_t>(geck::ObjectType::Critter)); // 1
+    CHECK(geck::FrmId(*fid).objectType() == geck::ObjectType::Critter); // 1
 }
 
 TEST_CASE("hasFrmExtension recognizes .frm and directional .fr0-.fr5", "[resource][frm]") {

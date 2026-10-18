@@ -6,6 +6,7 @@
 #include "format/pro/Pro.h"
 #include "format/pro/ProtoTypes.h"
 #include "resource/CritterFrmResolver.h"
+#include "util/FalloutEngineEnums.h"
 
 using namespace geck;
 
@@ -15,6 +16,69 @@ static_assert(ProtoId(MiscProtoTypeId::FirstExitGrid).pid() == 0x05000010u);
 static_assert(ProtoId(CritterProtoTypeId::Dude).pid() == 0x01000000u);
 static_assert(FrmId(MiscFrameId::ScrollBlocker).fid() == 0x0500000Cu);
 static_assert(FrmId(InterfaceFrameId::ExitGridMarker).fid() == 0x06000003u);
+
+// Proto enums and their proto.msg ids mirror the engine (proto_types.h, proto.cc).
+namespace engine_enums {
+using fallout::BodyType;
+using fallout::CaliberType;
+using fallout::DamageType;
+using fallout::enumValue;
+using fallout::MaterialType;
+using fallout::protoMessageId;
+
+static_assert(enumValue(ItemType::Armor) == 0);
+static_assert(enumValue(ItemType::Ammo) == 4);
+static_assert(protoMessageId(ItemType::Armor) == 150);
+static_assert(protoMessageId(ItemType::Ammo) == 154);
+// SCENERY_TYPE_LADDER_UP / _DOWN: gecko used to call these LADDER_BOTTOM / _TOP.
+static_assert(enumValue(SceneryType::LadderUp) == 3);
+static_assert(enumValue(SceneryType::LadderDown) == 4);
+static_assert(enumValue(MaterialType::Glass) == 0);
+static_assert(enumValue(MaterialType::Leather) == 7);
+static_assert(protoMessageId(MaterialType::Glass) == 100);
+static_assert(protoMessageId(MaterialType::Leather) == 107);
+static_assert(enumValue(DamageType::Normal) == 0);
+static_assert(enumValue(DamageType::Explosion) == 6);
+static_assert(protoMessageId(DamageType::Normal) == 250);
+static_assert(protoMessageId(DamageType::Explosion) == 256);
+static_assert(enumValue(CaliberType::None) == 0);
+static_assert(enumValue(CaliberType::Mm10) == 8);
+static_assert(enumValue(CaliberType::Mm7_62) == 18);
+static_assert(protoMessageId(CaliberType::Mm10) == 308);
+static_assert(protoMessageId(CaliberType::Mm7_62) == 318);
+static_assert(fallout::enumCount<CaliberType>() == 19);
+static_assert(enumValue(BodyType::Biped) == 0);
+static_assert(enumValue(BodyType::Robotic) == 2);
+static_assert(protoMessageId(BodyType::Biped) == 400);
+static_assert(protoMessageId(BodyType::Robotic) == 402);
+
+// Global perk ids (perk_defs.h) and their perk.msg / stat.msg name ids.
+using fallout::PerkId;
+static_assert(enumValue(PerkId::WeaponLongRange) == 58);
+static_assert(enumValue(PerkId::WeaponFlameboy) == 67);
+static_assert(enumValue(PerkId::ArmorAdvancedI) == 68);
+static_assert(enumValue(PerkId::ArmorAdvancedII) == 69);
+static_assert(enumValue(PerkId::JetAddiction) == 70);
+static_assert(enumValue(PerkId::TragicAddiction) == 71);
+static_assert(enumValue(PerkId::ArmorCharisma) == 72);
+static_assert(enumValue(PerkId::WeaponHandling) == 106);
+static_assert(enumValue(PerkId::WeaponEnhancedKnockout) == 117);
+static_assert(enumValue(PerkId::Jinxed) == 118);
+static_assert(fallout::perkNameMessageId(PerkId::WeaponLongRange) == 159);
+static_assert(fallout::perkNameMessageId(PerkId::ArmorCharisma) == 173);
+static_assert(fallout::perkNameMessageId(PerkId::WeaponEnhancedKnockout) == 218);
+static_assert(fallout::statNameMessageId(fallout::StatId::RadiationResistance) == 131);
+static_assert(fallout::statNameMessageId(fallout::StatId::PoisonResistance) == 132);
+
+// The weapon and armour proto perk subsets are filtered from the full perk enum.
+static_assert(fallout::WEAPON_ITEM_PERKS.size() == 9);
+static_assert(fallout::WEAPON_ITEM_PERKS.front() == PerkId::WeaponLongRange);
+static_assert(fallout::WEAPON_ITEM_PERKS.back() == PerkId::WeaponEnhancedKnockout);
+static_assert(fallout::ARMOR_ITEM_PERKS.size() == 5);
+static_assert(fallout::ARMOR_ITEM_PERKS.front() == PerkId::PoweredArmor);
+static_assert(fallout::ARMOR_ITEM_PERKS.back() == PerkId::ArmorCharisma);
+static_assert(fallout::NO_ITEM_PERK == -1);
+} // namespace engine_enums
 
 TEST_CASE("ProtoId decodes a PID like the engine", "[engine][ids]") {
     const ProtoId scrub{ 0x02000066u };

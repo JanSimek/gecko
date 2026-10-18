@@ -1,6 +1,5 @@
 # General tests (Catch2) - Pure C++ logic tests
 add_executable(general_tests
-    general/test_fallout_engine_enums.cpp
     general/test_engine_ids.cpp
     general/test_hexagon_grid.cpp
     general/test_message_enum_utils.cpp
@@ -31,7 +30,6 @@ add_executable(general_tests
     general/test_reader_factory.cpp
     general/test_selection_state.cpp
     general/test_selection_manager.cpp
-    general/test_tile_hex_conversion.cpp
     general/test_game_data_path_resolver.cpp
     general/test_data_path_resolution.cpp
     general/test_map_object_defaults.cpp

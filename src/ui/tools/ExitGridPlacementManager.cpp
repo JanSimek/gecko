@@ -8,7 +8,6 @@
 #include "util/ExitGridDirection.h"
 #include "util/HexLine.h"
 #include "editor/HexagonGrid.h"
-#include "editor/HexGeometry.h"
 #include "editor/helper/ObjectQueries.h"
 #include "selection/SelectionManager.h"
 #include "selection/SelectionState.h"
@@ -217,78 +216,12 @@ namespace {
         }
         return -1;
     }
-
-    // The hex one row over from `hex`, perpendicular to a diagonal band: the neighbour leaning most
-    // along the band's outward normal. -1 if off-grid or none leans outward.
-    int neighborRowHex(const HexagonGrid& grid, int hex, int dir) {
-        const auto here = grid.getHexByPosition(static_cast<uint32_t>(hex));
-        if (!here.has_value()) {
-            return -1;
-        }
-        const int hx = here->get().x();
-        const int hy = here->get().y();
-        std::vector<NeighborOffset> offsets;
-        for (const int nb : hexgrid::neighbors(hex)) {
-            const auto nbHex = grid.getHexByPosition(static_cast<uint32_t>(nb));
-            if (nbHex.has_value()) {
-                offsets.push_back({ nb, nbHex->get().x() - hx, nbHex->get().y() - hy });
-            }
-        }
-        return secondRowNeighbor(dir, offsets);
-    }
-
-    // The second-row hex `steps` rows over, perpendicular to a diagonal band. -1 if any step walks
-    // off-grid.
-    int secondRowHex(const HexagonGrid& grid, int hex, int dir, int steps) {
-        int current = hex;
-        for (int i = 0; i < steps && current >= 0; ++i) {
-            current = neighborRowHex(grid, current, dir);
-        }
-        return current;
-    }
 } // namespace
 
 ExitGridDestinationKind ExitGridPlacementManager::destinationKind() const {
     return _currentDestinationKind == DestinationKind::WorldMap
         ? ExitGridDestinationKind::WorldMap
         : ExitGridDestinationKind::InterMap;
-}
-
-ExitGridArt ExitGridPlacementManager::autoArtForLine(const std::vector<int>& orderedHexes,
-    bool flipSide) const {
-    const auto* hexGrid = _context.getHexagonGrid();
-    const ExitGridDestinationKind kind = destinationKind();
-    // Off-grid / empty fallback: a deterministic bottom-edge marker in the right family.
-    if (!hexGrid || orderedHexes.empty()) {
-        return exitGridArtForDirection(ExitGrid::DIR_BOTTOM, kind);
-    }
-    const auto screenOf = [hexGrid](int hexIndex) -> std::pair<int, int> {
-        const auto h = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
-        return h.has_value() ? std::pair<int, int>{ h->get().x(), h->get().y() }
-                             : std::pair<int, int>{ 0, 0 };
-    };
-    const auto [centerX, centerY] = hexGridCenterScreen(*hexGrid);
-
-    // A lone hex has no axis: classify by its outward facing.
-    if (orderedHexes.size() < 2) {
-        const auto [hx, hy] = screenOf(orderedHexes.front());
-        const ExitGridArt art = exitGridArtForFacing(hx, hy, centerX, centerY, kind);
-        // Honour a flip even for a lone hex so preview/commit stay consistent.
-        if (flipSide) {
-            return exitGridArtForDirection(
-                flipExitGridDirection(static_cast<int>(art.proPid - ExitGrid::FIRST_EXIT_GRID_PID)),
-                kind);
-        }
-        return art;
-    }
-
-    // Whole-stroke classification: first->last delta picks the axis, the midpoint's outward facing picks
-    // the side, ONCE — so every hex shares one side (a clean continuous bar) instead of flipping mid-run.
-    const auto [fx, fy] = screenOf(orderedHexes.front());
-    const auto [lx, ly] = screenOf(orderedHexes.back());
-    const auto [mx, my] = screenOf(orderedHexes[orderedHexes.size() / 2]);
-    const int dir = exitGridDirectionForLine(lx - fx, ly - fy, mx - centerX, my - centerY, flipSide);
-    return exitGridArtForDirection(dir, kind);
 }
 
 ExitGridArt ExitGridPlacementManager::artForLine(const std::vector<int>& orderedHexes,
@@ -298,7 +231,7 @@ ExitGridArt ExitGridPlacementManager::artForLine(const std::vector<int>& ordered
     if (const int dir = explicitDirection(markerArt); dir >= 0) {
         return exitGridArtForDirection(dir, destinationKind());
     }
-    return autoArtForLine(orderedHexes, flipSide);
+    return exitGridArtForStroke(_context.getHexagonGrid(), orderedHexes, destinationKind(), flipSide);
 }
 
 std::optional<ExitGridSegmentRun> ExitGridPlacementManager::buildSegmentRun(
@@ -321,22 +254,7 @@ std::optional<ExitGridSegmentRun> ExitGridPlacementManager::buildSegmentRun(
     if (segHexes.empty()) {
         return std::nullopt;
     }
-    const auto screenOf = [hexGrid](int hexIndex) -> std::pair<int, int> {
-        const auto h = hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
-        return h.has_value() ? std::pair<int, int>{ h->get().x(), h->get().y() }
-                             : std::pair<int, int>{ 0, 0 };
-    };
-    const auto [centerX, centerY] = hexGridCenterScreen(*hexGrid);
-    const auto [fx, fy] = screenOf(segHexes.front());
-    const auto [lx, ly] = screenOf(segHexes.back());
-    const auto [mx, my] = screenOf(segHexes[segHexes.size() / 2]);
-    ExitGridSegmentRun run;
-    run.hexes = std::move(segHexes);
-    run.screenDx = lx - fx;
-    run.screenDy = ly - fy;
-    run.outwardX = mx - centerX;
-    run.outwardY = my - centerY;
-    return run;
+    return exitGridSegmentRun(*hexGrid, std::move(segHexes));
 }
 
 ExitGridArt ExitGridPlacementManager::segmentArt(const ExitGridSegmentRun& run, bool flipSide) const {
@@ -351,56 +269,20 @@ ExitGridArt ExitGridPlacementManager::segmentArt(const ExitGridSegmentRun& run, 
     return exitGridArtForDirection(dir, kind);
 }
 
-ExitGridPlacementManager::CommittedSegment ExitGridPlacementManager::classifySegment(
-    sf::Vector2f from, sf::Vector2f to, bool flipSide) const {
-    CommittedSegment seg;
+ExitGridSegment ExitGridPlacementManager::classifySegment(sf::Vector2f from, sf::Vector2f to,
+    bool flipSide) const {
+    ExitGridSegment seg;
     const std::optional<ExitGridSegmentRun> run = buildSegmentRun(from, to);
     if (!run.has_value()) {
         return seg; // degenerate/off-grid: nothing to freeze
     }
-    // One uniform art for the whole segment, frozen at the given flip.
+    // One uniform art for the whole segment, frozen at the given flip; a diagonal grows its second row.
     const ExitGridArt art = segmentArt(*run, flipSide);
-    seg.hexes = run->hexes;
+    const auto* hexGrid = _context.getHexagonGrid();
+    seg.hexes = hexGrid != nullptr ? exitGridBandHexes(*hexGrid, run->hexes, exitGridDirOfProto(art.proPid))
+                                   : run->hexes;
     seg.art.assign(seg.hexes.size(), art);
-
-    // A diagonal edge is a 2-deep band: the drawn hex line is the outer row, and a second parallel row
-    // of real markers sits kSecondRowSteps hexes over, on the side exitGridOutward(dir) faces. A
-    // diagonal bar is ~32-38px against a ~16-19px hex step, so steps=2 tiles the two centred rows
-    // edge-to-edge into a clean ~2x band; steps=1 overlaps them ~50%. Cardinal edges stay single-row.
-    constexpr int kSecondRowSteps = 2;
-    const int dir = exitGridDirOfProto(art.proPid);
-    if (const auto* hexGrid = _context.getHexagonGrid(); hexGrid != nullptr && isDiagonalExitGridDir(dir)) {
-        std::set<int> seen(run->hexes.begin(), run->hexes.end());
-        for (const int hex : run->hexes) {
-            const int second = secondRowHex(*hexGrid, hex, dir, kSecondRowSteps);
-            if (second >= 0 && seen.insert(second).second) {
-                seg.hexes.push_back(second);
-                seg.art.push_back(art);
-            }
-        }
-    }
     return seg;
-}
-
-void ExitGridPlacementManager::flattenSegments(const std::vector<CommittedSegment>& committed,
-    const CommittedSegment& live, std::vector<int>& outHexes, std::vector<ExitGridArt>& outArt) {
-    outHexes.clear();
-    outArt.clear();
-    std::set<int> seen;
-    // Committed segments first (in commit order), then the live one; first-seen wins, so committed hexes
-    // never change as the live segment moves.
-    const auto append = [&](const CommittedSegment& seg) {
-        for (std::size_t i = 0; i < seg.hexes.size(); ++i) {
-            if (seen.insert(seg.hexes[i]).second) {
-                outHexes.push_back(seg.hexes[i]);
-                outArt.push_back(seg.art[i]);
-            }
-        }
-    };
-    for (const CommittedSegment& seg : committed) {
-        append(seg);
-    }
-    append(live);
 }
 
 void ExitGridPlacementManager::beginLine() {
@@ -410,7 +292,7 @@ void ExitGridPlacementManager::beginLine() {
 void ExitGridPlacementManager::commitSegment(sf::Vector2f from, sf::Vector2f to, bool flipSide) {
     // Freeze the just-closed segment at this click's flip. Drop a degenerate/off-grid capture so it
     // leaves no empty placeholder.
-    CommittedSegment seg = classifySegment(from, to, flipSide);
+    ExitGridSegment seg = classifySegment(from, to, flipSide);
     if (!seg.hexes.empty()) {
         _committedSegments.push_back(std::move(seg));
     }
@@ -425,10 +307,9 @@ ExitGridPlacementManager::LinePreview ExitGridPlacementManager::previewForLine(
     // The FROZEN committed segments plus the ONE live segment, classified now at the current flip.
     // Committed art stays frozen; only the live segment changes as the cursor moves or Space flips.
     LinePreview preview;
-    const CommittedSegment live = hasLive ? classifySegment(liveFrom, liveTo, flipSide)
-                                          : CommittedSegment{};
+    const ExitGridSegment live = hasLive ? classifySegment(liveFrom, liveTo, flipSide) : ExitGridSegment{};
     std::vector<ExitGridArt> art;
-    flattenSegments(_committedSegments, live, preview.hexes, art);
+    flattenExitGridSegments(_committedSegments, live, preview.hexes, art);
     preview.frmPids.reserve(art.size());
     for (const ExitGridArt& a : art) {
         preview.frmPids.push_back(a.frmPid);
@@ -619,7 +500,7 @@ void ExitGridPlacementManager::selectExitGridsAlongLine() {
     // the placed edge is pixel-identical to the last preview.
     std::vector<int> lineHexes;
     std::vector<ExitGridArt> art;
-    flattenSegments(_committedSegments, CommittedSegment{}, lineHexes, art);
+    flattenExitGridSegments(_committedSegments, ExitGridSegment{}, lineHexes, art);
 
     const auto existing = collectExitGridsOnHexes(lineHexes);
 

@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <set>
 #include <utility>
 #include <vector>
@@ -16,12 +17,16 @@
 using geck::ExitGridArt;
 using geck::exitGridArtForDirection;
 using geck::exitGridArtForFacing;
+using geck::exitGridArtForStroke;
+using geck::exitGridBandHexes;
 using geck::ExitGridDestinationKind;
 using geck::exitGridDirectionForLine;
 using geck::exitGridDirOfProto;
 using geck::exitGridOutward;
+using geck::ExitGridSegment;
 using geck::ExitGridSegmentRun;
 using geck::exitGridSnapDirections;
+using geck::flattenExitGridSegments;
 using geck::flipExitGridDirection;
 using geck::HexagonGrid;
 using geck::isDiagonalExitGridDir;
@@ -273,25 +278,6 @@ bool isDiagonalProto(uint32_t proPid) {
 }
 bool isDiagonalDir(int dir) { return dir >= ExitGrid::DIR_FWD_A && dir <= ExitGrid::DIR_BACK_B; }
 
-// Mirror ExitGridPlacementManager::autoArtForLine on the REAL grid: walk the hex line, axis from the
-// first->last delta, side from the midpoint's offset from centre, then classify.
-ExitGridArt autoArtForRun(const HexagonGrid& grid, int startHex, int endHex,
-    ExitGridDestinationKind kind, bool flipSide = false) {
-    const auto screenOf = [&grid](int hexIndex) -> std::pair<int, int> {
-        const auto h = grid.getHexByPosition(static_cast<uint32_t>(hexIndex));
-        return h.has_value() ? std::pair<int, int>{ h->get().x(), h->get().y() }
-                             : std::pair<int, int>{ 0, 0 };
-    };
-    const std::vector<int> run = geck::hexline::hexLine(startHex, endHex);
-    REQUIRE(run.size() >= 2);
-    const auto [cx, cy] = geck::hexGridCenterScreen(grid);
-    const auto [fx, fy] = screenOf(run.front());
-    const auto [lx, ly] = screenOf(run.back());
-    const auto [mx, my] = screenOf(run[run.size() / 2]);
-    const int dir = exitGridDirectionForLine(lx - fx, ly - fy, mx - cx, my - cy, flipSide);
-    return exitGridArtForDirection(dir, kind);
-}
-
 // position = row * WIDTH + col on the 200x200 grid.
 constexpr int hexPos(int col, int row) { return row * HexagonGrid::GRID_WIDTH + col; }
 } // namespace
@@ -331,65 +317,79 @@ TEST_CASE("exitGridDirectionForLine: the measured iso deltas yield a DIAGONAL di
     CHECK(exitGridDirectionForLine(0, 600, -300, 0, false) == ExitGrid::DIR_LEFT);
 }
 
-TEST_CASE("autoArtForLine (real grid): a stroke along the iso-diamond edge commits a DIAGONAL proto",
+TEST_CASE("exitGridArtForStroke (real grid): a stroke along the iso-diamond edge commits a DIAGONAL proto",
     "[exitgrid][iso]") {
     HexagonGrid grid;
     constexpr int C = 100; // a central col/row, well inside the diamond
 
     // Shallow NE/SW edge: vary the column only (a const-row hex run). Screen slope ~4:1.
-    const ExitGridArt shallow = autoArtForRun(grid, hexPos(C, C), hexPos(C + 30, C),
-        ExitGridDestinationKind::InterMap);
+    const ExitGridArt shallow = exitGridArtForStroke(&grid, geck::hexline::hexLine(hexPos(C, C), hexPos(C + 30, C)),
+        ExitGridDestinationKind::InterMap, false);
     CHECK(isDiagonalProto(shallow.proPid));
     // green frm = diagonal proto + 1
     CHECK(shallow.frmPid == shallow.proPid + 1);
 
     // Steep NW/SE edge: vary the row only (a const-col hex run). Screen slope ~1.33:1.
-    const ExitGridArt steep = autoArtForRun(grid, hexPos(C, C), hexPos(C, C + 30),
-        ExitGridDestinationKind::WorldMap);
+    const ExitGridArt steep = exitGridArtForStroke(&grid, geck::hexline::hexLine(hexPos(C, C), hexPos(C, C + 30)),
+        ExitGridDestinationKind::WorldMap, false);
     CHECK(isDiagonalProto(steep.proPid));
     // brown frm = diagonal proto + 0x11
     CHECK(steep.frmPid == steep.proPid + 0x11);
 }
 
-// --------------------------------------------------------------------------------------------------
-// TRUE-FREEZE per-segment capture. Each polyline segment is classified once from its own screen
-// direction, captured with the flip at the click that closed it, and never recomputed. The model below
-// reproduces ExitGridPlacementManager's contract with the pure classifier so the freeze property (a
-// committed segment is independent of any later flip/cursor change) is tested headlessly.
-
-namespace {
-// A frozen segment as the manager captures it: its hexes and its single captured direction.
-struct CapturedSegment {
-    std::vector<int> hexes;
-    int dir = 0;
-};
-
-// Capture one segment at the flip in effect right now — exactly what the manager freezes on a click.
-CapturedSegment captureSegment(const ExitGridSegmentRun& run, bool flipAtCapture) {
-    return { run.hexes,
-        exitGridDirectionForLine(run.screenDx, run.screenDy, run.outwardX, run.outwardY,
-            flipAtCapture) };
+TEST_CASE("exitGridArtForStroke: the flip inverts the whole stroke's side", "[exitgrid][line]") {
+    HexagonGrid grid;
+    const std::vector<int> stroke = geck::hexline::hexLine(hexPos(100, 100), hexPos(100, 130));
+    const ExitGridArt plain = exitGridArtForStroke(&grid, stroke, INTER, false);
+    const ExitGridArt flipped = exitGridArtForStroke(&grid, stroke, INTER, true);
+    CHECK(exitGridDirOfProto(flipped.proPid) == flipExitGridDirection(exitGridDirOfProto(plain.proPid)));
 }
 
-// Flatten frozen segments + a live segment into deduped (hex, dir) pairs (first-seen wins), modelling
-// ExitGridPlacementManager::flattenSegments.
-void flatten(const std::vector<CapturedSegment>& committed, const CapturedSegment& live,
-    std::vector<int>& outHexes, std::vector<int>& outDirs) {
-    outHexes.clear();
-    outDirs.clear();
-    std::set<int> seen;
-    const auto append = [&](const CapturedSegment& seg) {
-        for (const int hex : seg.hexes) {
-            if (seen.insert(hex).second) {
-                outHexes.push_back(hex);
-                outDirs.push_back(seg.dir);
-            }
-        }
-    };
-    for (const auto& seg : committed) {
-        append(seg);
+TEST_CASE("exitGridArtForStroke: a lone hex classifies by its facing and still honours the flip",
+    "[exitgrid][fallback]") {
+    HexagonGrid grid;
+    // A hex near the top row sits above the grid centre on screen -> the TOP edge.
+    const std::vector<int> lone{ hexPos(100, 5) };
+    const auto [hx, hy] = geck::hexScreenPosition(grid, lone.front());
+    const auto [cx, cy] = geck::hexGridCenterScreen(grid);
+    const ExitGridArt facing = exitGridArtForFacing(hx, hy, cx, cy, WORLD);
+    CHECK(exitGridArtForStroke(&grid, lone, WORLD, false).proPid == facing.proPid);
+    CHECK(exitGridArtForStroke(&grid, lone, WORLD, false).frmPid == facing.frmPid);
+    const ExitGridArt flipped = exitGridArtForStroke(&grid, lone, WORLD, true);
+    CHECK(exitGridDirOfProto(flipped.proPid) == flipExitGridDirection(exitGridDirOfProto(facing.proPid)));
+    CHECK(flipped.frmPid == ExitGrid::brownFrm(exitGridDirOfProto(flipped.proPid)));
+}
+
+TEST_CASE("exitGridArtForStroke: no grid or an empty stroke falls back to a bottom-edge marker",
+    "[exitgrid][fallback]") {
+    HexagonGrid grid;
+    const ExitGridArt noGrid = exitGridArtForStroke(nullptr, { hexPos(100, 100) }, WORLD, false);
+    CHECK(noGrid.proPid == ExitGrid::BOTTOM_PRO_PID);
+    CHECK(noGrid.frmPid == ExitGrid::brownFrm(ExitGrid::DIR_BOTTOM));
+    const ExitGridArt empty = exitGridArtForStroke(&grid, {}, INTER, true);
+    CHECK(empty.proPid == ExitGrid::BOTTOM_PRO_PID);
+    CHECK(empty.frmPid == ExitGrid::greenFrm(ExitGrid::DIR_BOTTOM));
+}
+
+// --------------------------------------------------------------------------------------------------
+// TRUE-FREEZE per-segment capture. Each polyline segment is classified once from its own screen
+// direction, captured with the flip at the click that closed it, and never recomputed;
+// flattenExitGridSegments must keep a committed segment independent of any later flip/cursor change.
+
+namespace {
+// Capture one segment at the flip in effect right now, as the manager freezes it on a click.
+ExitGridSegment captureSegment(const ExitGridSegmentRun& run, bool flipAtCapture) {
+    const ExitGridArt art = exitGridArtForDirection(
+        exitGridDirectionForLine(run.screenDx, run.screenDy, run.outwardX, run.outwardY, flipAtCapture), INTER);
+    return { run.hexes, std::vector<ExitGridArt>(run.hexes.size(), art) };
+}
+
+std::vector<int> dirsOf(const std::vector<ExitGridArt>& art) {
+    std::vector<int> dirs;
+    for (const ExitGridArt& a : art) {
+        dirs.push_back(exitGridDirOfProto(a.proPid));
     }
-    append(live);
+    return dirs;
 }
 } // namespace
 
@@ -403,8 +403,8 @@ TEST_CASE("freeze: a captured segment's direction is INDEPENDENT of a later flip
     run.outwardX = 0;
     run.outwardY = 300; // below centre -> BOTTOM without flip
 
-    const CapturedSegment frozen = captureSegment(run, /*flipAtCapture=*/false);
-    CHECK(frozen.dir == ExitGrid::DIR_BOTTOM);
+    const ExitGridSegment frozen = captureSegment(run, /*flipAtCapture=*/false);
+    CHECK(exitGridDirOfProto(frozen.art.front().proPid) == ExitGrid::DIR_BOTTOM);
 
     // The user now presses Space (the live flip becomes true) and moves the cursor. Re-flattening with
     // any live segment and any current flip leaves the committed segment's hexes/dirs untouched.
@@ -415,11 +415,12 @@ TEST_CASE("freeze: a captured segment's direction is INDEPENDENT of a later flip
         liveRun.screenDy = 360; // a "\" diagonal
         liveRun.outwardX = 300;
         liveRun.outwardY = 200;
-        const CapturedSegment live = captureSegment(liveRun, liveFlip);
+        const ExitGridSegment live = captureSegment(liveRun, liveFlip);
 
         std::vector<int> hexes;
-        std::vector<int> dirs;
-        flatten({ frozen }, live, hexes, dirs);
+        std::vector<ExitGridArt> art;
+        flattenExitGridSegments({ frozen }, live, hexes, art);
+        const std::vector<int> dirs = dirsOf(art);
 
         // The frozen segment's hexes come first and keep BOTTOM regardless of the live flip; hex 12 is
         // shared and first-seen (frozen) wins, so it stays BOTTOM too.
@@ -432,7 +433,7 @@ TEST_CASE("freeze: a captured segment's direction is INDEPENDENT of a later flip
         CHECK(isDiagonalDir(dirs[3]));
         CHECK(dirs[4] == dirs[3]);
         if (liveFlip) {
-            CHECK(dirs[3] == flipExitGridDirection(captureSegment(liveRun, false).dir));
+            CHECK(dirs[3] == flipExitGridDirection(dirsOf(captureSegment(liveRun, false).art).front()));
         }
     }
 }
@@ -447,7 +448,7 @@ TEST_CASE("freeze: committed hexes are pixel-stable as the live segment moves", 
     r1.screenDy = 0;
     r1.outwardX = 0;
     r1.outwardY = 300; // BOTTOM
-    const CapturedSegment c1 = captureSegment(r1, /*flipAtCapture=*/false);
+    const ExitGridSegment c1 = captureSegment(r1, /*flipAtCapture=*/false);
 
     ExitGridSegmentRun r2;
     r2.hexes = { 3, 4, 5 }; // shares hex 3 with c1
@@ -455,14 +456,12 @@ TEST_CASE("freeze: committed hexes are pixel-stable as the live segment moves", 
     r2.screenDy = 200; // vertical -> LEFT/RIGHT
     r2.outwardX = 300;
     r2.outwardY = 0;
-    const CapturedSegment c2 = captureSegment(r2, /*flipAtCapture=*/true); // captured with flip ON
+    const ExitGridSegment c2 = captureSegment(r2, /*flipAtCapture=*/true); // captured with flip ON
 
     std::vector<int> baselineHexes;
-    std::vector<int> baselineDirs;
-    {
-        const CapturedSegment emptyLive{};
-        flatten({ c1, c2 }, emptyLive, baselineHexes, baselineDirs);
-    }
+    std::vector<ExitGridArt> baselineArt;
+    flattenExitGridSegments({ c1, c2 }, ExitGridSegment{}, baselineHexes, baselineArt);
+    const std::vector<int> baselineDirs = dirsOf(baselineArt);
     // The shared hex 3 keeps c1's BOTTOM (first-seen); c2 contributes 4,5 at its captured (flipped) side.
     REQUIRE(baselineHexes == std::vector<int>{ 1, 2, 3, 4, 5 });
     CHECK(baselineDirs[2] == ExitGrid::DIR_BOTTOM);                       // shared hex 3, c1 wins
@@ -477,8 +476,9 @@ TEST_CASE("freeze: committed hexes are pixel-stable as the live segment moves", 
         liveRun.outwardX = 0;
         liveRun.outwardY = -300;
         std::vector<int> hexes;
-        std::vector<int> dirs;
-        flatten({ c1, c2 }, captureSegment(liveRun, /*flipAtCapture=*/true), hexes, dirs);
+        std::vector<ExitGridArt> art;
+        flattenExitGridSegments({ c1, c2 }, captureSegment(liveRun, /*flipAtCapture=*/true), hexes, art);
+        const std::vector<int> dirs = dirsOf(art);
 
         // The committed prefix (5 hexes) is identical to the baseline; only the live tail (6,7) is added.
         REQUIRE(hexes.size() == 7);
@@ -636,70 +636,35 @@ TEST_CASE("secondRowNeighbor: a neighbour exactly PERPENDICULAR (dot 0) is never
 
 // --- Placement: a diagonal segment grows a SECOND row of REAL hexes, a cardinal stays single-row -----
 
-namespace {
-// Mirror ExitGridPlacementManager's anon-namespace neighborRowHex/secondRowHex on the REAL grid: walk
-// `steps` rows OVER from `hex`, perpendicular to the band (the side exitGridOutward(dir) faces).
-int secondRowHexOnGrid(const HexagonGrid& grid, int hex, int dir, int steps) {
-    int current = hex;
-    for (int i = 0; i < steps && current >= 0; ++i) {
-        const auto here = grid.getHexByPosition(static_cast<uint32_t>(current));
-        if (!here.has_value()) {
-            return -1;
-        }
-        const int hx = here->get().x();
-        const int hy = here->get().y();
-        std::vector<NeighborOffset> offsets;
-        for (const int nb : geck::hexgrid::neighbors(current)) {
-            const auto nbHex = grid.getHexByPosition(static_cast<uint32_t>(nb));
-            if (nbHex.has_value()) {
-                offsets.push_back({ nb, nbHex->get().x() - hx, nbHex->get().y() - hy });
-            }
-        }
-        current = secondRowNeighbor(dir, offsets);
-    }
-    return current;
-}
-
-// Mirror classifySegment's hex set: the drawn hex line, plus (for a diagonal dir) a deduped second row.
-std::vector<int> classifiedHexes(const HexagonGrid& grid, int startHex, int endHex, int dir, int steps) {
-    std::vector<int> hexes = geck::hexline::hexLine(startHex, endHex);
-    if (!isDiagonalExitGridDir(dir)) {
-        return hexes; // cardinal: single row
-    }
-    std::set<int> seen(hexes.begin(), hexes.end());
-    const std::vector<int> outer = hexes; // iterate the original outer row only
-    for (const int hex : outer) {
-        const int second = secondRowHexOnGrid(grid, hex, dir, steps);
-        if (second >= 0 && seen.insert(second).second) {
-            hexes.push_back(second);
-        }
-    }
-    return hexes;
-}
-} // namespace
-
 TEST_CASE("placement: a DIAGONAL segment yields ~2x the line's hexes; a CARDINAL stays 1x",
     "[exitgrid][secondrow][placement]") {
     HexagonGrid grid;
     constexpr int C = 100;
-    constexpr int kSecondRowSteps = 2; // the source default
 
     // A diagonal "\" run (vary the row -> the steep iso edge classifies BackSlash, dir 6/7).
     const int dStart = hexPos(C, C);
     const int dEnd = hexPos(C, C + 30);
-    const std::size_t lineLen = geck::hexline::hexLine(dStart, dEnd).size();
+    const std::vector<int> line = geck::hexline::hexLine(dStart, dEnd);
+    const std::size_t lineLen = line.size();
     REQUIRE(lineLen >= 2);
 
-    const std::vector<int> diag = classifiedHexes(grid, dStart, dEnd, ExitGrid::DIR_BACK_A, kSecondRowSteps);
+    const std::vector<int> diag = exitGridBandHexes(grid, line, ExitGrid::DIR_BACK_A);
     // Two rows of REAL hexes: nearly double the drawn line (a few endpoints can collide and dedup).
-    CHECK(diag.size() > lineLen);
+    REQUIRE(diag.size() > lineLen);
     CHECK(diag.size() >= lineLen + lineLen - 2);
     CHECK(diag.size() <= 2 * lineLen);
     // Every hex is unique (the dedup held) and the original line is fully contained.
     CHECK(std::set<int>(diag.begin(), diag.end()).size() == diag.size());
+    CHECK(std::vector<int>(diag.begin(), diag.begin() + static_cast<std::ptrdiff_t>(lineLen)) == line);
+    // The second row sits EXIT_GRID_SECOND_ROW_STEPS hexes over, on the side the BACK_A bars face.
+    const int second = diag[lineLen];
+    CHECK(geck::hexgrid::distance(line.front(), second) == geck::EXIT_GRID_SECOND_ROW_STEPS);
+    const auto [fx, fy] = geck::hexScreenPosition(grid, line.front());
+    const auto [sx, sy] = geck::hexScreenPosition(grid, second);
+    const auto [ox, oy] = exitGridOutward(ExitGrid::DIR_BACK_A);
+    CHECK((sx - fx) * ox + (sy - fy) * oy > 0);
 
     // A cardinal run (pure horizontal hex row -> LEFT/RIGHT) stays single-row.
-    const std::vector<int> card = classifiedHexes(grid, hexPos(C, C), hexPos(C + 20, C),
-        ExitGrid::DIR_RIGHT, kSecondRowSteps);
-    CHECK(card.size() == geck::hexline::hexLine(hexPos(C, C), hexPos(C + 20, C)).size());
+    const std::vector<int> cardLine = geck::hexline::hexLine(hexPos(C, C), hexPos(C + 20, C));
+    CHECK(exitGridBandHexes(grid, cardLine, ExitGrid::DIR_RIGHT) == cardLine);
 }

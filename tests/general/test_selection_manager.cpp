@@ -13,6 +13,7 @@
 
 #include "support/GraphicsTestEnv.h"
 
+#include <cmath>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -112,63 +113,6 @@ public:
 };
 
 //==============================================================================
-// SECTION: Mock provider hit-test sanity checks
-//==============================================================================
-
-TEST_CASE("Mock provider position-based tile hit tests", "[selection_manager][mock_provider]") {
-    SECTION("Single click tile selection behavior") {
-        MockEditorWidget mockEditor;
-
-        // Test different world positions and verify correct tile selection.
-        // Per the mock formula (col = x/32, row = y/24):
-        sf::Vector2f testPos1(64.0f, 48.0f);  // -> col 2, row 2
-        sf::Vector2f testPos2(128.0f, 96.0f); // -> col 4, row 4
-
-        // Verify the mock returns reasonable tile indices
-        auto tile1 = mockEditor.getTileAtPosition(testPos1, false);
-        auto tile2 = mockEditor.getTileAtPosition(testPos2, false);
-
-        REQUIRE(tile1.has_value());
-        REQUIRE(tile2.has_value());
-        REQUIRE(tile1.value() != tile2.value()); // Different positions should give different tiles
-
-        // Verify tiles are within valid range
-        REQUIRE(tile1.value() >= 0);
-        REQUIRE(tile1.value() < kTileCount);
-        REQUIRE(tile2.value() >= 0);
-        REQUIRE(tile2.value() < kTileCount);
-    }
-
-    SECTION("Roof vs floor selection at same position") {
-        MockEditorWidget mockEditor;
-        sf::Vector2f testPos(100.0f, 75.0f);
-
-        auto floorTile = mockEditor.getTileAtPosition(testPos, false);
-        auto roofTile = mockEditor.getTileAtPosition(testPos, true);
-
-        // Both should return the same tile index (same logical position)
-        REQUIRE(floorTile.has_value());
-        REQUIRE(roofTile.has_value());
-        REQUIRE(floorTile.value() == roofTile.value());
-    }
-
-    SECTION("Invalid position handling") {
-        MockEditorWidget mockEditor;
-
-        // Test positions outside map bounds
-        sf::Vector2f invalidPos1(-10.0f, -10.0f);     // Negative coordinates
-        sf::Vector2f invalidPos2(10000.0f, 10000.0f); // Way outside map
-
-        auto tile1 = mockEditor.getTileAtPosition(invalidPos1, false);
-        auto tile2 = mockEditor.getTileAtPosition(invalidPos2, false);
-
-        // Should return nullopt for invalid positions
-        REQUIRE_FALSE(tile1.has_value());
-        REQUIRE_FALSE(tile2.has_value());
-    }
-}
-
-//==============================================================================
 // SECTION: Real SelectionManager construction through the mock provider
 //
 // These tests close the testability gap: previously MockEditorWidget only
@@ -215,19 +159,35 @@ TEST_CASE("SelectionManager drives provider-backed selection paths", "[selection
         REQUIRE_THAT(roofs, Catch::Matchers::UnorderedEquals(std::vector<int>{ 10, 250, 9999 }));
     }
 
-    SECTION("selectArea(FLOOR_TILES) succeeds via the provider's spatial index") {
-        // The spatial index was never built, so it yields no tiles; the path must
-        // still run cleanly through the provider and produce an (empty) selection.
+    SECTION("selectArea(FLOOR_TILES) selects nothing before the spatial index is built") {
+        // Floor area selection reads the sprite-backed spatial index, which initializeSpatialIndex()
+        // never populated here; the built-index path is covered by the elevation regression below.
         sf::FloatRect area({ 100.0f, 100.0f }, { 200.0f, 200.0f });
         auto result = mgr.selectArea(area, SelectionMode::FLOOR_TILES);
         REQUIRE(result.success);
         REQUIRE(mgr.getCurrentSelection().getFloorTileIndices().empty());
     }
 
-    SECTION("selectArea(HEXES) is safe with an empty hex grid") {
-        // getHexesInArea() iterates the provider's HexagonGrid; a default grid is empty.
-        sf::FloatRect area({ 0.0f, 0.0f }, { 500.0f, 500.0f });
-        auto result = mgr.selectArea(area, SelectionMode::HEXES);
+    SECTION("selectArea(HEXES) selects the hexes whose centre box the area touches") {
+        // getHexesInArea walks the provider's full 200x200 grid with a 32x16 box around each centre.
+        const auto hex = mockWidget.hexGrid.getHexByPosition(20000);
+        REQUIRE(hex.has_value());
+        const float cx = static_cast<float>(hex->get().x());
+        const float cy = static_cast<float>(hex->get().y());
+        REQUIRE(mgr.selectArea(sf::FloatRect({ cx - 1.0f, cy - 1.0f }, { 2.0f, 2.0f }), SelectionMode::HEXES).success);
+        const auto hexes = mgr.getCurrentSelection().getHexIndices();
+        CHECK_THAT(hexes, Catch::Matchers::VectorContains(20000));
+        for (const int selected : hexes) {
+            const auto h = mockWidget.hexGrid.getHexByPosition(static_cast<uint32_t>(selected));
+            REQUIRE(h.has_value());
+            CHECK(std::abs(static_cast<float>(h->get().x()) - cx) < 17.0f);
+            CHECK(std::abs(static_cast<float>(h->get().y()) - cy) < 9.0f);
+        }
+    }
+
+    SECTION("selectArea(HEXES) off the hex diamond selects nothing") {
+        // The grid's screen diamond starts well below y = 500 at this x range, so no hex lies here.
+        auto result = mgr.selectArea(sf::FloatRect({ 0.0f, 0.0f }, { 500.0f, 500.0f }), SelectionMode::HEXES);
         REQUIRE(result.success);
         REQUIRE(mgr.getCurrentSelection().getHexIndices().empty());
     }
@@ -689,6 +649,15 @@ TEST_CASE("SelectionManager area selection honors host elevation (regression)", 
         // read elevation 0 (the old hardcoded-0 bug), tiles.at(0) has it EMPTY and the
         // selection would be empty.
         REQUIRE_THAT(roofs, Catch::Matchers::VectorContains(TARGET_ROOF_TILE));
+    }
+
+    SECTION("FLOOR_TILES area selection picks the indexed floor tile under the area") {
+        const auto floorPos = indexToScreenPosition(TARGET_ROOF_TILE, false);
+        const sf::FloatRect floorArea({ static_cast<float>(floorPos.x) - 4.0f, static_cast<float>(floorPos.y) - 4.0f },
+            { 8.0f, 8.0f });
+        REQUIRE(mgr.selectArea(floorArea, SelectionMode::FLOOR_TILES).success);
+        CHECK_THAT(mgr.getCurrentSelection().getFloorTileIndices(), Catch::Matchers::VectorContains(TARGET_ROOF_TILE));
+        CHECK(mgr.getCurrentSelection().getRoofTileIndices().empty());
     }
 
     SECTION("same area on elevation 0 finds nothing (proves elevation is honored)") {

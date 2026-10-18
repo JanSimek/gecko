@@ -50,15 +50,6 @@ TEST_CASE("SelectionState basic functionality", "[selection_state]") {
         REQUIRE(state.hasItem(roofTile));
     }
 
-    SECTION("Hex selection") {
-        SelectedItem hexItem{ SelectionType::HEX, 2500 };
-        state.addItem(hexItem);
-
-        REQUIRE(state.count() == 1);
-        REQUIRE(state.hasItem(hexItem));
-        REQUIRE(hexItem.getHexIndex() == 2500);
-    }
-
     SECTION("Clear functionality") {
         // Add multiple items
         state.addItem({ SelectionType::FLOOR_TILE, 100 });
@@ -84,42 +75,22 @@ TEST_CASE("SelectionState keeps floor, roof and hex items apart by type", "[sele
     CHECK(state.getFloorTileIndices() == std::vector<int>{ 1500 });
     CHECK(state.getRoofTileIndices() == std::vector<int>{ 1500 });
     CHECK(state.getHexIndices() == std::vector<int>{ 15000 });
+    CHECK(state.hasItem({ SelectionType::HEX, 15000 }));
+    CHECK_FALSE(state.hasItem({ SelectionType::HEX, 1500 }));
 }
 
 //==============================================================================
 // SECTION: Selection Mode Tests
 //==============================================================================
 
-TEST_CASE("Selection mode enumeration", "[selection_modes]") {
-    SECTION("All selection modes are defined") {
-        // Test that all expected selection modes exist
-        std::vector<SelectionMode> allModes = {
-            SelectionMode::ALL,
-            SelectionMode::FLOOR_TILES,
-            SelectionMode::ROOF_TILES,
-            SelectionMode::ROOF_TILES_ALL,
-            SelectionMode::OBJECTS,
-            SelectionMode::HEXES,
-            SelectionMode::SCROLL_BLOCKER_RECTANGLE
-        };
-
-        // Verify string conversion works for all modes
-        for (auto mode : allModes) {
-            const std::string_view modeStr = selectionModeToString(mode);
-            REQUIRE_FALSE(modeStr.empty());
-            REQUIRE(modeStr != "Unknown");
-        }
-    }
-
-    SECTION("Selection mode string representations") {
-        CHECK(std::string_view(selectionModeToString(SelectionMode::ALL)) == "All");
-        CHECK(std::string_view(selectionModeToString(SelectionMode::FLOOR_TILES)) == "Floor Tiles");
-        CHECK(std::string_view(selectionModeToString(SelectionMode::ROOF_TILES)) == "Roof Tiles");
-        CHECK(std::string_view(selectionModeToString(SelectionMode::ROOF_TILES_ALL)) == "Roof Tiles + Empty");
-        CHECK(std::string_view(selectionModeToString(SelectionMode::OBJECTS)) == "Objects");
-        CHECK(std::string_view(selectionModeToString(SelectionMode::HEXES)) == "Hexes");
-        CHECK(std::string_view(selectionModeToString(SelectionMode::SCROLL_BLOCKER_RECTANGLE)) == "Scroll Blocker");
-    }
+TEST_CASE("selectionModeToString names every selection mode", "[selection_modes]") {
+    CHECK(std::string_view(selectionModeToString(SelectionMode::ALL)) == "All");
+    CHECK(std::string_view(selectionModeToString(SelectionMode::FLOOR_TILES)) == "Floor Tiles");
+    CHECK(std::string_view(selectionModeToString(SelectionMode::ROOF_TILES)) == "Roof Tiles");
+    CHECK(std::string_view(selectionModeToString(SelectionMode::ROOF_TILES_ALL)) == "Roof Tiles + Empty");
+    CHECK(std::string_view(selectionModeToString(SelectionMode::OBJECTS)) == "Objects");
+    CHECK(std::string_view(selectionModeToString(SelectionMode::HEXES)) == "Hexes");
+    CHECK(std::string_view(selectionModeToString(SelectionMode::SCROLL_BLOCKER_RECTANGLE)) == "Scroll Blocker");
 }
 
 //==============================================================================

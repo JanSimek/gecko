@@ -3,6 +3,7 @@
 
 #include "editor/HexagonGrid.h"
 #include "editor/HexGeometry.h"
+#include "util/TileUtils.h"
 
 #include <algorithm>
 #include <set>
@@ -28,6 +29,21 @@ TEST_CASE("HexagonGrid validates positions and converts to tiles", "[hex_grid]")
         REQUIRE(grid.tileIndexForPosition(HexagonGrid::GRID_WIDTH + 1) == 0);
         REQUIRE(grid.tileIndexForPosition(2) == 1);
         REQUIRE(grid.tileIndexForPosition(HexagonGrid::POSITION_COUNT - 1) == HexagonGrid::TILE_COUNT - 1);
+    }
+}
+
+TEST_CASE("tileIndexToHexIndex picks a tile's top-left hex and round-trips through tileIndexForPosition",
+    "[hex_grid]") {
+    const HexagonGrid grid;
+
+    CHECK(tileIndexToHexIndex(0) == 0);
+    CHECK(tileIndexToHexIndex(1) == 2);
+    CHECK(tileIndexToHexIndex(50) == 100);
+    CHECK(tileIndexToHexIndex(HexagonGrid::TILE_GRID_WIDTH) == 2 * HexagonGrid::GRID_WIDTH);
+    CHECK(tileIndexToHexIndex(HexagonGrid::TILE_COUNT - 1) == 39798); // tile (99, 99) -> hex (198, 198)
+
+    for (const int tileIndex : { 0, 100, 1000, 2500, 5000, HexagonGrid::TILE_COUNT - 1 }) {
+        CHECK(grid.tileIndexForPosition(tileIndexToHexIndex(tileIndex)) == tileIndex);
     }
 }
 

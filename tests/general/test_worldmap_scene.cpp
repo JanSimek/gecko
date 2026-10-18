@@ -1,8 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -84,6 +86,16 @@ struct FixtureResources {
     void mount() { resources.files().addDataPath(root.string()); }
 };
 
+// city.txt, worldmap.txt and color.pal, but an intrface.lst too short for any worldmap art index (the
+// tile's 999999, the markers' 336-338), so resolve() throws on each.
+void writeArtlessWorldmapData(FixtureResources& fixture) {
+    writeFile(fixture.root / "data/city.txt", kCityTxt);
+    writeFile(fixture.root / "data/worldmap.txt", kWorldmapTxt);
+    writePal(fixture.root / "color.pal");
+    writeFile(fixture.root / "art/intrface/intrface.lst", "iface0.frm\niface1.frm\n");
+    fixture.mount();
+}
+
 } // namespace
 
 // Both halves of an art lookup throw rather than returning null: ResourceRepository::load on a file
@@ -105,13 +117,7 @@ TEST_CASE("WorldMapScene reports missing worldmap data instead of throwing", "[w
 
 TEST_CASE("WorldMapScene draws what it can and lists the art it could not load", "[worldmap][scene]") {
     FixtureResources fixture("geck_worldmap_scene_noart_test");
-    writeFile(fixture.root / "data/city.txt", kCityTxt);
-    writeFile(fixture.root / "data/worldmap.txt", kWorldmapTxt);
-    writePal(fixture.root / "color.pal");
-    // Two entries, so every worldmap art index (the tile's 999999, the markers' 336-338) is past
-    // the end of the list and resolve() throws on each.
-    writeFile(fixture.root / "art/intrface/intrface.lst", "iface0.frm\niface1.frm\n");
-    fixture.mount();
+    writeArtlessWorldmapData(fixture);
 
     std::unique_ptr<worldmap::WorldMapScene> scene;
     REQUIRE_NOTHROW(scene = worldmap::WorldMapScene::load(fixture.resources));
@@ -134,4 +140,31 @@ TEST_CASE("WorldMapScene draws what it can and lists the art it could not load",
     CHECK_FALSE(arroyo.contains(arroyo.x, arroyo.y));
     CHECK(scene->areaAt(arroyo.x, arroyo.y) == nullptr);
     CHECK(scene->markerProfile(arroyo.size).empty());
+}
+
+// The single most load-bearing fact in drawing the worldmap. city.txt's world_pos is measured from
+// the engine's 640x480 interface window, but the map view starts at (WM_VIEW_X, WM_VIEW_Y) inside
+// it, so a marker's real place on the worldmap is world_pos minus that. fallout2-ce applies the bias
+// in both directions (wmInterfaceRefresh draws at city->x - offset into a buffer whose view begins
+// at WM_VIEW_X; wmMatchWorldPosToArea hit-tests worldPos + WM_VIEW_X against city->x).
+//
+// The engine pins it down: a new game starts the party at the hard-coded world position (173, 122)
+// (wmGenDataSetStartWorldPos), and that has to be inside Arroyo. Only the biased rectangle contains
+// it, and puts it within two pixels of the circle's centre.
+TEST_CASE("WorldMapScene places area markers WM_VIEW_X/Y before their world_pos", "[worldmap][scene]") {
+    FixtureResources fixture("geck_worldmap_scene_bias_test");
+    writeArtlessWorldmapData(fixture);
+
+    const std::unique_ptr<worldmap::WorldMapScene> scene = worldmap::WorldMapScene::load(fixture.resources);
+    REQUIRE(scene != nullptr);
+    REQUIRE(scene->areas().size() == 1);
+    const worldmap::AreaMarker& arroyo = scene->areas().front();
+    CHECK(arroyo.x == 162); // world_pos 184,133
+    CHECK(arroyo.y == 112);
+
+    constexpr int MEDIUM_CIRCLE = 25; // art/intrface/wrldspr1.frm
+    constexpr int START_X = 173;
+    constexpr int START_Y = 122;
+    CHECK(std::abs(arroyo.x + MEDIUM_CIRCLE / 2 - START_X) <= 2);
+    CHECK(std::abs(arroyo.y + MEDIUM_CIRCLE / 2 - START_Y) <= 2);
 }

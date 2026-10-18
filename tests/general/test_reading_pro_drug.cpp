@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
+
 #include "format/pro/Pro.h"
 #include "reader/pro/ProReader.h"
 #include "support/Fixtures.h"
@@ -24,9 +26,16 @@ TEST_CASE("Parse .pro drug file", "[pro]") {
     REQUIRE(pro_file->commonItemData.inventoryFID == 0x700002b);
     REQUIRE(pro_file->commonItemData.soundId == 48); // ASCII '0'
 
-    REQUIRE(geck::Pro::hasFlag(pro_file->header.flags, geck::Pro::ObjectFlags::OBJECT_FLAT));
-
-    // TODO: check other flags
+    // The whole flags words, so a stray or missing bit fails: flat, light- and shoot-through; the
+    // item's extended action bits.
+    using ObjectFlags = geck::Pro::ObjectFlags;
+    using ExtendedItemFlags = geck::Pro::ExtendedItemFlags;
+    CHECK(pro_file->header.flags
+        == (static_cast<uint32_t>(ObjectFlags::OBJECT_FLAT) | static_cast<uint32_t>(ObjectFlags::OBJECT_LIGHT_THRU)
+            | static_cast<uint32_t>(ObjectFlags::OBJECT_SHOOT_THRU)));
+    CHECK(pro_file->commonItemData.flagsExt
+        == (static_cast<uint32_t>(ExtendedItemFlags::CAN_USE_ON) | static_cast<uint32_t>(ExtendedItemFlags::GENERAL_FLAG)
+            | static_cast<uint32_t>(ExtendedItemFlags::INTERACTION_FLAG)));
 
     // Verify drug-specific data fields
     // The drug data structure contains immediate and delayed effects
