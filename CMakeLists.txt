@@ -11,6 +11,26 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Use the tracked git hooks (.githooks/pre-commit clang-formats the lines a commit changes). Leaves
+# a hooksPath the developer already set alone.
+option(GECK_INSTALL_GIT_HOOKS "Point this checkout's core.hooksPath at .githooks" ON)
+find_package(Git QUIET)
+if(GECK_INSTALL_GIT_HOOKS AND GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" config --get core.hooksPath
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE _geck_hooks_path
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(_geck_hooks_path STREQUAL "")
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" config core.hooksPath .githooks
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        message(STATUS "Git hooks: core.hooksPath set to .githooks")
+    elseif(NOT _geck_hooks_path STREQUAL ".githooks")
+        message(STATUS "Git hooks: keeping core.hooksPath=${_geck_hooks_path}; .githooks not installed")
+    endif()
+endif()
+
 if(NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})

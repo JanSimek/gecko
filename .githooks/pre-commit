@@ -1,0 +1,40 @@
+#!/bin/sh
+# Formats the C++ lines this commit changes with clang-format (`git clang-format --staged`), in both
+# the index and the working tree. Only changed lines are touched: a newer local clang-format would
+# otherwise reformat untouched code. Installed by CMake (core.hooksPath = .githooks).
+
+if ! git clang-format -h >/dev/null 2>&1; then
+    echo "pre-commit: git-clang-format not found; commit left unformatted." >&2
+    exit 0
+fi
+
+patch=$(mktemp) || exit 1
+trap 'rm -f "$patch"' EXIT
+
+# Exit status 1 just means "has changes"; an empty patch means nothing to format.
+git clang-format --staged --diff --quiet \
+    --extensions c,cc,cpp,cxx,h,hh,hpp,hxx >"$patch"
+[ -s "$patch" ] || exit 0
+
+if ! git apply --cached "$patch"; then
+    echo "pre-commit: could not apply clang-format's changes to the index." >&2
+    exit 1
+fi
+
+# `git commit <paths>` commits from a temporary index and then installs the locked real index,
+# which still holds the unformatted lines; fix that one too.
+real_index=$(git rev-parse --git-path index.lock)
+if [ -n "$GIT_INDEX_FILE" ] && [ -f "$real_index" ] && ! [ "$GIT_INDEX_FILE" -ef "$real_index" ]; then
+    GIT_INDEX_FILE="$real_index" git apply --cached "$patch" 2>/dev/null
+fi
+
+# Mirror the fix in the working tree so it doesn't show up as an unstaged revert. This can fail
+# only when unstaged edits overlap the formatted lines; the commit is formatted either way.
+if ! git apply "$patch" 2>/dev/null; then
+    echo "pre-commit: formatted the commit, but unstaged edits overlap it; the working tree" >&2
+    echo "            still has the unformatted lines." >&2
+fi
+
+echo "pre-commit: clang-format adjusted the staged changes:" >&2
+git apply --stat "$patch" >&2
+exit 0
