@@ -10,7 +10,7 @@
 #include <functional>
 #include <vector>
 
-#include "ui/input/InputHandler.h"
+#include "editing/input/InputHandler.h"
 #include "util/ExitGridDirection.h"
 
 #include "support/GraphicsTestEnv.h"

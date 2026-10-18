@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/tools/ITool.h"
+#include "editing/tools/ITool.h"
 
 #include <cstddef>
 #include <memory>

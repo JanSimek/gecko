@@ -1,4 +1,4 @@
-#include "ui/tools/ToolRegistry.h"
+#include "editing/tools/ToolRegistry.h"
 
 namespace geck {
 

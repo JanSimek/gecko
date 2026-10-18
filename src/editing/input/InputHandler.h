@@ -7,7 +7,7 @@
 #include <functional>
 #include <vector>
 #include <spdlog/spdlog.h>
-#include "ui/core/EditorMode.h"
+#include "editing/EditorMode.h"
 #include "util/Types.h"
 
 namespace geck {

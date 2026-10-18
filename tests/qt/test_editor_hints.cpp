@@ -7,7 +7,7 @@
 
 #include "ui/core/EditorHints.h"
 #include "ui/input/ActionSpec.h"
-#include "ui/core/EditorMode.h"
+#include "editing/EditorMode.h"
 
 using geck::EditorMode;
 using geck::hintForContext;

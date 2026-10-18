@@ -1,4 +1,4 @@
-#include "InputHandler.h"
+#include "editing/input/InputHandler.h"
 #include "util/Constants.h"
 #include "util/ExitGridDirection.h"
 #include <SFML/System/Time.hpp>

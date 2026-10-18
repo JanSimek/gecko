@@ -25,7 +25,7 @@
 #include <utility>
 #include <SFML/Window/Event.hpp>
 
-#include "EditorMode.h"
+#include "editing/EditorMode.h"
 
 QT_BEGIN_NAMESPACE
 class QVBoxLayout;

@@ -68,7 +68,7 @@ CMake targets, lowest layer first (`src/CMakeLists.txt`):
 | `vault` | `format/`, `reader/`, `writer/`, `ssl/`, parts of `util/` | Qt-free file formats and engine data parsing |
 | `gecko_resource` | `resource/`, `vfs/` | Qt-free; `GameResources`, DAT archives via vfspp. See `src/resource/README.md` |
 | `gecko_core` | `editor/`, `selection/`, `viewport/` | hex grid, `Object`, selection, coordinates |
-| `gecko_editing` | `editing/`, `rendering/`, `pattern/`, `scripting/` | undo services, SFML `RenderingEngine`, stamps/fills, Luau |
+| `gecko_editing` | `editing/`, `rendering/`, `pattern/`, `scripting/` | undo services, canvas `InputHandler` + `ToolRegistry` tools, SFML `RenderingEngine`, stamps/fills, Luau |
 | `gecko_app` | `ui/`, `state/` | Qt; linked by `gecko` and `qt_tests` |
 | `gecko_cli`, `gecko_mcp` | `cli/`, `mcp/` | headless analysis/generation; MCP stdio server over it |
 

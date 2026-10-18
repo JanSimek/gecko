@@ -200,8 +200,6 @@ set(GECK_APP_SOURCES
     ui/rendering/MapThumbnail.h
     ui/rendering/MapThumbnail.cpp
 
-    ui/input/InputHandler.h
-    ui/input/InputHandler.cpp
     ui/input/ActionSpec.h
     ui/input/ActionSpec.cpp
     ui/input/KeyBindingRegistry.h
@@ -215,10 +213,6 @@ set(GECK_APP_SOURCES
     ui/tools/ExitGridContext.h
     ui/tools/ExitGridPlacementManager.h
     ui/tools/ExitGridPlacementManager.cpp
-    ui/tools/FillBrushTool.h
-    ui/tools/ITool.h
-    ui/tools/ToolRegistry.h
-    ui/tools/ToolRegistry.cpp
     # Background loaders
     state/loader/Loader.h
     state/loader/MapLoader.cpp
@@ -661,6 +655,15 @@ add_library(gecko_editing STATIC
     rendering/RenderingEngine.cpp
     rendering/MapRenderer.h
     rendering/MapRenderer.cpp
+    # The canvas's tool-mode state machine (InputHandler) and the pluggable-tool seam it dispatches to
+    # (ITool/ToolRegistry, FillBrushTool): SFML events in, callbacks out, no Qt.
+    editing/EditorMode.h
+    editing/input/InputHandler.h
+    editing/input/InputHandler.cpp
+    editing/tools/ITool.h
+    editing/tools/ToolRegistry.h
+    editing/tools/ToolRegistry.cpp
+    editing/tools/FillBrushTool.h
     editing/commands/CommandHost.h
     editing/commands/ObjectCommandController.h
     editing/commands/ObjectCommandController.cpp

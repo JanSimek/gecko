@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "ui/tools/FillBrushTool.h"
+#include "editing/tools/FillBrushTool.h"
 
 using namespace geck;
 

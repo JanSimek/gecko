@@ -1,16 +1,23 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "ui/widgets/GameLocationWidget.h"
-
+#include <QAbstractButton>
 #include <QLineEdit>
 #include <QSignalSpy>
+#include <QTableWidget>
 
 #include <filesystem>
+#include <memory>
 #include <string_view>
+#include <vector>
 
 #include "support/MacBundle.h"
+#include "support/QtFind.h"
 #include "support/TempFile.h"
+#include "ui/Settings.h"
+#include "ui/widgets/DataPathsWidget.h"
+#include "ui/widgets/GameLocationWidget.h"
 
+namespace test = geck::test;
 using geck::GameLocationWidget;
 
 namespace {
@@ -163,4 +170,39 @@ TEST_CASE("Choosing an executable notifies once, not once per field it touches",
         widget.setDataDirectory("/games/fallout2");
         CHECK(notifications.count() == 1); // the field is only silenced while we drive it
     }
+}
+
+TEST_CASE("DataPathsWidget shows highest priority on top and preserves stored order", "[qt][datapaths]") {
+    auto settings = std::make_shared<geck::Settings>();
+    geck::DataPathsWidget widget(settings);
+
+    // Stored order is lowest-priority-first: the loader mounts in this order and the last-mounted
+    // source wins. (.dat paths normalise to themselves, so the round-trip is exact.)
+    const std::vector<std::filesystem::path> stored{ "/data/base.dat", "/data/patch.dat", "/data/mymod.dat" };
+    widget.setDataPaths(stored);
+
+    // Round-trip: the stored order is preserved exactly, so existing configs load identically.
+    CHECK(widget.getDataPaths() == stored);
+
+    // The table displays it reversed, highest priority first: the stored-last source is the top row.
+    auto* table = widget.findChild<QTableWidget*>();
+    REQUIRE(table != nullptr);
+    REQUIRE(table->rowCount() == 3);
+    CHECK(test::requireItem(*table, 0, 1).text().toStdString() == "/data/mymod.dat"); // top row = highest priority
+    CHECK(test::requireItem(*table, 2, 1).text().toStdString() == "/data/base.dat");  // bottom row = lowest
+    // Priority counts from 1 at the top. The cell is right-aligned with the marker arrow leading,
+    // so the number is what the text ends with.
+    CHECK(test::requireItem(*table, 0, 0).text().endsWith("1"));
+    CHECK(test::requireItem(*table, 2, 0).text().endsWith("3"));
+
+    // Every row can be reordered: priority is the user's call. The built-in resources folder used
+    // to block this - a row directly above it had Move Down greyed out, which stranded any path
+    // added after it, since new paths land on top.
+    table->setCurrentCell(0, 1);
+    QAbstractButton* moveDown = test::findButton(widget, "Move Down");
+    REQUIRE(moveDown != nullptr);
+    CHECK(moveDown->isEnabled());
+    moveDown->click();
+    CHECK(test::requireItem(*table, 1, 1).text().toStdString() == "/data/mymod.dat"); // moved one step down
+    CHECK(test::requireItem(*table, 0, 1).text().toStdString() == "/data/patch.dat");
 }

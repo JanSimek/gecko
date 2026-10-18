@@ -1,7 +1,7 @@
 #include "EditorWidget.h"
 #include "ui/core/EditorHints.h"
 #include "ui/widgets/SFMLWidget.h"
-#include "ui/input/InputHandler.h"
+#include "editing/input/InputHandler.h"
 // The stamp library + MapScriptApi are used by both the (scripting-only) Console and the always-on
 // area fill, so these are included unconditionally — only runScript itself stays #ifdef'd.
 #include "Application.h"
@@ -26,9 +26,9 @@
 #include "ui/dragdrop/DragDropManager.h"
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
-#include "ui/tools/FillBrushTool.h"
-#include "ui/tools/ITool.h"
-#include "ui/tools/ToolRegistry.h"
+#include "editing/tools/FillBrushTool.h"
+#include "editing/tools/ITool.h"
+#include "editing/tools/ToolRegistry.h"
 #include "viewport/EdgeScroll.h"
 #include "viewport/ViewportController.h"
 #include "ui/panels/ObjectPalettePanel.h"

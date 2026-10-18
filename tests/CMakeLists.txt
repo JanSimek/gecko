@@ -38,6 +38,9 @@ add_executable(general_tests
     general/test_undo_stack.cpp
     general/test_object_command_controller.cpp
     general/test_edge_edit_service.cpp
+    general/test_input_handler.cpp
+    general/test_tool_registry.cpp
+    general/test_fill_brush_tool.cpp
     general/test_animation_layout.cpp
     general/test_reading_lst.cpp
     general/test_reading_pal.cpp
@@ -111,20 +114,22 @@ endif()
 
 add_executable(qt_tests
     qt/qt_test_main.cpp
-    qt/test_ui_regressions.cpp
+    qt/test_pro_editor_widgets.cpp
+    qt/test_main_window.cpp
+    qt/test_map_info_panel.cpp
+    qt/test_scripts_panel.cpp
+    qt/test_exit_grids.cpp
+    qt/test_dialogs.cpp
+    qt/test_editor_widget.cpp
     qt/test_selection_panel.cpp
     qt/test_game_launcher.cpp
-    # Preferences: a macOS .app fixes the game root, so the data-directory field follows it.
-    qt/test_game_location_widget.cpp
+    # Preferences: the game-location (a macOS .app fixes the game root) and data-path widgets.
+    qt/test_preferences.cpp
     qt/test_palette_model.cpp
     qt/test_object_palette_indexing.cpp
     # PatternSerializer is the editor's Qt (QByteArray/QString) serializer.
     qt/test_pattern_serializer.cpp
-    # InputHandler is Qt-free but lives in gecko_app; its dispatch test needs SFML.
-    qt/test_input_handler.cpp
     qt/test_keybindings.cpp
-    qt/test_tool_registry.cpp
-    qt/test_fill_brush_tool.cpp
     # hintForContext is the pure status-bar key-hint provider (lives in gecko_app).
     qt/test_editor_hints.cpp
     # Log panel plumbing: the LogModel store (cap, threading), the spdlog sink, the filter proxy.
@@ -138,6 +143,11 @@ add_executable(qt_tests
     # CI-failing ceilings on operations that have regressed catastrophically before.
     qt/test_performance_guards.cpp
 )
+
+# The Luau console dock exists only when the runtime is compiled in.
+if(GECK_ENABLE_SCRIPTING)
+    target_sources(qt_tests PRIVATE qt/test_script_console.cpp)
+endif()
 
 # test_pattern_serializer also round-trips the headless pattern writer (gecko_cli) through the
 # editor's PatternSerializer; that case compiles only when the CLI lib is built (it owns

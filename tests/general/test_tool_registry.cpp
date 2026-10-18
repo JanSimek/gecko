@@ -4,7 +4,7 @@
 #include <string_view>
 #include <vector>
 
-#include "ui/tools/ToolRegistry.h"
+#include "editing/tools/ToolRegistry.h"
 
 using namespace geck;
 
