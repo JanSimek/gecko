@@ -305,15 +305,15 @@ Open items, roughly in order:
 
 # Feature-gap audit vs the reference mappers
 
-Full parity catalogue: [`docs/feature-gap-audit.md`](docs/feature-gap-audit.md), from a read-only
-audit of the fallout2-ce built-in mapper and the legacy Dims mapper against Gecko.
+From a read-only audit of the fallout2-ce built-in mapper and the legacy Dims mapper against Gecko;
+the full catalogue is `git show a89e980:docs/feature-gap-audit.md` (partly stale: `.edg` has shipped).
 
 1. **Minimap / overview** *(medium)* — click-to-navigate + elevation switch, with a viewport rectangle
    (improving on Dims' cursor-sprite locator).
 
 Deferred (substitute exists / niche): object clipboard copy-paste (pattern-stamp covers it),
 whole-elevation hex shift, absolute-rotation setters. Intentional non-goals and the corrected
-TODO-claim table are in the audit doc.
+TODO-claim table are in that catalogue.
 
 ---
 

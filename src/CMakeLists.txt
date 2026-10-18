@@ -192,7 +192,7 @@ set(GECK_APP_SOURCES
     ui/widgets/pro/ProMiscItemWidget.h
     ui/widgets/pro/ProMiscItemWidget.cpp
 
-    # Qt6 UI Constants
+    # Engine enum labels and offscreen thumbnails
     ui/GameEnums.h
     ui/GameEnums.cpp
     ui/rendering/ThumbnailRenderer.h
@@ -219,7 +219,7 @@ set(GECK_APP_SOURCES
     ui/tools/ITool.h
     ui/tools/ToolRegistry.h
     ui/tools/ToolRegistry.cpp
-    # Loaders (kept from state system)
+    # Background loaders
     state/loader/Loader.h
     state/loader/MapLoader.cpp
     state/loader/MapLoader.h
@@ -229,8 +229,6 @@ set(GECK_APP_SOURCES
     # Game launch service
     state/GameLauncher.cpp
     state/GameLauncher.h
-
-    # Map save service (Qt-free MapWriter + proto-resolver core)
 
     # Qt Resource files
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
@@ -254,19 +252,19 @@ if(WIN32)
     # Add Windows resource file for icon
     target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/resources/gecko.rc)
 elseif(APPLE)
-    # Add icon to bundle
-    set(MACOSX_BUNDLE_ICON_FILE gecko.icns)
+    # gecko.icns is the Dock/Finder icon (CFBundleIconFile)
     set(APP_ICON_MACOSX ${CMAKE_SOURCE_DIR}/resources/gecko.icns)
     set_source_files_properties(${APP_ICON_MACOSX} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
     add_executable(${PROJECT_NAME} MACOSX_BUNDLE main.cpp ${APP_ICON_MACOSX})
-    
-    # Set bundle properties
+
+    # Substituted into the resources/Info.plist template
     set_target_properties(${PROJECT_NAME} PROPERTIES
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/resources/Info.plist
         MACOSX_BUNDLE_BUNDLE_NAME "Gecko"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.gecko.editor"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
-        MACOSX_BUNDLE_BUNDLE_VERSION "1"
+        MACOSX_BUNDLE_ICON_FILE gecko.icns
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     )
 else()
     add_executable(${PROJECT_NAME} main.cpp)
@@ -416,9 +414,6 @@ add_library(vault STATIC
 
     reader/dat/DatReader.h
     reader/dat/DatReader.cpp
-
-#    writer/dat/DatWriter.h
-#    writer/dat/DatWriter.cpp
 
     reader/frm/FrmReader.h
     reader/frm/FrmReader.cpp
@@ -636,7 +631,7 @@ target_link_libraries(gecko_core PUBLIC
 # Map mutation that is heavier than the core model but still Qt-free: the undoable command
 # controller, the sprite/object builders and the scripting host API (plus the optional Luau
 # runtime). Sits on gecko_core so the Qt UI (gecko_app) and headless frontends (gecko-cli,
-# a future MCP server) drive the same editing code without any of them pulling in Qt.
+# gecko-mcp) drive the same editing code without any of them pulling in Qt.
 add_library(gecko_editing STATIC
     util/SpriteFactory.h
     util/SpriteFactory.cpp
@@ -845,11 +840,6 @@ if(APPLE)
         TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/resources
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/scripts $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/resources/scripts
-    )
-    # Also copy the main icon.png to Resources root for easy access
-    add_custom_command(
-        TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/resources/icon.png $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/icon.png
     )
 else()
     # For other platforms, stage resources next to the executable. Single-config builds share one

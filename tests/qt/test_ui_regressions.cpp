@@ -814,7 +814,7 @@ TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][main
 }
 
 // The panel shortcut family: Alt+1..6 on the six managed panels, Alt+` on the Log dock
-// (docs/keybindings-plan.md). Alt+digit rather than Ctrl+digit so Ctrl+1..3 stays free for the
+// (ui/input/ActionSpec.cpp). Alt+digit rather than Ctrl+digit so Ctrl+1..3 stays free for the
 // elevations and a panel's filter box never swallows the key.
 TEST_CASE("Panel menu actions carry their Alt shortcuts", "[qt][mainwindow][keys]") {
     removeTestSettings();

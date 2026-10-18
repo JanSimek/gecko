@@ -23,6 +23,12 @@ Some dependencies are bundled as git submodules, so clone with `--recursive` —
 `SFML`, `spdlog` and `ZLIB` are used from your system when a compatible version is
 found, and otherwise downloaded and built automatically by CMake. Qt6 must be installed.
 
+Besides the editor (`gecko`), the build produces `gecko-cli`, a headless tool that analyses,
+renders and generates maps (`gecko-cli --help`), and `gecko-mcp`, an MCP server exposing the
+same tools to AI agents (`-DGECK_BUILD_CLI=OFF` / `-DGECK_BUILD_MCP=OFF` skip them). The Luau
+scripting runtime behind map generation, fills and stamps is optional: configure with
+`-DGECK_ENABLE_SCRIPTING=ON` (it downloads Luau).
+
 ### Linux
 
 ```bash
@@ -74,7 +80,9 @@ cmake --build build
 
 ### Setup
 
-1. Copy `master.dat` and `critter.dat` from your Fallout 2 installation to the `resources` subdirectory (`gecko.app/Contents/Resources` on Mac)
+1. On first run Gecko opens its settings: add your Fallout 2 data under **Fallout 2 Data Paths**
+   (**Add Path... → Add DAT File...** for `master.dat` / `critter.dat`, **Add Folder...** for an
+   unpacked `data` directory, or **Auto-Detect**). Change them later in **Preferences → General**.
 2. (Optional) Extract data files using [dat-unpacker](https://github.com/falltergeist/dat-unpacker) with the `--transform` option to convert filenames to lowercase
 
 ### Controls

@@ -2517,7 +2517,7 @@ void MainWindow::setupPanelsMenu() {
         const char* label;
         QDockWidget* dock;
         QAction** actionRef;
-        const char* actionId; // the Alt+<digit> family; see docs/keybindings-plan.md
+        const char* actionId; // the Alt+<digit> family; see ui/input/ActionSpec.cpp
     };
 
     const std::array<PanelToggleSpec, 6> panelToggleSpecs = { {

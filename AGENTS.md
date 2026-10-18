@@ -80,7 +80,7 @@ CMake targets, lowest layer first (`src/CMakeLists.txt`):
   map script API (`scripts/README.md`); the build copies them into `resources/scripts`.
 
 Docs: `PLAN.md` is the backlog (open work only — delete shipped items, don't mark them done);
-`docs/` has format notes and `docs/feature-gap-audit.md`.
+`docs/` has format notes.
 
 ## Fallout 2 format rules
 

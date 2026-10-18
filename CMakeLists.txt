@@ -95,30 +95,15 @@ function(geck_disable_target_warnings)
             continue()
         endif()
 
-        get_property(_is_alias TARGET ${_target} PROPERTY ALIASED_TARGET SET)
-        if(_is_alias)
-            get_property(_resolved TARGET ${_target} PROPERTY ALIASED_TARGET)
-        else()
-            set(_resolved ${_target})
-        endif()
-
-        if(NOT _resolved)
-            continue()
-        endif()
-
-        get_target_property(_target_type ${_resolved} TYPE)
-        if(NOT _target_type)
-            continue()
-        endif()
-
-        if(_target_type MATCHES "INTERFACE")
+        get_target_property(_target_type ${_target} TYPE)
+        if(_target_type STREQUAL "INTERFACE_LIBRARY")
             continue()
         endif()
 
         if(MSVC)
-            target_compile_options(${_resolved} PRIVATE /w)
+            target_compile_options(${_target} PRIVATE /w)
         else()
-            target_compile_options(${_resolved} PRIVATE -w)
+            target_compile_options(${_target} PRIVATE -w)
         endif()
     endforeach()
 endfunction()
@@ -148,16 +133,15 @@ endif()
 
 if(MSVC)
     add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
-    # Suppress deprecation warning for stdext::checked_array_iterator in debug builds
-    add_compile_definitions(_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING)
 endif()
 
 # Targets
 add_subdirectory(src)
 
 if(GECK_BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
-    add_subdirectory(tests)
+    # Before add_subdirectory: tests/ inherits the enabled state its add_test() calls need.
     enable_testing()
+    add_subdirectory(tests)
 endif()
 
 # Windows: one target stages the runtime DLLs into the shared output dir. Each executable used to

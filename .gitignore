@@ -16,10 +16,6 @@
 *.dylib
 *.dll
 
-# Fortran module files
-*.mod
-*.smod
-
 # Compiled Static libraries
 *.lai
 *.la
@@ -40,10 +36,7 @@ reference/
 # All the stuff that running cmake adds
 CMakeCache.txt
 CMakeFiles/
-CPM_modules/
 _deps/
-cmake/CPM_*.cmake
-cpm-package-lock.cmake
 bin/
 Makefile
 cmake_install.cmake

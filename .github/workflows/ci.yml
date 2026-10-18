@@ -1,20 +1,25 @@
 name: CI
 
-# Skip CI for docs/text-only changes: a run is suppressed only when EVERY changed file
-# matches one of these patterns (a mixed code+docs change still builds).
+# Skip CI for docs/text-only changes: a run is suppressed only when EVERY changed file is
+# excluded (a mixed code+docs change still builds). Later patterns win, so the trailing
+# positive pattern re-includes scripts/README.md, which a test reads.
 on:
   push:
     branches: [ master, develop ]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - '!LICENSE'
+      - 'scripts/README.md'
   pull_request:
     branches: [ master, develop ]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - '!LICENSE'
+      - 'scripts/README.md'
   workflow_dispatch:
 
 # Cancel superseded runs for the same branch/PR so the queue doesn't pile up with stale

@@ -176,10 +176,7 @@ target_include_directories(qt_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
 
-# Enable testing
-include(CTest)
-
-# Catch2 test discovery for general tests
+# Catch2 test discovery for general tests (testing is enabled by the top-level CMakeLists)
 include(Catch)
 
 # In CI environments, use simpler test registration to avoid library loading issues

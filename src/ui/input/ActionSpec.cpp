@@ -8,9 +8,8 @@ namespace geck {
 namespace {
 
     // The shipped defaults. Kept in one place so the menus, the toolbar, the canvas shortcuts and
-    // the Preferences page all read the same table — see docs/keybindings-plan.md for the rationale
-    // behind the families (Alt+digit for panels, Ctrl+digit for elevations, bare letters on the
-    // canvas only).
+    // the Preferences page all read the same table. The families: Alt+digit for panels, Ctrl+digit
+    // for elevations, bare letters on the canvas only (AGENTS.md, "Keyboard shortcuts").
     constexpr std::array<ActionSpec, 34> SPECS = { {
         // File
         { actions::NEW_MAP, "New Map", "File", "", QKeySequence::New, ActionScope::Application },
