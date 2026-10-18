@@ -6,6 +6,8 @@
 #include "resource/GameResources.h"
 #include "rendering/MapRenderer.h"
 
+#include "support/MapObjectBuilder.h"
+
 using namespace geck;
 
 // A full render needs game art and an off-screen GL context (validated against real Fallout 2 data),
@@ -14,8 +16,7 @@ using namespace geck;
 // texture or GL context, so this case runs on any machine, headless or not.
 TEST_CASE("MapRenderer reports an empty map instead of rendering blank", "[render]") {
     resource::GameResources resources; // no data mounted
-    auto map = std::make_unique<Map>("empty.map");
-    map->setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
+    const auto map = test::mapOf();
 
     MapRenderer renderer(resources);
 

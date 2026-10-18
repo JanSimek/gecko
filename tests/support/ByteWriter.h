@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <string_view>
 #include <vector>
 
@@ -27,6 +28,14 @@ public:
         _bytes.push_back(static_cast<uint8_t>(v >> 16));
         _bytes.push_back(static_cast<uint8_t>(v >> 8));
         _bytes.push_back(static_cast<uint8_t>(v));
+        return *this;
+    }
+
+    /// Appends each of `values` big-endian, as the signed 32-bit words the engine's protos hold.
+    ByteWriter& be32s(std::initializer_list<int32_t> values) {
+        for (const int32_t v : values) {
+            be32(static_cast<uint32_t>(v));
+        }
         return *this;
     }
 

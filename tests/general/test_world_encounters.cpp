@@ -9,6 +9,7 @@
 #include "cli/WorldEncounters.h"
 #include "resource/GameResources.h"
 
+#include "support/CliJson.h"
 #include "support/DataTree.h"
 
 using namespace geck;
@@ -32,9 +33,7 @@ TEST_CASE("world encounters report the tables and the odds at a worldmap positio
     auto& resources = tree.mount();
 
     SECTION("the whole table set, with the gvars a condition reads") {
-        std::ostringstream oss;
-        REQUIRE(cli::buildWorldEncounters(resources, oss) == 0);
-        const auto j = nlohmann::json::parse(oss.str());
+        const auto j = test::runJson([&](std::ostream& out) { return cli::buildWorldEncounters(resources, out); });
         CHECK(j["frequencies"]["frequent"] == 38);
         REQUIRE(j["encounterTables"].size() == 2);
         const auto& entry = j["encounterTables"][0]["entries"][0];
@@ -48,9 +47,8 @@ TEST_CASE("world encounters report the tables and the odds at a worldmap positio
     }
 
     SECTION("one position: its sub-tile, the odds per part of the day and the table") {
-        std::ostringstream oss;
-        REQUIRE(cli::describeWorldPosition(resources, 60, 10, oss) == 0); // row 1, column 0
-        const auto j = nlohmann::json::parse(oss.str());
+        // row 1, column 0
+        const auto j = test::runJson([&](std::ostream& out) { return cli::describeWorldPosition(resources, 60, 10, out); });
         CHECK(j["subtile"]["row"] == 1);
         CHECK(j["terrain"] == "Desert");
         CHECK(j["fill"] == "fill_n");

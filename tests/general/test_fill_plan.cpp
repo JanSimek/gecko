@@ -13,7 +13,7 @@
 #include "scripting/EditArea.h"
 #include "scripting/MapScriptApi.h"
 
-#include "support/ControllerFixture.h"
+#include "support/ScriptApiFixture.h"
 
 // The A0 plan-sink core: MapScriptApi mutators record into a FillPlan instead of committing while a
 // sink is installed (preview), and pattern::PlacementBatch::replay applies the captured plan as ONE
@@ -22,9 +22,10 @@
 
 using namespace geck;
 using geck::test::ControllerFixture;
+using geck::test::ScriptApiFixture;
 
 namespace {
-constexpr int ELEV = 0;
+constexpr int ELEV = ScriptApiFixture::ELEVATION;
 constexpr uint16_t TILE_A = 271;
 constexpr uint16_t TILE_B = 300;
 constexpr uint16_t EMPTY = static_cast<uint16_t>(Map::EMPTY_TILE);
@@ -39,16 +40,15 @@ void seedTiles(ControllerFixture& fx) {
 } // namespace
 
 TEST_CASE("plan sink records edits without committing; replay applies them as one undo entry", "[scripting][fill]") {
-    ControllerFixture fx;
+    ScriptApiFixture fx{ false };
     seedTiles(fx);
-    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, /*buildSprites*/ false);
 
     pattern::FillPlan plan;
-    api.setPlanSink(&plan);
+    fx.api.setPlanSink(&plan);
 
-    REQUIRE(api.paintFloor(10, TILE_A));
-    REQUIRE(api.paintFloor(11, TILE_B));
-    REQUIRE(api.placeObject(PRO, FRM, 20100, 0));
+    REQUIRE(fx.api.paintFloor(10, TILE_A));
+    REQUIRE(fx.api.paintFloor(11, TILE_B));
+    REQUIRE(fx.api.placeObject(PRO, FRM, 20100, 0));
 
     // Captured into the plan, fully built...
     CHECK(plan.tiles.size() == 2);
@@ -62,7 +62,7 @@ TEST_CASE("plan sink records edits without committing; replay applies them as on
     CHECK_FALSE(fx.undoStack.canUndo());
 
     // Detach the sink and replay: now it commits, as a SINGLE undo entry.
-    api.setPlanSink(nullptr);
+    fx.api.setPlanSink(nullptr);
     const auto r = pattern::PlacementBatch::replay(fx.controller, plan, /*buildSprites*/ false, "Fill selection");
     CHECK(r.tilesPainted == 2);
     CHECK(r.objectsPlaced == 1);
@@ -83,27 +83,25 @@ TEST_CASE("plan sink records edits without committing; replay applies them as on
 
 TEST_CASE("a captured-then-replayed run yields the same map as a direct run", "[scripting][fill]") {
     // Direct run: mutators commit immediately inside one batch.
-    ControllerFixture direct;
+    ScriptApiFixture direct{ false };
     seedTiles(direct);
     {
-        MapScriptApi api(direct.resources, direct.hexgrid, direct.controller, *direct.map, ELEV, false);
         ScopedUndoBatch batch(direct.controller, "Fill");
-        REQUIRE(api.paintFloor(10, TILE_A));
-        REQUIRE(api.placeObject(PRO, FRM, 20100, 0));
-        REQUIRE(api.placeObject(PRO, FRM, 20101, 2));
+        REQUIRE(direct.api.paintFloor(10, TILE_A));
+        REQUIRE(direct.api.placeObject(PRO, FRM, 20100, 0));
+        REQUIRE(direct.api.placeObject(PRO, FRM, 20101, 2));
     }
 
     // Captured run: same calls into a sink, then replayed.
-    ControllerFixture replayed;
+    ScriptApiFixture replayed{ false };
     seedTiles(replayed);
     {
-        MapScriptApi api(replayed.resources, replayed.hexgrid, replayed.controller, *replayed.map, ELEV, false);
         pattern::FillPlan plan;
-        api.setPlanSink(&plan);
-        REQUIRE(api.paintFloor(10, TILE_A));
-        REQUIRE(api.placeObject(PRO, FRM, 20100, 0));
-        REQUIRE(api.placeObject(PRO, FRM, 20101, 2));
-        api.setPlanSink(nullptr);
+        replayed.api.setPlanSink(&plan);
+        REQUIRE(replayed.api.paintFloor(10, TILE_A));
+        REQUIRE(replayed.api.placeObject(PRO, FRM, 20100, 0));
+        REQUIRE(replayed.api.placeObject(PRO, FRM, 20101, 2));
+        replayed.api.setPlanSink(nullptr);
         pattern::PlacementBatch::replay(replayed.controller, plan, false, "Fill");
     }
 
@@ -121,9 +119,8 @@ TEST_CASE("a captured-then-replayed run yields the same map as a direct run", "[
 }
 
 TEST_CASE("placeStamp under a plan sink is captured, not committed", "[scripting][fill][stamper]") {
-    ControllerFixture fx;
+    ScriptApiFixture fx{ false };
     seedTiles(fx);
-    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
 
     // A small prefab: two objects + one floor tile.
     pattern::Pattern pat;
@@ -134,11 +131,11 @@ TEST_CASE("placeStamp under a plan sink is captured, not committed", "[scripting
     v.objects.push_back({ 1, 0, PRO, FRM, 2u, 0u }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
     v.floor.push_back({ 0, 0, TILE_A });
     pat.variants.push_back(v);
-    api.addStamp("cluster", pat);
+    fx.api.addStamp("cluster", pat);
 
     pattern::FillPlan plan;
-    api.setPlanSink(&plan);
-    const int placed = api.placeStamp("cluster", 50 * HexagonGrid::GRID_WIDTH + 50, 0);
+    fx.api.setPlanSink(&plan);
+    const int placed = fx.api.placeStamp("cluster", 50 * HexagonGrid::GRID_WIDTH + 50, 0);
 
     // Without the sink-aware planInto path, placeStamp would open its own ScopedUndoBatch and mutate
     // the live map during preview. Here it must only record into the plan.
@@ -149,7 +146,7 @@ TEST_CASE("placeStamp under a plan sink is captured, not committed", "[scripting
     CHECK_FALSE(fx.undoStack.canUndo());
 
     // Replay commits the whole stamp as one entry.
-    api.setPlanSink(nullptr);
+    fx.api.setPlanSink(nullptr);
     const auto r = pattern::PlacementBatch::replay(fx.controller, plan, false, "Fill: stamp");
     CHECK(r.objectsPlaced == 2);
     CHECK(r.tilesPainted == 1);
@@ -164,15 +161,14 @@ TEST_CASE("the same seed yields an identical fill plan; a different seed differs
     // A seeded scatter over a strip of hexes, captured into a plan. Reproducibility is the contract
     // that lets a previewed fill match the apply and a saved recipe regenerate the same map.
     const auto buildPlan = [](uint32_t seed) {
-        ControllerFixture fx;
+        ScriptApiFixture fx{ false };
         seedTiles(fx);
-        MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
-        api.setSeed(seed);
+        fx.api.setSeed(seed);
         pattern::FillPlan plan;
-        api.setPlanSink(&plan);
+        fx.api.setPlanSink(&plan);
         for (int t = 0; t < 300; ++t) {
-            if (api.rng() < 0.4) {
-                api.placeObject(PRO, FRM, 21000 + t, static_cast<uint32_t>(api.rngInt(0, 5)));
+            if (fx.api.rng() < 0.4) {
+                fx.api.placeObject(PRO, FRM, 21000 + t, static_cast<uint32_t>(fx.api.rngInt(0, 5)));
             }
         }
         return plan; // owns its MapObjects via shared_ptr, so it outlives the fixture
@@ -204,30 +200,29 @@ TEST_CASE("the same seed yields an identical fill plan; a different seed differs
 }
 
 TEST_CASE("area accessors report the bound selection and test membership", "[scripting][fill]") {
-    ControllerFixture fx;
-    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV, false);
+    ScriptApiFixture fx{ false };
 
-    CHECK_FALSE(api.hasArea());
-    CHECK(api.areaHexes().empty());
-    CHECK_FALSE(api.areaContainsHex(100)); // no area bound -> nothing is inside
+    CHECK_FALSE(fx.api.hasArea());
+    CHECK(fx.api.areaHexes().empty());
+    CHECK_FALSE(fx.api.areaContainsHex(100)); // no area bound -> nothing is inside
 
     EditArea area;
     area.hexes = { 100, 205, 410 }; // sorted ascending (the EditArea contract)
     area.floorTiles = { 50, 51, 52 };
     area.roofTiles = { 50 };
-    api.setArea(&area);
+    fx.api.setArea(&area);
 
-    CHECK(api.hasArea());
-    CHECK(api.areaHexes() == std::vector<int>{ 100, 205, 410 });
-    CHECK(api.areaFloorTiles().size() == 3);
-    CHECK(api.areaRoofTiles() == std::vector<int>{ 50 });
+    CHECK(fx.api.hasArea());
+    CHECK(fx.api.areaHexes() == std::vector<int>{ 100, 205, 410 });
+    CHECK(fx.api.areaFloorTiles().size() == 3);
+    CHECK(fx.api.areaRoofTiles() == std::vector<int>{ 50 });
 
-    CHECK(api.areaContainsHex(205));
-    CHECK_FALSE(api.areaContainsHex(206));
-    CHECK(api.areaContainsTile(52));
-    CHECK_FALSE(api.areaContainsTile(53));
+    CHECK(fx.api.areaContainsHex(205));
+    CHECK_FALSE(fx.api.areaContainsHex(206));
+    CHECK(fx.api.areaContainsTile(52));
+    CHECK_FALSE(fx.api.areaContainsTile(53));
 
-    api.setArea(nullptr); // clears
-    CHECK_FALSE(api.hasArea());
-    CHECK_FALSE(api.areaContainsHex(205));
+    fx.api.setArea(nullptr); // clears
+    CHECK_FALSE(fx.api.hasArea());
+    CHECK_FALSE(fx.api.areaContainsHex(205));
 }

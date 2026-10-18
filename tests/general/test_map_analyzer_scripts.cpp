@@ -6,13 +6,14 @@
 #include <string>
 #include <vector>
 
+#include "editor/HexagonGrid.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
 #include "format/pro/Pro.h"
 
 #include "support/AnalyzeWrittenMap.h"
-#include "support/ProStubProvider.h"
+#include "support/MapObjectBuilder.h"
 
 using nlohmann::json;
 using namespace geck;
@@ -38,7 +39,6 @@ const json* findScript(const json& scripts, const std::string& section) {
 // localVars. Built on a synthetic .map written headlessly (no game data mounted): scrname.msg names
 // don't resolve, so this asserts the structural fields, not the friendly names.
 TEST_CASE("analyze surfaces per-section scripts with their local variables", "[cli][analyze][scripts]") {
-    StubProvider provider;
     const uint32_t critterPid = ProtoId(ObjectType::Critter, 50).pid();
 
     auto mapFile = Map::createEmptyMapFile();
@@ -78,14 +78,9 @@ TEST_CASE("analyze surfaces per-section scripts with their local variables", "[c
     mapFile.map_scripts[static_cast<int>(MapScript::ScriptType::CRITTER)].push_back(critterScript);
 
     // The critter instance carrying that script.
-    auto critter = std::make_shared<MapObject>();
-    critter->pro_pid = critterPid;
-    critter->elevation = 0;
-    critter->position = 100 * 200 + 100;
-    critter->map_scripts_pid = static_cast<int32_t>(critterSid);
-    mapFile.map_objects[0].push_back(critter);
+    addObject(mapFile, critterPid, 100 * HexagonGrid::GRID_WIDTH + 100, 0, static_cast<int32_t>(critterSid));
 
-    const json root = analyzeWrittenMap(std::move(mapFile), "synthetic.map", "geck_analyze_scripts", provider);
+    const json root = analyzeWrittenMap(mapFile, "geck_analyze_scripts");
     REQUIRE(root["maps"].is_array());
     REQUIRE(root["maps"].size() == 1);
     const json& entry = root["maps"][0];
@@ -137,8 +132,6 @@ TEST_CASE("analyze surfaces per-section scripts with their local variables", "[c
 // A stale local_var_count (more than the pool holds) must never read past the LVAR vector: the
 // emitted slice stops at the pool's end rather than over-reading.
 TEST_CASE("analyze clamps a script's local-var slice to the pool", "[cli][analyze][scripts]") {
-    StubProvider provider;
-
     auto mapFile = Map::createEmptyMapFile();
     mapFile.map_local_vars = { 1, 2 };
     mapFile.header.num_local_vars = static_cast<uint32_t>(mapFile.map_local_vars.size());
@@ -151,7 +144,7 @@ TEST_CASE("analyze clamps a script's local-var slice to the pool", "[cli][analyz
     system.local_var_count = 5; // stale: only one value (index 1) actually exists
     mapFile.map_scripts[static_cast<int>(MapScript::ScriptType::SYSTEM)].push_back(system);
 
-    const json root = analyzeWrittenMap(std::move(mapFile), "synthetic_clamp.map", "geck_analyze_scripts_clamp", provider);
+    const json root = analyzeWrittenMap(mapFile, "geck_analyze_scripts_clamp");
     const json& scripts = root["maps"][0]["scripts"];
     REQUIRE(scripts.size() == 1);
     CHECK(scripts[0]["localVars"] == json::array({ 2 })); // only the in-range value, not five

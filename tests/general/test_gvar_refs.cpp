@@ -3,12 +3,13 @@
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
-#include <sstream>
+#include <ostream>
 #include <string>
 
 #include "cli/GvarRefs.h"
 #include "resource/GameResources.h"
 
+#include "support/CliJson.h"
 #include "support/TempFile.h"
 
 using namespace geck;
@@ -17,12 +18,10 @@ using geck::test::writeFile;
 
 namespace {
 
-nlohmann::json runFindGvar(const fs::path& root, const std::string& gvar, int& rc) {
+nlohmann::json runFindGvar(const fs::path& root, const std::string& gvar) {
     resource::GameResources resources;
     resources.files().addDataPath(root.string());
-    std::ostringstream oss;
-    rc = cli::findGvarRefs(resources, gvar, oss);
-    return nlohmann::json::parse(oss.str());
+    return test::runJson([&](std::ostream& out) { return cli::findGvarRefs(resources, gvar, out); });
 }
 
 } // namespace
@@ -48,10 +47,8 @@ TEST_CASE("findGvarRefs reports the reads and writes compiled code makes, throug
         "   set_global_var(GVAR_FOO, 3);\n" // not compiled: nothing calls it
         "end\n");
 
-    int rc = -1;
-    const auto j = runFindGvar(root, "GVAR_FOO", rc);
+    const auto j = runFindGvar(root, "GVAR_FOO");
 
-    CHECK(rc == 0);
     REQUIRE(j["stats"]["refs"] == 3);
     CHECK(j["stats"]["setters"] == 1);
     CHECK(j["stats"]["scripts"] == 1);
@@ -72,9 +69,8 @@ TEST_CASE("findGvarRefs: unused-with-sources is success, no-sources is an error"
     const fs::path& root = rootDir.path();
     writeFile(root / "a.ssl", "procedure start begin\n   set_global_var(GVAR_OTHER, 1);\nend\n");
 
-    int rc = -1;
-    const auto j = runFindGvar(root, "GVAR_NEVER_USED", rc);
-    CHECK(rc == 0); // read a source, found nothing -> a valid "unused" answer, not an error
+    const auto j = runFindGvar(root, "GVAR_NEVER_USED");
+    // Read a source and found nothing: a valid "unused" answer (runFindGvar requires success), not an error.
     CHECK(j["stats"]["refs"] == 0);
 
     // Nothing mounted at all -> error, so the MCP flags isError (vs. a genuine "unused").
@@ -88,9 +84,7 @@ TEST_CASE("findGvarRefs matches a gvar whose header is missing by its name", "[g
     const fs::path& root = rootDir.path();
     writeFile(root / "a.ssl", "procedure start begin\n   set_global_var(GVAR_FOO, 1);\n   x := global_var(GVAR_FOOBAR);\nend\n");
 
-    int rc = -1;
-    const auto j = runFindGvar(root, "GVAR_FOO", rc);
-    CHECK(rc == 0);
+    const auto j = runFindGvar(root, "GVAR_FOO");
     REQUIRE(j["stats"]["refs"] == 1); // GVAR_FOOBAR is a different name
     CHECK(j["refs"][0]["kind"] == "set");
 }

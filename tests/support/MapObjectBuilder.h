@@ -3,7 +3,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <memory>
+#include <utility>
 
+#include "format/map/Map.h"
 #include "format/map/MapObject.h"
 
 namespace geck::test {
@@ -56,6 +59,42 @@ inline void checkBase(const MapObject& got, const MapObject& want) {
     CHECK(got.max_inventory_size == want.max_inventory_size);
     CHECK(got.unknown10 == want.unknown10);
     CHECK(got.unknown11 == want.unknown11);
+}
+
+/// Appends a bare object (`pid` on `hex`, every other field at its default) to `elevation` of
+/// `mapFile`, with `sid` as its map-script id; returns it for further setup.
+inline std::shared_ptr<MapObject> addObject(Map::MapFile& mapFile, uint32_t pid, int hex, int elevation = 0,
+    int32_t sid = -1) {
+    auto object = std::make_shared<MapObject>();
+    object->pro_pid = pid;
+    object->position = hex;
+    object->elevation = static_cast<uint32_t>(elevation);
+    object->map_scripts_pid = sid;
+    mapFile.map_objects[elevation].push_back(object);
+    return object;
+}
+
+/// An object of `pid` on `elevation` whose base fields are all fillBase(`seed`) values.
+inline std::shared_ptr<MapObject> seededObject(uint32_t pid, int32_t seed, int elevation = 0) {
+    auto object = std::make_shared<MapObject>();
+    fillBase(*object, seed);
+    object->pro_pid = pid;
+    object->elevation = static_cast<uint32_t>(elevation);
+    return object;
+}
+
+/// Appends seededObject(`pid`, `seed`, `elevation`) to `mapFile` and returns it.
+inline std::shared_ptr<MapObject> addSeeded(Map::MapFile& mapFile, uint32_t pid, int32_t seed, int elevation = 0) {
+    auto object = seededObject(pid, seed, elevation);
+    mapFile.map_objects[elevation].push_back(object);
+    return object;
+}
+
+/// A Map named "test.map" holding `mapFile` (an empty map by default).
+inline std::unique_ptr<Map> mapOf(Map::MapFile mapFile = Map::createEmptyMapFile()) {
+    auto map = std::make_unique<Map>("test.map");
+    map->setMapFile(std::make_unique<Map::MapFile>(std::move(mapFile)));
+    return map;
 }
 
 } // namespace geck::test

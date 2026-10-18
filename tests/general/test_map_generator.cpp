@@ -7,12 +7,11 @@
 #include "cli/MapGenerator.h"
 #include "format/map/Map.h"
 #include "format/map/Tile.h"
-#include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
 #include "resource/MapFileIO.h"
 
 #include "support/Fixtures.h"
-#include "support/ProStubProvider.h"
+#include "support/MapFileIo.h"
 #include "support/TempFile.h"
 
 using namespace geck;
@@ -36,10 +35,7 @@ TEST_CASE("gecko-cli generate runs a tile script and writes a reloadable map", "
     INFO("generate log: " << log.str());
 
     // Reload and confirm the painted tiles persisted.
-    geck::test::StubProvider provider;
-    MapReader reader{ [&provider](uint32_t pid) { return provider.load(pid); } };
-    auto reloaded = reader.openFile(mapFile.path());
-    REQUIRE(reloaded != nullptr);
+    const auto reloaded = geck::test::readMapFile(mapFile.path());
     const auto& tiles = reloaded->getMapFile().tiles.at(0);
     for (int i = 0; i < 100; ++i) {
         CHECK(tiles[i].getFloor() == 271);
@@ -71,10 +67,7 @@ TEST_CASE("gecko-cli generate --in decorates an existing map", "[cli][generate]"
     REQUIRE(geck::cli::generateMap(resources, decorate, log) == 0);
     INFO("generate log: " << log.str());
 
-    geck::test::StubProvider provider;
-    MapReader reader{ [&provider](uint32_t pid) { return provider.load(pid); } };
-    auto reloaded = reader.openFile(outMap.path());
-    REQUIRE(reloaded != nullptr);
+    const auto reloaded = geck::test::readMapFile(outMap.path());
     const auto& tiles = reloaded->getMapFile().tiles.at(0);
     for (int i = 0; i < 50; ++i) {
         CHECK(tiles[i].getFloor() == 271); // preserved from the input map
@@ -104,11 +97,8 @@ TEST_CASE("gecko-cli generate --count writes N maps with consecutive seeds", "[c
     REQUIRE(geck::cli::generateMap(resources, options, log) == 0);
     INFO("generate log: " << log.str());
 
-    geck::test::StubProvider provider;
-    MapReader reader{ [&provider](uint32_t pid) { return provider.load(pid); } };
     for (int i = 0; i < 3; ++i) {
-        auto reloaded = reader.openFile(outDir.path() / ("batch_" + std::to_string(i + 1) + ".map"));
-        REQUIRE(reloaded != nullptr);
+        const auto reloaded = geck::test::readMapFile(outDir.path() / ("batch_" + std::to_string(i + 1) + ".map"));
         CHECK(reloaded->getMapFile().tiles.at(0)[0].getFloor() == 500 + i); // seed = base + i
     }
 }

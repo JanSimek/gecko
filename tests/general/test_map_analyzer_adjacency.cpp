@@ -8,7 +8,6 @@
 #include "format/map/Map.h"
 
 #include "support/AnalyzeWrittenMap.h"
-#include "support/ProStubProvider.h"
 
 using nlohmann::json;
 using namespace geck;
@@ -28,7 +27,6 @@ bool hasEntry(const json& adjacency, int a, int b, const std::string& dir) {
 // of a, "S" immediately south (row+1). The reverse direction is the swapped pair, same-tile
 // borders are dropped, and borders against the empty tile are never counted.
 TEST_CASE("analyze emits directional floor-tile adjacency", "[cli][analyze][adjacency]") {
-    StubProvider provider;
     auto mapFile = Map::createEmptyMapFile();
 
     // Row 0: [191][194][194] — one 191->194 east border, one same-id border (dropped).
@@ -39,7 +37,7 @@ TEST_CASE("analyze emits directional floor-tile adjacency", "[cli][analyze][adja
     tiles[2].setFloor(194);
     tiles[100].setFloor(70);
 
-    const json root = analyzeWrittenMap(std::move(mapFile), "synthetic.map", "geck_adjacency", provider);
+    const json root = analyzeWrittenMap(mapFile, "geck_adjacency");
     REQUIRE(root["maps"].size() == 1);
     const json& adjacency = root["maps"][0]["adjacency"];
     REQUIRE(adjacency.is_array());

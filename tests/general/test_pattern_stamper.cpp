@@ -9,13 +9,15 @@
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
+#include "format/frm/FrmId.h"
 #include "format/pro/Pro.h"
 #include "pattern/Pattern.h"
 #include "pattern/PatternStamper.h"
 
-#include "writer/pro/ProWriter.h"
+#include "format/pro/ProtoTypes.h"
 
 #include "support/ControllerFixture.h"
+#include "support/ProBuilder.h"
 #include "support/TempFile.h"
 
 using namespace geck;
@@ -26,14 +28,21 @@ namespace {
 
 constexpr int ANCHOR = 100 * hexgrid::WIDTH + 100; // col 100, row 100
 constexpr int TARGET = 50 * hexgrid::WIDTH + 50;   // col 50, row 50
+// Arbitrary scenery PIDs and their FIDs.
+constexpr uint32_t PID_A = ProtoId(ObjectType::Scenery, 769).pid();
+constexpr uint32_t PID_B = ProtoId(ObjectType::Scenery, 770).pid();
+constexpr uint32_t PID_C = ProtoId(ObjectType::Scenery, 771).pid();
+constexpr uint32_t FID_A = FrmId(ObjectType::Critter, 129).fid();
+constexpr uint32_t FID_B = FrmId(ObjectType::Critter, 130).fid();
+constexpr uint32_t FID_C = FrmId(ObjectType::Critter, 131).fid();
 
 PatternVariant sampleVariant() {
     PatternVariant v;
     v.label = "entrance west";
     v.anchorHex = ANCHOR;
-    v.objects.push_back(PatternObject{ 0, 0, 33555201u, 16777345u, 0u, 0u });
-    v.objects.push_back(PatternObject{ 1, 0, 33555202u, 16777346u, 2u, 0x10u });
-    v.objects.push_back(PatternObject{ 0, 1, 33555203u, 16777347u, 4u, 0u });
+    v.objects.push_back(PatternObject{ 0, 0, PID_A, FID_A, 0u, 0u });
+    v.objects.push_back(PatternObject{ 1, 0, PID_B, FID_B, 2u, 0x10u });
+    v.objects.push_back(PatternObject{ 0, 1, PID_C, FID_C, 4u, 0u });
     v.floor.push_back(PatternTile{ 0, 0, 271 });
     return v;
 }
@@ -47,8 +56,8 @@ TEST_CASE("PatternStamper::plan resolves object and tile positions", "[pattern][
     REQUIRE(plan.objects.size() == 3);
     // The (0,0) object lands exactly on the target anchor, verbatim PID/direction.
     CHECK(plan.objects[0].hex == TARGET);
-    CHECK(plan.objects[0].proPid == 33555201u);
-    CHECK(plan.objects[0].frmPid == 16777345u);
+    CHECK(plan.objects[0].proPid == PID_A);
+    CHECK(plan.objects[0].frmPid == FID_A);
     CHECK(plan.objects[0].direction == 0u);
     CHECK(plan.objects[1].direction == 2u);
     CHECK(plan.objects[1].flags == 0x10u);
@@ -160,7 +169,7 @@ TEST_CASE("PatternStamper records objects as data when buildSprites is false", "
     // The objects are in the map with their PID/direction/flags verbatim.
     const auto& objects = fx.mapFile().map_objects.at(0);
     REQUIRE(objects.size() == 3);
-    CHECK(objects[0]->pro_pid == 33555201u);
+    CHECK(objects[0]->pro_pid == PID_A);
     CHECK(objects[1]->flags == 0x10u);
     CHECK(objects[1]->direction == 2u);
 }
@@ -172,7 +181,7 @@ TEST_CASE("PatternStamper seeds stamped objects from their proto", "[pattern][st
     const test::TempDir rootDir{ "geck_stamp_proto_defaults" };
     const std::filesystem::path& root = rootDir.path();
     test::writeFile(root / "proto" / "walls" / "walls.lst", "lamp.pro\n");
-    constexpr uint32_t PRO = 0x03000001;
+    constexpr uint32_t PRO = ProtoId(ObjectType::Wall, 1).pid();
     constexpr auto PROTO_FLAGS = static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_FLAT)
         | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK);
     {
@@ -183,9 +192,7 @@ TEST_CASE("PatternStamper seeds stamped objects from their proto", "[pattern][st
         pro.header.light_distance = 4;
         pro.header.light_intensity = 0x8000;
         pro.commonItemData.SID = 0x03000044;
-        ProWriter writer;
-        writer.openFile(root / "proto" / "walls" / "lamp.pro");
-        REQUIRE(writer.write(pro));
+        test::writePro(root / "proto" / "walls" / "lamp.pro", pro);
     }
 
     ControllerFixture fx;

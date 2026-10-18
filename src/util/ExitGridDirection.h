@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -247,6 +248,7 @@ inline std::pair<int, int> hexScreenPosition(const HexagonGrid& grid, int hexInd
 /// The classification geometry of a non-empty ordered hex run: the first->last screen delta and the
 /// midpoint's offset from the grid centre.
 inline ExitGridSegmentRun exitGridSegmentRun(const HexagonGrid& grid, std::vector<int> hexes) {
+    assert(!hexes.empty());
     const auto [centerX, centerY] = hexGridCenterScreen(grid);
     const auto [fx, fy] = hexScreenPosition(grid, hexes.front());
     const auto [lx, ly] = hexScreenPosition(grid, hexes.back());
@@ -260,10 +262,17 @@ inline ExitGridSegmentRun exitGridSegmentRun(const HexagonGrid& grid, std::vecto
     return run;
 }
 
+/// The auto art for a classified segment run: its own screen axis plus its midpoint's outward side,
+/// inverted by `flipSide`. The "Draw edge" tool freezes every segment with this.
+inline ExitGridArt exitGridArtForRun(const ExitGridSegmentRun& run, ExitGridDestinationKind kind, bool flipSide) {
+    return exitGridArtForDirection(
+        exitGridDirectionForLine(run.screenDx, run.screenDy, run.outwardX, run.outwardY, flipSide), kind);
+}
+
 /// One auto art for a whole stroke: axis from the first to the last hex, side once from the midpoint's
 /// outward facing, so every hex shares one side (a clean continuous bar) instead of flipping mid-run.
-/// `flipSide` inverts the side. A lone hex has no axis and classifies by its outward facing (the flip
-/// still applies, so preview and commit agree); a null grid or empty stroke yields a bottom-edge marker.
+/// `flipSide` inverts the side. A lone hex has no axis and classifies by its outward facing, the flip
+/// still applied; a null grid or empty stroke yields a bottom-edge marker.
 inline ExitGridArt exitGridArtForStroke(const HexagonGrid* grid, const std::vector<int>& orderedHexes,
     ExitGridDestinationKind kind, bool flipSide) {
     if (grid == nullptr || orderedHexes.empty()) {
@@ -276,9 +285,7 @@ inline ExitGridArt exitGridArtForStroke(const HexagonGrid* grid, const std::vect
         return flipSide ? exitGridArtForDirection(flipExitGridDirection(exitGridDirOfProto(art.proPid)), kind)
                         : art;
     }
-    const ExitGridSegmentRun run = exitGridSegmentRun(*grid, orderedHexes);
-    return exitGridArtForDirection(
-        exitGridDirectionForLine(run.screenDx, run.screenDy, run.outwardX, run.outwardY, flipSide), kind);
+    return exitGridArtForRun(exitGridSegmentRun(*grid, orderedHexes), kind, flipSide);
 }
 
 /// How many rows over a diagonal band's second row sits. A diagonal bar is ~32-38px against a ~16-19px

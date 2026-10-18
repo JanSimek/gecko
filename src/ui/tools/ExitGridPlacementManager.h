@@ -120,10 +120,9 @@ private:
     ExitGridArt segmentArt(const ExitGridSegmentRun& run, bool flipSide) const;
     // The existing exit-grid objects sitting on any of `hexPositions`.
     std::vector<std::shared_ptr<Object>> collectExitGridsOnHexes(const std::vector<int>& hexPositions) const;
-    // The art for a whole stroke honouring the override: Auto -> exitGridArtForStroke (optionally flipped),
-    // explicit -> that direction. Family from the destination kind. Shared by commit and preview.
-    ExitGridArt artForLine(const std::vector<int>& orderedHexes,
-        ExitGridPropertiesDialog::ExitGridProperties::MarkerArt markerArt, bool flipSide) const;
+    // The art for a lone click-placed marker on `hex`: Auto -> its outward facing (exitGridArtForStroke
+    // on one hex, unflipped), explicit -> that direction. Family from the destination kind.
+    ExitGridArt artForHex(int hex, ExitGridPropertiesDialog::ExitGridProperties::MarkerArt markerArt) const;
     // The art family (green inter-map vs brown world/town) for the destination the user last chose.
     ExitGridDestinationKind destinationKind() const;
 

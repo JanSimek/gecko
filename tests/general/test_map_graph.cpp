@@ -4,7 +4,7 @@
 
 #include <filesystem>
 #include <memory>
-#include <sstream>
+#include <ostream>
 #include <string>
 
 #include "cli/MapGraph.h"
@@ -14,10 +14,11 @@
 #include "format/map/MapScript.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
-#include "writer/map/MapWriter.h"
 
-#include "support/ProStubProvider.h"
+#include "support/CliJson.h"
 #include "support/DataTree.h"
+#include "support/MapFileIo.h"
+#include "support/MapObjectBuilder.h"
 #include "support/TempFile.h"
 
 using nlohmann::json;
@@ -31,30 +32,23 @@ constexpr int kOpenHexA = 10100; // interior hexes, comfortably on-grid
 constexpr int kOpenHexB = 10110;
 constexpr int kSealedHex = 20100;
 
-std::shared_ptr<MapObject> makeExitGrid(int position, int destMap, int destHex, int destElevation) {
-    auto exit = std::make_shared<MapObject>();
-    exit->position = position;
-    exit->pro_pid = ProtoId(MiscProtoTypeId::FirstExitGrid).pid();
-    exit->exit_map = destMap;
-    exit->exit_position = destHex;
-    exit->exit_elevation = destElevation;
-    return exit;
+// Places an exit grid on `elevation` of `mapFile` leading to `destHex` on `destElevation` of `destMap`.
+void addExitGrid(Map::MapFile& mapFile, int position, int destMap, int destHex, int destElevation, int elevation = 0) {
+    auto exit = addObject(mapFile, ProtoId(MiscProtoTypeId::FirstExitGrid).pid(), position, elevation);
+    exit->exit_map = static_cast<uint32_t>(destMap);
+    exit->exit_position = static_cast<uint32_t>(destHex);
+    exit->exit_elevation = static_cast<uint32_t>(destElevation);
 }
 
-std::shared_ptr<MapObject> makeWall(int position) {
-    auto wall = std::make_shared<MapObject>();
-    wall->position = position;
-    wall->pro_pid = ProtoId(ObjectType::Wall, 1).pid();
-    return wall;
+// Rings `hex` with walls, sealing it off from the rest of its elevation.
+void sealHex(Map::MapFile& mapFile, int hex) {
+    for (const int neighbour : hexgrid::neighbors(hex)) {
+        addObject(mapFile, ProtoId(ObjectType::Wall, 1).pid(), neighbour);
+    }
 }
 
-void writeMap(const fs::path& path, Map::MapFile mapFile) {
-    Map map{ path.filename().string() };
-    map.setMapFile(std::make_unique<Map::MapFile>(std::move(mapFile)));
-    const StubProvider provider; // walls/misc never dereference their Pro
-    MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-    writer.openFile(path);
-    REQUIRE(writer.write(map.getMapFile()));
+json buildGraph(resource::GameResources& resources, const cli::MapGraphOptions& options) {
+    return runJson([&](std::ostream& out) { return cli::buildMapGraph(resources, options, out); });
 }
 
 const json* findEdge(const json& edges, const std::string& from, const std::string& to) {
@@ -81,46 +75,42 @@ void writeFixture(const fs::path& base) {
         "[Map 6]\nlookup_name=G\nmap_name=mapg\n");
 
     auto a = Map::createEmptyMapFile();
-    a.map_objects[0].push_back(makeExitGrid(100, 1, kOpenHexB, 0));
-    a.map_objects[0].push_back(makeExitGrid(102, 2, kOpenHexB, 0));
-    a.map_objects[0].push_back(makeExitGrid(104, 3, kOpenHexB, 0));
-    a.map_objects[0].push_back(makeExitGrid(106, 4, kOpenHexA, 0));
-    a.map_objects[0].push_back(makeExitGrid(108, 5, kOpenHexA, 0));
-    a.map_objects[0].push_back(makeExitGrid(110, 6, kOpenHexA, 0));
-    writeMap(base / "maps" / "mapa.map", std::move(a));
+    addExitGrid(a, 100, 1, kOpenHexB, 0);
+    addExitGrid(a, 102, 2, kOpenHexB, 0);
+    addExitGrid(a, 104, 3, kOpenHexB, 0);
+    addExitGrid(a, 106, 4, kOpenHexA, 0);
+    addExitGrid(a, 108, 5, kOpenHexA, 0);
+    addExitGrid(a, 110, 6, kOpenHexA, 0);
+    writeMapFile(a, base / "maps" / "mapa.map");
 
     // mapb: an open return exit -> two-way.
     auto b = Map::createEmptyMapFile();
-    b.map_objects[0].push_back(makeExitGrid(kOpenHexB + 6, 0, 100, 0));
-    writeMap(base / "maps" / "mapb.map", std::move(b));
+    addExitGrid(b, kOpenHexB + 6, 0, 100, 0);
+    writeMapFile(b, base / "maps" / "mapb.map");
 
     // mapc: no exit grids at all -> a->c has no return edge.
-    writeMap(base / "maps" / "mapc.map", Map::createEmptyMapFile());
+    writeMapFile(Map::createEmptyMapFile(), base / "maps" / "mapc.map");
 
     // (mapd is never written or analysed -> a->d stays undetermined.)
 
     // mape: the return exit sits in a hex sealed by a full wall ring, cut off from the arrival hex.
     auto e = Map::createEmptyMapFile();
-    e.map_objects[0].push_back(makeExitGrid(kSealedHex, 0, 106, 0));
-    for (const int neighbour : hexgrid::neighbors(kSealedHex)) {
-        e.map_objects[0].push_back(makeWall(neighbour));
-    }
-    writeMap(base / "maps" / "mape.map", std::move(e));
+    addExitGrid(e, kSealedHex, 0, 106, 0);
+    sealHex(e, kSealedHex);
+    writeMapFile(e, base / "maps" / "mape.map");
 
     // mapf: the only return exit lives on another elevation (stairs) -> undeterminable.
     auto f = Map::createEmptyMapFile();
-    f.map_objects[1].push_back(makeExitGrid(kOpenHexA, 0, 108, 0));
-    writeMap(base / "maps" / "mapf.map", std::move(f));
+    addExitGrid(f, kOpenHexA, 0, 108, 0, 1);
+    writeMapFile(f, base / "maps" / "mapf.map");
 
     // mapg: a sealed same-elevation return PLUS a return on another elevation — the stairs
     // option must veto the "return-unreachable" verdict.
     auto g = Map::createEmptyMapFile();
-    g.map_objects[0].push_back(makeExitGrid(kSealedHex, 0, 110, 0));
-    for (const int neighbour : hexgrid::neighbors(kSealedHex)) {
-        g.map_objects[0].push_back(makeWall(neighbour));
-    }
-    g.map_objects[1].push_back(makeExitGrid(kOpenHexB, 0, 110, 0));
-    writeMap(base / "maps" / "mapg.map", std::move(g));
+    addExitGrid(g, kSealedHex, 0, 110, 0);
+    sealHex(g, kSealedHex);
+    addExitGrid(g, kOpenHexB, 0, 110, 0, 1);
+    writeMapFile(g, base / "maps" / "mapg.map");
 }
 
 } // namespace
@@ -141,9 +131,7 @@ TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapg
     for (const char* name : { "mapa.map", "mapb.map", "mapc.map", "mape.map", "mapf.map", "mapg.map" }) {
         options.maps.push_back((base / "maps" / name).string());
     }
-    std::ostringstream out;
-    REQUIRE(cli::buildMapGraph(resources, options, out) == 0);
-    const json root = json::parse(out.str());
+    const json root = buildGraph(resources, options);
     const json& edges = root.at("edges");
 
     SECTION("a walkable return path is two-way in both directions") {
@@ -223,22 +211,20 @@ TEST_CASE("map_graph adds load_map transitions from the maps that place each scr
 
     auto a = Map::createEmptyMapFile();
     a.header.script_id = 1; // town.int, 1-based in the header
-    a.map_objects[0].push_back(makeExitGrid(100, 1, kOpenHexB, 0));
-    writeMap(base / "maps" / "mapa.map", std::move(a));
+    addExitGrid(a, 100, 1, kOpenHexB, 0);
+    writeMapFile(a, base / "maps" / "mapa.map");
     auto b = Map::createEmptyMapFile();
     b.map_scripts[static_cast<int>(MapScript::ScriptType::CRITTER)].push_back(
         MapScript::makeObjectScript(MapScript::ScriptType::CRITTER, 0, 1, 7)); // guard.int, 0-based
-    writeMap(base / "maps" / "mapb.map", std::move(b));
-    writeMap(base / "maps" / "mapc.map", Map::createEmptyMapFile());
+    writeMapFile(b, base / "maps" / "mapb.map");
+    writeMapFile(Map::createEmptyMapFile(), base / "maps" / "mapc.map");
 
     auto& resources = tree.mount();
     cli::MapGraphOptions options;
     for (const char* name : { "mapa.map", "mapb.map", "mapc.map" }) {
         options.maps.push_back((base / "maps" / name).string());
     }
-    std::ostringstream out;
-    REQUIRE(cli::buildMapGraph(resources, options, out) == 0);
-    const json root = json::parse(out.str());
+    const json root = buildGraph(resources, options);
     const json& scriptEdges = root.at("scriptEdges");
 
     const json* aToC = findEdge(scriptEdges, "mapa.map", "mapc.map");
@@ -265,7 +251,5 @@ TEST_CASE("map_graph adds load_map transitions from the maps that place each scr
     // The exit-grid layer is untouched, and scripts=false leaves the script layer out.
     CHECK(findEdge(root.at("edges"), "mapa.map", "mapb.map") != nullptr);
     options.scripts = false;
-    std::ostringstream plain;
-    REQUIRE(cli::buildMapGraph(resources, options, plain) == 0);
-    CHECK_FALSE(json::parse(plain.str()).contains("scriptEdges"));
+    CHECK_FALSE(buildGraph(resources, options).contains("scriptEdges"));
 }

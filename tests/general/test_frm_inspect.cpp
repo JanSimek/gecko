@@ -10,6 +10,7 @@
 #include "cli/FrmInspect.h"
 #include "resource/GameResources.h"
 
+#include "support/CliJson.h"
 #include "support/ArtLstTree.h"
 
 namespace fs = std::filesystem;
@@ -74,11 +75,8 @@ TEST_CASE("resolveFrmTarget resolves a FID and a full art path", "[frm][cli]") {
 
 TEST_CASE("resolveFidCommand emits decoded JSON for a FID", "[frm][cli]") {
     geck::test::ArtLstTree fx{ "geck_frminspect_test" };
-    std::ostringstream oss;
     // 0x05000002: type byte 5 (misc), index 2 -> ext2grd1 in the fixture misc.lst.
-    const int rc = cli::resolveFidCommand(fx.mount(), "0x05000002", oss);
-    CHECK(rc == 0);
-    const json decoded = json::parse(oss.str());
+    const json decoded = geck::test::runJson([&](std::ostream& out) { return cli::resolveFidCommand(fx.mount(), "0x05000002", out); });
     CHECK(decoded["type"] == "misc");
     CHECK(decoded["index"] == 2);
     CHECK(decoded["fid"] == 0x05000002);
@@ -94,9 +92,10 @@ TEST_CASE("resolveFidCommand rejects a non-numeric token", "[frm][cli]") {
 TEST_CASE("listFrms matches a glob across the art LSTs", "[frm][cli]") {
     geck::test::ArtLstTree fx{ "geck_frminspect_test" };
 
-    std::ostringstream ext;
-    CHECK(cli::listFrms(fx.mount(), "ext2grd*", ext) == 0);
-    const json extList = json::parse(ext.str());
+    const auto list = [&fx](const char* glob) {
+        return geck::test::runJson([&](std::ostream& out) { return cli::listFrms(fx.mount(), glob, out); });
+    };
+    const json extList = list("ext2grd*");
     REQUIRE(extList.size() == 2);
     CHECK(extList[0]["name"] == "ext2grd1");
     CHECK(extList[0]["artPath"] == "art/misc/ext2grd1.frm");
@@ -104,14 +103,10 @@ TEST_CASE("listFrms matches a glob across the art LSTs", "[frm][cli]") {
     CHECK(extList[1]["name"] == "ext2grd2");
 
     // '?' matches exactly one character; 'tree?' matches tree1/tree2 but not a longer name.
-    std::ostringstream trees;
-    CHECK(cli::listFrms(fx.mount(), "tree?", trees) == 0);
-    CHECK(json::parse(trees.str()).size() == 2);
+    CHECK(list("tree?").size() == 2);
 
     // A non-matching glob is an empty array (success, not an error).
-    std::ostringstream none;
-    CHECK(cli::listFrms(fx.mount(), "zzz*", none) == 0);
-    CHECK(json::parse(none.str()).empty());
+    CHECK(list("zzz*").empty());
 }
 
 TEST_CASE("frmInfo reports a clear error for an unresolvable target", "[frm][cli]") {

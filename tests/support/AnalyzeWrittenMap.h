@@ -4,42 +4,36 @@
 
 #include <nlohmann/json.hpp>
 
-#include <cstdint>
-#include <memory>
-#include <sstream>
+#include <filesystem>
+#include <ostream>
 
 #include "cli/MapAnalyzer.h"
 #include "format/map/Map.h"
 #include "resource/GameResources.h"
-#include "writer/map/MapWriter.h"
 
+#include "support/CliJson.h"
+#include "support/MapFileIo.h"
 #include "support/ProStubProvider.h"
 #include "support/TempFile.h"
 
 namespace geck::test {
 
-/// Write `mapFile` to a temp .map and return analyze's parsed JSON. No game data is mounted, so
-/// analyze reads the file back via cli::loadMap's disk fallback (raw tile ids survive without
-/// tiles.lst). Shared by the analyzer script/adjacency tests.
-inline nlohmann::json analyzeWrittenMap(Map::MapFile mapFile, const char* mapName, const char* tempPrefix,
-    const StubProvider& provider) {
-    Map map{ mapName };
-    map.setMapFile(std::make_unique<Map::MapFile>(std::move(mapFile)));
-
-    TempFile out{ tempPrefix, ".map" };
-    {
-        MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-        writer.openFile(out.path());
-        REQUIRE(writer.write(map.getMapFile()));
-    } // flush + close before analyze reads it back
-
+/// analyze's parsed JSON for the .map at `path`, with no game data mounted: cli::loadMap reads the
+/// file through its disk fallback (raw tile ids survive without tiles.lst).
+inline nlohmann::json analyzeMapPath(const std::filesystem::path& path) {
     resource::GameResources resources;
     cli::AnalyzeOptions options;
     options.json = true;
-    options.maps = { out.path().string() };
-    std::ostringstream jsonOut;
-    REQUIRE(cli::analyzeMaps(resources, options, jsonOut) == 0);
-    return nlohmann::json::parse(jsonOut.str());
+    options.maps = { path.string() };
+    return runJson([&](std::ostream& out) { return cli::analyzeMaps(resources, options, out); });
+}
+
+/// Writes `mapFile` to a temp .map named after `tempPrefix` and returns analyze's parsed JSON for it.
+inline nlohmann::json analyzeWrittenMap(const Map::MapFile& mapFile, const char* tempPrefix,
+    const StubProvider& provider = {}) {
+    const TempFile out{ tempPrefix, ".map" };
+    writeMapFile(mapFile, out.path(), provider);
+    return analyzeMapPath(out.path());
 }
 
 } // namespace geck::test

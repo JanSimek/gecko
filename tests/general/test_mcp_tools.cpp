@@ -3,38 +3,30 @@
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
+#include <ostream>
 #include <string>
 
 #include "cli/MapAnalyzer.h"
+#include "editor/HexagonGrid.h"
+#include "format/map/Map.h"
+#include "format/map/MapObject.h"
+#include "format/pro/ProtoTypes.h"
 #include "mcp/McpServer.h"
 #include "resource/GameResources.h"
 
-#include "format/map/Map.h"
-#include "format/map/MapObject.h"
-#include "writer/map/MapWriter.h"
-#include "support/ProStubProvider.h"
+#include "support/CliJson.h"
 #include "support/DataTree.h"
-#include "support/TempFile.h"
-#include "support/ByteWriter.h"
+#include "support/EngineProtoBytes.h"
 #include "support/Fixtures.h"
+#include "support/MapFileIo.h"
+#include "support/MapObjectBuilder.h"
+#include "support/McpCall.h"
+#include "support/TempFile.h"
 
 using nlohmann::json;
 using namespace geck;
 using namespace geck::test;
 namespace fs = std::filesystem;
-
-namespace {
-
-// The JSON a tool returned, unwrapped from the MCP content envelope.
-json callTool(mcp::McpServer& server, const std::string& name, const json& arguments) {
-    const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 9 }, { "method", "tools/call" },
-        { "params", { { "name", name }, { "arguments", arguments } } } });
-    REQUIRE(resp.contains("result"));
-    const std::string text = resp["result"]["content"][0]["text"].get<std::string>();
-    return json::parse(text);
-}
-
-} // namespace
 
 // mounts exists because a data path that did not open used to be skipped in silence, and every
 // answer afterwards came from whatever else mounted while reading as confidently as a correct one.
@@ -47,7 +39,7 @@ TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]")
         auto& resources = tree.mount();
         mcp::McpServer server(resources);
 
-        const json out = callTool(server, "mounts", json::object());
+        const json out = mcpToolJson(server, "mounts");
         CHECK(out.contains("mounts"));
         CHECK(out.contains("lookupOrder"));
         CHECK_FALSE(out.contains("failedMounts"));
@@ -63,7 +55,7 @@ TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]")
         auto& resources = tree.mount();
         mcp::McpServer server(resources);
 
-        const json out = callTool(server, "mounts", json::object());
+        const json out = mcpToolJson(server, "mounts");
         CHECK(out["rpuVersion"] == "v2.x.x");
         // Unpackaged source is a development line and not any release; say so rather than leave it
         // to be mistaken for one.
@@ -77,7 +69,7 @@ TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]")
         resources.files().addDataPath(test::f2ResDat());
         mcp::McpServer server(resources);
 
-        const json out = callTool(server, "mounts", json::object());
+        const json out = mcpToolJson(server, "mounts");
         REQUIRE(out["mounts"].size() == 1);
         CHECK(out["mounts"][0]["kind"] == "dat");
         CHECK(out["mounts"][0]["bytes"] > 0);
@@ -89,41 +81,12 @@ TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]")
         resources.files().addDataPath("/gecko-test/definitely/not/here.dat");
         mcp::McpServer server(resources);
 
-        const json out = callTool(server, "mounts", json::object());
+        const json out = mcpToolJson(server, "mounts");
         REQUIRE(out.contains("failedMounts"));
         REQUIRE(out["failedMounts"].size() == 1);
         CHECK(out["failedMounts"][0]["reason"] == "does not exist");
     }
 }
-
-namespace {
-
-// The critter layout fallout2-ce protoRead + protoCritterDataRead expect. Base stat i holds
-// 100 + i and bonus stat i holds 1000 + i, so a reported figure names both slots it came from;
-// skill i holds 50 + i. Built by hand so the test pins the engine's layout rather than gecko
-// agreeing with itself.
-test::ByteWriter critterProto() {
-    test::ByteWriter w;
-    for (const std::int32_t v : { 0x01000001, 200, 0x01000040, 0, 0, 0x20000000, 0x6000, 0x04000005, -1, 77, 1 }) {
-        w.be32(static_cast<std::uint32_t>(v));
-    }
-    w.be32(0x0802);
-    for (std::int32_t stat = 0; stat < 35; ++stat) {
-        w.be32(static_cast<std::uint32_t>(100 + stat));
-    }
-    for (std::int32_t stat = 0; stat < 35; ++stat) {
-        w.be32(static_cast<std::uint32_t>(1000 + stat));
-    }
-    for (std::int32_t skill = 0; skill < 18; ++skill) {
-        w.be32(static_cast<std::uint32_t>(50 + skill));
-    }
-    for (const std::int32_t v : { 1, 150, 3, 2 }) {
-        w.be32(static_cast<std::uint32_t>(v));
-    }
-    return w;
-}
-
-} // namespace
 
 // proto_info reports effective figures, base plus bonus. Base alone reads a Turret at 30 hit points
 // against the 75 the engine gives it, and every critter in the game as resisting nothing, because a
@@ -132,12 +95,14 @@ TEST_CASE("proto_info reports a critter's effective stats and skills", "[mcp][pr
     test::DataTree tree{ "gecko_proto_info" };
     tree.write("proto/critters/critters.lst", "critter.pro\n");
     tree.write("text/english/game/pro_crit.msg", "{200}{}{Test Critter}\n");
-    tree.writeBytes("proto/critters/critter.pro", critterProto().data());
+    // Base stat i holds 100 + i and bonus stat i 1000 + i, so a reported figure names both slots it
+    // came from; skill i holds 50 + i.
+    tree.writeBytes("proto/critters/critter.pro", critterProto(100, 1000, 50).data());
 
     auto& resources = tree.mount();
     mcp::McpServer server(resources);
 
-    const json out = callTool(server, "proto_info", { { "pid", 0x01000001 } });
+    const json out = mcpToolJson(server, "proto_info", { { "pid", ProtoId(ObjectType::Critter, 1).pid() } });
     const json entry = out.is_array() ? out[0] : out;
     REQUIRE(entry.contains("effective"));
     const json& effective = entry["effective"];
@@ -176,37 +141,23 @@ TEST_CASE("proto_info reports a critter's effective stats and skills", "[mcp][pr
 // dump_grid's name filter exists because asking where one object sits meant reading the whole map:
 // epax is 2684 objects, nearly all scroll blockers, so three rows cost 445KB.
 TEST_CASE("dump_grid filters objects by name", "[cli][dump_grid]") {
-    StubProvider provider;
     auto mapFile = Map::createEmptyMapFile();
     for (int i = 0; i < 5; ++i) {
         // Critters, not scenery: scenery dereferences its Pro in both directions, so reading the
         // map back without mounted protos fails. Critters carry their pid and nothing else.
-        const uint32_t pid = ProtoId(ObjectType::Critter, static_cast<uint32_t>(40 + i)).pid();
-        auto object = std::make_shared<MapObject>();
-        object->pro_pid = pid;
-        object->elevation = 0;
-        object->position = 100 * 200 + 100 + i;
-        mapFile.map_objects[0].push_back(object);
+        addObject(mapFile, ProtoId(ObjectType::Critter, static_cast<uint32_t>(40 + i)).pid(),
+            100 * HexagonGrid::GRID_WIDTH + 100 + i);
     }
-
-    Map map{ "synthetic_filter.map" };
-    map.setMapFile(std::make_unique<Map::MapFile>(std::move(mapFile)));
-    TempFile out{ "geck_dump_grid_filter", ".map" };
-    {
-        MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-        writer.openFile(out.path());
-        REQUIRE(writer.write(map.getMapFile()));
-    }
+    const TempFile mapPath{ "geck_dump_grid_filter", ".map" };
+    writeMapFile(mapFile, mapPath.path());
 
     resource::GameResources resources;
     const auto dump = [&](const std::string& nameFilter) {
         cli::DumpGridOptions options;
-        options.map = out.path().string();
+        options.map = mapPath.path().string();
         options.floor = false;
         options.nameFilter = nameFilter;
-        std::ostringstream oss;
-        REQUIRE(cli::dumpMapGrid(resources, options, oss) == 0);
-        return json::parse(oss.str())["elevations"][0]["objects"];
+        return runJson([&](std::ostream& out) { return cli::dumpMapGrid(resources, options, out); })["elevations"][0]["objects"];
     };
 
     const json all = dump("");
@@ -231,23 +182,6 @@ TEST_CASE("dump_grid filters objects by name", "[cli][dump_grid]") {
     }
 }
 
-namespace {
-
-// The item header fallout2-ce protoRead reads: pid, messageId, fid, lightDistance, lightIntensity,
-// flags, extendedFlags, sid, type, material, size, weight, cost, inventoryFid, then a byte of
-// soundId. By hand, so the test pins the engine's layout rather than gecko agreeing with itself.
-test::ByteWriter itemHeader(std::int32_t pid, std::int32_t messageId, std::int32_t type) {
-    test::ByteWriter w;
-    for (const std::int32_t v : { pid, messageId, 0x07000010, 0, 0, 0x00000008, 0x00000376, -1, type, 1, 3, 7, 250,
-             0x07000020 }) {
-        w.be32(static_cast<std::uint32_t>(v));
-    }
-    w.u8('0');
-    return w;
-}
-
-} // namespace
-
 // The weapon block is what turned "which weapons carry Long Range?" from opening .pro files by hand
 // into one call — and getting the perk wrong is quiet, because a wrong perk name reads perfectly.
 TEST_CASE("proto_info reports a weapon's perk and numbers", "[mcp][proto_info]") {
@@ -257,21 +191,14 @@ TEST_CASE("proto_info reports a weapon's perk and numbers", "[mcp][proto_info]")
     tree.write("text/english/game/proto.msg", "{101}{}{Metal}\n{251}{}{laser}\n{308}{}{10mm}\n");
     tree.write("text/english/game/perk.msg", "{159}{}{Long Range}\n");
 
-    // animationCode, damageMin 10, damageMax 20, damageType laser, rangePrimary 25,
-    // rangeSecondary 20, projectile, minStrength 4, actionCostPrimary 5, actionCostSecondary 6,
-    // critFail, perk 58 (Weapon Long Range), burstRounds 10, ammoType, ammoPid, ammoCapacity 30.
-    test::ByteWriter weapon = itemHeader(1, 100, 3);
-    for (const std::int32_t v : { 6, 10, 20, 1, 25, 20, -1, 4, 5, 6, 2, 58, 10, 8, 3, 30 }) {
-        weapon.be32(static_cast<std::uint32_t>(v));
-    }
-    weapon.u8('A');
+    const test::ByteWriter weapon = weaponProto(1, 100, 0x00000376);
     REQUIRE(weapon.size() == 122);
     tree.writeBytes("proto/items/weapon.pro", weapon.data());
 
     auto& resources = tree.mount();
     mcp::McpServer server(resources);
 
-    const json out = callTool(server, "proto_info", { { "pid", 1 } });
+    const json out = mcpToolJson(server, "proto_info", { { "pid", ProtoId(ObjectType::Item, 1).pid() } });
     const json entry = out.is_array() ? out[0] : out;
     REQUIRE(entry.contains("weapon"));
     const json& w = entry["weapon"];

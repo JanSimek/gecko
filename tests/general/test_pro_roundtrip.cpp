@@ -5,8 +5,8 @@
 
 #include "format/pro/Pro.h"
 #include "reader/pro/ProReader.h"
-#include "writer/pro/ProWriter.h"
 #include "support/ByteWriter.h"
+#include "support/EngineProtoBytes.h"
 #include "support/Fixtures.h"
 #include "support/ProBuilder.h"
 #include "support/TempFile.h"
@@ -30,11 +30,7 @@ TEST_CASE("PRO generic round-trip preserves bytes and state", "[pro][roundtrip]"
     TempFile tmpFile{ "test_pro_roundtrip_drug", ".pro" };
     const auto& tempPath = tmpFile.path();
 
-    {
-        geck::ProWriter writer{};
-        writer.openFile(tempPath);
-        REQUIRE(writer.write(*original));
-    } // writer destructor closes/flushes the stream before we read it back
+    writePro(tempPath, *original);
 
     // On-disk bytes must be identical to the source fixture.
     const auto originalBytes = readAllBytes(fixture);
@@ -123,11 +119,7 @@ TEST_CASE("PRO wall round-trip preserves flagsExt and SID", "[pro][roundtrip][wa
 
     REQUIRE(wall.type() == geck::ObjectType::Wall);
 
-    {
-        geck::ProWriter writer{};
-        writer.openFile(tempPath);
-        REQUIRE(writer.write(wall));
-    } // flush + close before reading back
+    writePro(tempPath, wall);
 
     geck::ProReader reader{};
     auto reparsed = reader.openFile(tempPath);
@@ -275,18 +267,8 @@ TEST_CASE("PRO weapon round-trip keeps sfall's energy bit in the extended flags"
 }
 
 TEST_CASE("PRO weapon rewrites the engine's 122-byte record byte for byte and ignores trailing bytes", "[pro][roundtrip][weapon]") {
-    // Built by hand in fallout2-ce protoRead + protoItemDataRead order, so the test pins the engine
-    // layout rather than gecko's reader and writer agreeing with each other.
-    ByteWriter engine;
-    for (const uint32_t v : { 0x00000020u, 100u, 0x07000010u, 0u, 0u, 0x00000008u, 0x00000476u, 0xFFFFFFFFu,
-             3u /* weapon */, 1u, 3u, 7u, 250u, 0x07000020u }) {
-        engine.be32(v);
-    }
-    engine.u8('0');
-    for (const uint32_t v : { 6u, 10u, 20u, 1u, 25u, 20u, 0xFFFFFFFFu, 4u, 5u, 6u, 2u, 58u, 10u, 8u, 3u, 30u }) {
-        engine.be32(v);
-    }
-    engine.u8('A');
+    // weaponProto lays the record out in fallout2-ce protoRead + protoItemDataRead order.
+    const ByteWriter engine = weaponProto(0x00000020, 100, 0x00000476u);
     REQUIRE(engine.size() == 122);
 
     // The engine reads a fixed-size record, so bytes past it are not an error.
@@ -307,11 +289,7 @@ TEST_CASE("PRO weapon rewrites the engine's 122-byte record byte for byte and ig
     REQUIRE(pro->weaponData.soundId == 'A');
 
     TempFile rewritten{ "test_pro_weapon_engine_layout_out", ".pro" };
-    {
-        geck::ProWriter writer{};
-        writer.openFile(rewritten.path());
-        REQUIRE(writer.write(*pro));
-    }
+    writePro(rewritten.path(), *pro);
     REQUIRE(readAllBytes(rewritten.path()) == engine.data());
 }
 

@@ -8,9 +8,9 @@
 #include "format/map/MapObject.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
-#include "writer/pro/ProWriter.h"
 
 #include "support/DataTree.h"
+#include "support/ProBuilder.h"
 
 namespace fs = std::filesystem;
 using namespace geck;
@@ -21,15 +21,10 @@ namespace {
 // Writes a minimal valid WALL .pro carrying the given header flags. object_query
 // only reads header.flags, but the file must still parse as a real PRO.
 void writeWallPro(const fs::path& path, uint32_t index, uint32_t flags) {
-    fs::create_directories(path.parent_path());
-
     Pro pro{ path }; // constructor zero-initialises the header and all data blocks
     pro.header.PID = static_cast<int32_t>(ProtoId(ObjectType::Wall, index).pid());
     pro.header.flags = flags;
-
-    ProWriter writer;
-    writer.openFile(path);
-    REQUIRE(writer.write(pro));
+    test::writePro(path, pro);
 }
 
 MapObject wallObject(uint32_t index) {
@@ -50,9 +45,9 @@ struct ProFixture {
 
     ProFixture() {
         tree.write("proto/walls/walls.lst", "blocking.pro\nnoblock.pro\nshoot.pro\n");
-        writeWallPro(tree.root() / "proto/walls/blocking.pro", BLOCKING, 0x00000000);
-        writeWallPro(tree.root() / "proto/walls/noblock.pro", NON_BLOCKING, 0x00000010); // NoBlock
-        writeWallPro(tree.root() / "proto/walls/shoot.pro", SHOOT_THROUGH, 0x80000000);  // ShootThrough
+        writeWallPro(tree.root() / "proto/walls/blocking.pro", BLOCKING, 0);
+        writeWallPro(tree.root() / "proto/walls/noblock.pro", NON_BLOCKING, static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK));
+        writeWallPro(tree.root() / "proto/walls/shoot.pro", SHOOT_THROUGH, static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_SHOOT_THRU));
     }
 
     GameResources& resources() { return tree.mount(); }

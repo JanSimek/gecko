@@ -5,11 +5,8 @@
 #include <cstdint>
 #include <filesystem>
 
-#include "format/pro/Pro.h"
-#include "scripting/MapScriptApi.h"
-#include "writer/map/MapWriter.h"
-
-#include "support/ControllerFixture.h"
+#include "support/MapFileIo.h"
+#include "support/ScriptApiFixture.h"
 
 namespace geck::test {
 
@@ -19,18 +16,13 @@ namespace geck::test {
 /// to reproduce it. `root` is a fresh scratch directory (a geck::test::TempDir). Shared by the
 /// MapScriptApi and Lua-runtime quilt tests.
 inline void writeCheckerboardReference(const std::filesystem::path& root) {
-    std::filesystem::create_directories(root / "maps");
-    ControllerFixture author;
-    MapScriptApi authorApi(author.resources, author.hexgrid, author.controller, *author.map,
-        /*elevation*/ 0, /*buildSprites*/ false);
+    ScriptApiFixture author{ false };
     for (int row = 0; row < 12; ++row) {
         for (int col = 0; col < 12; ++col) {
-            REQUIRE(authorApi.paintFloorXY(col, row, static_cast<uint16_t>(271 + (col + row) % 2)));
+            REQUIRE(author.api.paintFloorXY(col, row, static_cast<uint16_t>(271 + (col + row) % 2)));
         }
     }
-    MapWriter writer{ [](int32_t) -> Pro* { return nullptr; } };
-    writer.openFile(root / "maps/ref.map");
-    REQUIRE(writer.write(author.map->getMapFile()));
+    writeMapFile(author.mapFile(), root / "maps/ref.map");
 }
 
 } // namespace geck::test

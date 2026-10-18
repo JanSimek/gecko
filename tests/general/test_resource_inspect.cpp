@@ -7,6 +7,7 @@
 
 #include "cli/ResourceInspect.h"
 #include "resource/GameResources.h"
+#include "support/CliJson.h"
 #include "support/Fixtures.h"
 
 using json = nlohmann::json;
@@ -17,10 +18,7 @@ using namespace geck;
 TEST_CASE("resourceFind locates a DAT entry and names its source", "[resource]") {
     resource::GameResources resources;
     resources.files().addDataPath(test::f2ResDat());
-    std::ostringstream oss;
-    CHECK(cli::resourceFind(resources, std::string(test::HR_ALLTLK), oss) == 0);
-
-    const json j = json::parse(oss.str());
+    const json j = test::runJson([&](std::ostream& out) { return cli::resourceFind(resources, std::string(test::HR_ALLTLK), out); });
     CHECK(j["found"] == true);
     REQUIRE(j["source"].is_object());
     CHECK(j["source"]["kind"] == "dat");
@@ -30,10 +28,7 @@ TEST_CASE("resourceFind locates a DAT entry and names its source", "[resource]")
 TEST_CASE("resourceFind reports an absent path as found=false, not an error", "[resource]") {
     resource::GameResources resources;
     resources.files().addDataPath(test::f2ResDat());
-    std::ostringstream oss;
-    CHECK(cli::resourceFind(resources, "art/tiles/nope12345.frm", oss) == 0);
-
-    const json j = json::parse(oss.str());
+    const json j = test::runJson([&](std::ostream& out) { return cli::resourceFind(resources, "art/tiles/nope12345.frm", out); });
     CHECK(j["found"] == false);
     CHECK(j["source"].is_null());
 }
@@ -41,11 +36,8 @@ TEST_CASE("resourceFind reports an absent path as found=false, not an error", "[
 TEST_CASE("resourceList matches case-insensitively and tags each entry's source", "[resource]") {
     resource::GameResources resources;
     resources.files().addDataPath(test::f2ResDat());
-    std::ostringstream oss;
     // Upper-case glob against a lower-case entry exercises the case-insensitive match.
-    CHECK(cli::resourceList(resources, "*HR_ALLTLK*", oss) == 0);
-
-    const json j = json::parse(oss.str());
+    const json j = test::runJson([&](std::ostream& out) { return cli::resourceList(resources, "*HR_ALLTLK*", out); });
     CHECK(j["count"].get<int>() >= 1);
     CHECK(j["truncated"] == false);
 

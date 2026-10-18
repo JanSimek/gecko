@@ -1,6 +1,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -17,6 +18,7 @@
 using geck::ExitGridArt;
 using geck::exitGridArtForDirection;
 using geck::exitGridArtForFacing;
+using geck::exitGridArtForRun;
 using geck::exitGridArtForStroke;
 using geck::exitGridBandHexes;
 using geck::ExitGridDestinationKind;
@@ -377,11 +379,9 @@ TEST_CASE("exitGridArtForStroke: no grid or an empty stroke falls back to a bott
 // flattenExitGridSegments must keep a committed segment independent of any later flip/cursor change.
 
 namespace {
-// Capture one segment at the flip in effect right now, as the manager freezes it on a click.
+// A segment frozen with the flip in effect right now: every hex carries the run's production art.
 ExitGridSegment captureSegment(const ExitGridSegmentRun& run, bool flipAtCapture) {
-    const ExitGridArt art = exitGridArtForDirection(
-        exitGridDirectionForLine(run.screenDx, run.screenDy, run.outwardX, run.outwardY, flipAtCapture), INTER);
-    return { run.hexes, std::vector<ExitGridArt>(run.hexes.size(), art) };
+    return { run.hexes, std::vector<ExitGridArt>(run.hexes.size(), exitGridArtForRun(run, INTER, flipAtCapture)) };
 }
 
 std::vector<int> dirsOf(const std::vector<ExitGridArt>& art) {
@@ -657,7 +657,9 @@ TEST_CASE("placement: a DIAGONAL segment yields ~2x the line's hexes; a CARDINAL
     CHECK(std::set<int>(diag.begin(), diag.end()).size() == diag.size());
     CHECK(std::vector<int>(diag.begin(), diag.begin() + static_cast<std::ptrdiff_t>(lineLen)) == line);
     // The second row sits EXIT_GRID_SECOND_ROW_STEPS hexes over, on the side the BACK_A bars face.
-    const int second = diag[lineLen];
+    const int second = geck::exitGridSecondRowHex(grid, line.front(), ExitGrid::DIR_BACK_A, geck::EXIT_GRID_SECOND_ROW_STEPS);
+    REQUIRE(second >= 0);
+    CHECK(std::find(diag.begin(), diag.end(), second) != diag.end());
     CHECK(geck::hexgrid::distance(line.front(), second) == geck::EXIT_GRID_SECOND_ROW_STEPS);
     const auto [fx, fy] = geck::hexScreenPosition(grid, line.front());
     const auto [sx, sy] = geck::hexScreenPosition(grid, second);
@@ -667,4 +669,86 @@ TEST_CASE("placement: a DIAGONAL segment yields ~2x the line's hexes; a CARDINAL
     // A cardinal run (pure horizontal hex row -> LEFT/RIGHT) stays single-row.
     const std::vector<int> cardLine = geck::hexline::hexLine(hexPos(C, C), hexPos(C + 20, C));
     CHECK(exitGridBandHexes(grid, cardLine, ExitGrid::DIR_RIGHT) == cardLine);
+}
+
+TEST_CASE("placement: a flipped diagonal grows its second row on the opposite side",
+    "[exitgrid][secondrow][placement]") {
+    HexagonGrid grid;
+    constexpr int C = 100;
+    const std::vector<int> line = geck::hexline::hexLine(hexPos(C, C), hexPos(C, C + 30));
+    REQUIRE(line.size() >= 2);
+
+    const int second = geck::exitGridSecondRowHex(grid, line.front(), ExitGrid::DIR_BACK_B, geck::EXIT_GRID_SECOND_ROW_STEPS);
+    REQUIRE(second >= 0);
+    const std::vector<int> band = exitGridBandHexes(grid, line, ExitGrid::DIR_BACK_B);
+    CHECK(std::find(band.begin(), band.end(), second) != band.end());
+
+    // The row leans the way the BACK_B bars face, which is away from where BACK_A's would.
+    const auto [fx, fy] = geck::hexScreenPosition(grid, line.front());
+    const auto [sx, sy] = geck::hexScreenPosition(grid, second);
+    const auto [bx, by] = exitGridOutward(ExitGrid::DIR_BACK_B);
+    const auto [ax, ay] = exitGridOutward(ExitGrid::DIR_BACK_A);
+    CHECK((sx - fx) * bx + (sy - fy) * by > 0);
+    CHECK((sx - fx) * ax + (sy - fy) * ay < 0);
+}
+
+TEST_CASE("exitGridSecondRowHex: an off-grid start or a step off the grid gives -1", "[exitgrid][secondrow]") {
+    HexagonGrid grid;
+    const int pastEnd = HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT;
+    CHECK(geck::exitGridSecondRowHex(grid, -1, ExitGrid::DIR_BACK_A, geck::EXIT_GRID_SECOND_ROW_STEPS) == -1);
+    CHECK(geck::exitGridSecondRowHex(grid, pastEnd, ExitGrid::DIR_BACK_A, geck::EXIT_GRID_SECOND_ROW_STEPS) == -1);
+
+    // Corner hex 0: BACK_B has no neighbour leaning its way at all; FWD_B's first step stays on the grid
+    // and its second walks off. FWD_A leans inward and finds a real hex.
+    CHECK(geck::exitGridSecondRowHex(grid, 0, ExitGrid::DIR_BACK_B, 1) == -1);
+    CHECK(geck::exitGridSecondRowHex(grid, 0, ExitGrid::DIR_FWD_B, 1) >= 0);
+    CHECK(geck::exitGridSecondRowHex(grid, 0, ExitGrid::DIR_FWD_B, 2) == -1);
+    CHECK(geck::exitGridSecondRowHex(grid, 0, ExitGrid::DIR_FWD_A, 2) >= 0);
+}
+
+TEST_CASE("placement: a diagonal band along the grid edge adds no off-grid second row", "[exitgrid][secondrow][placement]") {
+    HexagonGrid grid;
+    // Row 0 is the grid's top edge: FWD_B's second row would lie off the grid, FWD_A's lies inside.
+    const std::vector<int> edge = geck::hexline::hexLine(hexPos(40, 0), hexPos(60, 0));
+    REQUIRE(edge.size() >= 2);
+    CHECK(exitGridBandHexes(grid, edge, ExitGrid::DIR_FWD_B) == edge);
+    const std::vector<int> inward = exitGridBandHexes(grid, edge, ExitGrid::DIR_FWD_A);
+    CHECK(inward.size() > edge.size());
+    for (const int hex : inward) {
+        CHECK(grid.getHexByPosition(static_cast<uint32_t>(hex)).has_value());
+    }
+}
+
+TEST_CASE("exitGridSegmentRun takes the axis from the ends and the side from the middle hex",
+    "[exitgrid][segment]") {
+    HexagonGrid grid;
+    constexpr int C = 100;
+    // Four hexes eastward along one row: the "middle" of an even run is hexes[size / 2], the third.
+    const std::vector<int> hexes{ hexPos(C, C), hexPos(C + 1, C), hexPos(C + 2, C), hexPos(C + 3, C) };
+    const ExitGridSegmentRun run = geck::exitGridSegmentRun(grid, hexes);
+
+    const auto [firstX, firstY] = geck::hexScreenPosition(grid, hexes.front());
+    const auto [lastX, lastY] = geck::hexScreenPosition(grid, hexes.back());
+    const auto [midX, midY] = geck::hexScreenPosition(grid, hexes[2]);
+    const auto [centerX, centerY] = geck::hexGridCenterScreen(grid);
+    CHECK(run.hexes == hexes);
+    CHECK(run.screenDx == lastX - firstX);
+    CHECK(run.screenDy == lastY - firstY);
+    CHECK(run.outwardX == midX - centerX);
+    CHECK(run.outwardY == midY - centerY);
+    // Hex columns grow leftward on screen, and hex (C, C) is the grid centre.
+    CHECK(run.screenDx < 0);
+    CHECK(run.outwardX < 0);
+    const int secondX = geck::hexScreenPosition(grid, hexes[1]).first;
+    CHECK(run.outwardX != secondX - centerX); // not the lower middle
+
+    // Reversing the run flips the axis sign; a single hex has no extent.
+    const ExitGridSegmentRun reversed = geck::exitGridSegmentRun(grid, { hexes.rbegin(), hexes.rend() });
+    CHECK(reversed.screenDx == -run.screenDx);
+    CHECK(reversed.screenDy == -run.screenDy);
+    const ExitGridSegmentRun lone = geck::exitGridSegmentRun(grid, { hexPos(C, C) });
+    CHECK(lone.screenDx == 0);
+    CHECK(lone.screenDy == 0);
+    CHECK(lone.outwardX == 0);
+    CHECK(lone.outwardY == 0);
 }

@@ -16,6 +16,7 @@
 
 #include "support/ControllerFixture.h"
 #include "support/GraphicsTestEnv.h"
+#include "support/MapObjectBuilder.h"
 
 using namespace geck;
 using geck::test::ControllerFixture;
@@ -31,14 +32,10 @@ std::shared_ptr<MapObject> addScriptedObject(ControllerFixture& fx, int elevatio
     MapScript script = MapScript::makeObjectScript(
         MapScript::ScriptType::ITEM, scriptIndex, /*programIndex*/ 100, oid);
 
-    auto obj = std::make_shared<MapObject>();
-    obj->elevation = static_cast<uint32_t>(elevation);
-    obj->unknown0 = oid;
-    obj->map_scripts_pid = static_cast<int32_t>(script.pid);
-
     mf.map_scripts[ITEM_SECTION].push_back(script);
     mf.scripts_in_section[ITEM_SECTION] = static_cast<int>(mf.map_scripts[ITEM_SECTION].size());
-    mf.map_objects[elevation].push_back(obj);
+    auto obj = test::addObject(mf, /*pid*/ 0, /*hex*/ 0, elevation, static_cast<int32_t>(script.pid));
+    obj->unknown0 = oid;
     return obj;
 }
 

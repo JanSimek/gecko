@@ -7,21 +7,23 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
-#include <sstream>
+#include <ostream>
 #include <string>
 #include <vector>
 
 #include "cli/SaveInspect.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
+#include "format/frm/FrmId.h"
 #include "format/pro/Pro.h"
+#include "format/pro/ProtoTypes.h"
 #include "resource/GameResources.h"
-#include "writer/map/MapWriter.h"
 
 #include "support/ByteWriter.h"
+#include "support/CliJson.h"
 #include "support/GzipBytes.h"
+#include "support/MapFileIo.h"
 #include "support/MapObjectBuilder.h"
-#include "support/ProStubProvider.h"
 #include "support/TempFile.h"
 
 using nlohmann::json;
@@ -31,7 +33,10 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr uint32_t DUDE_PID = 0x01000000;
+constexpr uint32_t DUDE_PID = ProtoId(CritterProtoTypeId::Dude).pid();
+constexpr uint32_t DUDE_FID = FrmId(ObjectType::Critter, 0).fid();
+constexpr auto OBJECT_HIDDEN = static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_HIDDEN);
+constexpr uint32_t CRITTER_PID = ProtoId(ObjectType::Critter, 20).pid();
 constexpr int32_t DUDE_OBJECT_ID = 900;
 
 void fixedString(ByteWriter& w, const std::string& text, std::size_t length) {
@@ -42,7 +47,7 @@ void fixedString(ByteWriter& w, const std::string& text, std::size_t length) {
 
 // The player's object record: the 22-field common block, then the critter tail in engine order.
 void dudeRecord(ByteWriter& w) {
-    const std::vector<uint32_t> common{ DUDE_OBJECT_ID, 18084, 0, 0, 0, 0, 0, 0, 0x01000000, 0, 0, DUDE_PID, 0, 0, 0, 0,
+    const std::vector<uint32_t> common{ DUDE_OBJECT_ID, 18084, 0, 0, 0, 0, 0, 0, DUDE_FID, 0, 0, DUDE_PID, 0, 0, 0, 0,
         static_cast<uint32_t>(-1), static_cast<uint32_t>(-1), 0, 0, 0, 0 };
     for (const uint32_t v : common) {
         w.be32(v);
@@ -102,10 +107,7 @@ std::vector<uint8_t> buildSaveDat(const std::vector<int32_t>& globals) {
 
 // A critter combatLoad leaves out of the combat list, still holding a combat id.
 std::shared_ptr<MapObject> unlistedCritter(int32_t seed, int32_t cid, int elevation, uint32_t flags) {
-    auto critter = std::make_shared<MapObject>();
-    fillBase(*critter, seed);
-    critter->pro_pid = ProtoId(ObjectType::Critter, 20).pid();
-    critter->elevation = static_cast<uint32_t>(elevation);
+    auto critter = seededObject(CRITTER_PID, seed, elevation);
     critter->flags = flags;
     critter->critter_index = cid;
     critter->position = 16000 + seed;
@@ -116,43 +118,29 @@ std::shared_ptr<MapObject> unlistedCritter(int32_t seed, int32_t cid, int elevat
 }
 
 void writeSlotMap(const fs::path& slot, const std::function<void(Map::MapFile&)>& customize = {}) {
-    StubProvider provider;
     auto mapFile = Map::createEmptyMapFile();
-    mapFile.header.flags |= 0x01;
+    mapFile.header.flags |= static_cast<uint32_t>(MapHeaderFlags::Saved);
     for (int32_t cid : { 1, 2 }) {
-        auto critter = std::make_shared<MapObject>();
-        fillBase(*critter, cid);
-        critter->pro_pid = ProtoId(ObjectType::Critter, 20).pid();
-        critter->elevation = 0;
+        auto critter = addSeeded(mapFile, CRITTER_PID, cid);
         critter->critter_index = cid;
         critter->position = 17000 + cid;
         critter->group_id = 121;
         critter->current_ap = 7;
         critter->maneuver = 0x01;
         critter->who_hit_me = static_cast<uint32_t>(-1);
-        mapFile.map_objects[0].push_back(critter);
     }
     if (customize) {
         customize(mapFile);
     }
-    TempFile plain{ "geck_save_slot_map", ".map" };
-    {
-        MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-        writer.openFile(plain.path());
-        REQUIRE(writer.write(mapFile));
-    }
-    writeBytes(slot / "TEST.SAV", gzipBytes(readAllBytes(plain.path())));
+    writeBytes(slot / "TEST.SAV", gzipBytes(mapBytes(mapFile)));
 }
 
-json describe(const fs::path& dataRoot, const fs::path& slot, int& rc, std::string& text) {
+json describe(const fs::path& dataRoot, const fs::path& slot, int* rc = nullptr, std::string* text = nullptr) {
     resource::GameResources resources;
     resources.files().addDataPath(dataRoot.string());
     cli::DescribeSaveOptions options;
     options.slotPath = slot.string();
-    std::ostringstream out;
-    rc = cli::describeSave(resources, options, out);
-    text = out.str();
-    return rc == 0 ? json::parse(text) : json();
+    return runJson([&](std::ostream& out) { return cli::describeSave(resources, options, out); }, rc, text);
 }
 
 } // namespace
@@ -167,11 +155,7 @@ TEST_CASE("describeSave decodes a slot and joins the combat list to the slot map
     writeBytes(slot / "SAVE.DAT", buildSaveDat({ 0, 7 }));
     writeSlotMap(slot);
 
-    int rc = 0;
-    std::string text;
-    const json save = describe(data, slot, rc, text);
-    INFO(text);
-    REQUIRE(rc == 0);
+    const json save = describe(data, slot);
 
     CHECK(save.at("header").at("characterName") == "Tester");
     CHECK(save.at("header").at("mapFile") == "TEST.SAV");
@@ -216,15 +200,11 @@ TEST_CASE("describeSave joins combat ids among the critters combatLoad lists", "
     writeSlotMap(slot, [](Map::MapFile& mapFile) {
         // Ahead of the listed critters in object order, so a first-match join over every critter would pick it.
         auto& ground = mapFile.map_objects[0];
-        ground.insert(ground.begin(), unlistedCritter(7, 1, 0, 0x01)); // OBJECT_HIDDEN
+        ground.insert(ground.begin(), unlistedCritter(7, 1, 0, OBJECT_HIDDEN));
         mapFile.map_objects[1].push_back(unlistedCritter(8, 2, 1, 0));
     });
 
-    int rc = 0;
-    std::string text;
-    const json save = describe(data, slot, rc, text);
-    INFO(text);
-    REQUIRE(rc == 0);
+    const json save = describe(data, slot);
 
     const auto& combat = save.at("combat");
     const auto& list = combat.at("list");
@@ -257,7 +237,7 @@ TEST_CASE("describeSave reports a vault13.gam that does not match the save", "[c
 
     int rc = 0;
     std::string text;
-    describe(data, slot, rc, text);
+    CHECK(describe(data, slot, &rc, &text).is_null());
     CHECK(rc != 0);
     CHECK(text.find("vault13.gam") != std::string::npos);
 }

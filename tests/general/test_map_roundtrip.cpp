@@ -9,12 +9,9 @@
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/pro/Pro.h"
-#include "reader/map/MapReader.h"
-#include "writer/map/MapWriter.h"
 #include "support/Fixtures.h"
+#include "support/MapFileIo.h"
 #include "support/MapObjectBuilder.h"
-#include "support/ProStubProvider.h"
-#include "support/TempFile.h"
 
 using namespace geck;
 using namespace geck::test;
@@ -42,16 +39,8 @@ TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roun
     provider.addScenery(stairsPid, SceneryType::Stairs);
 
     auto original = Map::createEmptyMapFile();
-    auto& objects = original.map_objects[0];
-
-    auto add = [&](uint32_t proPid, int32_t seed) {
-        auto o = std::make_shared<MapObject>();
-        fillBase(*o, seed);
-        o->pro_pid = proPid;
-        o->elevation = 0;
-        objects.push_back(o);
-        return o;
-    };
+    const auto& objects = original.map_objects[0];
+    const auto add = [&original](uint32_t proPid, int32_t seed) { return addSeeded(original, proPid, seed); };
 
     auto wall = add(ProtoId(ObjectType::Wall, 100).pid(), 1);
 
@@ -69,10 +58,7 @@ TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roun
 
     auto container = add(containerPid, 3);
     container->objects_in_inventory = 1;
-    auto armor = std::make_unique<MapObject>();
-    fillBase(*armor, 30);
-    armor->pro_pid = armorPid;
-    armor->elevation = 0;
+    auto armor = std::make_unique<MapObject>(std::move(*seededObject(armorPid, 30)));
     armor->amount = 5;
     container->inventory.push_back(std::move(armor));
 
@@ -101,17 +87,7 @@ TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roun
 
     const size_t objectCount = objects.size();
 
-    TempFile mapFile{ "geck_map_roundtrip_alltypes", ".map" };
-    const auto& path = mapFile.path();
-    {
-        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-        writer.openFile(path);
-        REQUIRE(writer.write(original));
-    } // destructor flushes and closes before we read it back
-
-    MapReader reader{ [&](uint32_t pid) { return provider.load(pid); } };
-    auto reloaded = reader.openFile(path);
-    REQUIRE(reloaded != nullptr);
+    const auto reloaded = readMapFile(mapBytes(original, provider), provider);
     const auto& result = reloaded->getMapFile();
 
     // Header. The filename is padded to FILENAME_LENGTH on write and read back
@@ -213,40 +189,23 @@ TEST_CASE("MAP single-enabled-elevation map keeps engine 3-block object framing"
     StubProvider provider;
 
     auto original = Map::createEmptyMapFile();
-    // Disable elevations 1 and 2 (flag bits 0x4 and 0x8 set => tiles absent).
-    original.header.flags = 0x4 | 0x8;
+    // Disable elevations 1 and 2 (their flag bits set => tiles absent).
+    constexpr uint32_t ELEVATIONS_1_AND_2_ABSENT = Map::elevationFlag(1) | Map::elevationFlag(2);
+    original.header.flags = ELEVATIONS_1_AND_2_ABSENT;
     original.tiles.erase(1);
     original.tiles.erase(2);
 
-    auto& objects = original.map_objects[0];
-    auto add = [&](uint32_t proPid, int32_t seed) {
-        auto o = std::make_shared<MapObject>();
-        fillBase(*o, seed);
-        o->pro_pid = proPid;
-        o->elevation = 0;
-        objects.push_back(o);
-        return o;
-    };
-    add(ProtoId(ObjectType::Wall, 100).pid(), 1);
-    auto critter = add(ProtoId(ObjectType::Critter, 50).pid(), 2);
+    const auto& objects = original.map_objects[0];
+    addSeeded(original, ProtoId(ObjectType::Wall, 100).pid(), 1);
+    auto critter = addSeeded(original, ProtoId(ObjectType::Critter, 50).pid(), 2);
     critter->current_hp = 42;
 
     const size_t objectCount = objects.size();
 
-    TempFile mapFile{ "geck_map_roundtrip_single_elev", ".map" };
-    const auto& path = mapFile.path();
-    {
-        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-        writer.openFile(path);
-        REQUIRE(writer.write(original));
-    }
-
-    MapReader reader{ [&](uint32_t pid) { return provider.load(pid); } };
-    auto reloaded = reader.openFile(path);
-    REQUIRE(reloaded != nullptr);
+    const auto reloaded = readMapFile(mapBytes(original, provider), provider);
     const auto& result = reloaded->getMapFile();
 
-    CHECK(result.header.flags == (0x4u | 0x8u));
+    CHECK(result.header.flags == ELEVATIONS_1_AND_2_ABSENT);
 
     // All three object blocks are present; only elevation 0 holds objects.
     REQUIRE(result.map_objects.at(0).size() == objectCount);
@@ -269,47 +228,23 @@ TEST_CASE("MAP single-enabled-elevation map keeps engine 3-block object framing"
 TEST_CASE("MAP non-exit MISC object writes no trailing exit data", "[map][roundtrip][compat]") {
     StubProvider provider;
 
-    auto buildSingleMisc = [&](uint32_t miscIndex) {
+    auto singleMiscBytes = [&](uint32_t miscIndex) {
         auto map = Map::createEmptyMapFile();
-        auto o = std::make_shared<MapObject>();
-        fillBase(*o, 1);
-        o->pro_pid = ProtoId(ObjectType::Misc, miscIndex).pid();
-        o->elevation = 0;
+        auto o = addSeeded(map, ProtoId(ObjectType::Misc, miscIndex).pid(), 1);
         o->exit_map = 901;
         o->exit_position = 902;
         o->exit_elevation = 903;
         o->exit_orientation = 904;
-        map.map_objects[0].push_back(o);
-        return map;
+        return mapBytes(map, provider);
     };
 
-    auto writeMap = [&](const Map::MapFile& m, const std::filesystem::path& p) {
-        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-        writer.openFile(p);
-        REQUIRE(writer.write(m));
-    };
-
-    auto readMap = [&](const std::filesystem::path& p) {
-        MapReader reader{ [&](uint32_t pid) { return provider.load(pid); } };
-        return reader.openFile(p);
-    };
-
-    TempFile exitFile{ "geck_misc_exit", ".map" };
-    TempFile plainFile{ "geck_misc_plain", ".map" };
-    const auto& exitPath = exitFile.path();
-    const auto& plainPath = plainFile.path();
-
-    writeMap(buildSingleMisc(16), exitPath); // exit grid -> 4 trailing fields
-    writeMap(buildSingleMisc(5), plainPath); // ordinary MISC -> none
-
-    const auto exitSize = std::filesystem::file_size(exitPath);
-    const auto plainSize = std::filesystem::file_size(plainPath);
-    CHECK(exitSize - plainSize == 4 * sizeof(uint32_t));
+    const auto exitBytes = singleMiscBytes(16); // exit grid -> 4 trailing fields
+    const auto plainBytes = singleMiscBytes(5); // ordinary MISC -> none
+    CHECK(exitBytes.size() - plainBytes.size() == 4 * sizeof(uint32_t));
 
     // The ordinary MISC still round-trips; its (unserialized) exit fields come
     // back at their defaults rather than the sentinels we set.
-    auto reloadedPlain = readMap(plainPath);
-    REQUIRE(reloadedPlain != nullptr);
+    const auto reloadedPlain = readMapFile(plainBytes, provider);
     const auto& plain = reloadedPlain->getMapFile();
     REQUIRE(plain.map_objects.at(0).size() == 1);
     const auto& misc = *plain.map_objects.at(0)[0];
@@ -319,8 +254,7 @@ TEST_CASE("MAP non-exit MISC object writes no trailing exit data", "[map][roundt
     CHECK(misc.exit_orientation == 0);
 
     // The exit grid preserves them.
-    auto reloadedExit = readMap(exitPath);
-    REQUIRE(reloadedExit != nullptr);
+    const auto reloadedExit = readMapFile(exitBytes, provider);
     const auto& exitMap = reloadedExit->getMapFile();
     REQUIRE(exitMap.map_objects.at(0).size() == 1);
     const auto& exitObj = *exitMap.map_objects.at(0)[0];
@@ -340,33 +274,12 @@ TEST_CASE("MAP round-trip keeps an object whose PID has no known type", "[map][r
     StubProvider provider; // deliberately empty: pid -1 resolves to no proto, as in the shipped maps
 
     auto original = Map::createEmptyMapFile();
-    auto& objects = original.map_objects[0];
-
-    auto untyped = std::make_shared<MapObject>();
-    fillBase(*untyped, 42);
-    untyped->pro_pid = 0xFFFFFFFFu; // the engine's "no proto" sentinel
-    untyped->elevation = 0;
-    objects.push_back(untyped);
-
+    const auto untyped = addSeeded(original, ProtoId::EMPTY_PID, 42); // the engine's "no proto" sentinel
     // A wall behind it: if the untyped record consumed the wrong number of bytes, this one is read
     // from the wrong offset and its base fields come back as garbage.
-    auto wall = std::make_shared<MapObject>();
-    fillBase(*wall, 43);
-    wall->pro_pid = ProtoId(ObjectType::Wall, 100).pid();
-    wall->elevation = 0;
-    objects.push_back(wall);
+    const auto wall = addSeeded(original, ProtoId(ObjectType::Wall, 100).pid(), 43);
 
-    TempFile mapFile{ "geck_map_roundtrip_untyped", ".map" };
-    const auto& path = mapFile.path();
-    {
-        MapWriter writer{ [&](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-        writer.openFile(path);
-        REQUIRE(writer.write(original));
-    } // destructor flushes and closes before we read it back
-
-    MapReader reader{ [&](uint32_t pid) { return provider.load(pid); } };
-    auto reloaded = reader.openFile(path);
-    REQUIRE(reloaded != nullptr);
+    const auto reloaded = readMapFile(mapBytes(original, provider), provider);
 
     const auto& got = reloaded->getMapFile().map_objects.at(0);
     REQUIRE(got.size() == 2);
@@ -374,37 +287,13 @@ TEST_CASE("MAP round-trip keeps an object whose PID has no known type", "[map][r
     checkBase(*got[1], *wall);
 }
 
-namespace {
-
-std::vector<uint8_t> writeToBytes(const Map::MapFile& mapFile, const StubProvider& provider, const char* stem) {
-    TempFile file{ stem, ".map" };
-    {
-        MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-        writer.openFile(file.path());
-        REQUIRE(writer.write(mapFile));
-    }
-    return readAllBytes(file.path());
-}
-
-std::unique_ptr<Map> readFromBytes(const std::vector<uint8_t>& bytes, const StubProvider& provider) {
-    MapReader reader{ [&provider](uint32_t pid) { return provider.load(pid); } };
-    auto map = reader.openFile("roundtrip.map", bytes);
-    REQUIRE(map != nullptr);
-    return map;
-}
-
-} // namespace
-
 TEST_CASE("MAP read -> write reproduces a shipped map byte for byte", "[map][roundtrip]") {
     // sfshutl2.map: real header words, real per-elevation framing, 227 objects (see test_reading_map).
-    StubProvider provider;
-    for (uint32_t pid = 33555970u; pid <= 33555979u; ++pid) {
-        provider.addScenery(pid, SceneryType::Generic);
-    }
+    const StubProvider provider = sfshutl2Provider();
     const auto original = readAllBytes(dataPath("sfshutl2.map"));
-    const auto map = readFromBytes(original, provider);
+    const auto map = readMapFile(original, provider);
 
-    CHECK(writeToBytes(map->getMapFile(), provider, "geck_map_roundtrip_sfshutl2") == original);
+    CHECK(mapBytes(map->getMapFile(), provider) == original);
 }
 
 TEST_CASE("MAP write -> read -> write keeps every script section byte for byte", "[map][roundtrip][scripts]") {
@@ -426,8 +315,8 @@ TEST_CASE("MAP write -> read -> write keeps every script section byte for byte",
         original.scripts_in_section[section] = static_cast<int>(original.map_scripts[section].size());
     }
 
-    const auto first = writeToBytes(original, provider, "geck_map_roundtrip_scripts_a");
-    const auto reloaded = readFromBytes(first, provider);
+    const auto first = mapBytes(original, provider);
+    const auto reloaded = readMapFile(first, provider);
     const auto& result = reloaded->getMapFile();
     for (int section = 0; section < Map::SCRIPT_SECTIONS; ++section) {
         INFO("section " << section);
@@ -443,7 +332,7 @@ TEST_CASE("MAP write -> read -> write keeps every script section byte for byte",
             CHECK(got.local_var_offset == want.local_var_offset);
         }
     }
-    CHECK(writeToBytes(result, provider, "geck_map_roundtrip_scripts_b") == first);
+    CHECK(mapBytes(result, provider) == first);
 }
 
 TEST_CASE("MAP writer derives the inventory count from the inventory", "[map][roundtrip]") {
@@ -454,24 +343,13 @@ TEST_CASE("MAP writer derives the inventory count from the inventory", "[map][ro
     provider.addItem(armorPid, ItemType::Armor);
 
     auto mapFile = Map::createEmptyMapFile();
-    auto container = std::make_shared<MapObject>();
-    fillBase(*container, 1);
-    container->pro_pid = containerPid;
-    container->elevation = 0;
+    auto container = addSeeded(mapFile, containerPid, 1);
     container->objects_in_inventory = 5; // stale: the inventory holds one item
-    auto armor = std::make_unique<MapObject>();
-    fillBase(*armor, 2);
-    armor->pro_pid = armorPid;
-    armor->elevation = 0;
-    container->inventory.push_back(std::move(armor));
-    auto after = std::make_shared<MapObject>();
-    fillBase(*after, 3);
-    after->pro_pid = ProtoId(ObjectType::Wall, 100).pid();
-    after->elevation = 0;
-    mapFile.map_objects[0] = { container, after };
+    container->inventory.push_back(std::make_unique<MapObject>(std::move(*seededObject(armorPid, 2))));
+    const auto after = addSeeded(mapFile, ProtoId(ObjectType::Wall, 100).pid(), 3);
 
     // Writing the stale 5 would make the reader consume four records that aren't there.
-    const auto reloaded = readFromBytes(writeToBytes(mapFile, provider, "geck_map_roundtrip_invcount"), provider);
+    const auto reloaded = readMapFile(mapBytes(mapFile, provider), provider);
     const auto& objects = reloaded->getMapFile().map_objects.at(0);
     REQUIRE(objects.size() == 2);
     CHECK(objects[0]->objects_in_inventory == 1u);

@@ -67,7 +67,7 @@ void ExitGridPlacementManager::placeExitGridAtPosition(sf::Vector2f worldPos) {
 
     // A single hex has no stroke: the art is the center-facing classification (or the explicit
     // override). No flip on a click-placed lone marker.
-    const ExitGridArt art = artForLine({ hexPosition }, properties.markerArt, /*flipSide=*/false);
+    const ExitGridArt art = artForHex(hexPosition, properties.markerArt);
     auto exitGridObject = createExitGridObject(hexPosition, art.proPid, art.frmPid, properties);
     int currentElevation = _context.getCurrentElevation();
 
@@ -224,14 +224,11 @@ ExitGridDestinationKind ExitGridPlacementManager::destinationKind() const {
         : ExitGridDestinationKind::InterMap;
 }
 
-ExitGridArt ExitGridPlacementManager::artForLine(const std::vector<int>& orderedHexes,
-    MarkerArt markerArt, bool flipSide) const {
-    // An explicit override forces one art for every hex; Auto uses the whole-stroke side. The flip only
-    // affects Auto (an explicit direction is already a fixed side).
+ExitGridArt ExitGridPlacementManager::artForHex(int hex, MarkerArt markerArt) const {
     if (const int dir = explicitDirection(markerArt); dir >= 0) {
         return exitGridArtForDirection(dir, destinationKind());
     }
-    return exitGridArtForStroke(_context.getHexagonGrid(), orderedHexes, destinationKind(), flipSide);
+    return exitGridArtForStroke(_context.getHexagonGrid(), { hex }, destinationKind(), /*flipSide=*/false);
 }
 
 std::optional<ExitGridSegmentRun> ExitGridPlacementManager::buildSegmentRun(
@@ -264,9 +261,7 @@ ExitGridArt ExitGridPlacementManager::segmentArt(const ExitGridSegmentRun& run, 
     if (const int forced = explicitDirection(_currentMarkerArt); forced >= 0) {
         return exitGridArtForDirection(forced, kind);
     }
-    const int dir = exitGridDirectionForLine(run.screenDx, run.screenDy,
-        run.outwardX, run.outwardY, flipSide);
-    return exitGridArtForDirection(dir, kind);
+    return exitGridArtForRun(run, kind, flipSide);
 }
 
 ExitGridSegment ExitGridPlacementManager::classifySegment(sf::Vector2f from, sf::Vector2f to,

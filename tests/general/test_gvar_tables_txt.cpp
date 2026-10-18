@@ -3,7 +3,7 @@
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
-#include <sstream>
+#include <ostream>
 #include <string>
 
 #include "cli/Endings.h"
@@ -17,6 +17,7 @@
 #include "reader/party/PartyTxtReader.h"
 #include "resource/GameResources.h"
 
+#include "support/CliJson.h"
 #include "support/TempFile.h"
 
 using namespace geck;
@@ -26,12 +27,10 @@ using geck::test::writeFile;
 namespace {
 
 template <typename Build>
-nlohmann::json run(const fs::path& root, Build build, int& rc) {
+nlohmann::json run(const fs::path& root, Build build) {
     resource::GameResources resources;
     resources.files().addDataPath(root.string());
-    std::ostringstream oss;
-    rc = build(resources, oss);
-    return nlohmann::json::parse(oss.str());
+    return test::runJson([&](std::ostream& out) { return build(resources, out); });
 }
 
 } // namespace
@@ -103,9 +102,7 @@ TEST_CASE("The endings, gvars and party tools surface the engine tables", "[gvar
     writeFile(root / "text" / "english" / "cuts" / "nar_e.txt", "1:You fell.\n2:The end.\n");
 
     SECTION("endings adds the death endings with the engine's conditions and subtitles") {
-        int rc = -1;
-        const auto j = run(root, cli::buildEndings, rc);
-        REQUIRE(rc == 0);
+        const auto j = run(root, cli::buildEndings);
         REQUIRE(j["deathEndings"].size() == 2);
         CHECK(j["deathEndings"][0]["condition"].is_null()); // gvar -1: no gvar check
         const auto& death = j["deathEndings"][1];
@@ -118,9 +115,7 @@ TEST_CASE("The endings, gvars and party tools surface the engine tables", "[gvar
     }
 
     SECTION("gvars lists each gvar's roles from the data files") {
-        int rc = -1;
-        const auto j = run(root, cli::buildGlobalVars, rc);
-        REQUIRE(rc == 0);
+        const auto j = run(root, cli::buildGlobalVars);
         CHECK(j["gvars"][0]["roles"][0]["kind"] == "karma");
         CHECK(j["gvars"][0]["roles"][0]["title"] == "Saint");
         CHECK(j["gvars"][1]["roles"][0]["kind"] == "holodisk");
@@ -132,9 +127,7 @@ TEST_CASE("The endings, gvars and party tools surface the engine tables", "[gvar
     }
 
     SECTION("party leaves out the player and the -1 level placeholder") {
-        int rc = -1;
-        const auto j = run(root, cli::buildParty, rc);
-        REQUIRE(rc == 0);
+        const auto j = run(root, cli::buildParty);
         REQUIRE(j["members"].size() == 1);
         CHECK(j["members"][0]["pid"] == 16777376);
         CHECK(j["members"][0]["options"]["chemUse"] == nlohmann::json::array({ "clean" }));

@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <sstream>
 #include <string>
 
 #include "cli/MapAnalyzer.h"
@@ -14,15 +13,13 @@
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/pro/Pro.h"
-#include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
 #include "resource/MapFileIO.h"
-#include "writer/map/MapWriter.h"
 
+#include "support/AnalyzeWrittenMap.h"
 #include "support/GzipBytes.h"
+#include "support/MapFileIo.h"
 #include "support/MapObjectBuilder.h"
-#include "support/ProStubProvider.h"
-#include "support/TempFile.h"
 
 using nlohmann::json;
 using namespace geck;
@@ -30,34 +27,15 @@ using namespace geck::test;
 
 namespace {
 
-constexpr uint32_t MAP_HEADER_SAVED = 0x01;
+constexpr auto MAP_HEADER_SAVED = static_cast<uint32_t>(MapHeaderFlags::Saved);
+constexpr auto OBJECT_HIDDEN = static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_HIDDEN);
 
 std::shared_ptr<MapObject> addCritter(Map::MapFile& mapFile, int32_t seed, int32_t cid, int32_t hex, int elevation = 0) {
-    auto critter = std::make_shared<MapObject>();
-    fillBase(*critter, seed);
-    critter->pro_pid = ProtoId(ObjectType::Critter, static_cast<uint32_t>(10 + seed)).pid();
-    critter->elevation = static_cast<uint32_t>(elevation);
+    auto critter = addSeeded(mapFile, ProtoId(ObjectType::Critter, static_cast<uint32_t>(10 + seed)).pid(), seed, elevation);
     critter->critter_index = cid;
     critter->position = hex;
     critter->who_hit_me = static_cast<uint32_t>(-1);
-    mapFile.map_objects[elevation].push_back(critter);
     return critter;
-}
-
-void writeMap(const Map::MapFile& mapFile, const std::filesystem::path& path, const StubProvider& provider) {
-    MapWriter writer{ [&provider](int32_t pid) { return provider.load(static_cast<uint32_t>(pid)); } };
-    writer.openFile(path);
-    REQUIRE(writer.write(mapFile));
-}
-
-json analyze(const std::filesystem::path& path) {
-    resource::GameResources resources;
-    cli::AnalyzeOptions options;
-    options.json = true;
-    options.maps = { path.string() };
-    std::ostringstream out;
-    REQUIRE(cli::analyzeMaps(resources, options, out) == 0);
-    return json::parse(out.str());
 }
 
 } // namespace
@@ -65,7 +43,6 @@ json analyze(const std::filesystem::path& path) {
 // A save slot stores each map gzip-compressed (fallout2-ce loadsave.cc _GameMap2Slot), and a saved map's
 // critters carry live combat state in slots that shipped maps leave zero.
 TEST_CASE("a save slot's gzip map loads and reports live critter combat state", "[cli][map][saved]") {
-    StubProvider provider;
     auto mapFile = Map::createEmptyMapFile();
     mapFile.header.flags |= MAP_HEADER_SAVED;
 
@@ -80,10 +57,8 @@ TEST_CASE("a save slot's gzip map loads and reports live critter combat state", 
     victim->current_hp = static_cast<uint32_t>(-6);
     victim->combat_results = 0x80; // DAM_DEAD
 
-    TempFile plain{ "geck_saved_map_plain", ".map" };
-    writeMap(mapFile, plain.path(), provider);
     TempFile gz{ "geck_saved_map_gzip", ".SAV" };
-    writeBytes(gz.path(), gzipBytes(readAllBytes(plain.path())));
+    writeBytes(gz.path(), gzipBytes(mapBytes(mapFile)));
 
     resource::GameResources resources;
     std::string error;
@@ -94,7 +69,7 @@ TEST_CASE("a save slot's gzip map loads and reports live critter combat state", 
     const auto opened = resource::readMap(resources, gz.path(), resource::MapSource::Disk);
     CHECK(opened->getMapFile().map_objects.at(0).size() == 2);
 
-    const json root = analyze(gz.path());
+    const json root = analyzeMapPath(gz.path());
     const auto& critters = root.at("maps").at(0).at("critters");
     REQUIRE(critters.size() == 2);
     const auto& combat = critters.at(0).at("combat");
@@ -113,12 +88,11 @@ TEST_CASE("a save slot's gzip map loads and reports live critter combat state", 
 // combatLoad relinks whoHitMe only among the critters it lists again, so a hidden critter neither resolves its own
 // id nor shadows a listed critter holding the same stale one, and ids do not cross elevations.
 TEST_CASE("a saved map resolves whoHitMe among the non-hidden critters of one elevation", "[cli][map][saved]") {
-    StubProvider provider;
     auto mapFile = Map::createEmptyMapFile();
     mapFile.header.flags |= MAP_HEADER_SAVED;
 
     auto hidden = addCritter(mapFile, 1, 4, 18080);
-    hidden->flags = 0x01; // OBJECT_HIDDEN
+    hidden->flags = OBJECT_HIDDEN;
     hidden->who_hit_me = 5;
     auto attacker = addCritter(mapFile, 2, 5, 18082);
     attacker->who_hit_me = 4;
@@ -126,9 +100,7 @@ TEST_CASE("a saved map resolves whoHitMe among the non-hidden critters of one el
     auto upstairs = addCritter(mapFile, 4, 6, 18086, 1);
     upstairs->who_hit_me = 5;
 
-    TempFile path{ "geck_saved_map_hidden", ".map" };
-    writeMap(mapFile, path.path(), provider);
-    const json root = analyze(path.path());
+    const json root = analyzeWrittenMap(mapFile, "geck_saved_map_hidden");
     const auto& critters = root.at("maps").at(0).at("critters");
     REQUIRE(critters.size() == 4);
     std::map<int, json> byHex;
@@ -143,23 +115,16 @@ TEST_CASE("a saved map resolves whoHitMe among the non-hidden critters of one el
 }
 
 TEST_CASE("an unsaved map reports no combat state", "[cli][map][saved]") {
-    StubProvider provider;
     auto mapFile = Map::createEmptyMapFile();
     mapFile.header.flags &= ~MAP_HEADER_SAVED;
     addCritter(mapFile, 1, 0, 18082);
 
-    TempFile plain{ "geck_unsaved_map", ".map" };
-    writeMap(mapFile, plain.path(), provider);
-    const json root = analyze(plain.path());
+    const json root = analyzeWrittenMap(mapFile, "geck_unsaved_map");
     CHECK_FALSE(root.at("maps").at(0).at("critters").at(0).contains("combat"));
 }
 
 TEST_CASE("a truncated gzip map fails with the reason", "[cli][map][saved]") {
-    StubProvider provider;
-    auto mapFile = Map::createEmptyMapFile();
-    TempFile plain{ "geck_truncated_plain", ".map" };
-    writeMap(mapFile, plain.path(), provider);
-    auto compressed = gzipBytes(readAllBytes(plain.path()));
+    auto compressed = gzipBytes(mapBytes(Map::createEmptyMapFile()));
     compressed.resize(compressed.size() / 2);
     TempFile gz{ "geck_truncated_gzip", ".SAV" };
     writeBytes(gz.path(), compressed);
@@ -181,13 +146,9 @@ TEST_CASE("MAP reader follows nested inventories", "[map][roundtrip]") {
 
     auto mapFile = Map::createEmptyMapFile();
     auto critter = addCritter(mapFile, 1, 0, 18082);
-    auto container = std::make_unique<MapObject>();
-    fillBase(*container, 2);
-    container->pro_pid = containerPid;
+    auto container = std::make_unique<MapObject>(std::move(*seededObject(containerPid, 2)));
     container->amount = 1;
-    auto armor = std::make_unique<MapObject>();
-    fillBase(*armor, 3);
-    armor->pro_pid = armorPid;
+    auto armor = std::make_unique<MapObject>(std::move(*seededObject(armorPid, 3)));
     armor->amount = 4;
     container->objects_in_inventory = 1;
     container->inventory.push_back(std::move(armor));
@@ -196,11 +157,8 @@ TEST_CASE("MAP reader follows nested inventories", "[map][roundtrip]") {
     auto after = addCritter(mapFile, 4, 1, 18084);
 
     TempFile out{ "geck_nested_inventory", ".map" };
-    writeMap(mapFile, out.path(), provider);
-
-    MapReader reader{ [&provider](uint32_t pid) { return provider.load(pid); } };
-    const auto reloaded = reader.openFile(out.path());
-    REQUIRE(reloaded != nullptr);
+    writeMapFile(mapFile, out.path(), provider);
+    const auto reloaded = readMapFile(out.path(), provider);
     const auto& objects = reloaded->getMapFile().map_objects.at(0);
     REQUIRE(objects.size() == 2);
     REQUIRE(objects[0]->inventory.size() == 1);

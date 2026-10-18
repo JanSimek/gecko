@@ -4,40 +4,25 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <initializer_list>
+#include <ostream>
 #include <sstream>
 #include <string>
 
 #include "cli/ProtoExport.h"
 #include "resource/GameResources.h"
 #include "support/ByteWriter.h"
+#include "support/CliJson.h"
 #include "support/DataTree.h"
+#include "support/EngineProtoBytes.h"
 
 using json = nlohmann::json;
 using geck::test::ByteWriter;
+using geck::test::critterProto;
+using geck::test::itemProtoHeader;
+using geck::test::weaponProto;
 using namespace geck;
 
 namespace {
-
-ByteWriter& be32s(ByteWriter& w, std::initializer_list<std::int32_t> values) {
-    for (const auto value : values) {
-        w.be32(static_cast<std::uint32_t>(value));
-    }
-    return w;
-}
-
-// The item header exactly as fallout2-ce protoRead reads it: pid, messageId, fid, lightDistance,
-// lightIntensity, flags, extendedFlags, sid, type, material, size, weight, cost, inventoryFid, then a
-// one-byte soundId. Built by hand rather than with ProWriter, so the test pins the engine's layout
-// instead of gecko agreeing with itself.
-ByteWriter itemHeader(std::int32_t pid, std::int32_t messageId, std::uint32_t extendedFlags, std::int32_t type) {
-    ByteWriter w;
-    be32s(w, { pid, messageId, 0x07000010, 0, 0, 0x00000008 });
-    w.be32(extendedFlags);
-    be32s(w, { -1, type, 1 /* Metal */, 3, 7, 250, 0x07000020 });
-    w.u8('0');
-    return w;
-}
 
 // A mounted data directory holding four readable item protos, one .lst entry whose file is missing,
 // and one critter, plus the .msg files that name them.
@@ -55,50 +40,34 @@ public:
         _tree.write("text/english/game/perk.msg", "{159}{}{Long Range}\n");
 
         // Primary attack mode 6, secondary 7, Big Gun, Two Handed and sfall's Energy bit.
-        ByteWriter weapon = itemHeader(1, 100, 0x00000776, 3);
-        be32s(weapon, { 6, 10, 20, 1 /* laser */, 25, 20, -1, 4, 5, 6, 2, 58 /* Weapon Long Range */, 10, 8 /* 10mm */, 3, 30 });
-        weapon.u8('A');
+        const ByteWriter weapon = weaponProto(1, 100, 0x00000776);
         REQUIRE(weapon.size() == 122);
         _tree.writeBytes("proto/items/weapon.pro", weapon.data());
 
-        ByteWriter ammo = itemHeader(3, 300, 0, 4);
-        be32s(ammo, { 8, 24, -10, 25, 2, 1 });
+        ByteWriter ammo = itemProtoHeader(3, 300, 0, 4);
+        ammo.be32s({ 8, 24, -10, 25, 2, 1 });
         REQUIRE(ammo.size() == 81);
         _tree.writeBytes("proto/items/ammo.pro", ammo.data());
 
-        ByteWriter armor = itemHeader(4, 400, 0, 0);
-        be32s(armor, { 20, 30, 20, 20, 10, 30, 500, 20, 4, 0, 0, 0, 0, 0, 0, -1, 0x0100000C, 0x01000005 });
+        ByteWriter armor = itemProtoHeader(4, 400, 0, 0);
+        armor.be32s({ 20, 30, 20, 20, 10, 30, 500, 20, 4, 0, 0, 0, 0, 0, 0, -1, 0x0100000C, 0x01000005 });
         REQUIRE(armor.size() == 129);
         _tree.writeBytes("proto/items/armor.pro", armor.data());
 
-        ByteWriter misc = itemHeader(5, 500, 0, 5);
-        be32s(misc, { 38, 3, 200 });
+        ByteWriter misc = itemProtoHeader(5, 500, 0, 5);
+        misc.be32s({ 38, 3, 200 });
         REQUIRE(misc.size() == 69);
         _tree.writeBytes("proto/items/misc.pro", misc.data());
 
-        // The critter layout of fallout2-ce protoRead + protoCritterDataRead. Base stat i holds 100 + i
-        // and bonus stat i holds 200 + i, so each value names the stat slot it was read from.
-        ByteWriter critter;
-        be32s(critter, { 0x01000001, 200, 0x01000040, 0, 0, 0x20000000, 0x6000, 0x04000005, -1, 77, 1 });
-        critter.be32(0x0802); // Barter + CRITTER_FLAT
-        for (std::int32_t stat = 0; stat < 35; ++stat) {
-            critter.be32(static_cast<std::uint32_t>(100 + stat));
-        }
-        for (std::int32_t stat = 0; stat < 35; ++stat) {
-            critter.be32(static_cast<std::uint32_t>(200 + stat));
-        }
-        for (std::int32_t skill = 0; skill < 18; ++skill) {
-            critter.be32(static_cast<std::uint32_t>(skill));
-        }
-        be32s(critter, { 1 /* quadruped */, 150, 3, 2 /* fire */ });
+        // Base stat i holds 100 + i and bonus stat i holds 200 + i, so each value names the stat slot
+        // it was read from; skill i holds i.
+        const ByteWriter critter = critterProto(100, 200, 0);
         REQUIRE(critter.size() == 416);
         _tree.writeBytes("proto/critters/critter.pro", critter.data());
     }
 
     json run(const cli::ProtoExportOptions& options = {}) {
-        std::ostringstream oss;
-        REQUIRE(cli::exportProtos(_tree.mount(), options, oss) == 0);
-        return json::parse(oss.str());
+        return test::runJson([&](std::ostream& out) { return cli::exportProtos(_tree.mount(), options, out); });
     }
 
 private:

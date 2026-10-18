@@ -11,6 +11,7 @@
 #include "mcp/McpServer.h"
 #include "resource/GameResources.h"
 
+#include "support/McpCall.h"
 #include "support/TempFile.h"
 
 using nlohmann::json;
@@ -76,8 +77,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
     // script-selecting tools insist on one and say which base they mean.
     SECTION("the script tools demand a selector and name the index base") {
         for (const char* tool : { "describe_script", "find_script" }) {
-            const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 6 }, { "method", "tools/call" },
-                { "params", { { "name", tool }, { "arguments", json::object() } } } });
+            const json resp = test::mcpCall(server, tool);
             CHECK(resp["result"]["isError"] == true);
             const auto text = resp["result"]["content"][0]["text"].get<std::string>();
             CHECK(text.find("1-based") != std::string::npos);
@@ -87,25 +87,20 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
     // Scenery and walls are ~98% of every map's object records and nobody searches for a wall, so the
     // export omits them unless asked. With no data mounted the call still has to answer cleanly.
     SECTION("export_entities reports missing data rather than failing oddly") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 8 }, { "method", "tools/call" },
-            { "params", { { "name", "export_entities" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "export_entities");
         CHECK(resp["result"]["isError"] == true);
         const auto text = resp["result"]["content"][0]["text"].get<std::string>();
         CHECK(text.find("no maps") != std::string::npos);
     }
 
     SECTION("export_protos reports missing data and rejects filters it cannot honour") {
-        auto call = [&](json toolArgs, int id) {
-            return server.handleMessage({ { "jsonrpc", "2.0" }, { "id", id }, { "method", "tools/call" },
-                { "params", { { "name", "export_protos" }, { "arguments", std::move(toolArgs) } } } });
-        };
-        const json noData = call(json::object(), 60);
+        const json noData = test::mcpCall(server, "export_protos");
         CHECK(noData["result"]["isError"] == true);
         CHECK(noData["result"]["content"][0]["text"].get<std::string>().find("items.lst") != std::string::npos);
 
         for (json bad : { json{ { "kind", "robot" } }, json{ { "itemType", "gun" } },
                  json{ { "kind", "critter" }, { "itemType", "weapon" } }, json{ { "kind", 5 } } }) {
-            const json resp = call(bad, 61);
+            const json resp = test::mcpCall(server, "export_protos", bad);
             CHECK(resp["result"]["isError"] == true);
             // A rejected filter never reaches the data: the message is about the argument.
             CHECK(resp["result"]["content"][0]["text"].get<std::string>().find("items.lst") == std::string::npos);
@@ -113,8 +108,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
     }
 
     SECTION("find_text requires a pattern") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 7 }, { "method", "tools/call" },
-            { "params", { { "name", "find_text" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "find_text");
         CHECK(resp["result"]["isError"] == true);
     }
 
@@ -129,14 +123,12 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
     }
 
     SECTION("an unknown tool is a -32602 error") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 4 }, { "method", "tools/call" },
-            { "params", { { "name", "nope" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "nope");
         CHECK(resp["error"]["code"] == -32602);
     }
 
     SECTION("list_maps with no data mounted is an empty list, not an error") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 5 }, { "method", "tools/call" },
-            { "params", { { "name", "list_maps" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "list_maps");
         CHECK(resp["result"]["isError"] == false);
         CHECK(resp["result"]["content"][0]["text"] == "[]");
         // An array-emitting tool wraps its structuredContent in an object (the MCP schema
@@ -145,8 +137,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
     }
 
     SECTION("a JSON-object tool carries structuredContent mirroring its text block") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 50 }, { "method", "tools/call" },
-            { "params", { { "name", "resolve_fid" }, { "arguments", { { "fid", "0x05000021" } } } } } });
+        const json resp = test::mcpCall(server, "resolve_fid", { { "fid", "0x05000021" } });
         REQUIRE(resp["result"]["isError"] == false);
         REQUIRE(resp["result"].contains("structuredContent"));
         const json text = json::parse(resp["result"]["content"][0]["text"].get<std::string>());
@@ -155,34 +146,29 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
     }
 
     SECTION("a plain-text tool result has no structuredContent") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 51 }, { "method", "tools/call" },
-            { "params", { { "name", "script_api" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "script_api");
         CHECK(resp["result"]["isError"] == false);
         CHECK_FALSE(resp["result"].contains("structuredContent"));
     }
 
     SECTION("a tool error carries no structuredContent") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 52 }, { "method", "tools/call" },
-            { "params", { { "name", "analyze" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "analyze");
         REQUIRE(resp["result"]["isError"] == true);
         CHECK_FALSE(resp["result"].contains("structuredContent"));
     }
 
     SECTION("analyze with no data mounted reports a tool error (not a crash)") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 6 }, { "method", "tools/call" },
-            { "params", { { "name", "analyze" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "analyze");
         CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("proto_info without a pid is a tool error") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 7 }, { "method", "tools/call" },
-            { "params", { { "name", "proto_info" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "proto_info");
         CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("resource_find with no data mounted reports found=false, not an error") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 15 }, { "method", "tools/call" },
-            { "params", { { "name", "resource_find" }, { "arguments", { { "path", "art/tiles/gras030.frm" } } } } } });
+        const json resp = test::mcpCall(server, "resource_find", { { "path", "art/tiles/gras030.frm" } });
         CHECK(resp["result"]["isError"] == false);
         const json payload = json::parse(resp["result"]["content"][0]["text"].get<std::string>());
         CHECK(payload["found"] == false);
@@ -190,88 +176,73 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
     }
 
     SECTION("resource_find without a path is a tool error") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 16 }, { "method", "tools/call" },
-            { "params", { { "name", "resource_find" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "resource_find");
         CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("render_map without map/out is a tool error") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 8 }, { "method", "tools/call" },
-            { "params", { { "name", "render_map" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "render_map");
         CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("describe_script without programIndex is a tool error") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 9 }, { "method", "tools/call" },
-            { "params", { { "name", "describe_script" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "describe_script");
         CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("describe_script accepts index 0 and reports a tool error with no data (not a crash)") {
         // programIndex is 0-based, so 0 must be accepted (not rejected as the old 1-based guard did);
         // with no data mounted it fails only for the missing scripts.lst.
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 10 }, { "method", "tools/call" },
-            { "params", { { "name", "describe_script" }, { "arguments", { { "programIndex", 0 } } } } } });
+        const json resp = test::mcpCall(server, "describe_script", { { "programIndex", 0 } });
         CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("reachability without a map is a tool error") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 11 }, { "method", "tools/call" },
-            { "params", { { "name", "reachability" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "reachability");
         CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("describe_map without a map is a tool error") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 12 }, { "method", "tools/call" },
-            { "params", { { "name", "describe_map" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "describe_map");
         CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("map_graph with no data mounted reports a tool error (no maps found)") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 13 }, { "method", "tools/call" },
-            { "params", { { "name", "map_graph" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "map_graph");
         CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("world_map with no data mounted reports a tool error (no city.txt)") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 14 }, { "method", "tools/call" },
-            { "params", { { "name", "world_map" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "world_map");
         CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("world_encounters needs x and y together") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 15 }, { "method", "tools/call" },
-            { "params", { { "name", "world_encounters" }, { "arguments", { { "x", 10 } } } } } });
+        const json resp = test::mcpCall(server, "world_encounters", { { "x", 10 } });
         CHECK(resp["result"]["isError"] == true);
         CHECK(resp["result"]["content"][0]["text"].get<std::string>().find("'x' and 'y'") != std::string::npos);
     }
 
     SECTION("world_encounters with no data mounted reports a tool error (no worldmap.txt)") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 15 }, { "method", "tools/call" },
-            { "params", { { "name", "world_encounters" }, { "arguments", json::object() } } } });
+        const json resp = test::mcpCall(server, "world_encounters");
         CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("quests / gvars / endings / party with no data mounted report tool errors") {
-        const json q = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 16 }, { "method", "tools/call" },
-            { "params", { { "name", "quests" }, { "arguments", json::object() } } } });
+        const json q = test::mcpCall(server, "quests");
         CHECK(q["result"]["isError"] == true);
-        const json g = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 17 }, { "method", "tools/call" },
-            { "params", { { "name", "gvars" }, { "arguments", json::object() } } } });
+        const json g = test::mcpCall(server, "gvars");
         CHECK(g["result"]["isError"] == true);
-        const json e = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 18 }, { "method", "tools/call" },
-            { "params", { { "name", "endings" }, { "arguments", json::object() } } } });
+        const json e = test::mcpCall(server, "endings");
         CHECK(e["result"]["isError"] == true);
-        const json p = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 19 }, { "method", "tools/call" },
-            { "params", { { "name", "party" }, { "arguments", json::object() } } } });
+        const json p = test::mcpCall(server, "party");
         CHECK(p["result"]["isError"] == true);
     }
 
     SECTION("resolve_fid decodes a FID without any data mounted") {
         // The type byte + index are pure FID arithmetic, so resolve_fid succeeds even with no data —
         // only the art-path lookup needs the LSTs (it just reports a null path then).
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 26 }, { "method", "tools/call" },
-            { "params", { { "name", "resolve_fid" }, { "arguments", { { "fid", "0x05000021" } } } } } });
+        const json resp = test::mcpCall(server, "resolve_fid", { { "fid", "0x05000021" } });
         CHECK(resp["result"]["isError"] == false);
         const json decoded = json::parse(resp["result"]["content"][0]["text"].get<std::string>());
         CHECK(decoded["type"] == "misc");
@@ -280,53 +251,44 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
     }
 
     SECTION("resolve_fid rejects a non-numeric fid as a tool error") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 27 }, { "method", "tools/call" },
-            { "params", { { "name", "resolve_fid" }, { "arguments", { { "fid", "nope" } } } } } });
+        const json resp = test::mcpCall(server, "resolve_fid", { { "fid", "nope" } });
         CHECK(resp["result"]["isError"] == true);
     }
 
     SECTION("frm_info / render_frm / list_frms without their required args are tool errors") {
-        CHECK(server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 28 }, { "method", "tools/call" },
-                  { "params", { { "name", "frm_info" }, { "arguments", json::object() } } } })["result"]["isError"]
+        CHECK(test::mcpCall(server, "frm_info")["result"]["isError"]
             == true);
-        CHECK(server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 29 }, { "method", "tools/call" },
-                  { "params", { { "name", "render_frm" }, { "arguments", { { "frm", "ext2grd1" } } } } } })["result"]["isError"]
+        CHECK(test::mcpCall(server, "render_frm", { { "frm", "ext2grd1" } })["result"]["isError"]
             == true); // missing 'out'
-        CHECK(server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 40 }, { "method", "tools/call" },
-                  { "params", { { "name", "list_frms" }, { "arguments", json::object() } } } })["result"]["isError"]
+        CHECK(test::mcpCall(server, "list_frms")["result"]["isError"]
             == true);
     }
 
     SECTION("list_frms with no data mounted is an empty array, not an error") {
-        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 41 }, { "method", "tools/call" },
-            { "params", { { "name", "list_frms" }, { "arguments", { { "glob", "ext2grd*" } } } } } });
+        const json resp = test::mcpCall(server, "list_frms", { { "glob", "ext2grd*" } });
         CHECK(resp["result"]["isError"] == false);
         CHECK(resp["result"]["content"][0]["text"] == "[]\n");
         CHECK(resp["result"]["structuredContent"] == json{ { "frms", json::array() } });
     }
 
     SECTION("bad argument types and out-of-range numbers are tool errors, not silent casts") {
-        auto call = [&](const char* tool, json toolArgs, int id) {
-            return server.handleMessage({ { "jsonrpc", "2.0" }, { "id", id }, { "method", "tools/call" },
-                { "params", { { "name", tool }, { "arguments", std::move(toolArgs) } } } });
-        };
         // A negative pid would have wrapped to a huge uint32; a string pid was silently ignored.
-        CHECK(call("proto_info", { { "pid", -5 } }, 20)["result"]["isError"] == true);
-        CHECK(call("proto_info", { { "pid", "nope" } }, 21)["result"]["isError"] == true);
+        CHECK(test::mcpCall(server, "proto_info", { { "pid", -5 } })["result"]["isError"] == true);
+        CHECK(test::mcpCall(server, "proto_info", { { "pid", "nope" } })["result"]["isError"] == true);
         // A negative maxDimension would have become an enormous unsigned value.
-        CHECK(call("render_map", { { "map", "m.map" }, { "out", "o.png" }, { "maxDimension", -1 } }, 22)["result"]["isError"] == true);
+        CHECK(test::mcpCall(server, "render_map", { { "map", "m.map" }, { "out", "o.png" }, { "maxDimension", -1 } })["result"]["isError"] == true);
         // A non-string required arg used to slip through as an empty string.
-        CHECK(call("render_map", { { "map", 123 }, { "out", "o.png" } }, 23)["result"]["isError"] == true);
+        CHECK(test::mcpCall(server, "render_map", { { "map", 123 }, { "out", "o.png" } })["result"]["isError"] == true);
         // embed must be a real boolean, not a truthy string.
-        CHECK(call("render_map", { { "map", "m.map" }, { "out", "o.png" }, { "embed", "yes" } }, 33)["result"]["isError"] == true);
-        CHECK(call("render_frm", { { "frm", "ext2grd1" }, { "out", "o.png" }, { "embed", 1 } }, 34)["result"]["isError"] == true);
+        CHECK(test::mcpCall(server, "render_map", { { "map", "m.map" }, { "out", "o.png" }, { "embed", "yes" } })["result"]["isError"] == true);
+        CHECK(test::mcpCall(server, "render_frm", { { "frm", "ext2grd1" }, { "out", "o.png" }, { "embed", 1 } })["result"]["isError"] == true);
         // A negative entry in a pid array would have wrapped too.
-        CHECK(call("extract_pattern", { { "map", "m" }, { "out", "o" }, { "name", "n" }, { "pids", json::array({ -1 }) } }, 24)["result"]["isError"] == true);
+        CHECK(test::mcpCall(server, "extract_pattern", { { "map", "m" }, { "out", "o" }, { "name", "n" }, { "pids", json::array({ -1 }) } })["result"]["isError"] == true);
         // find_gvar requires a non-empty gvar name (empty would match every line).
-        CHECK(call("find_gvar", json::object(), 25)["result"]["isError"] == true);
+        CHECK(test::mcpCall(server, "find_gvar")["result"]["isError"] == true);
         // dump_grid used to ignore a mistyped flag and dump with the default instead.
-        CHECK(call("dump_grid", { { "map", "m.map" }, { "elevation", "1" } }, 26)["result"]["isError"] == true);
-        CHECK(call("dump_grid", { { "map", "m.map" }, { "roof", "true" } }, 27)["result"]["isError"] == true);
+        CHECK(test::mcpCall(server, "dump_grid", { { "map", "m.map" }, { "elevation", "1" } })["result"]["isError"] == true);
+        CHECK(test::mcpCall(server, "dump_grid", { { "map", "m.map" }, { "roof", "true" } })["result"]["isError"] == true);
     }
 
     SECTION("ping is answered promptly with an empty result") {
@@ -356,9 +318,8 @@ TEST_CASE("McpServer generate stops a runaway script and stays responsive", "[mc
     geck::test::TempFile out{ "geck_mcp_loop_out", ".map" };
     geck::test::writeFile(script.path(), "while true do end");
 
-    const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 40 }, { "method", "tools/call" },
-        { "params", { { "name", "generate" },
-                        { "arguments", { { "script", script.path().string() }, { "out", out.path().string() }, { "timeBudgetSeconds", 1 } } } } } });
+    const json resp = test::mcpCall(server, "generate",
+        { { "script", script.path().string() }, { "out", out.path().string() }, { "timeBudgetSeconds", 1 } });
     REQUIRE(resp["result"]["isError"] == true);
     CHECK(resp["result"]["content"][0]["text"].get<std::string>().find("time budget") != std::string::npos);
 
@@ -373,9 +334,8 @@ TEST_CASE("McpServer returns a tool's exception as a tool error, not a protocol 
     geck::test::writeFile(script.path(), "api:paintFloor(0, 271)");
 
     // The out path names a directory, which the map writer cannot open as a file and throws.
-    const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 42 }, { "method", "tools/call" },
-        { "params", { { "name", "generate" },
-                        { "arguments", { { "script", script.path().string() }, { "out", script.path().parent_path().string() } } } } } });
+    const json resp = test::mcpCall(server, "generate",
+        { { "script", script.path().string() }, { "out", script.path().parent_path().string() } });
     CHECK_FALSE(resp.contains("error"));
     REQUIRE(resp["result"]["isError"] == true);
     CHECK(resp["result"]["content"][0]["text"].get<std::string>().starts_with("generate failed: "));

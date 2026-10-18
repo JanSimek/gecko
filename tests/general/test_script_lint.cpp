@@ -24,6 +24,8 @@
 #include "ssl/IntProgram.h"
 #include "support/CompiledScript.h"
 #include "support/DataTree.h"
+#include "support/MapObjectBuilder.h"
+#include "support/CliJson.h"
 #include "support/TempFile.h"
 
 using namespace geck;
@@ -53,12 +55,10 @@ void makeTree(const fs::path& root) {
         "procedure unused begin load_map(\"never.map\", 0); end\n");
 }
 
-nlohmann::json run(const fs::path& root, const std::function<int(resource::GameResources&, std::ostream&)>& tool, int& rc) {
+nlohmann::json run(const fs::path& root, const std::function<int(resource::GameResources&, std::ostream&)>& tool) {
     resource::GameResources resources;
     resources.files().addDataPath(root.string());
-    std::ostringstream oss;
-    rc = tool(resources, oss);
-    return nlohmann::json::parse(oss.str());
+    return test::runJson([&](std::ostream& out) { return tool(resources, out); });
 }
 
 } // namespace
@@ -69,9 +69,7 @@ TEST_CASE("lint_script reports local variables past scripts.lst's count, missing
     makeTree(root);
     cli::LintOptions options;
     options.name = "one";
-    int rc = -1;
-    const auto j = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); }, rc);
-    REQUIRE(rc == 0);
+    const auto j = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); });
     CHECK(j["name"] == "one");
     CHECK(j["summary"]["errors"] == 3);
     CHECK(j["summary"]["notes"] == 3); // the unused procedure, and local variables 1 (never set) and 5 (never read)
@@ -101,9 +99,7 @@ TEST_CASE("lint_script all=true checks every script it can read and leaves notes
     cli::LintOptions options;
     options.all = true;
     options.includeNotes = false;
-    int rc = -1;
-    const auto j = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); }, rc);
-    REQUIRE(rc == 0);
+    const auto j = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); });
     CHECK(j["scripts"] == 1); // two.int has neither a source nor a compiled script
     CHECK(j["unchecked"] == 1);
     CHECK(j["summary"]["errors"] == 3);
@@ -117,9 +113,7 @@ TEST_CASE("describe_script analyze=true summarises the parsed script", "[script_
     cli::DescribeScriptOptions options;
     options.name = "one";
     options.analyze = true;
-    int rc = -1;
-    const auto j = run(root, [&options](auto& r, auto& out) { return cli::describeScript(r, options, out); }, rc);
-    REQUIRE(rc == 0);
+    const auto j = run(root, [&options](auto& r, auto& out) { return cli::describeScript(r, options, out); });
     const auto& analysis = j["analysis"];
     REQUIRE(analysis.is_object());
     std::map<std::string, std::pair<bool, bool>> procedures; // name -> (live, entry point)
@@ -139,19 +133,17 @@ TEST_CASE("script_refs finds calls, procedure references and macro uses in code 
     const test::TempDir rootDir{ "script_refs" };
     const fs::path& root = rootDir.path();
     makeTree(root);
-    int rc = -1;
 
-    const auto calls = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "call", "load_map" }, out); }, rc);
-    REQUIRE(rc == 0);
+    const auto calls = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "call", "load_map" }, out); });
     REQUIRE(calls["stats"]["refs"] == 1); // the one in `unused` never runs
     CHECK(calls["refs"][0]["procedure"] == "helper");
     CHECK(calls["refs"][0]["line"] == 13);
 
-    const auto procedure = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "procedure", "helper" }, out); }, rc);
+    const auto procedure = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "procedure", "helper" }, out); });
     REQUIRE(procedure["stats"]["refs"] == 1);
     CHECK(procedure["refs"][0]["procedure"] == "talk_p_proc");
 
-    const auto macro = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "macro", "give" }, out); }, rc);
+    const auto macro = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "macro", "give" }, out); });
     CHECK(macro["stats"]["refs"] == 3); // lines 7, 8 and 9
 
     std::ostringstream bad;
@@ -178,23 +170,20 @@ TEST_CASE("script_refs finds a PID's uses and the load_map calls into a map", "[
         "   load_map(\"cave.map\", 0);\n"                              // line 10
         "   if (0) then x := create_object_sid(PID_ROCK, 0, 0, -1);\n" // never runs
         "end\n");
-    int rc = -1;
 
-    const auto rock = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "pid", "PID_ROCK" }, out); }, rc);
-    REQUIRE(rc == 0);
+    const auto rock = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "pid", "PID_ROCK" }, out); });
     REQUIRE(rock["stats"]["refs"] == 2);
     CHECK(rock["refs"][0]["line"] == 5);
     CHECK(rock["refs"][0]["via"] == "create_object_sid");
     CHECK(rock["refs"][0]["pid"] == "0x0200004B");
     CHECK(rock["refs"][1]["line"] == 6);
     CHECK(rock["refs"][1]["via"] == "obj_pid");
-    const auto byNumber = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "pid", "0x0200004b" }, out); }, rc);
+    const auto byNumber = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "pid", "0x0200004b" }, out); });
     CHECK(byNumber["stats"]["refs"] == 2);
-    const auto every = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "pid", "*" }, out); }, rc);
+    const auto every = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "pid", "*" }, out); });
     CHECK(every["stats"]["refs"] == 3);
 
-    const auto town = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "map", "town" }, out); }, rc);
-    REQUIRE(rc == 0);
+    const auto town = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "map", "town" }, out); });
     CHECK(town["mapIndex"] == 0);
     REQUIRE(town["stats"]["refs"] == 2);
     CHECK(town["refs"][0]["line"] == 8);
@@ -203,10 +192,10 @@ TEST_CASE("script_refs finds a PID's uses and the load_map calls into a map", "[
     CHECK(town["refs"][1]["line"] == 9);
     CHECK(town["refs"][1]["mapIndex"] == 0);
     CHECK(town["refs"][1]["map"] == "town.map");
-    const auto byIndex = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "map", "1" }, out); }, rc);
+    const auto byIndex = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "map", "1" }, out); });
     REQUIRE(byIndex["stats"]["refs"] == 1);
     CHECK(byIndex["refs"][0]["map"] == "cave.map");
-    const auto allMaps = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "map", "*" }, out); }, rc);
+    const auto allMaps = run(root, [](auto& r, auto& out) { return cli::findScriptRefs(r, { "map", "*" }, out); });
     CHECK(allMaps["stats"]["refs"] == 3);
 }
 
@@ -217,9 +206,8 @@ TEST_CASE("localVarBlockProblems follows the engine's block sizes and finds over
     const Lst* lst = resources.repository().load<Lst>("scripts/scripts.lst");
     REQUIRE(lst != nullptr);
 
-    Map map("test.map");
-    map.setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
-    auto& file = map.getMapFile();
+    const auto map = test::mapOf();
+    auto& file = map->getMapFile();
     const auto place = [&file](uint32_t id, uint32_t program, uint32_t offset, uint32_t storedCount) {
         auto script = MapScript::makeObjectScript(MapScript::ScriptType::ITEM, id, program, id + 10);
         script.local_var_offset = offset;
@@ -233,7 +221,7 @@ TEST_CASE("localVarBlockProblems follows the engine's block sizes and finds over
     place(3, 0, MapScript::NONE, 0);                  // no block yet: the engine allocates one
     file.map_local_vars = std::vector<int32_t>(4, 0); // so c.int's 4 is past the end
 
-    auto problems = resource::localVarBlockProblems(map, *lst);
+    auto problems = resource::localVarBlockProblems(*map, *lst);
     REQUIRE(problems.size() == 3);
     CHECK(problems[a] == "Its local variables 0-2 overlap those of b.int, so they share them.");
     CHECK(problems[b] == "Its local variables 2-3 overlap those of a.int, so they share them.");
@@ -241,7 +229,7 @@ TEST_CASE("localVarBlockProblems follows the engine's block sizes and finds over
 
     // A saved game keeps each record's own count when it is set: a.int's 1 no longer reaches b.int.
     file.header.flags |= static_cast<uint32_t>(MapHeaderFlags::Saved);
-    problems = resource::localVarBlockProblems(map, *lst);
+    problems = resource::localVarBlockProblems(*map, *lst);
     CHECK_FALSE(problems.contains(a));
     CHECK_FALSE(problems.contains(b));
 }
@@ -263,9 +251,7 @@ TEST_CASE("lint_script checks global variables, timers, created objects and tile
     cli::LintOptions options;
     options.name = "one";
     options.includeNotes = false;
-    int rc = -1;
-    const auto j = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); }, rc);
-    REQUIRE(rc == 0);
+    const auto j = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); });
     std::multimap<int, std::string> found; // line -> check
     for (const auto& f : j["findings"]) {
         found.emplace(f["line"].get<int>(), f["check"].get<std::string>());
@@ -431,9 +417,7 @@ TEST_CASE("lint_script checks a script's compiled .int when no source is mounted
 
     cli::LintOptions options;
     options.name = "two";
-    int rc = -1;
-    const auto one = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); }, rc);
-    REQUIRE(rc == 0);
+    const auto one = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); });
     CHECK(one["fromBytecode"] == true);
     CHECK(one["summary"]["errors"] == 1); // local variable 0, past the 0 scripts.lst gives two
     CHECK(one["findings"][0]["file"] == "scripts/two.int");
@@ -441,7 +425,7 @@ TEST_CASE("lint_script checks a script's compiled .int when no source is mounted
     options = {};
     options.all = true;
     options.includeNotes = false;
-    const auto all = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); }, rc);
+    const auto all = run(root, [&options](auto& r, auto& out) { return cli::lintScripts(r, options, out); });
     CHECK(all["scripts"] == 2);
     CHECK(all["fromBytecode"] == 1);
     CHECK(all["unchecked"] == 0);

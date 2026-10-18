@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "format/pro/Pro.h"
+#include "format/pro/ProtoTypes.h"
 
 namespace geck::test {
 
@@ -30,5 +31,15 @@ struct StubProvider {
         return it != pros.end() ? it->second.get() : nullptr;
     }
 };
+
+/// The protos tests/data/sfshutl2.map needs to parse: its objects use ten scenery protos (indices
+/// 1538..1547), all of the GENERIC subtype, and no items.
+inline StubProvider sfshutl2Provider() {
+    StubProvider provider;
+    for (uint32_t index = 1538; index <= 1547; ++index) {
+        provider.addScenery(ProtoId(ObjectType::Scenery, index).pid(), SceneryType::Generic);
+    }
+    return provider;
+}
 
 } // namespace geck::test
