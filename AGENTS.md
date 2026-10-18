@@ -38,7 +38,7 @@ ctest --test-dir build-claude --output-on-failure             # everything ctest
 
 ### Formatting
 
-clang-format, WebKit-based (`.clang-format`). The pre-commit hook `.githooks/pre-commit` (installed
+clang-format 22 or newer, WebKit-based (`.clang-format`; older versions reject `SpaceInEmptyBraces`). The pre-commit hook `.githooks/pre-commit` (installed
 by CMake configure via `core.hooksPath`) formats exactly the lines each commit changes, in the
 index and the working tree — don't run clang-format yourself, and never over the whole tree: a
 newer local clang-format reformats untouched code. CI does not check formatting.
