@@ -1,6 +1,7 @@
 #include "cli/WorldEncounters.h"
 
 #include "resource/ConfigLoad.h"
+#include "cli/GameText.h"
 #include "cli/GlobalVars.h" // loadGameGam
 #include "format/gam/Gam.h"
 #include "format/worldmap/WorldmapTxt.h"
@@ -22,6 +23,9 @@ namespace geck::cli {
 namespace {
 
     using ordered_json = nlohmann::ordered_json;
+
+    constexpr int ENCOUNTER_DESCRIPTION_BASE = 3000;
+    constexpr int ENCOUNTER_DESCRIPTION_STRIDE = 50;
 
     WorldmapTxt loadWorldmap(resource::GameResources& resources) {
         return resource::loadConfig<WorldmapTxt>(resources, { "data/worldmap.txt", "worldmap.txt" },
@@ -77,9 +81,31 @@ namespace {
         return { { "map", lookupName }, { "mapFile", file.empty() ? ordered_json(nullptr) : ordered_json(file) } };
     }
 
-    ordered_json tableToJson(const EncounterTable& table, const Gam* gam, const resource::MapNameResolver& names) {
+    // What a table needs to name its gvars, maps and descriptions.
+    struct Lookups {
+        resource::GameResources& resources;
+        const Gam* gam;
+        resource::MapNameResolver names;
+
+        explicit Lookups(resource::GameResources& r)
+            : resources(r)
+            , gam(loadGameGam(r))
+            , names(r) {}
+    };
+
+    // The encounter's worldmap.msg text, shown when it is offered and when it starts: message
+    // 3000 + 50 * table + entry, both in load order (fallout2-ce wmRndEncounterOccurred). "" when the
+    // message is missing, where the game shows its "Error" placeholder (16 shipped entries).
+    std::string encounterDescription(resource::GameResources& resources, const EncounterTable& table, std::size_t entry) {
+        const int id = ENCOUNTER_DESCRIPTION_BASE + ENCOUNTER_DESCRIPTION_STRIDE * table.index + static_cast<int>(entry);
+        return gameMessage(resources, "worldmap.msg", id);
+    }
+
+    ordered_json tableToJson(const EncounterTable& table, Lookups& lookups) {
+        const resource::MapNameResolver& names = lookups.names;
         auto entries = ordered_json::array();
-        for (const auto& entry : table.entries) {
+        for (std::size_t index = 0; index < table.entries.size(); ++index) {
+            const EncounterTableEntry& entry = table.entries[index];
             auto groups = ordered_json::array();
             for (const auto& group : entry.groups) {
                 groups.push_back({ { "name", group.name }, { "minCount", group.minCount }, { "maxCount", group.maxCount },
@@ -90,8 +116,10 @@ namespace {
                 { "scenery", entry.scenery } };
             if (!entry.condition.empty()) {
                 json["condition"] = entry.condition;
-                json["conditionGvars"] = conditionGvars(gam, entry.condition);
+                json["conditionGvars"] = conditionGvars(lookups.gam, entry.condition);
             }
+            const std::string description = encounterDescription(lookups.resources, table, index);
+            json["description"] = description.empty() ? ordered_json(nullptr) : ordered_json(description);
             entries.push_back(std::move(json));
         }
         auto maps = ordered_json::array();
@@ -106,10 +134,10 @@ namespace {
         return json;
     }
 
-    ordered_json tablesToJson(const WorldmapTxt& world, const Gam* gam, const resource::MapNameResolver& names) {
+    ordered_json tablesToJson(const WorldmapTxt& world, Lookups& lookups) {
         auto tables = ordered_json::array();
         for (const auto& table : world.encounterTables) {
-            tables.push_back(tableToJson(table, gam, names));
+            tables.push_back(tableToJson(table, lookups));
         }
         return tables;
     }
@@ -128,7 +156,8 @@ int buildWorldEncounters(resource::GameResources& resources, std::ostream& out) 
     root["terrains"] = terrainsToJson(world);
     root["frequencies"] = frequenciesToJson(world);
     root["encounters"] = encountersToJson(world);
-    root["encounterTables"] = tablesToJson(world, loadGameGam(resources), resource::MapNameResolver(resources));
+    Lookups lookups(resources);
+    root["encounterTables"] = tablesToJson(world, lookups);
     root["stats"] = { { "terrains", world.terrains.size() }, { "encounters", world.encounters.size() },
         { "encounterTables", world.encounterTables.size() } };
     out << root.dump(2, ' ', false, ordered_json::error_handler_t::replace) << "\n";
@@ -164,8 +193,8 @@ int describeWorldPosition(resource::GameResources& resources, int x, int y, std:
     root["encounterDifficulty"] = world.tiles[static_cast<std::size_t>(tile)].encounterDifficulty;
     root["chances"] = std::move(chances);
     root["encounterTableName"] = subtile->encounterTable;
-    root["encounterTable"] = table != nullptr ? tableToJson(*table, loadGameGam(resources), resource::MapNameResolver(resources))
-                                              : ordered_json(nullptr);
+    Lookups lookups(resources);
+    root["encounterTable"] = table != nullptr ? tableToJson(*table, lookups) : ordered_json(nullptr);
     out << root.dump(2, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     return 0;
 }

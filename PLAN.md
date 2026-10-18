@@ -264,9 +264,6 @@ Open items:
 - **Corpus / world index** — index `analyze` + the semantic facts across all shipped maps so an
   agent can query *examples* ("how do shipped towns place and wire shopkeepers?") — improves
   generation, not just analysis.
-- **`worldmap.msg`** — random-encounter descriptions (`[3000 + 50*tableId + entryId]`,
-  fallout2-ce worldmap.cc:3595); runtime-index-tied to the encounter table/entry ordering, so
-  not a small add. (Area/city labels turned out to live in map.msg and are already surfaced.)
 
 *(MCP server guard note: per-call cancellation / progress notifications are deliberately not
 planned — the stdio loop is synchronous and tool calls are short.)*
