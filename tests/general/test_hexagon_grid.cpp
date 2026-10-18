@@ -2,6 +2,11 @@
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
 #include "editor/HexagonGrid.h"
+#include "editor/Reachability.h"
+
+#include <algorithm>
+#include <set>
+#include <vector>
 
 using namespace geck;
 
@@ -26,25 +31,61 @@ TEST_CASE("HexagonGrid validates positions and converts to tiles", "[hex_grid]")
     }
 }
 
-TEST_CASE("HexagonGrid rectangleBorderPositions returns the outer ring", "[hex_grid]") {
+TEST_CASE("HexagonGrid screenRectangleBorderPositions follows the screen rectangle", "[hex_grid]") {
     HexagonGrid grid;
 
-    const auto border = grid.rectangleBorderPositions(
-        0,
-        2,
-        HexagonGrid::GRID_WIDTH * 2,
-        HexagonGrid::GRID_WIDTH * 2 + 2);
+    // A rectangle around a mid-map hex, in the grid's screen coordinates.
+    const auto& centre = grid.getHexByPosition(100 * HexagonGrid::GRID_WIDTH + 100)->get();
+    const float left = static_cast<float>(centre.x()) - 160.f;
+    const float right = static_cast<float>(centre.x()) + 160.f;
+    const float top = static_cast<float>(centre.y()) - 90.f;
+    const float bottom = static_cast<float>(centre.y()) + 90.f;
 
-    REQUIRE_THAT(border, Catch::Matchers::Equals(std::vector<int>{
-                             0,
-                             1,
-                             2,
-                             HexagonGrid::GRID_WIDTH,
-                             HexagonGrid::GRID_WIDTH + 2,
-                             HexagonGrid::GRID_WIDTH * 2,
-                             HexagonGrid::GRID_WIDTH * 2 + 1,
-                             HexagonGrid::GRID_WIDTH * 2 + 2,
-                         }));
+    const auto border = grid.screenRectangleBorderPositions(left, top, right, bottom);
+    REQUIRE(border.size() > 20);
+    REQUIRE(std::ranges::is_sorted(border));
+
+    const std::set<int> ring(border.begin(), border.end());
+    for (int position : border) {
+        const auto& hex = grid.getHexByPosition(static_cast<uint32_t>(position))->get();
+        const auto x = static_cast<float>(hex.x());
+        const auto y = static_cast<float>(hex.y());
+        INFO("hex " << position << " at (" << x << ", " << y << ")");
+        REQUIRE((x >= left && x <= right && y >= top && y <= bottom));
+        // Neighbouring hex centres are at most 32 px apart across and 12 px down, so an edge hex hugs
+        // a side of the rectangle. Walking hex rows from the corners strays far from it instead.
+        CHECK((x - left < 32.f || right - x < 32.f || y - top < 12.f || bottom - y < 12.f));
+    }
+
+    // The ring is one hex-connected loop, so nothing inside can be reached without crossing it.
+    std::set<int> reached{ border.front() };
+    std::vector<int> frontier{ border.front() };
+    while (!frontier.empty()) {
+        const int position = frontier.back();
+        frontier.pop_back();
+        for (int neighbour : reachability::hexNeighbors(position)) {
+            if (ring.contains(neighbour) && reached.insert(neighbour).second) {
+                frontier.push_back(neighbour);
+            }
+        }
+    }
+    CHECK(reached == ring);
+
+    // Every hex inside the rectangle but off the ring has all six neighbours inside it.
+    for (const Hex& hex : grid.grid()) {
+        const auto x = static_cast<float>(hex.x());
+        const auto y = static_cast<float>(hex.y());
+        const int position = static_cast<int>(hex.position());
+        if (x < left || x > right || y < top || y > bottom || ring.contains(position)) {
+            continue;
+        }
+        for (int neighbour : reachability::hexNeighbors(position)) {
+            const auto& n = grid.getHexByPosition(static_cast<uint32_t>(neighbour))->get();
+            CHECK((n.x() >= left && n.x() <= right && n.y() >= top && n.y() <= bottom));
+        }
+    }
+
+    CHECK(grid.screenRectangleBorderPositions(-100.f, -100.f, -50.f, -50.f).empty());
 }
 
 TEST_CASE("HexagonGrid position<->coordinates round-trip over the whole grid", "[hex_grid]") {

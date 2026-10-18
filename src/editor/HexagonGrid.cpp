@@ -1,9 +1,10 @@
 #include "HexagonGrid.h"
 #include "Hex.h"
+#include "HexGeometry.h"
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <limits>
-#include <set>
 
 namespace geck {
 
@@ -109,50 +110,33 @@ std::optional<int> HexagonGrid::tileIndexForPosition(int position) const {
     return tileY * TILE_GRID_WIDTH + tileX;
 }
 
-std::vector<int> HexagonGrid::rectangleBorderPositions(int topLeftPosition,
-    int topRightPosition,
-    int bottomLeftPosition,
-    int bottomRightPosition) const {
-    auto topLeft = coordinatesForPosition(topLeftPosition);
-    auto topRight = coordinatesForPosition(topRightPosition);
-    auto bottomLeft = coordinatesForPosition(bottomLeftPosition);
-    auto bottomRight = coordinatesForPosition(bottomRightPosition);
-    if (!topLeft.has_value() || !topRight.has_value() || !bottomLeft.has_value() || !bottomRight.has_value()) {
-        return {};
-    }
+std::vector<int> HexagonGrid::screenRectangleBorderPositions(float left, float top, float right, float bottom) const {
+    const auto inside = [&](int position) {
+        const Hex& hex = _grid[static_cast<size_t>(position)];
+        const auto x = static_cast<float>(hex.x());
+        const auto y = static_cast<float>(hex.y());
+        return x >= left && x <= right && y >= top && y <= bottom;
+    };
 
-    int leftX = std::min(topLeft->x, bottomLeft->x);
-    int rightX = std::max(topRight->x, bottomRight->x);
-    int topY = std::min(topLeft->y, topRight->y);
-    int bottomY = std::max(bottomLeft->y, bottomRight->y);
+    // Neighbours are taken in cube space, which absorbs the grid's column-parity offset.
+    static constexpr std::array<hexgrid::Cube, 6> DIRECTIONS{ { { 1, -1, 0 }, { 1, 0, -1 }, { 0, 1, -1 }, { -1, 1, 0 }, { -1, 0, 1 }, { 0, -1, 1 } } };
 
-    std::set<int> uniquePositions;
-
-    for (int x = leftX; x <= rightX; ++x) {
-        auto topPosition = positionForCoordinates(x, topY);
-        if (topPosition.has_value()) {
-            uniquePositions.insert(*topPosition);
+    std::vector<int> border;
+    for (int position = 0; position < POSITION_COUNT; ++position) {
+        if (!inside(position)) {
+            continue;
         }
-
-        auto bottomPosition = positionForCoordinates(x, bottomY);
-        if (bottomPosition.has_value()) {
-            uniquePositions.insert(*bottomPosition);
+        const hexgrid::Cube center = hexgrid::cubeOfPosition(position);
+        const bool onEdge = std::ranges::any_of(DIRECTIONS, [&](const hexgrid::Cube& direction) {
+            const hexgrid::ColRow cell = hexgrid::cubeToOffset(center + direction);
+            const auto neighbour = positionForCoordinates(cell.col, cell.row);
+            return !neighbour.has_value() || !inside(*neighbour);
+        });
+        if (onEdge) {
+            border.push_back(position);
         }
     }
-
-    for (int y = topY + 1; y < bottomY; ++y) {
-        auto leftPosition = positionForCoordinates(leftX, y);
-        if (leftPosition.has_value()) {
-            uniquePositions.insert(*leftPosition);
-        }
-
-        auto rightPosition = positionForCoordinates(rightX, y);
-        if (rightPosition.has_value()) {
-            uniquePositions.insert(*rightPosition);
-        }
-    }
-
-    return { uniquePositions.begin(), uniquePositions.end() };
+    return border;
 }
 
 } // namespace geck

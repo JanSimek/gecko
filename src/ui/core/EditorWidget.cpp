@@ -37,6 +37,7 @@
 #include <cmath>
 #include <algorithm>
 #include <limits>
+#include <unordered_set>
 #include <cstdlib>
 #include <set>
 #include <unordered_map>
@@ -946,25 +947,10 @@ void EditorWidget::createNewMap() {
 }
 
 std::vector<int> EditorWidget::calculateRectangleBorderHexes(sf::FloatRect rectangle) {
-    sf::Vector2f topLeft = sf::Vector2f(rectangle.position.x, rectangle.position.y);
-    sf::Vector2f topRight = sf::Vector2f(rectangle.position.x + rectangle.size.x, rectangle.position.y);
-    sf::Vector2f bottomLeft = sf::Vector2f(rectangle.position.x, rectangle.position.y + rectangle.size.y);
-    sf::Vector2f bottomRight = sf::Vector2f(rectangle.position.x + rectangle.size.x, rectangle.position.y + rectangle.size.y);
-
-    int topLeftHex = _controller.viewport().worldPosToHexIndex(topLeft);
-    int topRightHex = _controller.viewport().worldPosToHexIndex(topRight);
-    int bottomLeftHex = _controller.viewport().worldPosToHexIndex(bottomLeft);
-    int bottomRightHex = _controller.viewport().worldPosToHexIndex(bottomRight);
-
-    if (!_session.hexgrid().containsPosition(topLeftHex)
-        || !_session.hexgrid().containsPosition(topRightHex)
-        || !_session.hexgrid().containsPosition(bottomLeftHex)
-        || !_session.hexgrid().containsPosition(bottomRightHex)) {
-        spdlog::warn("Rectangle contains invalid hex positions, skipping border calculation");
-        return {};
-    }
-
-    auto borderHexes = _session.hexgrid().rectangleBorderPositions(topLeftHex, topRightHex, bottomLeftHex, bottomRightHex);
+    // The ring follows the dragged screen rectangle, not the hex rows/columns through its corners
+    // (those run diagonally on screen).
+    auto borderHexes = _session.hexgrid().screenRectangleBorderPositions(rectangle.position.x, rectangle.position.y,
+        rectangle.position.x + rectangle.size.x, rectangle.position.y + rectangle.size.y);
 
     spdlog::debug("Calculated {} border hexes for rectangle ({}, {}, {}, {})",
         borderHexes.size(), rectangle.position.x, rectangle.position.y, rectangle.size.x, rectangle.size.y);
@@ -1498,34 +1484,30 @@ void EditorWidget::createScrollBlockersFromHexes(const std::vector<int>& borderH
         return;
     }
 
+    // Hexes that already hold a scroll blocker on this elevation keep it rather than gaining a twin.
+    std::unordered_set<int> blocked;
+    for (const auto& existing : _session.map()->getMapFile().map_objects[_session.currentElevation()]) {
+        if (existing && existing->pro_pid == WallBlockers::SCROLL_BLOCKER_PID.pid()) {
+            blocked.insert(existing->position);
+        }
+    }
+
+    auto& commands = _controller.commandController();
+    ScopedUndoBatch batch(commands, "Place Scroll Blockers");
     int scrollBlockersCreated = 0;
     for (int hexPos : borderHexes) {
+        if (blocked.contains(hexPos)) {
+            continue;
+        }
         auto scrollBlockerObject = createScrollBlockerObject(hexPos);
-
-        _session.map()->getMapFile().map_objects[_session.currentElevation()].push_back(scrollBlockerObject);
-
-        // Create visual object for immediate display
-        try {
-            std::string frmPath = _resources.frmResolver().resolve(scrollBlockerObject->frm_pid);
-            auto frm = _resources.repository().find<Frm>(frmPath);
-            if (!frm) {
-                frm = _resources.repository().load<Frm>(frmPath);
-            }
-
-            if (frm) {
-                auto object = std::make_shared<Object>(frm);
-                sf::Sprite sprite{ _resources.textures().get(frmPath) };
-                object->setSprite(std::move(sprite));
-                object->setDirection(static_cast<Rotation>(scrollBlockerObject->direction));
-                if (auto hex = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexPos)); hex.has_value()) {
-                    object->setHexPosition(hex->get());
-                }
-                object->setMapObject(scrollBlockerObject);
-                _session.objects().push_back(object);
-                scrollBlockersCreated++;
-            }
-        } catch (const std::exception& e) {
-            spdlog::warn("Failed to create visual scroll blocker object at hex {}: {}", hexPos, e.what());
+        auto object = pattern::buildSpriteObject(_resources, _session.hexgrid(), scrollBlockerObject->frm_pid,
+            hexPos, scrollBlockerObject->direction);
+        if (!object) {
+            continue;
+        }
+        object->setMapObject(scrollBlockerObject);
+        if (commands.registerObjectPlacement(scrollBlockerObject, object)) {
+            ++scrollBlockersCreated;
         }
     }
 
@@ -1785,6 +1767,14 @@ void EditorWidget::rotateSelectedObject() {
 
 void EditorWidget::changeElevation(int elevation) {
     if (elevation >= ELEVATION_1 && elevation <= ELEVATION_3) {
+        // The selection holds the previous elevation's objects and tiles, so Delete or Rotate would
+        // act on things no longer shown. A spatial script selected on the target elevation (the
+        // Scripts panel selects one before revealing it) survives.
+        clearSelection();
+        if (const auto spatial = spatialScriptInfo(_session.selectedSpatialScriptSid());
+            !spatial || spatial->elevation != elevation) {
+            setSelectedSpatialScript(MapScript::NONE);
+        }
         _session.setCurrentElevation(elevation);
         // Edge zones are per-elevation, so a selected zone index doesn't carry across elevations.
         _selectedEdgeZone = -1;
