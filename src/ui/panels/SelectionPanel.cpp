@@ -1003,14 +1003,25 @@ void SelectionPanel::onEditLightClicked() {
         return;
     }
 
-    LightPropertiesDialog dialog(mapObject->light_radius, mapObject->light_intensity, this);
-    if (dialog.exec() != QDialog::Accepted) {
+    // The map previews the light as the values change (its reach is drawn from these fields); the
+    // originals come back before the undoable edit below, so undo restores them.
+    const uint32_t oldRadius = mapObject->light_radius;
+    const uint32_t oldIntensity = mapObject->light_intensity;
+    LightPropertiesDialog dialog(oldRadius, oldIntensity, this);
+    connect(&dialog, &LightPropertiesDialog::lightChanged, this, [mapObject](uint32_t radius, uint32_t intensity) {
+        mapObject->light_radius = radius;
+        mapObject->light_intensity = intensity;
+    });
+    const bool accepted = dialog.exec() == QDialog::Accepted;
+    mapObject->light_radius = oldRadius;
+    mapObject->light_intensity = oldIntensity;
+    if (!accepted) {
         return;
     }
 
     const uint32_t newRadius = dialog.getLightRadius();
     const uint32_t newIntensity = dialog.getLightIntensity();
-    if (newRadius == mapObject->light_radius && newIntensity == mapObject->light_intensity) {
+    if (newRadius == oldRadius && newIntensity == oldIntensity) {
         return;
     }
 

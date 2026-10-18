@@ -104,6 +104,19 @@ void Object::setFrm(const Frm* frm) {
     setDirection(Rotation(_direction));
 }
 
+void Object::setStandInArt(const Frm* frm, sf::Sprite sprite) {
+    if (!frm || frm->directions().empty() || frm->directions()[0].frames().empty()) {
+        spdlog::error("Object::setStandInArt - FRM has no frame to draw");
+        return;
+    }
+
+    _frm = frm;
+    _direction = 0;
+    _sprite = std::move(sprite);
+    const auto& frame = frm->directions()[0].frames()[0];
+    _sprite.setTextureRect({ { 0, 0 }, { frame.width(), frame.height() } });
+}
+
 void Object::setHexPosition(const Hex& hex) {
 
     // center on the hex

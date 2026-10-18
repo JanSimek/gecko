@@ -12,6 +12,7 @@ namespace geck {
 
 class HexagonGrid;
 class Map;
+class Frm;
 class Object;
 struct MapObject;
 class Tile;
@@ -59,6 +60,11 @@ public:
 
 private:
     void createWallBlockerOverlay(const std::shared_ptr<MapObject>& mapObject, int hexPosition, std::vector<sf::Sprite>& wallBlockerOverlays) const;
+    // A light whose art draws nothing (the game's Light Source scenery is one transparent pixel) is
+    // given the light marker art instead, so it can be seen and picked.
+    void applyLightMarker(Object& object) const;
+    [[nodiscard]] static bool drawsNothing(const Frm& frm);
+    [[nodiscard]] bool emitsLight(const MapObject& mapObject) const;
     static const sf::Texture& blankTexture();
 
     resource::GameResources& _resources;

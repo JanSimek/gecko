@@ -32,6 +32,10 @@ LightPropertiesDialog::LightPropertiesDialog(uint32_t lightRadius, uint32_t ligh
 
     mainLayout->addLayout(formLayout);
 
+    const auto notify = [this] { Q_EMIT lightChanged(getLightRadius(), getLightIntensity()); };
+    connect(_distanceSpin, &QSpinBox::valueChanged, this, notify);
+    connect(_intensitySpin, &QSpinBox::valueChanged, this, notify);
+
     mainLayout->addWidget(createButtonBox());
 }
 

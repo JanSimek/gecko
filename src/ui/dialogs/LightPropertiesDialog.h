@@ -27,6 +27,10 @@ public:
     static constexpr int MAX_PERCENT = 100;
     static constexpr uint32_t LIGHT_SCALE = 0x10000; // 65536 == 100%
 
+Q_SIGNALS:
+    /// Either value changed while the dialog is open, so the map can preview the light live.
+    void lightChanged(uint32_t lightRadius, uint32_t lightIntensity);
+
 private:
     QSpinBox* _distanceSpin;
     QSpinBox* _intensitySpin;

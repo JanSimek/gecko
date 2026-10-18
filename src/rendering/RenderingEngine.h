@@ -194,11 +194,13 @@ private:
      * the source hex, fading out to the light's radius. Honours the same per-layer visibility rule as
      * renderObjects, so a light on a hidden layer shows no overlay. Illustrative only: no wall shadowing
      * and no ambient darkness simulation, it just shows which hexes each light reaches and how strongly.
+     * With @p selectedOnly, only selected lights are drawn (the overlay toggle is off).
      */
     void renderLightOverlays(sf::RenderTarget& target,
         const sf::View& view,
         const RenderData& renderData,
-        const VisibilitySettings& visibility);
+        const VisibilitySettings& visibility,
+        bool selectedOnly);
 
     /**
      * @brief Shade the walkable hexes cut off from every entry point (a translucent wash), so a

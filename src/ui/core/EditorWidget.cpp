@@ -350,6 +350,8 @@ void EditorWidget::registerInstanceEdit(const std::shared_ptr<MapObject>& mapObj
     const MapObjectInstanceState& after,
     const std::string& description) {
     _controller.commandController().registerInstanceEdit(mapObject, before, after, description);
+    // The edit rebuilt the object wrappers; keep the edited object selected (and its light reach shown).
+    reconcileSelectionWithMap();
 }
 
 void EditorWidget::clearElevationObjects(int elevation) {

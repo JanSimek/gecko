@@ -3,11 +3,13 @@
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
 #include "editor/helper/ObjectQueries.h"
+#include "format/frm/Frame.h"
 #include "format/frm/Frm.h"
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
+#include "format/pro/Pro.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
 #include "util/Constants.h"
@@ -16,6 +18,8 @@
 #include "util/TileUtils.h"
 
 #include <spdlog/spdlog.h>
+
+#include <algorithm>
 
 namespace geck {
 
@@ -141,6 +145,7 @@ void MapSpriteLoader::loadObjectSprites(
             if (auto hex = _hexgrid.getHexByPosition(object->position); hex.has_value()) {
                 sceneObject->setHexPosition(hex->get());
             }
+            applyLightMarker(*sceneObject);
 
             objects.emplace_back(std::move(sceneObject));
             objectsLoaded++;
@@ -180,8 +185,58 @@ void MapSpriteLoader::appendObjectSprite(
         return;
     }
 
+    applyLightMarker(*object);
     objects.push_back(object);
     createWallBlockerOverlay(mapObject, mapObject->position, wallBlockerOverlays);
+}
+
+void MapSpriteLoader::applyLightMarker(Object& object) const {
+    const auto mapObject = object.getMapObjectPtr();
+    if (!mapObject || !object.getFrm() || !drawsNothing(*object.getFrm()) || !emitsLight(*mapObject)) {
+        return;
+    }
+    const auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(mapObject->position));
+    if (!hex.has_value()) {
+        return;
+    }
+    try {
+        const std::string markerPath(ResourcePaths::Frm::LIGHT);
+        const auto* marker = _resources.repository().load<Frm>(markerPath);
+        object.setStandInArt(marker, sf::Sprite{ _resources.textures().get(markerPath) });
+        object.setHexPosition(hex->get());
+    } catch (const std::exception& e) {
+        spdlog::warn("Failed to give the light at hex {} its marker: {}", mapObject->position, e.what());
+    }
+}
+
+bool MapSpriteLoader::drawsNothing(const Frm& frm) {
+    // Palette index 0 is the transparent colour. Visible art stops at its first opaque pixel.
+    return std::ranges::all_of(frm.directions(), [](const auto& direction) {
+        return std::ranges::all_of(direction.frames(), [](const Frame& frame) {
+            for (uint16_t y = 0; y < frame.height(); ++y) {
+                for (uint16_t x = 0; x < frame.width(); ++x) {
+                    if (frame.index(x, y) != 0) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        });
+    });
+}
+
+bool MapSpriteLoader::emitsLight(const MapObject& mapObject) const {
+    if (mapObject.isLightSource()) {
+        return true;
+    }
+    // A light whose radius and intensity were zeroed on the map still is one: its proto gives light.
+    try {
+        const Pro* pro = _resources.tryLoadPro(mapObject.pro_pid);
+        return pro && (pro->header.light_distance > 0 || pro->header.light_intensity > 0);
+    } catch (const std::exception& e) {
+        spdlog::debug("No proto light for pid 0x{:08X}: {}", mapObject.pro_pid, e.what());
+        return false;
+    }
 }
 
 void MapSpriteLoader::updateTileSprite(

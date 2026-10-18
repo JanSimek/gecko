@@ -118,9 +118,8 @@ void RenderingEngine::render(sf::RenderTarget& target,
 
     // Layer 1b: Light overlays. Drawn as a ground layer (over the floor, under objects) so each light
     // source's illuminated hexes read like light pooling on the ground with objects standing in it.
-    if (visibility.showLightOverlays) {
-        renderLightOverlays(target, view, renderData, visibility);
-    }
+    // With the overlay off, a selected light still shows its reach.
+    renderLightOverlays(target, view, renderData, visibility, !visibility.showLightOverlays);
 
     // Layer 1c: Unreachable-area shading. A ground wash (over floor, under objects, like the light
     // pass) over walkable hexes stranded from every entry point — a diagnostic, off by default.
@@ -381,7 +380,8 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
 void RenderingEngine::renderLightOverlays(sf::RenderTarget& target,
     const sf::View& view,
     const RenderData& renderData,
-    const VisibilitySettings& visibility) {
+    const VisibilitySettings& visibility,
+    bool selectedOnly) {
     if (!renderData.objects || !renderData.hexGrid) {
         return;
     }
@@ -390,7 +390,7 @@ void RenderingEngine::renderLightOverlays(sf::RenderTarget& target,
     const sf::Color lightTint(255, 224, 130);
 
     for (const auto& object : *renderData.objects) {
-        if (!object->hasLight()) {
+        if (!object->hasLight() || (selectedOnly && !object->isSelected())) {
             continue;
         }
         const auto mapObject = object->getMapObjectPtr(); // non-null: hasLight() already checked it

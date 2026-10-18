@@ -39,6 +39,10 @@ public:
     [[nodiscard]] sf::Sprite& getSprite() noexcept;
 
     void setFrm(const Frm* frm);
+    /// Draws @p frm (the art @p sprite shows) in place of the object's own art, e.g. a marker for art
+    /// that draws nothing. Visual only: unlike setFrm/setDirection it leaves the MapObject's direction
+    /// alone. Call setHexPosition afterwards to seat the new art on the hex.
+    void setStandInArt(const Frm* frm, sf::Sprite sprite);
     [[nodiscard]] const Frm* getFrm() const noexcept { return _frm; }
 
     void setHexPosition(const Hex& hex);

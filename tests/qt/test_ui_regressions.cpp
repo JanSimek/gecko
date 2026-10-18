@@ -12,6 +12,7 @@
 #include <QStackedWidget>
 #include <QShortcut>
 #include <QSignalSpy>
+#include <QSpinBox>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTableWidget>
@@ -2108,4 +2109,21 @@ TEST_CASE("Light dialog keeps the intensity percent it stored", "[ui][light]") {
     }
     geck::LightPropertiesDialog legacy(4, 6553); // saved by the truncating version as 10%
     CHECK(legacy.getLightIntensity() == 6554);
+}
+
+TEST_CASE("LightPropertiesDialog reports each change so the map can preview it", "[qt][light]") {
+    geck::LightPropertiesDialog dialog(4, 65536);
+    QSignalSpy changed(&dialog, &geck::LightPropertiesDialog::lightChanged);
+    auto spins = dialog.findChildren<QSpinBox*>();
+    REQUIRE(spins.size() == 2);
+
+    spins[0]->setValue(6); // distance
+    REQUIRE(changed.size() == 1);
+    CHECK(changed.last().at(0).toUInt() == 6);
+    CHECK(changed.last().at(1).toUInt() == 65536);
+
+    spins[1]->setValue(50); // intensity, in percent
+    REQUIRE(changed.size() == 2);
+    CHECK(changed.last().at(0).toUInt() == 6);
+    CHECK(changed.last().at(1).toUInt() == 32768);
 }

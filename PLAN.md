@@ -156,14 +156,9 @@ terrain-derived locations:
     single tiles; nothing paints a repeating multi-tile pattern by dragging.
 
 **Known bugs:**
-- **Light Sources are invisible and unclickable.** The game's lights are "Light Source" scenery
-  (PID `0x0200008D`, 1,848 in shipped maps) drawn with `art/scenery/block.frm`, a transparent
-  1×1 pixel, and `ObjectPicker` only hits opaque pixels, so a placed light vanishes and can't be
-  selected (0 of 22 clickable on `arcaves.map` elevation 2). Fix: draw the bundled
-  `art/misc/light.frm` marker (preloaded, never drawn) on the hex of each light-emitting object
-  whose art has no opaque pixel, pickable through the marker and toggled with the blocker
-  markers; always show the selected light's radius overlay, updating live while its
-  radius/intensity are edited. The in-game look belongs to the preview mode (Lighting below).
+- **Exit Grid Map Markers are invisible and unclickable.** Like Light Sources did, the "Exit Grid
+  Map Marker" scenery (PID `0x02000031`, 741 in shipped maps) draws `art/scenery/block.frm`, one
+  transparent pixel, and gives no light, so it gets no marker; it can only be caught by a drag.
 ---
 
 # SSL script editing
@@ -345,7 +340,9 @@ TODO-claim table are in the audit doc.
   as `BlendTables::intensity` (`util/PaletteBlend.h`); floors interpolate L across the engine's
   sampled vertices (`tile.cc`), sprites and roofs take their hex's value. On the GPU that is a
   shader (the renderer already loads one) reading the palette index, a light-grid texture and the
-  intensity LUT. **Not** from `header.darkness`: the engine never uses it — ambient is reset on
+  intensity LUT. `TextureManager` uploads RGBA only, so the preview also needs palette-index
+  textures alongside — the largest part of this item. The editor already marks invisible lights
+  (`light.frm`) and shows a selected light's reach; the preview replaces that cue, not the marker. **Not** from `header.darkness`: the engine never uses it — ambient is reset on
   map load and set by the map script (`set_light_level`, 0→16384, 50→40960, 100→65536), so the
   preview offers day / cavern / night presets, defaulting to what the map script sets when the
   SSL front end can read it.
