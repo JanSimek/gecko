@@ -26,7 +26,7 @@ TilePalettePanel::TilePalettePanel(resource::GameResources& resources, QWidget* 
 
 void TilePalettePanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    _mainLayout->setSpacing(ui::theme::spacing::NORMAL);
     _mainLayout->setContentsMargins(ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN);
 
     setupModeControls();

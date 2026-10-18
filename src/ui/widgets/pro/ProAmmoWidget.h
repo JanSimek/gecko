@@ -26,7 +26,7 @@ private:
     QSpinBox* _damageMultiplierEdit;
     QSpinBox* _damageTypeModifierEdit;
 
-    ProAmmoData _ammoData;
+    Pro::AmmoData _ammoData;
 };
 
 } // namespace geck

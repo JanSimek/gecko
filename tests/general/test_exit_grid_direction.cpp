@@ -277,7 +277,7 @@ ExitGridArt autoArtForRun(const HexagonGrid& grid, int startHex, int endHex,
         return h.has_value() ? std::pair<int, int>{ h->get().x(), h->get().y() }
                              : std::pair<int, int>{ 0, 0 };
     };
-    const std::vector<int> run = geck::hexline::hexLine(grid, startHex, endHex);
+    const std::vector<int> run = geck::hexline::hexLine(startHex, endHex);
     REQUIRE(run.size() >= 2);
     const auto [cx, cy] = geck::hexGridCenterScreen(grid);
     const auto [fx, fy] = screenOf(run.front());
@@ -657,7 +657,7 @@ int secondRowHexOnGrid(const HexagonGrid& grid, int hex, int dir, int steps) {
 
 // Mirror classifySegment's hex set: the drawn hex line, plus (for a diagonal dir) a deduped second row.
 std::vector<int> classifiedHexes(const HexagonGrid& grid, int startHex, int endHex, int dir, int steps) {
-    std::vector<int> hexes = geck::hexline::hexLine(grid, startHex, endHex);
+    std::vector<int> hexes = geck::hexline::hexLine(startHex, endHex);
     if (!isDiagonalExitGridDir(dir)) {
         return hexes; // cardinal: single row
     }
@@ -682,7 +682,7 @@ TEST_CASE("placement: a DIAGONAL segment yields ~2x the line's hexes; a CARDINAL
     // A diagonal "\" run (vary the row -> the steep iso edge classifies BackSlash, dir 6/7).
     const int dStart = hexPos(C, C);
     const int dEnd = hexPos(C, C + 30);
-    const std::size_t lineLen = geck::hexline::hexLine(grid, dStart, dEnd).size();
+    const std::size_t lineLen = geck::hexline::hexLine(dStart, dEnd).size();
     REQUIRE(lineLen >= 2);
 
     const std::vector<int> diag = classifiedHexes(grid, dStart, dEnd, ExitGrid::DIR_BACK_A, kSecondRowSteps);
@@ -696,5 +696,5 @@ TEST_CASE("placement: a DIAGONAL segment yields ~2x the line's hexes; a CARDINAL
     // A cardinal run (pure horizontal hex row -> LEFT/RIGHT) stays single-row.
     const std::vector<int> card = classifiedHexes(grid, hexPos(C, C), hexPos(C + 20, C),
         ExitGrid::DIR_RIGHT, kSecondRowSteps);
-    CHECK(card.size() == geck::hexline::hexLine(grid, hexPos(C, C), hexPos(C + 20, C)).size());
+    CHECK(card.size() == geck::hexline::hexLine(hexPos(C, C), hexPos(C + 20, C)).size());
 }

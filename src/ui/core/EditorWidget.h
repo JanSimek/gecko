@@ -158,8 +158,6 @@ public:
     void changeElevation(int elevation);
     void toggleScrollBlockerRectangleMode();
 
-    // Player position selection
-    void enterPlayerPositionSelectionMode();
     void centerViewOnPlayerPosition();
 
     // One-shot "click a hex" mode: the next left-click passes its hex to `onFinished`, Escape passes
@@ -334,11 +332,10 @@ public:
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
 
     // Exit grid undo support
-    using ExitGridState = ExitGridCommandState;
     void registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation) override;
     void registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
-        const std::vector<ExitGridState>& beforeStates,
-        const std::vector<ExitGridState>& afterStates) override;
+        const std::vector<ExitGridCommandState>& beforeStates,
+        const std::vector<ExitGridCommandState>& afterStates) override;
 
     // Per-instance property (flags / light / scenery destination / critter) undo
     // support. The before/after snapshots come from SelectionPanel's editors.
@@ -411,7 +408,6 @@ signals:
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
     void hexHoverChanged(int hexIndex);
-    void playerPositionSelected(int hexPosition);
     void statusMessageRequested(const QString& message);
     void statusMessageClearRequested();
     void undoStackChanged();
@@ -489,8 +485,7 @@ private:
     void updateEdgeHoverCursor(sf::Vector2f worldPos);
     void resetEdgeHoverCursor();
 
-    // Handles a click in SetPlayerPosition mode: routes to an armed beginHexPick callback (one-shot)
-    // or, failing that, emits playerPositionSelected (legacy player-start pick).
+    // Handles a click in SetPlayerPosition mode: hands its hex to the armed beginHexPick callback.
     void handlePositionPickClick(sf::Vector2f worldPos);
 
     // Object management
@@ -685,11 +680,8 @@ private:
     pattern::FillPlan _fillPlan;
     void buildFillGhosts();
 
-    // Player position selection state
-    bool _playerPositionSelectionMode = false;
-
-    // When set, the SetPlayerPosition mode is being used as a generic one-shot hex picker (see
-    // beginHexPick): the next click routes here instead of emitting playerPositionSelected.
+    // The armed one-shot hex pick (see beginHexPick): the next click in SetPlayerPosition mode
+    // routes here.
     std::function<void(std::optional<int>)> _hexPickCallback;
 
     // Exit-grid "Draw edge" state: _exitGridLineActive gates the renderer, the vertices and cursor

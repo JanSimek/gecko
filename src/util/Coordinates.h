@@ -4,6 +4,8 @@
 #include <compare>
 #include <cstdint>
 
+#include "util/Constants.h"
+
 namespace geck {
 
 /**
@@ -47,49 +49,6 @@ public:
 
 private:
     int _position;
-};
-
-/**
- * @brief Type-safe tile index
- *
- * Represents a position in the tile grid (0-9,999 for Fallout 2 maps)
- * Provides type safety to prevent mixing with hex coordinates.
- */
-class TileIndex {
-public:
-    static constexpr int MAX_VALUE = 9999; // 0-9999 range for 100x100 tile grid
-
-    constexpr explicit TileIndex(int index = 0)
-        : _index(index) { }
-
-    [[nodiscard]] constexpr int value() const noexcept { return _index; }
-    [[nodiscard]] constexpr bool isValid() const noexcept {
-        return _index >= 0 && _index <= MAX_VALUE;
-    }
-
-    // Comparison operators
-    [[nodiscard]] constexpr auto operator<=>(const TileIndex&) const = default;
-    [[nodiscard]] constexpr bool operator==(const TileIndex&) const = default;
-
-    // Arithmetic operators
-    constexpr TileIndex& operator+=(int offset) {
-        _index += offset;
-        return *this;
-    }
-    constexpr TileIndex& operator-=(int offset) {
-        _index -= offset;
-        return *this;
-    }
-
-    [[nodiscard]] constexpr TileIndex operator+(int offset) const {
-        return TileIndex(_index + offset);
-    }
-    [[nodiscard]] constexpr TileIndex operator-(int offset) const {
-        return TileIndex(_index - offset);
-    }
-
-private:
-    int _index;
 };
 
 /**
@@ -141,100 +100,13 @@ private:
     float _x, _y;
 };
 
-/**
- * @brief Type-safe screen coordinates
- *
- * Represents integer screen/pixel coordinates.
- */
-class ScreenCoords {
-public:
-    constexpr ScreenCoords(int x = 0, int y = 0)
-        : _x(x)
-        , _y(y) { }
-
-    [[nodiscard]] constexpr int x() const noexcept { return _x; }
-    [[nodiscard]] constexpr int y() const noexcept { return _y; }
-
-    [[nodiscard]] constexpr sf::Vector2i toVector() const noexcept {
-        return sf::Vector2i(_x, _y);
-    }
-    [[nodiscard]] constexpr sf::Vector2f toFloatVector() const noexcept {
-        return sf::Vector2f(static_cast<float>(_x), static_cast<float>(_y));
-    }
-
-    // Comparison operators
-    [[nodiscard]] constexpr auto operator<=>(const ScreenCoords&) const = default;
-    [[nodiscard]] constexpr bool operator==(const ScreenCoords&) const = default;
-
-    // Arithmetic operators
-    constexpr ScreenCoords& operator+=(const ScreenCoords& other) {
-        _x += other._x;
-        _y += other._y;
-        return *this;
-    }
-    constexpr ScreenCoords& operator-=(const ScreenCoords& other) {
-        _x -= other._x;
-        _y -= other._y;
-        return *this;
-    }
-
-    [[nodiscard]] constexpr ScreenCoords operator+(const ScreenCoords& other) const {
-        return ScreenCoords(_x + other._x, _y + other._y);
-    }
-    [[nodiscard]] constexpr ScreenCoords operator-(const ScreenCoords& other) const {
-        return ScreenCoords(_x - other._x, _y - other._y);
-    }
-
-private:
-    int _x, _y;
-};
-
 // Helper functions for tile validation
 constexpr bool isValidTileIndex(int index) noexcept {
-    return index >= 0 && index <= TileIndex::MAX_VALUE;
+    return index >= 0 && index < TILES_PER_ELEVATION;
 }
 
 constexpr bool isValidHexPosition(int position) noexcept {
     return position >= 0 && position <= HexPosition::MAX_VALUE;
-}
-
-/**
- * @brief Type conversion utilities for gradual migration
- *
- * These functions help migrate from raw int coordinates to type-safe classes
- * without breaking existing code all at once.
- */
-namespace CoordinateUtils {
-
-    // Convert legacy int values to type-safe classes
-    [[nodiscard]] constexpr HexPosition toHexPosition(int position) {
-        return HexPosition(position);
-    }
-
-    [[nodiscard]] constexpr TileIndex toTileIndex(int index) {
-        return TileIndex(index);
-    }
-
-    [[nodiscard]] constexpr WorldCoords toWorldCoords(float x, float y) {
-        return WorldCoords(x, y);
-    }
-
-    [[nodiscard]] constexpr ScreenCoords toScreenCoords(int x, int y) {
-        return ScreenCoords(x, y);
-    }
-
-    // Convert from SFML types
-    [[nodiscard]] constexpr WorldCoords fromVector2f(const sf::Vector2f& vec) {
-        return WorldCoords(vec.x, vec.y);
-    }
-
-    [[nodiscard]] constexpr ScreenCoords fromVector2i(const sf::Vector2i& vec) {
-        return ScreenCoords(vec.x, vec.y);
-    }
-
-    // Validate and convert (throws on invalid input)
-    [[nodiscard]] HexPosition toValidHexPosition(int position);
-    [[nodiscard]] TileIndex toValidTileIndex(int index);
 }
 
 } // namespace geck

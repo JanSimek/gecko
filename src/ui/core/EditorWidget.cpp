@@ -340,8 +340,8 @@ void EditorWidget::registerExitGridCreation(const std::vector<std::shared_ptr<Ma
 }
 
 void EditorWidget::registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
-    const std::vector<ExitGridState>& beforeStates,
-    const std::vector<ExitGridState>& afterStates) {
+    const std::vector<ExitGridCommandState>& beforeStates,
+    const std::vector<ExitGridCommandState>& afterStates) {
     _controller.commandController().registerExitGridEdit(exitGrids, beforeStates, afterStates);
 }
 
@@ -1428,8 +1428,8 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
             setMode(EditorMode::Select);
             Q_EMIT statusMessageRequested("Tool cancelled.");
         } else if (_mode == EditorMode::SetPlayerPosition) {
-            // Cancels the player-position pick and any generic hex pick (beginHexPick); leaving the
-            // mode notifies a pending pick callback with no position (see setMode).
+            // Cancels the hex pick (beginHexPick); leaving the mode notifies the pending callback
+            // with no position (see setMode).
             setMode(EditorMode::Select);
             Q_EMIT statusMessageClearRequested();
         } else if (_tilePlacementManager->isTilePlacementMode()) {
@@ -1824,7 +1824,6 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     _tilePlacementManager->setTilePlacementMode(false, -1, false);
     _exitGridPlacementManager->setExitGridPlacementMode(false);
     _exitGridPlacementManager->setMarkExitsMode(false);
-    _playerPositionSelectionMode = false;
     if (mode != EditorMode::StampPattern) {
         clearStampPreview();
     }
@@ -1875,7 +1874,6 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
             }
             break;
         case EditorMode::SetPlayerPosition:
-            _playerPositionSelectionMode = true;
             if (_inputHandler) {
                 _inputHandler->setPlayerPositionMode(true);
             }
@@ -2742,31 +2740,16 @@ void EditorWidget::cancelDragPreview() {
     }
 }
 
-void EditorWidget::enterPlayerPositionSelectionMode() {
-    setMode(EditorMode::SetPlayerPosition);
-
-    Q_EMIT statusMessageRequested("Click on a hex to set the player starting position (Press Escape to cancel)");
-
-    spdlog::debug("EditorWidget: Entered player position selection mode");
-}
-
 void EditorWidget::handlePositionPickClick(sf::Vector2f worldPos) {
     const int hexPosition = _controller.viewport().worldPosToHexIndex(worldPos);
     Q_EMIT statusMessageClearRequested();
 
-    // Generic one-shot hex pick (beginHexPick): consume the callback and return to Select before
-    // invoking it, so the callback (which may reopen a dialog) sees a settled editor state.
+    // Consume the callback and return to Select before invoking it, so the callback (which may
+    // reopen a dialog) sees a settled editor state.
     if (_hexPickCallback) {
         auto onFinished = std::exchange(_hexPickCallback, nullptr);
         setMode(EditorMode::Select);
         onFinished(hexPosition >= 0 ? std::optional<int>(hexPosition) : std::nullopt);
-        return;
-    }
-
-    // Legacy player-position pick: stays in the mode for repeated clicks until Escape.
-    if (hexPosition >= 0) {
-        Q_EMIT playerPositionSelected(hexPosition);
-        spdlog::debug("EditorWidget: Player position selected at hex {}", hexPosition);
     }
 }
 

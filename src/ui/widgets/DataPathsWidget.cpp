@@ -74,13 +74,13 @@ void DataPathsWidget::setupUI() {
     // cannot wrap, so it needs no width reserved and no height negotiated.
     auto* listRow = new QHBoxLayout();
     listRow->setContentsMargins(0, 0, 0, 0);
-    listRow->setSpacing(SPACING_NORMAL);
+    listRow->setSpacing(ui::theme::spacing::NORMAL);
     listRow->addWidget(_pathsTable, /*stretch=*/1);
 
     auto* buttonColumn = new QVBoxLayout();
     // Flush with the top of the list: a nested layout otherwise inherits margins from the style.
     buttonColumn->setContentsMargins(0, 0, 0, 0);
-    buttonColumn->setSpacing(SPACING_NORMAL);
+    buttonColumn->setSpacing(ui::theme::spacing::NORMAL);
     _controlLayout = buttonColumn;
 
     _addButton = new QPushButton("Add Path...");
@@ -110,7 +110,7 @@ void DataPathsWidget::setupUI() {
 
     // Checkable so the label stays constant while the check state shows the marker (it used to grow to
     // "Clear ..." and clip). Below this: what a path *is*, not what to do with it.
-    buttonColumn->addSpacing(SPACING_LOOSE);
+    buttonColumn->addSpacing(ui::theme::spacing::LOOSE);
 
     _saveLocationButton = new QPushButton("Save Location");
     _saveLocationButton->setIcon(createIcon(":/icons/actions/save.svg"));

@@ -12,6 +12,35 @@
 
 using namespace geck;
 
+TEST_CASE("findGameExecutable names the binary inside a detected installation", "[game_launcher]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const std::filesystem::path root = tempDir.path().toStdString();
+
+    SECTION("An installation folder yields the executable in it") {
+        std::filesystem::create_directories(root / "data");
+        std::ofstream(root / "fallout2-ce") << "";
+
+        const auto executable = findGameExecutable(root);
+        REQUIRE(executable.has_value());
+        CHECK(executable->filename() == "fallout2-ce");
+        CHECK(std::filesystem::is_regular_file(*executable));
+    }
+
+    SECTION("A folder with no Fallout 2 binary yields nothing") {
+        std::filesystem::create_directories(root / "data");
+
+        CHECK_FALSE(findGameExecutable(root).has_value());
+    }
+
+    SECTION("A macOS bundle is its own executable choice") {
+        const std::filesystem::path bundle = root / "Fallout 2.app";
+        std::filesystem::create_directories(bundle / "Contents" / "MacOS");
+
+        CHECK(findGameExecutable(bundle) == bundle);
+    }
+}
+
 TEST_CASE("applyStartingMapToContentConfig sets the fallout2-ce start map", "[game_launcher]") {
     SECTION("The section and key are created for an empty config") {
         const std::string result = applyStartingMapToContentConfig("", "artemple.map");

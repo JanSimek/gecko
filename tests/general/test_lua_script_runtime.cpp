@@ -658,27 +658,6 @@ TEST_CASE("Luau print() output is captured for the console", "[scripting][lua]")
     CHECK(r.output == "hello\t42\ndone\n");
 }
 
-TEST_CASE("LuaSandboxHost can repoint captured print output", "[scripting][lua]") {
-    ControllerFixture fx;
-    MapScriptApi api(fx.resources, fx.hexgrid, fx.controller, *fx.map, ELEV);
-    LuaSandboxHost host;
-    std::string first;
-    std::string second;
-    std::string error;
-
-    REQUIRE(host.initialize(api, {}, first, error));
-    REQUIRE(host.loadSource("print('first')", error));
-    REQUIRE(host.runLoaded(error));
-    CHECK(first == "first\n");
-    CHECK(second.empty());
-
-    host.setPrintOutput(second);
-    REQUIRE(host.loadSource("print('second')", error));
-    REQUIRE(host.runLoaded(error));
-    CHECK(first == "first\n");
-    CHECK(second == "second\n");
-}
-
 TEST_CASE("LuaSandboxHost refuses to run before it is initialized", "[scripting][lua]") {
     LuaSandboxHost host;
     std::string error;

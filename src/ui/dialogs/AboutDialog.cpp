@@ -59,7 +59,7 @@ void AboutDialog::createContent() {
     }
 
     _textLayout = new QVBoxLayout();
-    _textLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    _textLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     _titleLabel = new QLabel();
     _titleLabel->setText(QString("%1 %2").arg(geck::version::name).arg(geck::version::string));

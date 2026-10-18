@@ -33,7 +33,7 @@ void ProPreviewPanelWidget::setupUI() {
         auto* dualWidget = new QWidget(this);
         auto* dualLayout = new QHBoxLayout(dualWidget);
         dualLayout->setContentsMargins(0, 0, 0, 0);
-        dualLayout->setSpacing(ui::constants::SPACING_TIGHT);
+        dualLayout->setSpacing(ui::theme::spacing::TIGHT);
         dualLayout->setAlignment(Qt::AlignCenter);
 
         _inventoryPreviewWidget = new ObjectPreviewWidget(_resources, dualWidget,

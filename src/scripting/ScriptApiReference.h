@@ -7,7 +7,7 @@ namespace geck {
 
 /// The single source of truth for the generation-script `api:` surface. Each bound function is
 /// listed once as X(name, signature, doc); the `name` is both the Lua name and the MapScriptApi
-/// method (they match). LuaScriptRuntime expands this to bind the functions (addFunction), and
+/// method (they match). LuaSandboxHost expands this to bind the functions (addFunction), and
 /// ScriptApiReference expands it to document them — so the reference can never drift from what is
 /// actually bound. To add an api function, add one line here and implement the method.
 #define GECK_SCRIPT_API(X)                                                                                                                                                                                                                                                                                                                                                              \

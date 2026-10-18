@@ -54,7 +54,7 @@ const std::vector<std::unique_ptr<ObjectInfo>>& ObjectPalettePanel::getObjectLis
 
 void ObjectPalettePanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    _mainLayout->setSpacing(ui::theme::spacing::TIGHT);
     _mainLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
 
     setupCategoryTabs();

@@ -303,10 +303,7 @@ default** — that way changing a default in a later release still reaches users
 customized that action. An explicitly-unbound action persists as an empty string, which is
 distinct from absent.
 
-No `SETTINGS_VERSION` bump: an absent `"keyBindings"` key means "no overrides", which
-`Settings::fromJson()` already tolerates. Avoid touching the version — the 1.0→1.1 data-path
-migration at `Settings.cpp:178` keys off `_version != SETTINGS_VERSION` and would re-run
-`expandDataPaths()` on every existing install if the constant moved.
+An absent `"keyBindings"` key means "no overrides", which `Settings::fromJson()` tolerates.
 
 ### 4.5 Preferences page
 

@@ -96,10 +96,8 @@ namespace detail {
 
 /// A gap-free run of hexes from `startHex` to `endHex` along the straight cube-coordinate chord:
 /// the endpoints are exact, consecutive results are grid neighbours (no gaps), and no hex repeats.
-/// `grid` is unused — the walk is pure grid geometry — but the signature is kept so callers
-/// (ExitGridPlacementManager, MapScriptApi::placeExitGridRect) don't churn. Empty if either
-/// endpoint is off-grid.
-inline std::vector<int> hexLine([[maybe_unused]] const HexagonGrid& grid, int startHex, int endHex) {
+/// Empty if either endpoint is off-grid.
+inline std::vector<int> hexLine(int startHex, int endHex) {
     using namespace geck::hexgrid;
     std::vector<int> line;
     if (!isValidHex(startHex) || !isValidHex(endHex)) {
@@ -138,7 +136,7 @@ inline std::vector<int> hexLine([[maybe_unused]] const HexagonGrid& grid, int st
 /// by hexLine() and the result has each hex once, in first-seen order. Off-grid vertices (hex < 0)
 /// are skipped. Both the editor's "Draw edge" tool and its preview use this so they trace the same
 /// hexes from the same vertex list.
-inline std::vector<int> hexPolyline(const HexagonGrid& grid, const std::vector<int>& vertexHexes) {
+inline std::vector<int> hexPolyline(const std::vector<int>& vertexHexes) {
     std::vector<int> result;
     std::set<int> seen;
     int prevHex = -1;
@@ -147,7 +145,7 @@ inline std::vector<int> hexPolyline(const HexagonGrid& grid, const std::vector<i
             continue;
         }
         const std::vector<int> segment = (prevHex >= 0)
-            ? hexLine(grid, prevHex, hex)
+            ? hexLine(prevHex, hex)
             : std::vector<int>{ hex };
         for (const int lineHex : segment) {
             if (seen.insert(lineHex).second) {

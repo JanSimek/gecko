@@ -11,10 +11,6 @@ namespace geck {
 
 /**
  * @brief Manages viewport operations like zooming, panning, and coordinate conversions
- *
- * This class handles all viewport-related functionality that was previously
- * embedded in EditorWidget, providing a clean separation of concerns for
- * camera/view management operations.
  */
 class ViewportController {
 public:
@@ -94,8 +90,7 @@ public:
      * @brief Whether a hex at the given world coordinates is within `view`.
      *
      * The viewport owns this cull/projection math; the renderers delegate here so
-     * there is one definition (HexRenderer and RenderingEngine previously each had
-     * their own copy). Static because it depends only on the hex coords and view.
+     * there is one definition. Static because it depends only on the hex coords and view.
      */
     [[nodiscard]] static bool isHexVisible(int hexWorldX, int hexWorldY, const sf::View& view);
 

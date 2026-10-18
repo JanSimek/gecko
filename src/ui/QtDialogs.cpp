@@ -174,13 +174,6 @@ QString QtDialogs::getLastDirectory() {
                                       QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation))
                               .toString();
     }
-    // Defensive: earlier versions stored a file path here (a file's path, not its
-    // directory). If so, fall back to the containing directory so save dialogs do
-    // not pre-fill an unrelated file name.
-    QFileInfo info(s_lastDirectory);
-    if (info.exists() && info.isFile()) {
-        return info.absolutePath();
-    }
     return s_lastDirectory;
 }
 

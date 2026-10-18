@@ -40,8 +40,7 @@ bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::
 
     luaL_openlibs(_state); // Luau's stdlib is already safe: no `io`, `os` trimmed, no bytecode loaders
 
-    // Replace print() with one that calls back into this host. The output string can be repointed
-    // later without rebinding the global, which is useful for future resident plugin VMs.
+    // Replace print() with one that calls back into this host, which appends to `output`.
     lua_pushlightuserdata(_state, this);
     lua_pushcclosure(_state, &LuaSandboxHost::capturePrint, "print", 1);
     lua_setglobal(_state, "print");
@@ -91,11 +90,6 @@ bool LuaSandboxHost::initialize(MapScriptApi& api, const ScriptArgs& args, std::
     lua_pop(_state, 1); // pop math
 
     return true;
-}
-
-void LuaSandboxHost::setPrintOutput(std::string& output) {
-    _output = &output;
-    _printTruncated = false;
 }
 
 // Luau's default allocator (linit.cpp l_alloc), plus a running total so one script can't exhaust

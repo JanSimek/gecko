@@ -56,7 +56,7 @@ private:
     ObjectPreviewWidget* _armorFemalePreviewWidget;
 
     // Data
-    ProArmorData _armorData;
+    Pro::ArmorData _armorData;
     int32_t _armorMaleFID;
     int32_t _armorFemaleFID;
 

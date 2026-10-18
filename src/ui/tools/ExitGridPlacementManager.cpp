@@ -83,7 +83,7 @@ void ExitGridPlacementManager::editExitGridProperties(std::shared_ptr<MapObject>
     }
 
     // Capture before state for undo
-    ExitGridContext::ExitGridState beforeState;
+    ExitGridCommandState beforeState;
     beforeState.exitMap = exitGrid->exit_map;
     beforeState.exitPosition = exitGrid->exit_position;
     beforeState.exitElevation = exitGrid->exit_elevation;
@@ -110,7 +110,7 @@ void ExitGridPlacementManager::editExitGridProperties(std::shared_ptr<MapObject>
     exitGrid->exit_orientation = newProperties.exitOrientation;
 
     // Capture after state for undo
-    ExitGridContext::ExitGridState afterState;
+    ExitGridCommandState afterState;
     afterState.exitMap = exitGrid->exit_map;
     afterState.exitPosition = exitGrid->exit_position;
     afterState.exitElevation = exitGrid->exit_elevation;
@@ -316,7 +316,7 @@ std::optional<ExitGridSegmentRun> ExitGridPlacementManager::buildSegmentRun(
     if (aHex < 0 || bHex < 0) {
         return std::nullopt;
     }
-    std::vector<int> segHexes = hexline::hexLine(*hexGrid, aHex, bHex);
+    std::vector<int> segHexes = hexline::hexLine(aHex, bHex);
     if (segHexes.empty()) {
         return std::nullopt;
     }
@@ -523,14 +523,14 @@ bool ExitGridPlacementManager::bulkEditExistingExitGrids(const std::vector<std::
 
     // Capture before states for undo
     std::vector<std::shared_ptr<MapObject>> mapObjects;
-    std::vector<ExitGridContext::ExitGridState> beforeStates;
+    std::vector<ExitGridCommandState> beforeStates;
     for (const auto& exitGridObject : exitGrids) {
         auto mapObjectPtr = exitGridObject->getMapObjectPtr();
         if (!mapObjectPtr) {
             continue;
         }
         mapObjects.push_back(mapObjectPtr);
-        ExitGridContext::ExitGridState beforeState;
+        ExitGridCommandState beforeState;
         beforeState.exitMap = mapObjectPtr->exit_map;
         beforeState.exitPosition = mapObjectPtr->exit_position;
         beforeState.exitElevation = mapObjectPtr->exit_elevation;
@@ -542,14 +542,14 @@ bool ExitGridPlacementManager::bulkEditExistingExitGrids(const std::vector<std::
 
     // Destination-only bulk edit: update the exit_* fields, keep each marker's directional art — they
     // were placed along a line with per-segment art, so we must not collapse them to one direction.
-    std::vector<ExitGridContext::ExitGridState> afterStates;
+    std::vector<ExitGridCommandState> afterStates;
     for (const auto& mapObjectPtr : mapObjects) {
         mapObjectPtr->exit_map = newProperties.exitMap;
         mapObjectPtr->exit_position = newProperties.exitPosition;
         mapObjectPtr->exit_elevation = newProperties.exitElevation;
         mapObjectPtr->exit_orientation = newProperties.exitOrientation;
 
-        ExitGridContext::ExitGridState afterState;
+        ExitGridCommandState afterState;
         afterState.exitMap = mapObjectPtr->exit_map;
         afterState.exitPosition = mapObjectPtr->exit_position;
         afterState.exitElevation = mapObjectPtr->exit_elevation;

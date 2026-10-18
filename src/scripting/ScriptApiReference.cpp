@@ -5,7 +5,7 @@
 namespace geck {
 
 const std::vector<ScriptApiEntry>& scriptApiEntries() {
-    // Built from the single GECK_SCRIPT_API list that LuaScriptRuntime also binds from.
+    // Built from the single GECK_SCRIPT_API list that LuaSandboxHost also binds from.
 #define GECK_SCRIPT_API_ENTRY(name, sig, doc) { #name, sig, doc },
     static const std::vector<ScriptApiEntry> entries = { GECK_SCRIPT_API(GECK_SCRIPT_API_ENTRY) };
 #undef GECK_SCRIPT_API_ENTRY

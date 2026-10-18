@@ -584,6 +584,23 @@ std::string applyManagedModsOrderBlock(const std::string& existingContent, const
     return content;
 }
 
+std::optional<std::filesystem::path> findGameExecutable(const std::filesystem::path& installation) {
+    if (installation.extension() == ".app") {
+        return installation;
+    }
+    static constexpr std::array<const char*, 8> kExecutableNames = {
+        "fallout2.exe", "Fallout2.exe", "fallout2", "Fallout2",
+        "fallout2-ce.exe", "Fallout2-ce.exe", "fallout2-ce", "Fallout2-ce"
+    };
+    std::error_code ec;
+    for (const char* name : kExecutableNames) {
+        if (std::filesystem::is_regular_file(installation / name, ec)) {
+            return installation / name;
+        }
+    }
+    return std::nullopt;
+}
+
 std::optional<std::filesystem::path> macOsBundleDataRoot(const std::filesystem::path& executablePath) {
     if (executablePath.extension() != ".app") {
         return std::nullopt;

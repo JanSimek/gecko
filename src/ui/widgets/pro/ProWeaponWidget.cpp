@@ -39,12 +39,12 @@ void ProWeaponWidget::setupUI() {
     QWidget* leftColumn = new QWidget();
     QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    leftLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     QWidget* rightColumn = new QWidget();
     QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
-    rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    rightLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     // === LEFT COLUMN: Damage & Attack ===
 

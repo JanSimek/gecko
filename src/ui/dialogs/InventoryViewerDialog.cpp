@@ -74,9 +74,9 @@ void InventoryViewerDialog::setupUI() {
     resize(ui::constants::dialog_sizes::LARGE_WIDTH, ui::constants::dialog_sizes::LARGE_HEIGHT);
 
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(ui::constants::SPACING_NORMAL, ui::constants::SPACING_NORMAL,
-        ui::constants::SPACING_NORMAL, ui::constants::SPACING_TIGHT);
-    _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    _mainLayout->setContentsMargins(ui::theme::spacing::NORMAL, ui::theme::spacing::NORMAL,
+        ui::theme::spacing::NORMAL, ui::theme::spacing::TIGHT);
+    _mainLayout->setSpacing(ui::theme::spacing::TIGHT);
 
     _splitter = new QSplitter(Qt::Horizontal);
 
@@ -84,7 +84,7 @@ void InventoryViewerDialog::setupUI() {
     _leftPanel = new QWidget();
     _leftLayout = new QVBoxLayout(_leftPanel);
     _leftLayout->setContentsMargins(0, 0, 0, 0);
-    _leftLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    _leftLayout->setSpacing(ui::theme::spacing::TIGHT);
 
     _inventoryTree = new QTreeWidget();
     _inventoryTree->setColumnCount(COLUMN_COUNT);
@@ -129,7 +129,7 @@ void InventoryViewerDialog::setupUI() {
     _rightPanel = new QWidget();
     _rightLayout = new QVBoxLayout(_rightPanel);
     _rightLayout->setContentsMargins(0, 0, 0, 0);
-    _rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    _rightLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     _previewGroup = new QGroupBox("Item Preview");
     _previewFormLayout = new QFormLayout(_previewGroup);
@@ -168,8 +168,8 @@ void InventoryViewerDialog::setupUI() {
     // === BUTTON PANEL ===
     _buttonPanel = new QWidget();
     _buttonLayout = new QHBoxLayout(_buttonPanel);
-    _buttonLayout->setContentsMargins(0, ui::constants::SPACING_TIGHT, 0, 0);
-    _buttonLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    _buttonLayout->setContentsMargins(0, ui::theme::spacing::TIGHT, 0, 0);
+    _buttonLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     _addButton = new QPushButton("Add Item...");
     _addButton->setEnabled(true);

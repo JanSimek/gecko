@@ -68,6 +68,7 @@ TEST_CASE("MsgReader returns an empty message for an unknown id", "[msg]") {
     const auto& missing = msg->message(999);
     CHECK(missing.id == 0);
     CHECK(missing.text.empty());
+    CHECK(msg->getMessages().size() == 1); // a miss does not insert an entry
 }
 
 TEST_CASE("MsgReader keeps the last entry for a duplicate id", "[msg]") {

@@ -22,11 +22,11 @@ ProCommonFieldsWidget::ProCommonFieldsWidget(resource::GameResources& resources,
 
 void ProCommonFieldsWidget::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    _mainLayout->setSpacing(ui::theme::spacing::NORMAL);
     _mainLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
 
     QHBoxLayout* columnsLayout = new QHBoxLayout();
-    columnsLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    columnsLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     // === LEFT COLUMN ===
     QVBoxLayout* leftColumn = new QVBoxLayout();

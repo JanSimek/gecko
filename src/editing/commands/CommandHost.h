@@ -15,8 +15,7 @@ class Tile;
  * *back* into its host for presentation refresh and elevation/tile access. Splitting it out
  * means the command controller depends on one narrow seam instead of six loose std::functions,
  * and lets a headless caller (gecko-cli generation) supply a trivial implementation instead of
- * wiring up rendering/UI infrastructure. Mirrors the existing TilePlacementContext /
- * ExitGridContext idiom: a narrow host interface the full editor (EditorWidget) implements.
+ * wiring up rendering/UI infrastructure. Both supply it as a CallbackCommandHost (below).
  */
 class CommandHost {
 public:

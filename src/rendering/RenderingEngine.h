@@ -23,9 +23,7 @@ struct ToolPreview;
 /**
  * @brief Handles all rendering operations for the editor
  *
- * This class encapsulates all rendering logic that was previously
- * in EditorWidget, providing a clean separation of concerns between
- * UI management and rendering operations.
+ * Keeps rendering separate from EditorWidget's UI management.
  */
 class RenderingEngine {
 public:

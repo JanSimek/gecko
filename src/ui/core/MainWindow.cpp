@@ -2122,8 +2122,16 @@ void MainWindow::connectPanelSignals() {
     if (_mapInfoPanel) {
         connect(_mapInfoPanel, &MapInfoPanel::selectPlayerPositionRequested,
             this, [this]() {
-                if (_currentEditorWidget)
-                    _currentEditorWidget->enterPlayerPositionSelectionMode();
+                if (!_currentEditorWidget) {
+                    return;
+                }
+                _currentEditorWidget->beginHexPick(
+                    [this](std::optional<int> hex) {
+                        if (hex.has_value() && _mapInfoPanel && _currentEditorWidget) {
+                            _mapInfoPanel->setPlayerPosition(*hex, _currentEditorWidget->getCurrentElevation());
+                        }
+                    },
+                    "Click on a hex to set the player starting position (Press Escape to cancel)");
             });
         connect(_mapInfoPanel, &MapInfoPanel::centerViewOnPlayerPositionRequested,
             this, [this]() {
@@ -2339,15 +2347,6 @@ void MainWindow::connectToEditorWidget() {
         [this]() { refreshScriptsPanel(); });
     connect(_currentEditorWidget, &EditorWidget::mapEdgeChanged, this,
         [this]() { refreshMapEdgesPanel(); });
-
-    if (_mapInfoPanel) {
-        connect(_currentEditorWidget, &EditorWidget::playerPositionSelected,
-            this, [this](int hexPosition) {
-                if (_mapInfoPanel && _currentEditorWidget) {
-                    _mapInfoPanel->setPlayerPosition(hexPosition, _currentEditorWidget->getCurrentElevation());
-                }
-            });
-    }
 
     applySelectionColorsToEditor();
 

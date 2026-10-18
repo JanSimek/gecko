@@ -102,10 +102,9 @@ TEST_CASE("Choosing an .app fills the data directory from it and locks the field
     }
 }
 
-TEST_CASE("An .app is validated as an executable, not as an installation folder", "[qt][settings]") {
-    // A bundle is a directory, so it used to fall to the installation check, which looks for a
-    // binary sitting directly in the folder - a bundle keeps its own in Contents/MacOS, so every
-    // one of them was reported as "may not be a valid Fallout 2 installation".
+TEST_CASE("An .app is validated as an executable, and a plain folder is not one", "[qt][settings]") {
+    // A bundle is a directory that is nonetheless an executable choice: its binary is in
+    // Contents/MacOS. Any other directory cannot be launched.
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
     const std::filesystem::path root = tempDir.path().toStdString();
@@ -141,12 +140,15 @@ TEST_CASE("An .app is validated as an executable, not as an installation folder"
         CHECK(lastStatus.contains("no executable"));
     }
 
-    SECTION("A plain directory is still checked as an installation") {
+    SECTION("A plain folder is rejected as an executable") {
+        std::filesystem::create_directories(root / "data");
+        std::ofstream(root / "fallout2.exe") << "";
+
         widget.setExecutableLocation(root);
         widget.validateSelection();
 
         CHECK(lastStyle.toStdString() == "warning");
-        CHECK(lastStatus.contains("installation"));
+        CHECK(lastStatus.contains("not a folder"));
     }
 }
 

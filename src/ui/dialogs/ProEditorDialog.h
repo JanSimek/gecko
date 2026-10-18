@@ -10,7 +10,6 @@
 
 #include "format/frm/Frm.h"
 #include "format/pro/Pro.h"
-#include "format/pro/ProDataModels.h"
 #include "ui/widgets/ProInfoPanelWidget.h"
 #include "ui/widgets/ProPreviewPanelWidget.h"
 #include "ui/widgets/ProCommonFieldsWidget.h"

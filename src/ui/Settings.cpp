@@ -29,9 +29,7 @@ namespace {
 
 }
 
-Settings::Settings()
-    : _version(SETTINGS_VERSION) {
-}
+Settings::Settings() = default;
 
 QString Settings::getSettingsFilePath() const {
     QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
@@ -99,7 +97,6 @@ void Settings::save() {
 QJsonObject Settings::toJson() const {
     QJsonObject json;
 
-    json["version"] = _version;
     json["dataPaths"] = pathVectorToJsonArray(_dataPaths);
     if (!_writableDataPath.empty()) {
         json["writableDataPath"] = QString::fromStdString(_writableDataPath.string());
@@ -168,18 +165,8 @@ QJsonObject Settings::toJson() const {
 }
 
 void Settings::fromJson(const QJsonObject& json) {
-    _version = json["version"].toString(SETTINGS_VERSION);
-
     if (json.contains("dataPaths")) {
         setDataPaths(jsonArrayToPathVector(json["dataPaths"].toArray()));
-    }
-
-    // One-time migration: settings written before DATs were explicit stored only folders and relied on
-    // silent nested-mounting of master.dat/critter.dat. Expand those folders so the DATs become listed,
-    // manageable entries (matching the order they were mounted in).
-    if (_version != SETTINGS_VERSION) {
-        setDataPaths(util::expandDataPaths(_dataPaths));
-        _version = SETTINGS_VERSION;
     }
 
     // Read after the data paths (setDataPaths clears an unlisted marker); tolerate a hand-edited
@@ -281,8 +268,7 @@ void Settings::fromJson(const QJsonObject& json) {
         }
     }
 
-    // An absent "keyBindings" means "no overrides" — which is also every settings file written
-    // before this existed, so no version bump is needed to read one.
+    // An absent "keyBindings" means "no overrides".
     _keyBindings.clear();
     if (json.contains("keyBindings") && json["keyBindings"].isObject()) {
         const QJsonObject keyBindings = json["keyBindings"].toObject();

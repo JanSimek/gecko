@@ -2106,6 +2106,7 @@ TEST_CASE("Light dialog keeps the intensity percent it stored", "[ui][light]") {
         INFO("percent " << percent);
         CHECK(dialog.getLightIntensity() == raw);
     }
-    geck::LightPropertiesDialog legacy(4, 6553); // saved by the truncating version as 10%
-    CHECK(legacy.getLightIntensity() == 6554);
+    // fallout2-ce's mapper truncates (mp_instance.cc), so its maps store 10% as 6553.
+    geck::LightPropertiesDialog truncated(4, 6553);
+    CHECK(truncated.getLightIntensity() == 6554);
 }

@@ -33,8 +33,8 @@ namespace resource {
     class GameResources;
 }
 
-// ExitGridCommandState and MapObjectInstanceState are defined in ObjectEditService.h
-// (the aggregate that owns exit-grid and per-instance editing) and re-exported here.
+// ExitGridCommandState and MapObjectInstanceState come from ObjectEditService.h (the aggregate
+// that owns exit-grid and per-instance editing).
 
 /// Whether a placement also gives the object its proto's script. A NEW object does: the engine's
 /// obj_new attaches it (objectSetScriptFromProto). A copy does only when its source was scripted

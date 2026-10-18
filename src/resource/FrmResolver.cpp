@@ -167,7 +167,7 @@ std::optional<uint32_t> FrmResolver::resolveFid(const std::string& artPath) {
                 const std::string baseName = trimmed(
                     commaPos != std::string::npos ? std::string_view(entries[i]).substr(0, commaPos) : std::string_view(entries[i]));
                 if (!baseName.empty() && CritterFrmResolver::matchesCritterBase(baseName, filename)) {
-                    const uint32_t fid = CritterFrmResolver::deriveCritterFrmPid(baseName, filename, static_cast<uint32_t>(i));
+                    const uint32_t fid = CritterFrmResolver::deriveCritterFrmPid(filename, static_cast<uint32_t>(i));
                     if (fid != 0) {
                         return fid;
                     }

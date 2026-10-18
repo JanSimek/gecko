@@ -402,8 +402,7 @@ history (`git show edf773d:PLAN.md`, §"Feature B").
 
 **Kept on master (dual-use, pays off without plugins):** the `ITool`/`ToolRegistry` seam
 (powers the native Fill Brush), `MapScriptApi`/`ScriptApiReference` (Console + headless
-CLI/MCP), the `LuaSandboxHost` extraction, the plan-sink placement cap + Console time budget,
-and the inert `MapScriptApi::retarget`/`detach` (reverting would churn a class the Console,
-CLI, MCP and fills all share).
+CLI/MCP), the `LuaSandboxHost` extraction, and the plan-sink placement cap + Console time
+budget.
 **Scrapped:** the `PluginManager` MVP (PRs #120/#121 closed unmerged; branches remain) and the
 resident-VM substrate (`PluginVm`, heap cap, persistent env — removed in #122).

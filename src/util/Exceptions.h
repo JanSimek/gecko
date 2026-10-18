@@ -22,18 +22,6 @@ public:
 };
 
 /**
- * @brief Exception for invalid arguments or parameter validation failures
- */
-class InvalidArgumentException : public GeckoException {
-public:
-    explicit InvalidArgumentException(const std::string& message)
-        : GeckoException("Invalid argument: " + message) { }
-
-    explicit InvalidArgumentException(const std::string& message, const std::string& parameterName)
-        : GeckoException("Invalid argument for '" + parameterName + "': " + message) { }
-};
-
-/**
  * @brief Exception for resource loading and management errors
  */
 class ResourceException : public GeckoException {

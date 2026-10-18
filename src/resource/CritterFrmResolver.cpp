@@ -35,9 +35,7 @@ std::string CritterFrmResolver::generateCritterFrmName(const std::string& baseNa
     return filename;
 }
 
-uint32_t CritterFrmResolver::deriveCritterFrmPid(const std::string& /* baseName */,
-    const std::string& frmFilename,
-    uint32_t baseIndex) {
+uint32_t CritterFrmResolver::deriveCritterFrmPid(const std::string& frmFilename, uint32_t baseIndex) {
     char suffix1, suffix2, direction;
     if (!parseAnimationSuffixes(frmFilename, suffix1, suffix2, direction)) {
         return 0;

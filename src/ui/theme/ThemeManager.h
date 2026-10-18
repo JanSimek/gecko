@@ -365,16 +365,9 @@ namespace ui {
      * @brief UI styling constants and utilities
      *
      * Layout dimensions - widget sizes, dock and dialog geometry, column widths. Colours,
-     * the spacing scale and prebuilt stylesheets live in the theme namespace above; the aliases
-     * here exist so a layout can reach for a spacing value without qualifying it twice.
+     * the spacing scale and prebuilt stylesheets live in the theme namespace above.
      */
     namespace constants {
-        // Spacing aliases for clarity
-        constexpr int SPACING_TIGHT = theme::spacing::TIGHT;
-        constexpr int SPACING_NORMAL = theme::spacing::NORMAL;
-        constexpr int SPACING_LOOSE = theme::spacing::LOOSE;
-        constexpr int SPACING_SECTION = theme::spacing::SECTION;
-
         // Widget sizes
         constexpr int LIST_MAX_HEIGHT = 100;
         constexpr int LIST_MIN_HEIGHT = 160; // tall enough to show several data-path rows before scrolling

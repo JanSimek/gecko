@@ -401,7 +401,7 @@ FileBrowserPanel::~FileBrowserPanel() {
 void FileBrowserPanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
     _mainLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
-    _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    _mainLayout->setSpacing(ui::theme::spacing::TIGHT);
 
     setupFilterControls();
     setupTreeView();

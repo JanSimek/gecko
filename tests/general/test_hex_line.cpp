@@ -57,23 +57,21 @@ double maxOffsetFromChord(const HexagonGrid& grid, const std::vector<int>& line)
 } // namespace
 
 TEST_CASE("hexLine includes both endpoints", "[hexline]") {
-    HexagonGrid grid;
     const int start = 100 * HexagonGrid::GRID_WIDTH + 80;
     const int end = 100 * HexagonGrid::GRID_WIDTH + 120;
 
-    const auto line = hexline::hexLine(grid, start, end);
+    const auto line = hexline::hexLine(start, end);
     REQUIRE(line.size() >= 2);
     CHECK(line.front() == start);
     CHECK(line.back() == end);
 }
 
 TEST_CASE("hexLine on a horizontal screen run is gap-free", "[hexline]") {
-    HexagonGrid grid;
     // Two hexes on the same screen row, well apart horizontally.
     const int start = 100 * HexagonGrid::GRID_WIDTH + 60;
     const int end = 100 * HexagonGrid::GRID_WIDTH + 140;
 
-    const auto line = hexline::hexLine(grid, start, end);
+    const auto line = hexline::hexLine(start, end);
     REQUIRE(line.size() >= 2);
     CHECK(line.front() == start);
     CHECK(line.back() == end);
@@ -86,12 +84,11 @@ TEST_CASE("hexLine on a horizontal screen run is gap-free", "[hexline]") {
 }
 
 TEST_CASE("hexLine on a diagonal screen run is gap-free and reaches the end", "[hexline]") {
-    HexagonGrid grid;
     // A diagonal: differ in both row and column so the iso staircase must step in both axes.
     const int start = 80 * HexagonGrid::GRID_WIDTH + 80;
     const int end = 120 * HexagonGrid::GRID_WIDTH + 120;
 
-    const auto line = hexline::hexLine(grid, start, end);
+    const auto line = hexline::hexLine(start, end);
     REQUIRE(line.size() >= 2);
     CHECK(line.front() == start);
     CHECK(line.back() == end);
@@ -99,18 +96,16 @@ TEST_CASE("hexLine on a diagonal screen run is gap-free and reaches the end", "[
 }
 
 TEST_CASE("hexLine from a hex to itself is just that hex", "[hexline]") {
-    HexagonGrid grid;
     const int hex = 50 * HexagonGrid::GRID_WIDTH + 50;
-    const auto line = hexline::hexLine(grid, hex, hex);
+    const auto line = hexline::hexLine(hex, hex);
     REQUIRE(line.size() == 1);
     CHECK(line.front() == hex);
 }
 
 TEST_CASE("hexLine with an off-grid endpoint is empty", "[hexline]") {
-    HexagonGrid grid;
     const int valid = 100 * HexagonGrid::GRID_WIDTH + 100;
-    CHECK(hexline::hexLine(grid, -1, valid).empty());
-    CHECK(hexline::hexLine(grid, valid, HexagonGrid::POSITION_COUNT).empty());
+    CHECK(hexline::hexLine(-1, valid).empty());
+    CHECK(hexline::hexLine(valid, HexagonGrid::POSITION_COUNT).empty());
 }
 
 TEST_CASE("hexline::isValidHex matches the grid bounds", "[hexline]") {
@@ -137,7 +132,7 @@ TEST_CASE("hexLine stays on the straight chord (no bowing)", "[hexline]") {
     };
 
     for (const Edge& edge : edges) {
-        const auto line = hexline::hexLine(grid, edge.start, edge.end);
+        const auto line = hexline::hexLine(edge.start, edge.end);
         REQUIRE(line.size() >= 2);
         CHECK(line.front() == edge.start);
         CHECK(line.back() == edge.end);

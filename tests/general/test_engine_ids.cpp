@@ -92,12 +92,12 @@ TEST_CASE("FrmId's frame id is the engine's 12-bit lst index", "[engine][ids]") 
 }
 
 TEST_CASE("Critter FID names round-trip through FrmId", "[engine][ids][critter]") {
-    const uint32_t multi = CritterFrmResolver::deriveCritterFrmPid("hmjmps", "hmjmpsaa.frm", 7);
+    const uint32_t multi = CritterFrmResolver::deriveCritterFrmPid("hmjmpsaa.frm", 7);
     CHECK(FrmId(multi) == FrmId(ObjectType::Critter, 7, 0, 0, Rotation::NE));
     CHECK(CritterFrmResolver::generateCritterFrmName("hmjmps", multi) == "hmjmpsaa.frm");
 
     // Engine art.cc: rotation bits r > 0 name the single-direction file .fr(r-1).
-    const uint32_t single = CritterFrmResolver::deriveCritterFrmPid("hmjmps", "hmjmpsab.fr2", 7);
+    const uint32_t single = CritterFrmResolver::deriveCritterFrmPid("hmjmpsab.fr2", 7);
     CHECK(FrmId(single).rotation() == Rotation::SW);
     CHECK(CritterFrmResolver::generateCritterFrmName("hmjmps", single) == "hmjmpsab.fr2");
 }

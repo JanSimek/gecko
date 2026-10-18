@@ -37,8 +37,8 @@ std::optional<std::filesystem::path> resolveLooseDataDirectory(const std::filesy
 /// so every mounted archive is an explicit data-path entry rather than a silent nested mount. The DATs
 /// come first and the directory last: mounts resolve last-wins, so the folder's loose files override
 /// the archives it ships, as they do in the engine. `.dat` entries and DAT-less directories pass
-/// through untouched; an already-listed path is never duplicated. Used to migrate older folder-only
-/// settings and when adding a folder in the UI.
+/// through untouched; an already-listed path is never duplicated. Used for `--data` folders and
+/// when adding a folder in the UI.
 std::vector<std::filesystem::path> expandDataPaths(const std::vector<std::filesystem::path>& dataPaths);
 
 /// Attempt to resolve a user-supplied path to a Fallout 2 game data root.

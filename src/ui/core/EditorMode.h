@@ -9,7 +9,7 @@ enum class EditorMode {
     PlaceTile,         ///< Painting floor/roof tiles from the palette.
     PlaceExitGrid,     ///< Placing exit-grid markers.
     MarkExits,         ///< Selecting exit grids to edit their properties.
-    SetPlayerPosition, ///< One-shot: next click sets the player start hex.
+    SetPlayerPosition, ///< One-shot hex pick (EditorWidget::beginHexPick), e.g. the player start hex.
     StampPattern,      ///< Placing a loaded prefab pattern by clicking hexes.
     PluginTool,        ///< Dynamic dispatch to the active ToolRegistry tool (object placement today; plugins later).
 };

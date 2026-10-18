@@ -18,10 +18,9 @@ namespace geck::selection {
 /**
  * @brief Narrow abstraction over the editor host that SelectionManager depends on.
  *
- * SelectionManager used to hold a raw EditorWidget* (and include EditorWidget.h),
- * which created a compile cycle and made the manager untestable in isolation.
- * This interface declares exactly the methods SelectionManager needs from its host;
- * EditorWidget implements it, and tests can supply a lightweight mock.
+ * It declares exactly the methods SelectionManager needs from its host, so the manager
+ * stays independent of EditorWidget; EditorWidget implements it, and tests can supply a
+ * lightweight mock.
  *
  * Heavy types are forward-declared above; Map::MapFile is a nested type and cannot
  * be forward-declared, so Map.h is included (SelectionManager.h includes it already).

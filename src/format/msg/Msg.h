@@ -45,8 +45,8 @@ public:
     /// programmatic/synthetic construction (tests, generated messages).
     Msg(std::filesystem::path path, std::map<int, Message> messages);
 
-    /// The message with `id`, or a default-constructed one if absent (legacy lookup behaviour).
-    const Message& message(int id);
+    /// The message with `id`, or a default-constructed (empty) one if absent.
+    const Message& message(int id) const;
     const std::map<int, Message>& getMessages() const;
 
     /// Lossless round-trip view: every line in order, and whether the file ended with a newline.

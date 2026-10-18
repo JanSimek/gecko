@@ -158,7 +158,7 @@ std::string Application::processCommandLineArgs() {
         spdlog::info("No data paths in settings, will use command line default: {}", dataPath.toStdString());
 
         // Expand a folder into the folder + its master.dat/critter.dat so the DATs are explicit,
-        // mounted entries (DataFileSystem no longer nested-mounts them). Add to settings, don't save/load yet.
+        // mounted entries (DataFileSystem does not nested-mount them). Add to settings, don't save/load yet.
         for (const auto& entry : util::expandDataPaths({ std::filesystem::path(dataPath.toStdString()) })) {
             settings.addDataPath(entry);
         }
