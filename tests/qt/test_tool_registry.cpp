@@ -73,7 +73,7 @@ TEST_CASE("ToolRegistry activates one tool at a time", "[tools]") {
 TEST_CASE("ToolRegistry rejects duplicate ids", "[tools]") {
     ToolRegistry registry;
     auto tool = std::make_unique<CountingTool>("tool");
-    ITool* first = tool.get();
+    const ITool* first = tool.get();
 
     REQUIRE(registry.registerTool(std::move(tool)));
     CHECK_FALSE(registry.registerTool(std::make_unique<CountingTool>("tool")));

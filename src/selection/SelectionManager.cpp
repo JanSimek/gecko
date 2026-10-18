@@ -616,100 +616,31 @@ SelectionResult SelectionManager::cycleThroughItemsAtPosition(sf::Vector2f world
         : std::nullopt;
     auto floorTileIndex = _layers.floorTiles ? getFloorTileAtPosition(worldPos) : std::nullopt;
 
-    bool roofSelected = false;
-    bool floorSelected = false;
-    int selectedObjectIndex = -1;
-
-    for (const auto& item : _state.items) {
-        switch (item.type) {
-            case SelectionType::ROOF_TILE:
-                if (roofTileIndex && item.getTileIndex() == roofTileIndex.value()) {
-                    roofSelected = true;
-                }
-                break;
-
-            case SelectionType::FLOOR_TILE:
-                if (floorTileIndex && item.getTileIndex() == floorTileIndex.value()) {
-                    floorSelected = true;
-                }
-                break;
-
-            case SelectionType::OBJECT: {
-                auto it = std::find(objectsAtPos.begin(), objectsAtPos.end(), item.getObject());
-                if (it != objectsAtPos.end()) {
-                    selectedObjectIndex = static_cast<int>(std::distance(objectsAtPos.begin(), it));
-                }
-                break;
-            }
-
-            case SelectionType::HEX:
-                // Hex selections are not part of ALL-mode item cycling.
-                break;
-        }
+    // Cycle order: roof -> objects (all) -> floor -> deselect. The current position is the first
+    // selected candidate in that order; the click moves to the next one.
+    std::vector<SelectedItem> candidates;
+    if (roofTileIndex) {
+        candidates.push_back({ SelectionType::ROOF_TILE, roofTileIndex.value() });
+    }
+    for (const auto& object : objectsAtPos) {
+        candidates.push_back({ SelectionType::OBJECT, object });
+    }
+    if (floorTileIndex) {
+        candidates.push_back({ SelectionType::FLOOR_TILE, floorTileIndex.value() });
     }
 
-    // Cycle order: roof -> objects (all) -> floor -> deselect
-    if (roofSelected) {
-        if (!objectsAtPos.empty()) {
-            clearSelection();
-            SelectedItem item{ SelectionType::OBJECT, objectsAtPos[0] };
-            addItemToSelection(item);
-            notifySelectionChanged();
-            return SelectionResult::createSuccess();
-        } else if (floorTileIndex) {
-            clearSelection();
-            SelectedItem item{ SelectionType::FLOOR_TILE, floorTileIndex.value() };
-            addItemToSelection(item);
-            notifySelectionChanged();
-            return SelectionResult::createSuccess();
-        } else {
-            clearSelection();
-            return SelectionResult::createSuccess();
-        }
-    } else if (selectedObjectIndex >= 0) {
-        if (selectedObjectIndex < static_cast<int>(objectsAtPos.size()) - 1) {
-            clearSelection();
-            SelectedItem item{ SelectionType::OBJECT, objectsAtPos[selectedObjectIndex + 1] };
-            addItemToSelection(item);
-            notifySelectionChanged();
-            return SelectionResult::createSuccess();
-        } else if (floorTileIndex) {
-            clearSelection();
-            SelectedItem item{ SelectionType::FLOOR_TILE, floorTileIndex.value() };
-            addItemToSelection(item);
-            notifySelectionChanged();
-            return SelectionResult::createSuccess();
-        } else {
-            clearSelection();
-            return SelectionResult::createSuccess();
-        }
-    } else if (floorSelected) {
-        clearSelection();
-        return SelectionResult::createSuccess();
-    } else {
-        // Nothing selected yet: start at roof, else first available item.
-        if (roofTileIndex) {
-            clearSelection();
-            SelectedItem item{ SelectionType::ROOF_TILE, roofTileIndex.value() };
-            addItemToSelection(item);
-            notifySelectionChanged();
-            return SelectionResult::createSuccess();
-        } else if (!objectsAtPos.empty()) {
-            clearSelection();
-            SelectedItem item{ SelectionType::OBJECT, objectsAtPos[0] };
-            addItemToSelection(item);
-            notifySelectionChanged();
-            return SelectionResult::createSuccess();
-        } else if (floorTileIndex) {
-            clearSelection();
-            SelectedItem item{ SelectionType::FLOOR_TILE, floorTileIndex.value() };
-            addItemToSelection(item);
-            notifySelectionChanged();
-            return SelectionResult::createSuccess();
-        }
-    }
+    auto isSelected = [this](const SelectedItem& candidate) {
+        return std::find(_state.items.begin(), _state.items.end(), candidate) != _state.items.end();
+    };
+    const auto current = std::find_if(candidates.begin(), candidates.end(), isSelected);
+    const auto next = current == candidates.end() ? candidates.begin() : std::next(current);
 
     clearSelection();
+    if (next == candidates.end()) {
+        return SelectionResult::createSuccess();
+    }
+    addItemToSelection(*next);
+    notifySelectionChanged();
     return SelectionResult::createSuccess();
 }
 
