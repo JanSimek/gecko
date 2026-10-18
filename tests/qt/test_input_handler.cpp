@@ -6,10 +6,12 @@
 #include <SFML/Window/Event.hpp>
 #include <SFML/Window/Keyboard.hpp>
 
+#include <cmath>
 #include <cstddef>
 #include <vector>
 
 #include "ui/input/InputHandler.h"
+#include "util/ExitGridDirection.h"
 
 using geck::InputHandler;
 
@@ -330,24 +332,41 @@ TEST_CASE("InputHandler forwards keys to the active registered-tool branch befor
 // Shift-snap wiring: the live cursor passes through maybeSnapMarkExitsCursor before preview/commit.
 // Holding Shift can't be driven headlessly (sf::Keyboard reads the OS), so the snapped behaviour is
 // GUI-only — see the pure snapToExitGridAngle tests for the geometry. Here we pin the no-op path: with
-// Shift up the re-fired preview cursor is the raw cursor.
+// a live segment that Shift would snap, Shift up leaves the vertices and the preview cursor raw.
 TEST_CASE("InputHandler's Draw-edge preview leaves the cursor unsnapped when Shift is up", "[input][line][snap]") {
     if (keyboardStateUnavailable()) {
         SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux");
     }
-    InputHandler handler;
+    Harness h;
+    std::vector<sf::Vector2f> lastVertices;
     sf::Vector2f lastCursor{ -1.f, -1.f };
     InputHandler::Callbacks cb;
-    cb.onMarkExitsLinePreview = [&](const std::vector<sf::Vector2f>&, sf::Vector2f cursor, bool) {
+    cb.onMarkExitsLinePreview = [&](const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool) {
+        lastVertices = vertices;
         lastCursor = cursor;
     };
-    handler.setCallbacks(cb);
-    handler.setMarkExitsMode(true);
+    h.handler.setCallbacks(cb);
+    h.handler.setMarkExitsMode(true);
 
-    // No committed vertex yet: snap can't apply (no segment), so the cursor (the key re-fire's last
-    // world pos, default 0,0) is passed through unchanged regardless of Shift.
-    pressKeyDirect(handler, sf::Keyboard::Key::Space);
-    CHECK(lastCursor == sf::Vector2f{ 0.f, 0.f });
+    // Two vertices make a committed segment, so the live one from the last vertex is snappable.
+    // Clicks map pixel -> world through the view, so positions compare within a float tolerance.
+    const auto near = [](sf::Vector2f a, sf::Vector2f b) { return std::abs(a.x - b.x) < 0.01f && std::abs(a.y - b.y) < 0.01f; };
+    h.leftClick(100, 100);
+    h.leftClick(300, 100);
+    const sf::Vector2f raw{ 337.f, 161.f };
+    const auto [snappedX, snappedY] = geck::snapToExitGridAngle(300.0, 100.0, raw.x, raw.y);
+    REQUIRE_FALSE(near({ static_cast<float>(snappedX), static_cast<float>(snappedY) }, raw)); // Shift would move it
+
+    h.mouseMove(static_cast<int>(raw.x), static_cast<int>(raw.y));
+    REQUIRE(lastVertices.size() == 2);
+    CHECK(near(lastVertices[0], { 100.f, 100.f }));
+    CHECK(near(lastVertices[1], { 300.f, 100.f }));
+    CHECK(near(lastCursor, raw));
+
+    // The flip key's re-fire passes the same raw cursor.
+    lastCursor = { -1.f, -1.f };
+    pressKeyDirect(h.handler, sf::Keyboard::Key::Space);
+    CHECK(near(lastCursor, raw));
 }
 
 TEST_CASE("InputHandler's flip key does nothing outside Draw-edge mode, and resets on mode change", "[input][line][flip]") {

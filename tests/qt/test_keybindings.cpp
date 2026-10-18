@@ -367,20 +367,20 @@ TEST_CASE("The keybindings page repaints both sides of a conflict", "[qt][keybin
     const QBrush plain = mapInfo->foreground(1);
 
     // Put Map Info on the Selection panel's key: both rows are now half of a conflict.
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
-        Q_ARG(QKeySequence, QKeySequence("Alt+2")));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
+        Q_ARG(QKeySequence, QKeySequence("Alt+2"))));
     CHECK(mapInfo->foreground(1) != plain);
     CHECK(selection->foreground(1) != plain);
 
     // Move it somewhere free: neither row is conflicting any more.
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
-        Q_ARG(QKeySequence, QKeySequence("Ctrl+Alt+J")));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
+        Q_ARG(QKeySequence, QKeySequence("Ctrl+Alt+J"))));
     CHECK(mapInfo->foreground(1) == plain);
     CHECK(selection->foreground(1) == plain);
 
     // A conflicting edit is never committed — it would leave Qt firing neither shortcut.
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
-        Q_ARG(QKeySequence, QKeySequence("Alt+2")));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
+        Q_ARG(QKeySequence, QKeySequence("Alt+2"))));
     widget.applyChanges();
     CHECK(registry.shortcut(actions::PANEL_SELECTION) == QKeySequence("Alt+2"));
     CHECK(registry.shortcut(actions::PANEL_MAP_INFO) == QKeySequence("Alt+1"));
@@ -463,8 +463,8 @@ TEST_CASE("Reserved and canvas-only keys cannot be bound", "[qt][keybindings]") 
     REQUIRE(tree != nullptr);
     QTreeWidgetItem* fitMap = tree->findItems("Fit Map in View", Qt::MatchExactly | Qt::MatchRecursive).value(0);
     REQUIRE(fitMap != nullptr);
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, fitMap),
-        Q_ARG(QKeySequence, QKeySequence(Qt::Key_Delete)));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, fitMap),
+        Q_ARG(QKeySequence, QKeySequence(Qt::Key_Delete))));
     CHECK_FALSE(widget.hasPendingChanges());
 }
 
@@ -489,10 +489,10 @@ TEST_CASE("Applying drops edits that conflict once another edit is dropped", "[q
 
     // Scripts onto the Tile Palette's key (a conflict, so it will be dropped), then Map Info onto
     // the key Scripts appears to be leaving.
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, scripts),
-        Q_ARG(QKeySequence, QKeySequence("Alt+4")));
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
-        Q_ARG(QKeySequence, QKeySequence("Alt+3")));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, scripts),
+        Q_ARG(QKeySequence, QKeySequence("Alt+4"))));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
+        Q_ARG(QKeySequence, QKeySequence("Alt+3"))));
     widget.applyChanges();
 
     CHECK(registry.shortcut(actions::PANEL_SCRIPTS) == QKeySequence("Alt+3"));
@@ -514,8 +514,8 @@ TEST_CASE("Clear unbinds the selected row and resolves its conflict", "[qt][keyb
     REQUIRE(mapInfo != nullptr);
     REQUIRE(selection != nullptr);
 
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
-        Q_ARG(QKeySequence, QKeySequence("Alt+2")));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
+        Q_ARG(QKeySequence, QKeySequence("Alt+2"))));
 
     QPushButton* clear = nullptr;
     for (QPushButton* button : widget.findChildren<QPushButton*>()) {

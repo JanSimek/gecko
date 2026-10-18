@@ -1,9 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <thread>
 
 #include <QCoreApplication>
-#include <QElapsedTimer>
 #include <QHeaderView>
 #include <QTreeView>
 
@@ -13,6 +13,7 @@
 #include "ui/logging/LogModel.h"
 #include "ui/logging/LogModelSink.h"
 #include "ui/panels/LogPanel.h"
+#include "support/QtWait.h"
 
 using namespace geck;
 
@@ -71,12 +72,8 @@ TEST_CASE("LogModel evicts the oldest records beyond the cap", "[qt][log]") {
     });
     producer.join();
 
-    QElapsedTimer timer;
-    timer.start();
-    while (model.rowCount() < LogModel::MAX_RECORDS && timer.elapsed() < 60000) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-    }
-
+    REQUIRE(geck::test::pumpUntil([&model]() { return model.rowCount() >= LogModel::MAX_RECORDS; },
+        std::chrono::seconds(60)));
     REQUIRE(model.rowCount() == LogModel::MAX_RECORDS);
     CHECK(model.index(0, LogModel::MessageColumn).data().toString() == "10");
     CHECK(model.index(model.rowCount() - 1, LogModel::MessageColumn).data().toString()
@@ -102,12 +99,7 @@ TEST_CASE("LogModel delivers records appended from another thread", "[qt][log]")
     worker.join();
 
     // The append was queued to this (the model's) thread; run the event loop until it lands.
-    QElapsedTimer timer;
-    timer.start();
-    while (model.rowCount() == 0 && timer.elapsed() < 5000) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-    }
-
+    REQUIRE(geck::test::pumpUntil([&model]() { return model.rowCount() != 0; }));
     REQUIRE(model.rowCount() == 1);
     CHECK(model.index(0, LogModel::MessageColumn).data().toString() == "from worker thread");
 }

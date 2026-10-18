@@ -18,6 +18,7 @@
 #include <QTextStream>
 #include <QTreeWidget>
 
+#include <algorithm>
 #include <array>
 #include <filesystem>
 #include <fstream>
@@ -25,6 +26,7 @@
 #include <stdexcept>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "format/ai/AiPacket.h"
 #include "format/map/MapObject.h"
@@ -62,6 +64,8 @@
 #include "ui/ExternalEditorLauncher.h"
 #include "ui/ScriptSourceService.h"
 #include "support/CompiledScript.h"
+#include "support/EditorResources.h"
+#include "support/QtWait.h"
 #include "ui/tools/ExitGridPlacementManager.h"
 #include "format/map/Map.h"
 #include "format/map/MapScript.h"
@@ -284,6 +288,13 @@ QAction* findAction(QObject& root, const QString& text) {
     }
 
     return nullptr;
+}
+
+// The cell at (row, column), failing the test rather than crashing the suite when it is missing.
+QTableWidgetItem& requireItem(const QTableWidget& table, int row, int column) {
+    QTableWidgetItem* item = table.item(row, column);
+    REQUIRE(item != nullptr);
+    return *item;
 }
 
 QComboBox* findComboBoxByToolTip(QWidget& root, const QString& tooltip) {
@@ -647,15 +658,15 @@ TEST_CASE("ScriptSelectorDialog shows index/filename/name/comment columns and re
     // index / filename / name / comment.
     int dudeRow = -1;
     for (int row = 0; row < table->rowCount(); ++row) {
-        if (table->item(row, 1)->text() == "obj_dude.int") {
+        if (requireItem(*table, row, 1).text() == "obj_dude.int") {
             dudeRow = row;
             break;
         }
     }
     REQUIRE(dudeRow >= 0);
-    CHECK(table->item(dudeRow, 0)->data(Qt::DisplayRole).toInt() == 0);
-    CHECK(table->item(dudeRow, 2)->text() == "The Chosen One");
-    CHECK(table->item(dudeRow, 3)->text() == "Player script."); // scripts.lst comment column
+    CHECK(requireItem(*table, dudeRow, 0).data(Qt::DisplayRole).toInt() == 0);
+    CHECK(requireItem(*table, dudeRow, 2).text() == "The Chosen One");
+    CHECK(requireItem(*table, dudeRow, 3).text() == "Player script."); // scripts.lst comment column
 
     // currentIndex == 2 is preselected; selectedIndex returns the program index, not the row.
     CHECK(dialog.selectedIndex() == 2);
@@ -777,7 +788,7 @@ TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][main
     auto resources = std::make_shared<geck::resource::GameResources>();
     geck::MainWindow window(resources, std::make_shared<geck::Settings>());
     window.show();
-    QTest::qWait(250);
+    REQUIRE(QTest::qWaitForWindowExposed(&window));
 
     auto* mapInfoDock = window.findChild<QDockWidget*>("MapInfoDock");
     auto* selectionDock = window.findChild<QDockWidget*>("SelectionDock");
@@ -822,7 +833,7 @@ TEST_CASE("Panel menu actions carry their Alt shortcuts", "[qt][mainwindow][keys
     auto resources = std::make_shared<geck::resource::GameResources>();
     geck::MainWindow window(resources, std::make_shared<geck::Settings>());
     window.show();
-    QTest::qWait(250);
+    REQUIRE(QTest::qWaitForWindowExposed(&window));
 
     struct ExpectedShortcut {
         const char* actionText;
@@ -855,7 +866,7 @@ TEST_CASE("A panel action raises a tabbed-behind dock instead of hiding it", "[q
     auto resources = std::make_shared<geck::resource::GameResources>();
     geck::MainWindow window(resources, std::make_shared<geck::Settings>());
     window.show();
-    QTest::qWait(250);
+    REQUIRE(QTest::qWaitForWindowExposed(&window));
 
     auto* mapInfoDock = window.findChild<QDockWidget*>("MapInfoDock");
     auto* selectionDock = window.findChild<QDockWidget*>("SelectionDock");
@@ -868,26 +879,21 @@ TEST_CASE("A panel action raises a tabbed-behind dock instead of hiding it", "[q
     mapInfoDock->show();
     selectionDock->show();
     mapInfoDock->raise(); // Map Info is the tab on top, Selection is behind it
-    QApplication::processEvents();
-    QTest::qWait(50);
 
+    REQUIRE(geck::test::pumpUntil([mapInfoDock]() { return !mapInfoDock->visibleRegion().isEmpty(); }));
     REQUIRE_FALSE(selectionDock->isHidden());          // visible to Qt...
     REQUIRE(selectionDock->visibleRegion().isEmpty()); // ...but not on screen
 
     selectionAction->trigger();
-    QApplication::processEvents();
-    QTest::qWait(50);
 
+    CHECK(geck::test::pumpUntil([selectionDock]() { return !selectionDock->visibleRegion().isEmpty(); })); // raised to the front tab
     CHECK_FALSE(selectionDock->isHidden());
-    CHECK_FALSE(selectionDock->visibleRegion().isEmpty()); // raised to the front tab
     CHECK(selectionAction->isChecked());
 
     // Now that it is the tab on top, the same action puts it away.
     selectionAction->trigger();
-    QApplication::processEvents();
-    QTest::qWait(50);
 
-    CHECK(selectionDock->isHidden());
+    CHECK(geck::test::pumpUntil([selectionDock]() { return selectionDock->isHidden(); }));
     CHECK_FALSE(selectionAction->isChecked());
 }
 
@@ -900,7 +906,7 @@ TEST_CASE("File menu offers Close Map, and closing with no map open is a safe no
     auto resources = std::make_shared<geck::resource::GameResources>();
     geck::MainWindow window(resources, std::make_shared<geck::Settings>());
     window.show();
-    QTest::qWait(100);
+    REQUIRE(QTest::qWaitForWindowExposed(&window));
 
     QAction* closeMap = findAction(window, "Close Map");
     REQUIRE(closeMap != nullptr);
@@ -931,12 +937,12 @@ TEST_CASE("DataPathsWidget shows highest priority on top and preserves stored or
     auto* table = widget.findChild<QTableWidget*>();
     REQUIRE(table != nullptr);
     REQUIRE(table->rowCount() == 3);
-    CHECK(table->item(0, 1)->text().toStdString() == "/data/mymod.dat"); // top row = highest priority
-    CHECK(table->item(2, 1)->text().toStdString() == "/data/base.dat");  // bottom row = lowest
+    CHECK(requireItem(*table, 0, 1).text().toStdString() == "/data/mymod.dat"); // top row = highest priority
+    CHECK(requireItem(*table, 2, 1).text().toStdString() == "/data/base.dat");  // bottom row = lowest
     // Priority counts from 1 at the top. The cell is right-aligned with the marker arrow leading,
     // so the number is what the text ends with.
-    CHECK(table->item(0, 0)->text().endsWith("1"));
-    CHECK(table->item(2, 0)->text().endsWith("3"));
+    CHECK(requireItem(*table, 0, 0).text().endsWith("1"));
+    CHECK(requireItem(*table, 2, 0).text().endsWith("3"));
 
     // Every row can be reordered: priority is the user's call. The built-in resources folder used
     // to block this - a row directly above it had Move Down greyed out, which stranded any path
@@ -948,8 +954,8 @@ TEST_CASE("DataPathsWidget shows highest priority on top and preserves stored or
             b->click();
         }
     }
-    CHECK(table->item(1, 1)->text().toStdString() == "/data/mymod.dat"); // moved one step down
-    CHECK(table->item(0, 1)->text().toStdString() == "/data/patch.dat");
+    CHECK(requireItem(*table, 1, 1).text().toStdString() == "/data/mymod.dat"); // moved one step down
+    CHECK(requireItem(*table, 0, 1).text().toStdString() == "/data/patch.dat");
 }
 
 #ifdef GECK_SCRIPTING_ENABLED
@@ -1073,7 +1079,7 @@ TEST_CASE("MapInfoPanel persists edited map names to a writable Data Path and re
     // Editing a name emits mapNamesChanged — the signal the main window turns into "map modified".
     QSignalSpy modifiedSpy(&panel, &geck::MapInfoPanel::mapNamesChanged);
     QTest::keyClicks(lookupEdit, "Z"); // user input fires textEdited -> mapNamesChanged
-    CHECK(modifiedSpy.count() >= 1);
+    CHECK(modifiedSpy.count() == 1);
 
     // Set the final values and persist — what the main window calls after writing the .map.
     lookupEdit->setText("Renamed Town");
@@ -1261,8 +1267,8 @@ TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name"
         REQUIRE(idItem != nullptr);
         if (idItem->data(Qt::DisplayRole).toInt() == 0) {
             foundScriptZero = true;
-            CHECK(table->item(row, 2)->text() == QStringLiteral("obj_dude.int"));   // COL_FILENAME
-            CHECK(table->item(row, 3)->text() == QStringLiteral("The Chosen One")); // COL_NAME
+            CHECK(requireItem(*table, row, 2).text() == QStringLiteral("obj_dude.int"));   // COL_FILENAME
+            CHECK(requireItem(*table, row, 3).text() == QStringLiteral("The Chosen One")); // COL_NAME
         }
     }
     CHECK(foundScriptZero);
@@ -1275,9 +1281,9 @@ TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name"
         REQUIRE(sectionItem != nullptr);
         if (sectionItem->text() == QStringLiteral("Map")) {
             foundMapRow = true;
-            CHECK(table->item(row, 1)->data(Qt::DisplayRole).toInt() == 0);         // COL_SCRIPT_ID (0-based)
-            CHECK(table->item(row, 2)->text() == QStringLiteral("obj_dude.int"));   // COL_FILENAME
-            CHECK(table->item(row, 3)->text() == QStringLiteral("The Chosen One")); // COL_NAME
+            CHECK(requireItem(*table, row, 1).data(Qt::DisplayRole).toInt() == 0);         // COL_SCRIPT_ID (0-based)
+            CHECK(requireItem(*table, row, 2).text() == QStringLiteral("obj_dude.int"));   // COL_FILENAME
+            CHECK(requireItem(*table, row, 3).text() == QStringLiteral("The Chosen One")); // COL_NAME
         }
     }
     CHECK(foundMapRow);
@@ -1289,11 +1295,10 @@ TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name"
     int mapRow = -1;
     qulonglong critterSid = 0;
     for (int row = 0; row < table->rowCount(); ++row) {
-        const QString section = table->item(row, 0)->text();  // COL_SECTION
-        const QTableWidgetItem* idItem = table->item(row, 1); // COL_SCRIPT_ID
+        const QString section = requireItem(*table, row, 0).text(); // COL_SECTION
         if (section == QStringLiteral("Critter")) {
             critterRow = row;
-            critterSid = idItem->data(Qt::UserRole).toULongLong();
+            critterSid = requireItem(*table, row, 1).data(Qt::UserRole).toULongLong(); // COL_SCRIPT_ID
         } else if (section == QStringLiteral("Map")) {
             mapRow = row;
         }
@@ -1356,8 +1361,8 @@ TEST_CASE("ScriptsPanel shows the selected script's local variables", "[qt][scri
 
     scriptsTable->selectRow(0); // selecting the script reveals its local variables
     REQUIRE(lvarTable->rowCount() == 2);
-    CHECK(lvarTable->item(0, 1)->data(Qt::DisplayRole).toInt() == 111); // column 1 = Value
-    CHECK(lvarTable->item(1, 1)->data(Qt::DisplayRole).toInt() == 222);
+    CHECK(requireItem(*lvarTable, 0, 1).data(Qt::DisplayRole).toInt() == 111); // column 1 = Value
+    CHECK(requireItem(*lvarTable, 1, 1).data(Qt::DisplayRole).toInt() == 222);
 }
 
 // After the table fills, each script is linted (one per event-loop turn) and its rows get a marker:
@@ -1377,8 +1382,10 @@ TEST_CASE("ScriptsPanel marks scripts the lint finds problems in", "[qt][scripts
     mapFile.map_scripts[static_cast<int>(geck::MapScript::ScriptType::ITEM)].push_back(clean);
     mapFile.map_local_vars = { 0, 0, 0, 0 };
 
+    std::vector<int> linted; // program indices the panel has asked about, in order
     geck::ScriptsPanel panel(data.resources());
-    panel.setStatusProvider([](int programIndex) {
+    panel.setStatusProvider([&linted](int programIndex) {
+        linted.push_back(programIndex);
         geck::ScriptSourceService::ScriptStatus status;
         status.resolved = true;
         auto report = std::make_shared<geck::resource::ScriptReport>();
@@ -1398,18 +1405,19 @@ TEST_CASE("ScriptsPanel marks scripts the lint finds problems in", "[qt][scripts
     REQUIRE(table != nullptr);
     const auto filenameCell = [table](int programIndex) -> QTableWidgetItem* {
         for (int row = 0; row < table->rowCount(); ++row) {
-            if (table->item(row, 1)->data(Qt::DisplayRole).toInt() == programIndex) {
+            if (requireItem(*table, row, 1).data(Qt::DisplayRole).toInt() == programIndex) {
                 return table->item(row, 2);
             }
         }
         return nullptr;
     };
-    QTRY_VERIFY_WITH_TIMEOUT(filenameCell(0) != nullptr && !filenameCell(0)->toolTip().isEmpty(), 2000);
+    // The provider returns into markRows, so once it has seen script 1 both rows are marked.
+    REQUIRE(geck::test::pumpUntil([&linted]() { return std::ranges::find(linted, 1) != linted.end(); }));
+    REQUIRE(filenameCell(0) != nullptr);
     const QString tip = filenameCell(0)->toolTip();
     CHECK(tip.contains("Its local variables 0-3 overlap those of clean.int, so they share them."));
     CHECK(tip.contains("obj_dude.ssl line 12: message 150 is not in dialog/obj_dude.msg"));
     CHECK_FALSE(filenameCell(0)->icon().isNull());
-    QCoreApplication::processEvents();
     REQUIRE(filenameCell(1) != nullptr);
     CHECK(filenameCell(1)->toolTip().isEmpty()); // nothing wrong with the clean script
     CHECK(filenameCell(1)->icon().isNull());
@@ -1446,15 +1454,15 @@ TEST_CASE("ScriptsPanel marks scripts wrong for where the map places them", "[qt
     REQUIRE(table != nullptr);
     const auto filenameCell = [table](int programIndex) -> QTableWidgetItem* {
         for (int row = 0; row < table->rowCount(); ++row) {
-            if (table->item(row, 1)->data(Qt::DisplayRole).toInt() == programIndex) {
+            if (requireItem(*table, row, 1).data(Qt::DisplayRole).toInt() == programIndex) {
                 return table->item(row, 2);
             }
         }
         return nullptr;
     };
-    QTRY_VERIFY_WITH_TIMEOUT(filenameCell(0) != nullptr && !filenameCell(0)->toolTip().isEmpty(), 2000);
+    REQUIRE(geck::test::pumpUntil([&filenameCell]() { return filenameCell(0) != nullptr && !filenameCell(0)->toolTip().isEmpty(); }));
     CHECK(filenameCell(0)->toolTip().contains("mapscr.ssl line 30: This is a system script"));
-    QTRY_VERIFY_WITH_TIMEOUT(filenameCell(1) != nullptr && !filenameCell(1)->toolTip().isEmpty(), 2000);
+    REQUIRE(geck::test::pumpUntil([&filenameCell]() { return filenameCell(1) != nullptr && !filenameCell(1)->toolTip().isEmpty(); }));
     CHECK(filenameCell(1)->toolTip().contains("A spatial script without spatial_p_proc"));
 }
 
@@ -1524,16 +1532,11 @@ TEST_CASE("Unified Exit-Grids tool exposes one button with an exclusive sub-mode
 }
 
 // The editor-mode half: the two sub-modes map to distinct EditorWidget modes (PlaceExitGrid vs
-// MarkExits). Constructing an EditorWidget eagerly loads art/misc/HEX.frm, so this runs only with game
-// data mounted; without it we skip (the dropdown test above covers the wiring with no data).
+// MarkExits). Constructing an EditorWidget eagerly loads art/misc/HEX.frm, which the bundled
+// resources/ ships.
 TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exitgrids]") {
-    auto resources = std::make_shared<geck::resource::GameResources>();
-    std::unique_ptr<geck::EditorWidget> editor;
-    try {
-        editor = std::make_unique<geck::EditorWidget>(*resources, makeMap("exitgrids.map"));
-    } catch (const std::exception& e) {
-        SKIP(std::string("EditorWidget needs mounted game data (HEX.frm): ") + e.what());
-    }
+    auto resources = geck::test::editorResources();
+    auto editor = std::make_unique<geck::EditorWidget>(*resources, makeMap("exitgrids.map"));
 
     CHECK(editor->currentMode() == geck::EditorMode::Select);
 
@@ -1556,7 +1559,7 @@ TEST_CASE("No two actions in the window share a shortcut", "[qt][mainwindow][key
     auto resources = std::make_shared<geck::resource::GameResources>();
     geck::MainWindow window(resources, std::make_shared<geck::Settings>());
     window.show();
-    QTest::qWait(250);
+    REQUIRE(QTest::qWaitForWindowExposed(&window));
 
     QHash<QString, QString> owners; // key text -> the action already holding it
     for (const QAction* action : window.findChildren<QAction*>()) {
@@ -1578,10 +1581,10 @@ TEST_CASE("No two actions in the window share a shortcut", "[qt][mainwindow][key
 TEST_CASE("Elevation actions carry Ctrl+digit and stay no-ops until a map has that elevation", "[qt][mainwindow][keys]") {
     removeTestSettings();
 
-    auto resources = std::make_shared<geck::resource::GameResources>();
+    auto resources = geck::test::editorResources();
     geck::MainWindow window(resources, std::make_shared<geck::Settings>());
     window.show();
-    QTest::qWait(250);
+    REQUIRE(QTest::qWaitForWindowExposed(&window));
 
     struct ExpectedShortcut {
         const char* actionText;
@@ -1600,6 +1603,27 @@ TEST_CASE("Elevation actions carry Ctrl+digit and stay no-ops until a map has th
         CHECK(action->shortcut() == entry.keys);
         CHECK_FALSE(action->isEnabled()); // no map open
     }
+
+    // A map with elevations 1 and 2 enables exactly those, and the key switches the editor there.
+    auto map = makeMap("elevations.map");
+    map->getMapFile().header.flags = geck::Map::elevationFlag(geck::ELEVATION_3);
+    window.setEditorWidget(std::make_unique<geck::EditorWidget>(*resources, std::move(map)));
+    auto* editor = window.findChild<geck::EditorWidget*>();
+    REQUIRE(editor != nullptr);
+
+    QAction* elevation1 = findAction(window, "Elevation 1");
+    QAction* elevation2 = findAction(window, "Elevation 2");
+    QAction* elevation3 = findAction(window, "Elevation 3");
+    REQUIRE(elevation1 != nullptr);
+    REQUIRE(elevation2 != nullptr);
+    REQUIRE(elevation3 != nullptr);
+    CHECK(elevation1->isEnabled());
+    CHECK(elevation2->isEnabled());
+    CHECK_FALSE(elevation3->isEnabled());
+    REQUIRE(editor->getCurrentElevation() == geck::ELEVATION_1);
+
+    elevation2->trigger();
+    CHECK(editor->getCurrentElevation() == geck::ELEVATION_2);
 }
 
 // B and R used to be window-scoped QAction shortcuts, which fired while a palette grid or a tree
@@ -1611,7 +1635,7 @@ TEST_CASE("Single-letter tool keys are off the window-scoped actions", "[qt][mai
     auto resources = std::make_shared<geck::resource::GameResources>();
     geck::MainWindow window(resources, std::make_shared<geck::Settings>());
     window.show();
-    QTest::qWait(250);
+    REQUIRE(QTest::qWaitForWindowExposed(&window));
 
     for (const char* text : { "Scroll Blocker Rectangle", "Rotate" }) {
         QAction* action = findAction(window, text);
@@ -1628,23 +1652,17 @@ TEST_CASE("Single-letter tool keys are off the window-scoped actions", "[qt][mai
 // "Inspect the selection": Return (and numpad Enter, a distinct key code) reveals the Selection
 // panel. Both are scoped to the canvas so a Return typed in a panel's filter box is left alone, and
 // both must stand down in MarkExits mode, where Enter finalizes the in-progress Draw-edge polyline
-// (InputHandler). Constructing an EditorWidget eagerly loads art/misc/HEX.frm, so this needs game
-// data mounted; without it we skip.
+// (InputHandler). Constructing an EditorWidget eagerly loads art/misc/HEX.frm, which the bundled
+// resources/ ships.
 TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge mode", "[qt][mainwindow][keys]") {
     removeTestSettings();
 
-    auto resources = std::make_shared<geck::resource::GameResources>();
+    auto resources = geck::test::editorResources();
     geck::MainWindow window(resources, std::make_shared<geck::Settings>());
     window.show();
-    QTest::qWait(250);
+    REQUIRE(QTest::qWaitForWindowExposed(&window));
 
-    std::unique_ptr<geck::EditorWidget> editor;
-    try {
-        editor = std::make_unique<geck::EditorWidget>(*resources, makeMap("inspect.map"));
-    } catch (const std::exception& e) {
-        SKIP(std::string("EditorWidget needs mounted game data (HEX.frm): ") + e.what());
-    }
-    window.setEditorWidget(std::move(editor));
+    window.setEditorWidget(std::make_unique<geck::EditorWidget>(*resources, makeMap("inspect.map")));
     QApplication::processEvents();
 
     auto* editorWidget = window.findChild<geck::EditorWidget*>();
@@ -1982,14 +2000,16 @@ TEST_CASE("MapInfoPanel global-variable edits can be undone through the state it
             before = b;
         });
 
-    tree->topLevelItem(0)->setText(1, QStringLiteral("7"));
+    QTreeWidgetItem* row = tree->topLevelItem(0);
+    REQUIRE(row != nullptr);
+    row->setText(1, QStringLiteral("7"));
     REQUIRE(before.has_value());
     CHECK(fixture.map->getMapFile().map_global_vars[0] == 7);
 
     // The host's undo applies the captured state: the .map block, the rows and the .gam come back.
     panel.applyGlobalVarsState(*before);
     CHECK(fixture.map->getMapFile().map_global_vars[0] == 10);
-    CHECK(tree->topLevelItem(0)->text(1) == QStringLiteral("10"));
+    CHECK(row->text(1) == QStringLiteral("10"));
     panel.persistMapVars();
     const std::filesystem::path savedGam = std::filesystem::path(fixture.writableDir.path().toStdString()) / "maps" / "testmap.gam";
     CHECK(geck::io::readFile(savedGam).find("MVAR_first := 10;") != std::string::npos);

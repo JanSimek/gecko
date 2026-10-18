@@ -80,10 +80,21 @@ TEST_CASE("SetPlayerPosition hint advertises click to set the start and Esc to c
 }
 
 TEST_CASE("Every hint uses the middot separator between multiple keys", "[hints]") {
-    // MarkExits has four parts (Space, Shift, Enter/double-click, Esc), so it must contain the
-    // separator exactly three times.
-    const QString hint = hintForContext(EditorMode::MarkExits, false);
-    REQUIRE(hint.count(QString::fromUtf8("·")) == 3);
+    // Each part is "<key>: <what>", so a hint of N parts carries N-1 separators. MarkExits has four
+    // parts (Space, Shift, Enter/double-click, Esc), so it must contain the separator exactly three times.
+    const QString separator = QStringLiteral("  ") + QChar(0x00B7) + QStringLiteral("  ");
+    REQUIRE(hintForContext(EditorMode::MarkExits, false).count(separator) == 3);
+
+    using enum EditorMode;
+    for (const EditorMode mode : { Select, PlaceTile, PlaceExitGrid, MarkExits, SetPlayerPosition, StampPattern, PluginTool }) {
+        for (const bool hasSelection : { false, true }) {
+            const QString hint = hintForContext(mode, hasSelection);
+            INFO("mode " << static_cast<int>(mode) << ", selection " << hasSelection << ": " << hint.toStdString());
+            if (!hint.isEmpty()) {
+                CHECK(hint.count(QStringLiteral(": ")) == hint.count(separator) + 1);
+            }
+        }
+    }
 }
 
 TEST_CASE("PluginTool hint falls back to the host's cancel guarantee", "[hints]") {

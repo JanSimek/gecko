@@ -176,6 +176,11 @@ target_include_directories(qt_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
 
+# The editor's bundled art (art/misc/HEX.frm, ...), mounted by support/EditorResources.h.
+target_compile_definitions(qt_tests PRIVATE
+    GECK_RESOURCES_DIR="${CMAKE_SOURCE_DIR}/resources"
+)
+
 # Catch2 test discovery for general tests (testing is enabled by the top-level CMakeLists)
 include(Catch)
 
@@ -195,17 +200,5 @@ add_test(NAME qt_tests COMMAND qt_tests)
 # CMakeLists), which copies the union of every executable's DLLs once — doing it per-target here
 # raced with gecko's identical copies into the shared output dir.
 
-# general_tests resolves fixtures by absolute path
-# (GECK_TEST_DATA_DIR via test_support), so no tests/data copy is needed for them.
-
-# qt_tests needs resources/ staged next to it at runtime. Single-config builds share the one
-# copy_runtime_resources target (so gecko + qt_tests don't race copying into the same dir);
-# multi-config builds copy per-config here.
-if(TARGET copy_runtime_resources)
-    add_dependencies(qt_tests copy_runtime_resources)
-else()
-    add_custom_command(
-        TARGET qt_tests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_FILE_DIR:qt_tests>/resources
-    )
-endif()
+# Both suites resolve fixtures (GECK_TEST_DATA_DIR) and the bundled resources/
+# (GECK_RESOURCES_DIR) by absolute path, so nothing is staged next to them.

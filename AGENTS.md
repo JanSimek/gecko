@@ -29,6 +29,10 @@ ctest --test-dir build-claude --output-on-failure             # everything ctest
   `qt_tests` (Qt UI, headless harness in `tests/qt/qt_test_main.cpp`).
 - Tests need no game data. New test files go under `tests/{general,qt}/test_<feature>.cpp`
   and must be added to `tests/CMakeLists.txt` by hand; fixtures live in `tests/data/`.
+- In `qt_tests` assert with Catch2 `REQUIRE`/`CHECK` and wait with
+  `REQUIRE(geck::test::pumpUntil(...))` (`tests/support/QtWait.h`), never `QVERIFY`/`QTRY_*` or a
+  fixed `qWait`: QTestLib failures don't reach Catch2. An `EditorWidget` needs
+  `test::editorResources()` (`tests/support/EditorResources.h`) for its bundled art.
 - Real game data for manual checks: `--data <dir-or-.dat>` (repeatable) on `gecko-cli` /
   `gecko-mcp`; the editor takes `-d/--data`, `-m/--map`, `--debug`, but ignores `--data` once a
   `settings.json` exists (data paths then come from Preferences).

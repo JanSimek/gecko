@@ -118,7 +118,9 @@ TEST_CASE("CompletenessView clearReport returns to the no-map state", "[qt][comp
     auto* tree = view.findChild<QTreeWidget*>();
     REQUIRE(tree != nullptr);
     CHECK(tree->topLevelItemCount() == 0);
-    CHECK_FALSE(findButtonByText(view, "Refresh")->isEnabled());
+    const QAbstractButton* refresh = findButtonByText(view, "Refresh");
+    REQUIRE(refresh != nullptr);
+    CHECK_FALSE(refresh->isEnabled());
 }
 
 TEST_CASE("CompletenessView refresh button emits refreshRequested", "[qt][completeness]") {
@@ -126,6 +128,8 @@ TEST_CASE("CompletenessView refresh button emits refreshRequested", "[qt][comple
     view.setReport(reportWithGaps(), "artemple.map");
 
     QSignalSpy spy(&view, &CompletenessView::refreshRequested);
-    findButtonByText(view, "Refresh")->click();
+    QAbstractButton* refresh = findButtonByText(view, "Refresh");
+    REQUIRE(refresh != nullptr);
+    refresh->click();
     CHECK(spy.count() == 1);
 }

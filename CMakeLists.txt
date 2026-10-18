@@ -36,8 +36,8 @@ if(NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-    # Single owner of the build-tree resource staging. The editor and qt_tests both run from
-    # this shared CMAKE_RUNTIME_OUTPUT_DIRECTORY, and each used to POST_BUILD-copy
+    # Single owner of the build-tree resource staging. The editor runs from this shared
+    # CMAKE_RUNTIME_OUTPUT_DIRECTORY, and it and qt_tests each used to POST_BUILD-copy
     # ${CMAKE_SOURCE_DIR}/resources into the same ${CMAKE_BINARY_DIR}/resources — which raced under
     # parallel builds (intermittent "Error copying directory ..." on Windows CI). One ALL target now
     # owns the copy and consumers depend on it instead of duplicating it. (Single-config only;

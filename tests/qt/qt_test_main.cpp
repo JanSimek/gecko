@@ -10,6 +10,7 @@
 #include <QApplication>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QTest>
 
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_case_info.hpp>
@@ -80,6 +81,12 @@ int main(int argc, char** argv) {
     app.setApplicationName("gecko-qt-tests");
     app.setOrganizationName("gecko");
     Q_INIT_RESOURCE(icons);
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    // A failed QVERIFY/QCOMPARE otherwise just returns from the test function, which Catch2 counts
+    // as a pass. Throwing makes Catch2 report it; tests should still use REQUIRE/CHECK.
+    QTest::setThrowOnFail(true);
+#endif
 
     Catch::Session session;
     const int result = session.run(argc, argv);

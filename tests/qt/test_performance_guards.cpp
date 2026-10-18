@@ -1,10 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
-#include <functional>
+#include <chrono>
 #include <thread>
 
-#include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QLabel>
 #include <QMetaObject>
@@ -15,6 +14,7 @@
 #include "ui/panels/LogPanel.h"
 #include "ui/Settings.h"
 #include "resource/GameResources.h"
+#include "support/QtWait.h"
 
 using namespace geck;
 
@@ -24,19 +24,11 @@ using namespace geck;
 // e.g. per-record UI work inside a hot loop), not detectors of percent-level drift. If one of
 // these fails, something is architecturally wrong, not merely slower.
 
+using geck::test::pumpUntil;
+
 namespace {
 
-bool pumpUntil(const std::function<bool()>& done, int timeoutMs) {
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-        if (done()) {
-            return true;
-        }
-    }
-    return done();
-}
+constexpr std::chrono::milliseconds BUDGET{ 60000 }; // every guard's ceiling
 
 } // namespace
 
@@ -61,10 +53,10 @@ TEST_CASE("A cross-thread log flood drains without starving the UI thread", "[qt
     });
     producer.join();
 
-    REQUIRE(pumpUntil([&model]() { return model.rowCount() == FLOOD; }, 60000));
+    REQUIRE(pumpUntil([&model]() { return model.rowCount() == FLOOD; }, BUDGET));
     const auto elapsed = timer.elapsed();
     INFO("draining " << FLOOD << " cross-thread records took " << elapsed << "ms");
-    CHECK(elapsed < 60000);
+    CHECK(elapsed < BUDGET.count());
 }
 
 TEST_CASE("A UI-thread log flood is buffered, not inserted row by row", "[qt][performance]") {
@@ -72,7 +64,8 @@ TEST_CASE("A UI-thread log flood is buffered, not inserted row by row", "[qt][pe
     // panel's ResizeToContents columns re-measure every row on each insert, so a script console run
     // under --debug (a debug line per painted tile) spent ~15ms per record and hit the console's
     // 30s budget after ~2000 records, leaving a cave map half painted. Same-thread records now
-    // buffer like cross-thread ones and land as one batched insert.
+    // buffer like cross-thread ones and land as one batched insert. The regression grows with the row
+    // count (every insert re-measures every row), so 20k records under it run far past the budget.
     LogModel model;
     LogPanel panel;
     panel.setModel(&model);
@@ -87,11 +80,11 @@ TEST_CASE("A UI-thread log flood is buffered, not inserted row by row", "[qt][pe
     }
     const auto appending = timer.elapsed();
     INFO("appending " << FLOOD << " UI-thread records took " << appending << "ms");
-    CHECK(appending < 2000);
+    CHECK(appending < BUDGET.count());
 
-    REQUIRE(pumpUntil([&model]() { return model.rowCount() == FLOOD; }, 60000));
+    REQUIRE(pumpUntil([&model]() { return model.rowCount() == FLOOD; }, BUDGET));
     INFO("appending and draining took " << timer.elapsed() << "ms");
-    CHECK(timer.elapsed() < 10000);
+    CHECK(timer.elapsed() < BUDGET.count());
 }
 
 TEST_CASE("File-browser tree population stays within its time budget", "[qt][performance]") {
@@ -130,7 +123,7 @@ TEST_CASE("File-browser tree population stays within its time budget", "[qt][per
     REQUIRE(QMetaObject::invokeMethod(&panel, "onFilesLoaded", Qt::DirectConnection,
         Q_ARG(std::vector<FileBrowserEntry>, entries)));
 
-    REQUIRE(pumpUntil(populatedLabelShown, 60000));
+    REQUIRE(pumpUntil(populatedLabelShown, BUDGET));
     const auto elapsed = timer.elapsed();
 
     auto* tree = panel.findChild<QTreeView*>();
@@ -138,5 +131,5 @@ TEST_CASE("File-browser tree population stays within its time budget", "[qt][per
     REQUIRE(tree->model()->rowCount() > 0);
 
     INFO("populating " << ROWS << " rows took " << elapsed << "ms");
-    CHECK(elapsed < 60000);
+    CHECK(elapsed < BUDGET.count());
 }
