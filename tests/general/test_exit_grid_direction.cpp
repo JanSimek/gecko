@@ -15,7 +15,6 @@
 using geck::ExitGridArt;
 using geck::exitGridArtForDirection;
 using geck::exitGridArtForFacing;
-using geck::exitGridArtForSegment;
 using geck::ExitGridDestinationKind;
 using geck::exitGridDirectionForLine;
 using geck::exitGridDirOfProto;
@@ -42,12 +41,17 @@ bool isExitGridProto(uint32_t proPid) {
     return proPid >= ExitGrid::FIRST_EXIT_GRID_PID && proPid <= ExitGrid::LAST_EXIT_GRID_PID;
 }
 
+// The art a drawn stroke gets, unflipped: the line's direction rendered for one destination kind.
+ExitGridArt artForLine(int dx, int dy, int outwardX, int outwardY, ExitGridDestinationKind kind) {
+    return exitGridArtForDirection(exitGridDirectionForLine(dx, dy, outwardX, outwardY, false), kind);
+}
+
 // Assert both destination kinds emit an in-range proto for one segment, across every outward facing.
 void checkSegmentProtosInRange(int dx, int dy) {
     for (int ox = -1; ox <= 1; ++ox) {
         for (int oy = -1; oy <= 1; ++oy) {
-            const ExitGridArt g = exitGridArtForSegment(dx, dy, ox, oy, INTER);
-            const ExitGridArt b = exitGridArtForSegment(dx, dy, ox, oy, WORLD);
+            const ExitGridArt g = artForLine(dx, dy, ox, oy, INTER);
+            const ExitGridArt b = artForLine(dx, dy, ox, oy, WORLD);
             CHECK(isExitGridProto(g.proPid));
             CHECK(isExitGridProto(b.proPid));
         }
@@ -81,47 +85,47 @@ TEST_CASE("exitGridArtForDirection emits green for inter-map and brown for world
 
 // Verified data points: a horizontal line for a world/town exit -> proto 0x05000013 (dir 3, TOP), brown
 // frm 0x05000024; a "/" diagonal -> proto 0x05000014 (dir 4), brown frm 0x05000025.
-TEST_CASE("exitGridArtForSegment matches the user's horizontal data point", "[exitgrid][segment]") {
+TEST_CASE("exitGridDirectionForLine matches the user's horizontal data point", "[exitgrid][segment]") {
     // A horizontal screen segment (dx dominates), hex above centre -> TOP edge, world map -> brown.
-    const ExitGridArt art = exitGridArtForSegment(/*dx=*/200, /*dy=*/0,
+    const ExitGridArt art = artForLine(/*dx=*/200, /*dy=*/0,
         /*outwardX=*/0, /*outwardY=*/-300, WORLD);
     CHECK(art.proPid == 0x05000013u);
     CHECK(art.frmPid == 0x05000024u);
 }
 
-TEST_CASE("exitGridArtForSegment matches the user's '/' diagonal data point", "[exitgrid][segment]") {
+TEST_CASE("exitGridDirectionForLine matches the user's '/' diagonal data point", "[exitgrid][segment]") {
     // A "/" segment runs up-right: dx > 0, dy < 0 in screen space. side B faces up-right (dir 5);
     // a hex facing down-left takes side A (dir 4). World map -> brown ext2grd5 = 0x05000025.
-    const ExitGridArt art = exitGridArtForSegment(/*dx=*/120, /*dy=*/-120,
+    const ExitGridArt art = artForLine(/*dx=*/120, /*dy=*/-120,
         /*outwardX=*/-200, /*outwardY=*/200, WORLD);
     CHECK(art.proPid == 0x05000014u);
     CHECK(art.frmPid == 0x05000025u);
 }
 
-TEST_CASE("exitGridArtForSegment: a vertical line -> left/right (the 96x24 wide bars)", "[exitgrid][segment]") {
+TEST_CASE("exitGridDirectionForLine: a vertical line -> left/right (the 96x24 wide bars)", "[exitgrid][segment]") {
     // A vertical screen segment (dy dominates). A hex left of centre faces LEFT (dir 0).
-    const ExitGridArt left = exitGridArtForSegment(0, 200, -300, 0, INTER);
+    const ExitGridArt left = artForLine(0, 200, -300, 0, INTER);
     CHECK(left.proPid == ExitGrid::LEFT_PRO_PID);
     CHECK(left.proPid == 0x05000010u);
     // A hex right of centre faces RIGHT (dir 1).
-    const ExitGridArt right = exitGridArtForSegment(0, 200, 300, 0, INTER);
+    const ExitGridArt right = artForLine(0, 200, 300, 0, INTER);
     CHECK(right.proPid == ExitGrid::RIGHT_PRO_PID);
     CHECK(right.proPid == 0x05000011u);
 }
 
-TEST_CASE("exitGridArtForSegment: a horizontal line -> top/bottom (the 32x96 tall bars)", "[exitgrid][segment]") {
-    const ExitGridArt top = exitGridArtForSegment(200, 0, 0, -300, INTER);
+TEST_CASE("exitGridDirectionForLine: a horizontal line -> top/bottom (the 32x96 tall bars)", "[exitgrid][segment]") {
+    const ExitGridArt top = artForLine(200, 0, 0, -300, INTER);
     CHECK(top.proPid == ExitGrid::TOP_PRO_PID);
     CHECK(top.proPid == 0x05000013u);
-    const ExitGridArt bottom = exitGridArtForSegment(200, 0, 0, 300, INTER);
+    const ExitGridArt bottom = artForLine(200, 0, 0, 300, INTER);
     CHECK(bottom.proPid == ExitGrid::BOTTOM_PRO_PID);
     CHECK(bottom.proPid == 0x05000012u);
 }
 
-TEST_CASE("exitGridArtForSegment: a '\\' line -> the dir 6/7 diagonal pair", "[exitgrid][segment]") {
+TEST_CASE("exitGridDirectionForLine: a '\\' line -> the dir 6/7 diagonal pair", "[exitgrid][segment]") {
     // A "\" segment runs down-right: dx and dy same sign. Two opposite-facing hexes split the pair.
-    const ExitGridArt a = exitGridArtForSegment(120, 120, -200, -200, INTER);
-    const ExitGridArt b = exitGridArtForSegment(120, 120, 200, 200, INTER);
+    const ExitGridArt a = artForLine(120, 120, -200, -200, INTER);
+    const ExitGridArt b = artForLine(120, 120, 200, 200, INTER);
     CHECK((a.proPid == ExitGrid::BACK_A_PRO_PID || a.proPid == ExitGrid::BACK_B_PRO_PID));
     CHECK((b.proPid == ExitGrid::BACK_A_PRO_PID || b.proPid == ExitGrid::BACK_B_PRO_PID));
     CHECK(a.proPid != b.proPid); // opposite facings pick opposite sides

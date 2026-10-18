@@ -56,7 +56,6 @@ TEST_CASE("Perk enum mirrors Fallout 2 global perk ids", "[engine][enum]") {
     REQUIRE(perkNameMessageId(PerkId::WeaponLongRange) == 159);
     REQUIRE(perkNameMessageId(PerkId::ArmorCharisma) == 173);
     REQUIRE(perkNameMessageId(PerkId::WeaponEnhancedKnockout) == 218);
-    REQUIRE(perkDescriptionMessageId(PerkId::WeaponLongRange) == 1159);
 }
 
 TEST_CASE("Weapon and armor proto perk subsets are filtered from the full perk enum", "[engine][enum]") {

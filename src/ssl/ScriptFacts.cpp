@@ -151,8 +151,4 @@ ScriptFacts readFacts(const ScriptUnit& unit) {
     return facts;
 }
 
-ScriptFacts inspectScript(const SourceProvider& provider, const std::filesystem::path& path, const PreprocessOptions& options) {
-    return readFacts(ScriptUnit::load(provider, path, options));
-}
-
 } // namespace geck::ssl

@@ -178,16 +178,6 @@ namespace exitgrid_detail {
 
 } // namespace exitgrid_detail
 
-/// The directional exit-grid art for a hex drawn as part of a line. `dx`/`dy` are the hex's local
-/// segment direction (screen, y DOWNWARD); `outwardX`/`outwardY` its offset from the map centre; `kind`
-/// selects green vs brown. The segment axis picks the direction pair, the outward facing the side.
-inline ExitGridArt exitGridArtForSegment(int dx, int dy, int outwardX, int outwardY,
-    ExitGridDestinationKind kind) {
-    const exitgrid_detail::SegmentAxis axis = exitgrid_detail::classifySegment(dx, dy);
-    const int dir = exitgrid_detail::directionForAxis(axis, outwardX, outwardY);
-    return exitGridArtForDirection(dir, kind);
-}
-
 /// Flip a direction (0..7) to the OPPOSITE side of its axis pair (LEFT<->RIGHT, etc). The directions
 /// are four adjacent pairs (0/1, 2/3, 4/5, 6/7), so toggling the low bit swaps within the pair and
 /// keeps the axis. The two bitmaps in a pair are identical; the flip only changes the sign of

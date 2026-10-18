@@ -13,7 +13,6 @@
 #include "rendering/ToolPreview.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
-#include "util/ColorUtils.h"
 #include "util/Constants.h"
 #include "util/Coordinates.h"
 #include "util/TileUtils.h"
@@ -566,8 +565,8 @@ void RenderingEngine::applySelectionRectangleColors(sf::RectangleShape& rectangl
             SelectionColors::SCROLL_BLOCKER_FILL_ALPHA));
         rectangle.setOutlineColor(sf::Color(0, 200, 0, SelectionColors::SCROLL_BLOCKER_OUTLINE_ALPHA));
     } else {
-        rectangle.setFillColor(ColorUtils::createSelectionFillColor());
-        rectangle.setOutlineColor(ColorUtils::createSelectionOutlineColor());
+        rectangle.setFillColor(TileColors::selectionFill());
+        rectangle.setOutlineColor(TileColors::selectionOutline());
     }
 }
 

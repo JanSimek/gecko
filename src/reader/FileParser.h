@@ -1,13 +1,14 @@
 #pragma once
 
+#include <array>
 #include <memory>
 #include <filesystem>
+#include <vector>
 #include <spdlog/spdlog.h>
 
 #include "StreamBuffer.h"
 #include "ReaderExceptions.h"
 #include "BinaryUtils.h"
-#include "FormatValidator.h"
 #include <stdexcept>
 
 namespace geck {
@@ -18,7 +19,6 @@ protected:
     StreamBuffer _stream;
     std::filesystem::path _path;
     StreamBuffer::ENDIANNESS _endianness = StreamBuffer::ENDIANNESS::BIG;
-    bool _preserveAllData = false;
     std::unique_ptr<BinaryUtils> _binaryUtils;
 
 public:
@@ -63,29 +63,11 @@ public:
 
     virtual std::unique_ptr<T> read() = 0;
 
-    void setPreserveAllData(bool preserve) { _preserveAllData = preserve; }
-    bool getPreserveAllData() const { return _preserveAllData; }
-
     BinaryUtils& getBinaryUtils() {
         if (!_binaryUtils) {
             throw std::runtime_error("BinaryUtils not initialized - call openFile first");
         }
         return *_binaryUtils;
-    }
-
-    inline uint32_t read_u8() {
-        validateStreamPosition(1);
-        return _stream.uint8();
-    }
-
-    inline uint32_t read_le_u32() {
-        validateStreamPosition(4);
-        return _stream.uint32();
-    }
-
-    inline uint8_t read_be_u8() {
-        validateStreamPosition(1);
-        return _stream.uint8();
     }
 
     inline uint16_t read_be_u16() {

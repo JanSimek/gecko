@@ -92,7 +92,6 @@ public:
         return rotationIsValid(rotation) ? static_cast<Rotation>(rotation) : Rotation::Invalid;
     }
 
-    constexpr bool hasFid() const { return static_cast<int32_t>(_fid) >= 0; }
     constexpr bool is(ObjectType type) const { return objectType() == type; }
 
     constexpr bool operator==(const FrmId&) const = default;

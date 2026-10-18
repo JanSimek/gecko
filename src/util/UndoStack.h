@@ -65,9 +65,6 @@ public:
         _redo.clear();
     }
 
-    void setMaxCommands(size_t maxCommands) { _maxCommands = maxCommands; }
-    size_t maxCommands() const { return _maxCommands; }
-
 private:
     std::vector<UndoCommand> _undo;
     std::vector<UndoCommand> _redo;

@@ -3,7 +3,6 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
-#include <set>
 #include <vector>
 
 #include "editor/Hex.h"
@@ -130,31 +129,6 @@ inline std::vector<int> hexLine(int startHex, int endHex) {
         line.push_back(cr.row * WIDTH + cr.col);
     }
     return line;
-}
-
-/// The deduped, gap-free hex run through a polyline of hex indices: consecutive vertices are joined
-/// by hexLine() and the result has each hex once, in first-seen order. Off-grid vertices (hex < 0)
-/// are skipped. Both the editor's "Draw edge" tool and its preview use this so they trace the same
-/// hexes from the same vertex list.
-inline std::vector<int> hexPolyline(const std::vector<int>& vertexHexes) {
-    std::vector<int> result;
-    std::set<int> seen;
-    int prevHex = -1;
-    for (const int hex : vertexHexes) {
-        if (hex < 0) {
-            continue;
-        }
-        const std::vector<int> segment = (prevHex >= 0)
-            ? hexLine(prevHex, hex)
-            : std::vector<int>{ hex };
-        for (const int lineHex : segment) {
-            if (seen.insert(lineHex).second) {
-                result.push_back(lineHex);
-            }
-        }
-        prevHex = hex;
-    }
-    return result;
 }
 
 } // namespace geck::hexline

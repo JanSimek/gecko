@@ -1,16 +1,13 @@
 #ifndef GECK_MAPPER_STREAMBUFFER_H
 #define GECK_MAPPER_STREAMBUFFER_H
 
+#include <cstdint>
 #include <fstream>
 #include <string>
 #include <memory>
 #include <vector>
 
-#include "format/dat/DatEntry.h"
-
 namespace geck {
-
-class DatReader;
 
 /**
  * @brief A data stream for binary resource files loaded from either a Dat file or the file system.
@@ -123,29 +120,19 @@ public:
     virtual std::streambuf::int_type underflow();
 
     StreamBuffer& read(uint8_t* destination, size_t size);
-    StreamBuffer& skipBytes(size_t numberOfBytes);
     StreamBuffer& setPosition(size_t position);
     size_t position() const;
     size_t size() const;
 
-    size_t bytesRemains();
-
     ENDIANNESS endianness();
-    void setEndianness(ENDIANNESS value);
 
     uint32_t uint32();
-    int32_t int32();
     uint16_t uint16();
-    int16_t int16();
     uint8_t uint8();
-    int8_t int8();
 
     StreamBuffer& operator>>(uint32_t& value);
-    StreamBuffer& operator>>(int32_t& value);
     StreamBuffer& operator>>(uint16_t& value);
-    StreamBuffer& operator>>(int16_t& value);
     StreamBuffer& operator>>(uint8_t& value);
-    StreamBuffer& operator>>(int8_t& value);
 
     std::string readString(size_t len);
 

@@ -50,7 +50,7 @@ TEST_CASE("ViewportController rejects out-of-map world positions", "[viewport][h
 // Regression guard for the tile-paint alignment fix (WP-10): tile placement must
 // resolve a click with the render projection (screenToTileIndex, the exact inverse
 // of how tile sprites are drawn), the SAME resolver hover/selection uses — NOT by
-// snapping to the nearest hex and halving (worldPosToHexIndex -> hexIndexToTileIndex),
+// snapping to the nearest hex and halving (worldPosToHexIndex -> HexagonGrid::tileIndexForPosition),
 // which picks an adjacent tile away from tile centres. This test proves the two paths
 // are genuinely different (so using the correct one matters) and that the render
 // projection is the one that lands on the tile under the cursor.
@@ -74,7 +74,7 @@ TEST_CASE("Tile placement uses the render projection, not hex-snapping", "[viewp
     // OLD placement path: snap the click to the nearest hex, then halve to a tile.
     auto oldPlacementTile = [&](sf::Vector2f pt) {
         const int hex = viewport.worldPosToHexIndex(pt);
-        return hex < 0 ? -1 : hexIndexToTileIndex(hex);
+        return hex < 0 ? -1 : grid.tileIndexForPosition(hex).value();
     };
     // NEW placement path (== the hover/selection path): nearest rendered tile centre.
     auto newPlacementTile = [&](sf::Vector2f pt) {

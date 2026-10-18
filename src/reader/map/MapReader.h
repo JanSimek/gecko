@@ -21,7 +21,6 @@ public:
 
 private:
     std::unique_ptr<MapObject> readMapObject();
-    MapScript::ScriptType fromPid(uint32_t val);
 
     std::function<Pro*(uint32_t PID)> _proLoadCallback;
 

@@ -84,7 +84,7 @@ TEST_CASE("Coordinate system boundary testing", "[integration]") {
         REQUIRE(maxHexIndex == 39999);
 
         // Verify hex to tile conversion at boundaries
-        int maxHexTileIndex = hexIndexToTileIndex(maxHexIndex);
+        int maxHexTileIndex = HexagonGrid().tileIndexForPosition(maxHexIndex).value();
         REQUIRE(maxHexTileIndex == maxTileIndex);
     }
 
@@ -397,7 +397,7 @@ TEST_CASE("Regression prevention for known issues (original)", "[regression_prev
 
         // Test hex coordinate boundaries
         int maxHexIndex = HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT - 1;
-        int maxHexTileIndex = hexIndexToTileIndex(maxHexIndex);
+        int maxHexTileIndex = HexagonGrid().tileIndexForPosition(maxHexIndex).value();
         REQUIRE(maxHexTileIndex >= 0);
         REQUIRE(maxHexTileIndex < TILES_PER_ELEVATION);
     }

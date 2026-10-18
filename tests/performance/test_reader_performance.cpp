@@ -12,7 +12,6 @@
 #include "reader/gam/GamReader.h"
 #include "reader/msg/MsgReader.h"
 #include "reader/lst/LstReader.h"
-#include "reader/ReaderDiagnostics.h"
 #include "support/Fixtures.h"
 
 // Include format classes for complete type definitions

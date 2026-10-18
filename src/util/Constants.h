@@ -33,16 +33,6 @@ constexpr int TILE_Y_OFFSET_TINY = 12;  ///< Tiny Y offset for tile positioning
 
 constexpr int ROOF_OFFSET = 96; ///< Roof height offset (adjusted for coordinate system alignment)
 
-// View movement constants
-constexpr float VIEW_MOVE_STEP = 50.0f; ///< Distance to move view with arrow keys
-
-// Mouse and interaction constants
-constexpr float TILE_CLICK_DISTANCE_THRESHOLD = 40.0f; ///< Maximum distance for tile click detection
-constexpr float DRAG_START_THRESHOLD = 5.0f;           ///< Minimum drag distance to start drag operation
-
-// Color constants
-constexpr int HEX_HIGHLIGHT_ALPHA = 200; ///< Alpha value for hex highlighting
-
 // Area selection padding constants
 constexpr float AREA_SELECTION_X_PADDING = 40.0f;       ///< X padding for area selection bounds
 constexpr float AREA_SELECTION_Y_PADDING = 18.0f;       ///< Y padding for area selection bounds
@@ -76,20 +66,12 @@ namespace Colors {
     constexpr int ERROR_ALPHA = 150;
     constexpr int ERROR_OUTLINE_ALPHA = 255;
 
-    // Tile selection overlay alpha (floor + roof) — higher visibility.
-    constexpr int SELECTION_TILE_ALPHA = 220;
-
     // Standard alpha values
     constexpr int FULLY_OPAQUE = 255;
-    constexpr int SEMI_TRANSPARENT = 150;
 }
 
 // UI constants
 namespace UI {
-    constexpr int TITLE_FONT_SIZE = 24;   ///< Font size for titles
-    constexpr int STATUS_FONT_SIZE = 14;  ///< Font size for status text
-    constexpr int PROGRESS_BAR_MAX = 100; ///< Maximum value for progress bars
-    constexpr int PROGRESS_BAR_MIN = 0;   ///< Minimum value for progress bars
     constexpr int TIMER_INTERVAL_MS = 33; ///< Timer interval for 30 FPS updates (33ms = ~30 FPS)
 }
 
@@ -161,8 +143,7 @@ namespace ExitGrid {
     /// The BROWN (world/town-map) FRM PID for a direction's proto: frm = proto + 0x11.
     constexpr uint32_t brownFrm(int dir) { return exitGridProto(dir) + 0x11; }
 
-    // Convenience aliases for the cardinal directions, used by the explicit Marker-Direction
-    // override and the single-hex fallback. The matching FRM comes from greenFrm()/brownFrm() by
+    // Each direction's proto by name. The matching FRM comes from greenFrm()/brownFrm() by
     // destination kind — these name only the proto (= direction).
     constexpr uint32_t LEFT_PRO_PID = exitGridProto(DIR_LEFT);     ///< 0x05000010, 96x24 (vertical line)
     constexpr uint32_t RIGHT_PRO_PID = exitGridProto(DIR_RIGHT);   ///< 0x05000011, 96x24 (vertical line)
@@ -190,12 +171,6 @@ namespace MapDefaults {
 namespace SpriteOffset {
     constexpr int HEX_HIGHLIGHT_X = -16; ///< X offset for hex highlighting
     constexpr int HEX_HIGHLIGHT_Y = -8;  ///< Y offset for hex highlighting
-}
-
-// View constants - fixed size for consistent coordinate system
-namespace View {
-    constexpr float DEFAULT_WIDTH = 800.0f;  ///< Default view width
-    constexpr float DEFAULT_HEIGHT = 600.0f; ///< Default view height
 }
 
 namespace UI {

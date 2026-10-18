@@ -22,10 +22,7 @@ public:
     Frame(uint16_t width, uint16_t height);
 
     uint16_t width() const;
-    void setWidth(const uint16_t& width);
-
     uint16_t height() const;
-    void setHeight(const uint16_t& height);
 
     int16_t offsetX() const;
     void setOffsetX(const int16_t& offsetX);

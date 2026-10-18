@@ -14,9 +14,13 @@ namespace geck {
  */
 std::unique_ptr<Pro> ProReader::read() {
     try {
-        FormatValidator::validateProFile(getBinaryUtils(), _path);
-
         auto& utils = getBinaryUtils();
+
+        // A PRO header carries no magic or version to check, so its minimum size is the whole validation.
+        constexpr size_t MIN_PRO_SIZE = 24;
+        if (const size_t size = utils.getPosition().total; size < MIN_PRO_SIZE) {
+            throw UnsupportedFormatException(ErrorMessages::invalidFileSize(_path, size, MIN_PRO_SIZE), _path);
+        }
 
         auto pro = std::make_unique<Pro>(_path);
 

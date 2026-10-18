@@ -5,7 +5,6 @@
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
 #include "util/Constants.h"
-#include "util/ColorUtils.h"
 #include "util/ProHelper.h"
 #include "ui/FrmThumbnailGenerator.h"
 #include "ui/common/BaseWidget.h"

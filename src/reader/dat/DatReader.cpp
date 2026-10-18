@@ -13,18 +13,28 @@ namespace geck {
 
 std::unique_ptr<Dat> DatReader::read() {
     try {
-        FormatValidator::validateDatFile(getBinaryUtils(), _path);
-
         auto& utils = getBinaryUtils();
         spdlog::debug("Reading DAT file: {}", _path.string());
 
-        utils.setPosition(utils.getPosition().total - FOOTER_SIZE);
+        // A DAT2 archive's footer (its last 8 bytes) holds the directory tree size and the archive size.
+        const size_t fileSize = utils.getPosition().total;
+        if (fileSize < FOOTER_SIZE) {
+            throw UnsupportedFormatException(ErrorMessages::invalidFileSize(_path, fileSize, FOOTER_SIZE), _path);
+        }
+        utils.setPosition(fileSize - FOOTER_SIZE);
 
         uint32_t tree_size = utils.readBE32();
         uint32_t data_size = utils.readBE32();
 
-        if (data_size != utils.getPosition().total) {
-            throw ParseException("Stored file size and real size don't match", _path);
+        if (data_size != fileSize) {
+            throw UnsupportedFormatException(
+                ErrorMessages::datFileError(_path,
+                    "File size mismatch: header says " + std::to_string(data_size) + " bytes, actual file is " + std::to_string(fileSize) + " bytes"),
+                _path);
+        }
+        if (tree_size == 0 || tree_size > fileSize) {
+            throw UnsupportedFormatException(
+                ErrorMessages::datFileError(_path, "Invalid tree size: " + std::to_string(tree_size)), _path);
         }
 
         // tree_size includes file_count field size

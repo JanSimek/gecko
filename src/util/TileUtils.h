@@ -208,23 +208,6 @@ inline int tileIndexToHexIndex(int tileIndex) {
 }
 
 /**
- * @brief Convert hex index to tile index for data operations
- *
- * Converts from hex coordinates (200x200) to tile coordinates (100x100) by dividing by 2.
- * This gives the tile that contains the specified hex.
- *
- * @param hexIndex Linear hex index (0-39999)
- * @return Corresponding tile index (0-9999)
- */
-inline int hexIndexToTileIndex(int hexIndex) {
-    int hexX = hexIndex % HexagonGrid::GRID_WIDTH; // 0-199
-    int hexY = hexIndex / HexagonGrid::GRID_WIDTH; // 0-199
-    int tileX = hexX / 2;                          // 0-99
-    int tileY = hexY / 2;                          // 0-99
-    return tileY * MAP_WIDTH + tileX;
-}
-
-/**
  * @brief Common color constants for UI elements
  */
 namespace TileColors {
@@ -265,11 +248,6 @@ namespace TileColors {
     // Transparent colors for empty tiles
     inline sf::Color transparent() {
         return sf::Color(255, 255, 255, 0);
-    }
-
-    // Exit grid highlight colors (bright magenta for better contrast against green)
-    inline sf::Color exitGridHighlight() {
-        return sf::Color(255, 0, 255, 180);
     }
 }
 

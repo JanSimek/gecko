@@ -3,7 +3,6 @@
 #include "format/lst/Lst.h"
 #include "resource/GameResources.h"
 #include "util/Constants.h"
-#include "util/ColorUtils.h"
 #include "ui/common/BaseWidget.h"
 #include "ui/theme/ThemeManager.h"
 #include "selection/SelectionManager.h"

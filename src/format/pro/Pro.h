@@ -349,12 +349,6 @@ public:
     /// instance overload forwards to this, so callers holding only a type (e.g. a ProtoId's
     /// objectType()) reuse the same mapping instead of duplicating it.
     static std::string typeToString(ObjectType type);
-
-    // Allow updating the file path for save operations
-    void setPath(const std::filesystem::path& newPath) {
-        _path = newPath;
-        _filename = newPath.filename().string();
-    }
 };
 
 } // namespace geck

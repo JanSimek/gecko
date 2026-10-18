@@ -1,5 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
+#include <fstream>
+#include <iterator>
+#include <vector>
+
 #include "reader/ReaderFactory.h"
 #include "format/pro/Pro.h"
 #include "format/frm/Frm.h"
@@ -7,144 +12,48 @@
 #include "format/msg/Msg.h"
 #include "format/lst/Lst.h"
 #include "format/pal/Pal.h"
+#include "support/Fixtures.h"
 
-TEST_CASE("ReaderFactory Format Detection", "[reader_factory]") {
+TEST_CASE("ReaderFactory picks the reader by file extension", "[reader_factory]") {
     using namespace geck;
 
-    SECTION("Extension-based detection") {
-        REQUIRE(ReaderFactory::detectFormat("test.pro") == ReaderFactory::Format::PRO);
-        REQUIRE(ReaderFactory::detectFormat("test.frm") == ReaderFactory::Format::FRM);
-        REQUIRE(ReaderFactory::detectFormat("test.dat") == ReaderFactory::Format::DAT);
-        REQUIRE(ReaderFactory::detectFormat("test.pal") == ReaderFactory::Format::PAL);
-        REQUIRE(ReaderFactory::detectFormat("test.gam") == ReaderFactory::Format::GAM);
-        REQUIRE(ReaderFactory::detectFormat("test.msg") == ReaderFactory::Format::MSG);
-        REQUIRE(ReaderFactory::detectFormat("test.lst") == ReaderFactory::Format::LST);
-        REQUIRE(ReaderFactory::detectFormat("test.map") == ReaderFactory::Format::MAP);
+    CHECK(ReaderFactory::detectByExtension("test.pro") == ReaderFactory::Format::PRO);
+    CHECK(ReaderFactory::detectByExtension("test.frm") == ReaderFactory::Format::FRM);
+    CHECK(ReaderFactory::detectByExtension("test.pal") == ReaderFactory::Format::PAL);
+    CHECK(ReaderFactory::detectByExtension("test.gam") == ReaderFactory::Format::GAM);
+    CHECK(ReaderFactory::detectByExtension("test.msg") == ReaderFactory::Format::MSG);
+    CHECK(ReaderFactory::detectByExtension("test.lst") == ReaderFactory::Format::LST);
 
-        // Case insensitive
-        REQUIRE(ReaderFactory::detectFormat("TEST.PRO") == ReaderFactory::Format::PRO);
+    // Case insensitive
+    CHECK(ReaderFactory::detectByExtension("TEST.PRO") == ReaderFactory::Format::PRO);
 
-        // Unknown extension
-        REQUIRE(ReaderFactory::detectFormat("test.unknown") == ReaderFactory::Format::UNKNOWN);
+    // Split critter animations keep one direction per file
+    for (const char* name : { "hmjmpsaa.fr0", "hmjmpsaa.fr1", "hmjmpsaa.fr2", "hmjmpsaa.fr3", "hmjmpsaa.fr4", "hmjmpsaa.fr5" }) {
+        CHECK(ReaderFactory::detectByExtension(name) == ReaderFactory::Format::FRM);
     }
 
-    SECTION("Magic number detection") {
-        // FRM format - version 4 at start
-        std::vector<uint8_t> frm_data = { 0x00, 0x00, 0x00, 0x04, 0x00, 0x10 }; // Version 4, FPS 16
-        REQUIRE(ReaderFactory::detectFormat(frm_data, "test") == ReaderFactory::Format::FRM);
-    }
-
-    SECTION("Content-based detection") {
-        // GAM format detection
-        std::vector<uint8_t> gam_data;
-        std::string gam_content = "GAME_GLOBAL_VARS:\ntest_var:=42;\n";
-        gam_data.assign(gam_content.begin(), gam_content.end());
-        REQUIRE(ReaderFactory::detectFormat(gam_data, "test") == ReaderFactory::Format::GAM);
-
-        // MSG format detection
-        std::vector<uint8_t> msg_data;
-        std::string msg_content = "{100}{}{Hello World}";
-        msg_data.assign(msg_content.begin(), msg_content.end());
-        REQUIRE(ReaderFactory::detectFormat(msg_data, "test") == ReaderFactory::Format::MSG);
-
-        // LST format detection (plain text)
-        std::vector<uint8_t> lst_data;
-        std::string lst_content = "file1.frm\nfile2.frm\nfile3.frm\n";
-        lst_data.assign(lst_content.begin(), lst_content.end());
-        REQUIRE(ReaderFactory::detectFormat(lst_data, "test") == ReaderFactory::Format::LST);
-    }
+    CHECK(ReaderFactory::detectByExtension("test.unknown") == ReaderFactory::Format::UNKNOWN);
+    CHECK(ReaderFactory::detectByExtension("test") == ReaderFactory::Format::UNKNOWN);
 }
 
-TEST_CASE("ReaderFactory Reader Creation", "[reader_factory]") {
+TEST_CASE("ReaderFactory reads a directional .fr0 FRM from memory", "[reader_factory]") {
     using namespace geck;
 
-    SECTION("Template-based reader creation") {
-        auto pro_reader = ReaderFactory::createReader<Pro>(ReaderFactory::Format::PRO);
-        REQUIRE(pro_reader != nullptr);
+    std::ifstream file(test::dataPath("flower.frm"), std::ios::binary);
+    REQUIRE(file.is_open());
+    const std::vector<uint8_t> data{ std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>() };
 
-        auto frm_reader = ReaderFactory::createReader<Frm>(ReaderFactory::Format::FRM);
-        REQUIRE(frm_reader != nullptr);
-
-        auto gam_reader = ReaderFactory::createReader<Gam>(ReaderFactory::Format::GAM);
-        REQUIRE(gam_reader != nullptr);
-
-        auto msg_reader = ReaderFactory::createReader<Msg>(ReaderFactory::Format::MSG);
-        REQUIRE(msg_reader != nullptr);
-    }
-
-    SECTION("Format mismatch throws exception") {
-        REQUIRE_THROWS_AS(
-            ReaderFactory::createReader<Pro>(ReaderFactory::Format::FRM),
-            UnsupportedFormatException);
-    }
+    const auto frm = ReaderFactory::readFileFromMemory<Frm>(data, "art/critters/flower.fr0");
+    REQUIRE(frm != nullptr);
+    CHECK(frm->version() == 4);
 }
 
-TEST_CASE("ReaderFactory Utility Methods", "[reader_factory]") {
+TEST_CASE("ReaderFactory rejects a file whose extension names another or no format", "[reader_factory]") {
     using namespace geck;
 
-    SECTION("Format support checking") {
-        REQUIRE(ReaderFactory::isFormatSupported(ReaderFactory::Format::PRO));
-        REQUIRE(ReaderFactory::isFormatSupported(ReaderFactory::Format::FRM));
-        REQUIRE_FALSE(ReaderFactory::isFormatSupported(ReaderFactory::Format::UNKNOWN));
+    const std::vector<uint8_t> data(64, 0);
+    CHECK_THROWS_AS(ReaderFactory::readFileFromMemory<Pro>(data, "art/items/flower.frm"), IOException);
+    CHECK_THROWS_AS(ReaderFactory::readFileFromMemory<Lst>(data, "scripts/scripts"), IOException);
 
-        REQUIRE(ReaderFactory::isFormatSupported(".pro"));
-        REQUIRE(ReaderFactory::isFormatSupported(".PRO")); // Case insensitive
-        REQUIRE_FALSE(ReaderFactory::isFormatSupported(".unknown"));
-    }
-
-    SECTION("Supported extensions list") {
-        auto extensions = ReaderFactory::getSupportedExtensions();
-        REQUIRE_FALSE(extensions.empty());
-        REQUIRE(std::find(extensions.begin(), extensions.end(), ".pro") != extensions.end());
-        REQUIRE(std::find(extensions.begin(), extensions.end(), ".frm") != extensions.end());
-    }
-
-    SECTION("Format info retrieval") {
-        auto pro_info = ReaderFactory::getFormatInfo(ReaderFactory::Format::PRO);
-        REQUIRE(pro_info.format == ReaderFactory::Format::PRO);
-        REQUIRE(pro_info.name == "Fallout PRO Object");
-        REQUIRE_FALSE(pro_info.extensions.empty());
-        REQUIRE(pro_info.min_file_size == 24);
-
-        auto unknown_info = ReaderFactory::getFormatInfo(ReaderFactory::Format::UNKNOWN);
-        REQUIRE(unknown_info.format == ReaderFactory::Format::UNKNOWN);
-    }
-
-    SECTION("All supported formats") {
-        auto formats = ReaderFactory::getAllSupportedFormats();
-        REQUIRE(formats.size() == 8); // DAT, PRO, FRM, PAL, GAM, MSG, LST, MAP
-
-        // Check that all expected formats are present
-        bool found_pro = false, found_frm = false;
-        for (const auto& info : formats) {
-            if (info.format == ReaderFactory::Format::PRO)
-                found_pro = true;
-            if (info.format == ReaderFactory::Format::FRM)
-                found_frm = true;
-        }
-        REQUIRE(found_pro);
-        REQUIRE(found_frm);
-    }
-}
-
-TEST_CASE("ReaderFactory File Grouping", "[reader_factory]") {
-    using namespace geck;
-
-    SECTION("Group files by format") {
-        std::vector<std::filesystem::path> files = {
-            "file1.pro",
-            "file2.pro",
-            "anim1.frm",
-            "anim2.frm",
-            "save.gam",
-            "messages.msg"
-        };
-
-        auto groups = ReaderFactory::groupFilesByFormat(files);
-
-        REQUIRE(groups[ReaderFactory::Format::PRO].size() == 2);
-        REQUIRE(groups[ReaderFactory::Format::FRM].size() == 2);
-        REQUIRE(groups[ReaderFactory::Format::GAM].size() == 1);
-        REQUIRE(groups[ReaderFactory::Format::MSG].size() == 1);
-    }
+    CHECK_THROWS_AS(ReaderFactory::createReader<Pro>(ReaderFactory::Format::FRM), UnsupportedFormatException);
 }

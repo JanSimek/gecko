@@ -273,7 +273,7 @@ void ProEditorDialog::onAccept() {
 
     try {
         ProWriter writer;
-        writer.openFile(savePath, true);
+        writer.openFile(savePath);
 
         if (writer.write(*_pro)) {
             QMessageBox::information(this, "Success",

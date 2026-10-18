@@ -44,13 +44,9 @@ struct ScriptFacts {
     bool assigns(Override::Field field) const;
 };
 
-/// The facts above, read from an already parsed script.
+/// The facts above, read from an already parsed script. Calls are matched after macro expansion, so
+/// any macro spelling of the opcode is found; a call inside a comment, a string, an unused macro, a
+/// procedure nothing calls or a branch that can never run is not (see CallGraph).
 ScriptFacts readFacts(const ScriptUnit& unit);
-
-/// Preprocess the script at `path` (following its #includes through `provider`) and read the facts
-/// above out of the result. Calls are matched after macro expansion, so any macro spelling of the
-/// opcode is found; a call inside a comment, a string, an unused macro, a procedure nothing calls or
-/// a branch that can never run is not (see CallGraph).
-ScriptFacts inspectScript(const SourceProvider& provider, const std::filesystem::path& path, const PreprocessOptions& options = {});
 
 } // namespace geck::ssl

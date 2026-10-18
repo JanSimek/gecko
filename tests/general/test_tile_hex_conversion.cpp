@@ -44,6 +44,8 @@ TEST_CASE("Tile coordinate conversions for selection", "[tile_selection]") {
 }
 
 TEST_CASE("Tile-to-hex coordinate conversion", "[tile_selection]") {
+    const HexagonGrid grid;
+
     SECTION("Tile index to hex index conversion") {
         // Test corner cases
         REQUIRE(tileIndexToHexIndex(0) == 0); // Top-left tile -> top-left hex
@@ -67,7 +69,7 @@ TEST_CASE("Tile-to-hex coordinate conversion", "[tile_selection]") {
         std::vector<int> hexIndices = { 0, 150, 1000, 5000, 10000 };
 
         for (int hexIndex : hexIndices) {
-            int tileIndex = hexIndexToTileIndex(hexIndex);
+            int tileIndex = grid.tileIndexForPosition(hexIndex).value();
 
             // Verify the hex is within valid range
             REQUIRE(tileIndex >= 0);
@@ -81,7 +83,7 @@ TEST_CASE("Tile-to-hex coordinate conversion", "[tile_selection]") {
 
         for (int tileIndex : tileIndices) {
             int hexIndex = tileIndexToHexIndex(tileIndex);
-            int backToTileIndex = hexIndexToTileIndex(hexIndex);
+            int backToTileIndex = grid.tileIndexForPosition(hexIndex).value();
             REQUIRE(backToTileIndex == tileIndex);
         }
     }

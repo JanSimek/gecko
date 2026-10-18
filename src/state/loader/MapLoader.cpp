@@ -10,7 +10,6 @@
 #include "resource/ResourcePaths.h"
 
 #include "reader/ReaderExceptions.h"
-#include "reader/ReaderFactory.h"
 
 #include "format/pro/Pro.h"
 #include "format/map/Map.h"

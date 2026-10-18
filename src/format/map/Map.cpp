@@ -40,10 +40,6 @@ void Map::setMapFile(std::unique_ptr<MapFile> newMapFile) {
     mapFile = std::move(newMapFile);
 }
 
-int Map::elevations() const {
-    return static_cast<int>(objects().size());
-}
-
 std::vector<Tile> Map::createEmptyElevation() {
     std::vector<Tile> tiles;
     tiles.reserve(TILES_PER_ELEVATION);

@@ -60,7 +60,6 @@ public:
     /// The macro `name` names now (at the end of a run); nullptr when undefined.
     const Macro* find(std::string_view name) const;
 
-    const Expansion& expansion(ExpansionId id) const { return _expansions.at(id); }
     /// Where the user wrote `token`: its own location, or for a token a macro produced, the outermost
     /// call site.
     SourceLocation writtenAt(const Token& token) const;

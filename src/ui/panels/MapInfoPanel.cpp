@@ -20,7 +20,6 @@
 #include "resource/MapNameResolver.h"
 #include "resource/MapNameEditor.h"
 #include "ui/Settings.h"
-#include "reader/ReaderFactory.h"
 #include "reader/gam/GamReader.h"
 #include "writer/gam/GamSerializer.h"
 #include "writer/gam/GamValidator.h"
