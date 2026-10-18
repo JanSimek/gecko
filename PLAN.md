@@ -7,20 +7,19 @@
 > Reminder: this repo squash-merges, so `git merge-base --is-ancestor <branch> master` reports
 > merged work as unmerged — use `gh pr list --state merged` to check.
 
-*Last compacted: 2026-08-06.*
+*Last compacted: 2026-10-18.*
 
 ## What's next (priority order)
 
 1. **Minimap / overview panel** (feature-gap audit).
 2. **In-game preview mode** — idle animations first.
-3. **Analysis/MCP tail** — small, self-contained items.
-4. **Editor UX** — customizable toolbar (driven by the `ActionSpec` table); undo residuals;
-   log-panel follow-ups.
-5. **Biome script library** — `town.luau`, `coast.luau`. Note: generating
+3. **Editor UX** — customizable toolbar; undo residuals; log-panel follow-ups; the small items
+   under "Editor: known limitations".
+4. **Biome script library** — `town.luau`, `coast.luau`. Note: generating
    random caves proved not possible (every synthesised rim broke the wall art, see Caves), so
    `cave.luau` only copies an existing shipped cave map; expect the same limit for other biomes
    whose look depends on hand-laid wall art.
-6. **SSL script editing** *(possible)* — only if an in-app editor is still wanted now that
+5. **SSL script editing** *(possible)* — only if an in-app editor is still wanted now that
    compiling lives in VS Code + BGforge MLS (see the SSL section).
 
 ---
@@ -35,9 +34,9 @@
   MCP is the intelligence layer; `mapSceneryHistogram` is an analysis tool, not a generator.
 - **Seamless floors shipped as patch quilting** (`FloorSynth`, `api:quiltFloor*`/`quiltObjects`,
   PRs #125/#126). **Do not rebuild** the `autotile_floor`/`FloorTileSet`/Wang-variant-table
-  design — it was built (A1/A2) and deleted by design in favor of Luau fills + quilting.
+  design — it was built and deleted by design in favor of Luau fills + quilting.
 - **Orientation is a variant set** (pre-authored direction-specific art the editor cycles),
-  never geometric rotation — F2 object art is direction-specific.
+  never geometric rotation — Fallout 2 object art is direction-specific.
 - The Tier-2 scripting runtime is **Luau + LuaBridge3** (spike-validated over sol2/PUC-Lua on
   sandbox safety); decision record in git history.
 
@@ -68,8 +67,9 @@ Expand the `scripts/README.md` table as new generators land.
 
 ## Placement polish
 
-Footprint-aware, iso-diamond-masked placement for the curated scripts/tools; extract recurring
-multi-object clusters as **prefabs** (place a rock formation as one unit).
+Footprint-aware, iso-diamond-masked placement for the curated scripts/tools. Placement today
+only drops off-grid targets (`PatternStamper`); nothing checks occupancy or footprint. (Prefabs
+shipped as stamps: `extract_pattern` + `api:placeStamp`.)
 
 ## Smarter exit placement
 
@@ -82,22 +82,22 @@ terrain-derived locations:
   generator to retain road endpoints + headings (it currently keeps no such structure).
 - **Along the real map edge** — trace the iso playable boundary (the diamond, not an
   axis-aligned box) and place exits on the edge segments the design wants open. Reuse the
-  screen→hex edge walk from `placeExitGridRect`, following the diamond boundary with a
-  per-edge open/closed mask.
+  screen→hex edge walk from `placeExitGridRect` (also exposed as `api:hexesOnScreenRect`),
+  following the diamond boundary with a per-edge open/closed mask.
 - **Reachability-aware placement** — placement should consult reachability, not just have
-  `generate` report an unreachable exit grid after the fact.
+  `generate` report an unreachable exit grid after the fact (`warnOnUnreachableExits`).
 
 ## Open questions
 
-- **`findProtos` scope/cost:** scan all proto types into one cached index, or per-type
-  (`findScenery`/`findWall`) to bound the first-call scan? Lean: one cached index, documented.
-- **Coordinate convention:** expose `(col,row)` as the engine's storage layout or remap to
-  match the editor's displayed coordinates? Pick one and document it.
+- **`findProtos` (unbuilt API) scope/cost:** scan all proto types into one cached index, or
+  per-type (`findScenery`/`findWall`) to bound the first-call scan? Lean: one cached index,
+  documented.
 - **Collision policy** when a generator/stamp targets an occupied hex/tile
-  (overwrite / skip / error).
+  (overwrite / skip / error). Today everything stacks.
 - **Multi-elevation prefabs** (store/stamp across the 3 `ELEVATION_COUNT` slots?).
-- **Scripts in patterns** (object scripts via `programIndex`; spatial scripts) — deferred;
-  programIndex is portable, SID/OID re-allocated at stamp.
+- **Per-instance scripts in patterns** — stamped objects get their *proto's* script (#177), but a
+  captured object's own script (`programIndex`) and spatial scripts are not carried;
+  `PatternObject` has no script field. programIndex is portable, SID/OID re-allocated at stamp.
 - **Freeform selection** (lasso / flood fill / magic wand) — selection is one `FloatRect` +
   discrete items today; a future selection primitive, prerequisite for non-rect area fills.
 - **Fill-preview cost on huge selections** — bounded today by debounce + the placement cap;
@@ -107,49 +107,63 @@ terrain-derived locations:
 
 # Editor: known limitations & follow-ups
 
-1. **Undo coverage.** *Remaining:* a cascading script-delete when an object is deleted, and the
-   command-controller actions themselves aren't integration-tested (they need GameResources/Qt —
-   a `qt_tests` follow-up). Map Info header, elevation and map-variable edits are undoable
-   (`MapEditService::setHeader` / `setElevationPresent`, the panel's `globalVarsEdited`).
-2. **Newly created scripts get `local_var_count=0` / `offset=-1`** — exactly what the engine's
-   `scriptAdd` writes; locals are allocated at runtime from the `.int`. The editor does not
-   parse `.int` headers, and the local-var *count* lives in `scripts.lst`, not the binary.
-3. **F11 spatial placement is still dialog-driven** (enter tile/elevation/radius), not
-   click-to-place with a live hex marker, radius overlay, and a new `EditorMode`.
-4. **F16 per-instance kill-type and custom name are out of scope** — not exposed in the engine
+1. **Undo coverage.** *Remaining:* deleting an object leaves its script behind
+   (`ObjectEditService::registerObjectDeletion` never erases it; only clearing/removing an
+   elevation does), and the `EditorWidget`-level handlers are untested (the command controller
+   itself is covered headless by `test_object_command_controller.cpp`).
+2. **Spatial script placement has no map mode.** `SpatialScriptDialog` has "Pick on map" and
+   placed spatial scripts render with marker + radius, but there is no dedicated `EditorMode`
+   with a live radius preview while placing.
+3. **Per-instance kill-type and custom name are out of scope** — not exposed in the engine
    mapper and would require new serialized `MapObject` fields.
-5. **Script attach reassigns the object OID** (`unknown0`) to a fresh unique id (matching the
+4. **Script attach reassigns the object OID** (`unknown0`) to a fresh unique id (matching the
    engine's `objectSetScript`); existing cross-references to the old OID aren't audited/rewritten.
-6. **Edit visuals are sprite-rebuild only** — no engine-style `_obj_toggle_flat` outline
-   recompute, multi-hex occupancy overlay, or live light-radius overlay beyond the rebuild.
-7. **Toolbar is a fixed button set — not user-customizable.** The primary toolbar (New, Browse Maps,
-    Save, Play) is a hardcoded `primaryToolbarActions` array in `MainWindow::setupToolBar()`. Most
-    editors let users choose which buttons appear and reorder them. **Add a customizable toolbar:**
-    drive it from the `ActionSpec` table (`src/ui/input/ActionSpec.h`, stable action id → icon/label/handler),
-    with a context-menu / Preferences UI to add, remove, and reorder buttons, persisted via `Settings`.
-    Editor UX only; no map/format change.
-8. **Log panel follow-ups.** Add jump-to-source where a record carries a hex/object (needs
+5. **Edit visuals are sprite-rebuild only** — no engine-style `_obj_toggle_flat` outline
+   recompute or multi-hex occupancy overlay.
+6. **Toolbar is a fixed button set — not user-customizable.** The primary toolbar (New, Browse Maps,
+    Save, Play) is a hardcoded `primaryToolbarActions` array in `MainWindow::setupToolBar()`. **Add a
+    customizable toolbar** with a context-menu / Preferences UI to add, remove, and reorder
+    buttons, persisted via `Settings`. Key the buttons by the stable `ActionSpec` ids
+    (`src/ui/input/ActionSpec.h`); that table is keybinding-only today (no icon or handler), so
+    it needs those fields or a lookup from id to the bound `QAction`.
+7. **Log panel follow-ups.** Add jump-to-source where a record carries a hex/object (needs
    structured records, not text). Editor UX only; changes no map/format data.
-9. **Move the item views onto Qt's model/view where the convenience widgets are fighting us.**
-    30 files use `QTableWidget`/`QListWidget`/`QTreeWidget`, 4 use a model. Three places where
-    that costs something concrete — each its own change, in rising order of size:
+8. **Item views still on the convenience widgets** — each its own change:
     - **`DataPathsWidget`** — a `QAbstractTableModel` + `QTableView` would bring drag-to-reorder
       (`moveRows` + `InternalMove`) alongside the Move Up/Down buttons, and drop the manual
-      renumbering pass. Note `QTableWidget` + `InternalMove` is *not* a shortcut: it moves cells
-      and duplicates rows, so the model is the prerequisite.
-    - **`FileBrowserPanel`** (1333 lines) — populates a `QTreeWidget` in chunks off a `QTimer`,
-      which is what `canFetchMore()`/`fetchMore()` exists for. A lazy model would also stop the
-      per-row `DataFileSystem` calls that contend with the loader thread.
-    - **The palettes** — `GridPalettePanel` builds one widget per item in a `QGridLayout`, which
-      is the only reason `PaginationWidget` exists. A `QListView` in `IconMode` with a
-      `QStyledItemDelegate` recycles item views and scrolls thousands of entries, so pagination
-      stops being a concept the palettes need at all.
-10. **Background work uses `std::thread`/`QThread` directly; `QtConcurrent` is unused.** The
-    loaders (`Loader.h`, `DataPathLoader`, `MapLoader`) each own a raw `std::thread`;
+      `renumberPriorities()` pass. Note `QTableWidget` + `InternalMove` is *not* a shortcut: it
+      moves cells and duplicates rows, so the model is the prerequisite.
+    - **`FileBrowserPanel`** — already a `QTreeView` over a `QStandardItemModel`, but still fills
+      it in `QTimer` chunks (`processNextChunk`); a lazy model (`canFetchMore()`/`fetchMore()`)
+      would replace that.
+9. **Background work uses `std::thread` directly; `QtConcurrent` is unused.** The loaders start
+    the raw `std::thread` owned by `Loader` (`DataPathLoader`, `MapLoader`);
     `QtConcurrent::run` + `QFutureWatcher` would deliver completion on the GUI thread without the
     hand-rolled marshalling. **Weigh before doing:** this is the code the loading-dialog
     starvation fixes landed in, so the risk is real and the benefit is idiom rather than
     behaviour. Worth it only alongside a change that already touches the loaders.
+10. **Hex-flag placement.** Only scroll blockers can be placed (the B rectangle tool); wall
+    blockers can be shown but not placed, and shoot-through exists only as an object/PRO flag.
+    No palette or overlay for marking unwalkable / wall / shoot-through hexes.
+11. **Play-map leaves changes behind.** `GameLauncher` restores `mods/mods_order.txt` when the
+    game exits, but never undoes the `ddraw.ini` StartingMap edit, the
+    `data/config/game#patch.cfg` edit or the map copied into `data/maps/`. (Steam launch was
+    removed; reviving it means resolving the install dir from `libraryfolders.vdf` +
+    `appmanifest_38410.acf`, then reusing the executable path's copy + config step.)
+12. **Closing a dock resizes the canvas**, which rebuilds the SFML render texture. Panels
+    floating over the canvas would avoid it.
+13. **Tile-pattern brush.** Stamps place a captured tile+object pattern and the fill brush paints
+    single tiles; nothing paints a repeating multi-tile pattern by dragging.
+
+**Known bugs:**
+- **Scroll-blocker rectangle follows the hex grid, not the screen.** The drag preview is a screen
+  rectangle, but `HexagonGrid::rectangleBorderPositions` walks hex rows/columns from its corners,
+  so the placed border runs diagonally. `createScrollBlockersFromHexes` also bypasses undo.
+- **Switching elevation keeps the selection** (`EditorWidget::changeElevation` neither clears the
+  object nor the spatial-script selection), so Delete may act on the previous elevation —
+  unconfirmed, check by hand.
+- *Reported, unconfirmed from code:* the file browser panel is sometimes hard to resize; placing
+  lights (`light.frm`, preloaded but never drawn) misbehaves.
 ---
 
 # SSL script editing
@@ -171,17 +185,15 @@ revisited, since Save could not compile.
 ### Still unbuilt
 
 - **Registering a new script name in `scripts.lst`** — appending a line so a fresh program index
-  exists for `MapScript` to reference. Needs an Lst writer plus override semantics, and must mirror
-  the engine's index-is-line-number convention (1-based in the map header, `at(index-1)` in `Lst`).
-- A recompiled `.int` has to land where `ResourcePaths::Lst::SCRIPTS` (`scripts/`) expects it, or
-  neither the engine nor `repository().load<Lst>` will find it.
+  exists for `MapScript` to reference. Needs an Lst writer (none exists) plus override semantics;
+  the new line's 0-based position is its `programIndex` (see AGENTS.md "Script Index Bases").
 
 ---
 
 # SSL script analysis
 
-**Goal:** one SSL front end for the editor, gecko-cli and the MCP server, replacing the remaining
-ad-hoc scanners: `cli/GvarRefs` (line-based, `//` only) and the raw text in `cli/ScriptIntrospect`.
+**Goal:** one SSL front end for the editor, gecko-cli and the MCP server. `cli/GvarRefs` already
+runs on it; the raw source text in `cli/ScriptIntrospect` is the last ad-hoc consumer.
 
 **Shape** — `src/ssl/`, namespace `geck::ssl`, in `vault` (no Qt; JSON stays in `cli/`):
 
@@ -214,8 +226,8 @@ in ~1.7 s on all cores).
 - `IntOpcodes.inc` becomes the single opcode catalog (name, opcode, arity, what it reads/writes),
   shared by the disassembler and the SSL passes.
 
-**Follow-up found in phase 1:** `LstReader` skips blank and `;`-only lines, but the engine
-(`scripts.cc` `scriptsListLoad`) counts every line of scripts.lst as an index. The shipped and RP
+**Known divergence (waits for a mod that needs it):** `LstReader` skips blank and `;`-only lines, but the engine
+(`scripts.cc` `scriptsLoadScriptsList`) counts every line of scripts.lst as an index. The shipped and RP
 files have none, so indices agree today; a modded scripts.lst with one would shift every later script.
 The engine counts every line of the art lists too (`art.cc` `artReadList`). None of vanilla's 23 or the
 RP's 17 `.lst` files has a blank or comment-only line, and ~24 consumers iterate `Lst::list()` (the
@@ -237,18 +249,19 @@ and keeping every parsed script would cost gigabytes; build it only when a tool 
 cleanly); only `sprtrp0.ssl` is a placeholder sslc can't compile (the game runs vanilla's .int), so its
 syntax errors are true and the folder is not skipped.
 
-**Phase 4 (rest):** the bytecode report (`resource::reportInt`) walks back over each opcode's
+**Open — short-circuit writes in the bytecode report:** the bytecode report (`resource::reportInt`) walks back over each opcode's
 arguments with the engine's stack effects (`IntOpcodes.inc`, generated from the handlers) and skips
 branches under a constant condition. On the RP it shows 99.96% of what the source shows. Left: 34 RP
 writes whose value contains sslc's short-circuit and/or (jumps and `OPCODE_POP`), which the walk
 doesn't model, so their index stays unknown.
 
 **Rejected:** tree-sitter + the BGforge SSL grammar — no preprocessor, and RP hides structure behind
-macros, so phases 1–3 would still be needed on top of a new C dependency.
+macros, so the preprocessor, parser and analysis passes would still be needed on top of a new C
+dependency.
 
 ---
 
-# Map semantics & analysis — remaining tail
+# Map semantics & analysis — guard notes
 
 **Guiding principles (standing):** don't hardcode classification heuristics ("N critters ⇒ a
 fight") — surface the engine's own semantic sources faithfully and cross-referenced (join keys:
@@ -258,15 +271,6 @@ model infer purpose. Parse engine data in the **vault** library (a `format/…` 
 Deliberately **not** building a computed "critical path to the ending" — `.ssl` is imperative
 quest logic and static win-path extraction would be brittle; the MCP supplies ground truth
 (quest → gvar → `find_gvar` → `describe_script`), the model infers the route.
-
-Open items:
-
-- **Corpus / world index** — index `analyze` + the semantic facts across all shipped maps so an
-  agent can query *examples* ("how do shipped towns place and wire shopkeepers?") — improves
-  generation, not just analysis.
-- **`worldmap.msg`** — random-encounter descriptions (`[3000 + 50*tableId + entryId]`,
-  fallout2-ce worldmap.cc:3595); runtime-index-tied to the encounter table/entry ordering, so
-  not a small add. (Area/city labels turned out to live in map.msg and are already surfaced.)
 
 *(MCP server guard note: per-call cancellation / progress notifications are deliberately not
 planned — the stdio loop is synchronous and tool calls are short.)*
@@ -293,8 +297,9 @@ Open items, roughly in order:
 - **Town-map view** — per-area screen from `townmap_art_idx` / `townmap_label_art_idx` (both now
   parsed) with the `entrance_N` hotspots drawn at their `townX,townY`; double-click already opens
   an area's first map, this would let you pick *which* entrance.
-- **Overlays** — terrain type, per-subtile encounter chance (needs the unparsed subtile fields,
-  see the worldmap.txt item above), the `.msk` travel masks (1bpp, 44-byte rows; reproduce the
+- **Overlays** — terrain type, per-subtile encounter chance (the data is parsed now:
+  `WorldmapSubtile` `chance`/`encounterTable`, as `world_encounters --x/--y` reports), the
+  `.msk` travel masks (no reader yet; only the mask name is parsed) (1bpp, 44-byte rows; reproduce the
   engine's own `1 << ((x/8) & 3)` indexing rather than "fixing" it), tile `encounter_difficulty`.
 - **Editing** — drag markers, change size/state/entrances. Writing `city.txt` / `worldmap.txt`
   should follow the lossless round-trip pattern used for `maps.txt` (`MapsTxtSerializer`): both
@@ -309,7 +314,7 @@ Open items, roughly in order:
 Full parity catalogue: [`docs/feature-gap-audit.md`](docs/feature-gap-audit.md), from a read-only
 audit of the fallout2-ce built-in mapper and the legacy Dims mapper against Gecko.
 
-1. **Minimap / overview** *(M)* — click-to-navigate + elevation switch, with a viewport rectangle
+1. **Minimap / overview** *(medium)* — click-to-navigate + elevation switch, with a viewport rectangle
    (improving on Dims' cursor-sprite locator).
 
 Deferred (substitute exists / niche): object clipboard copy-paste (pattern-stamp covers it),
@@ -331,11 +336,13 @@ TODO-claim table are in the audit doc.
   `framesPerDirection`, looping idle anims), per-object animation state, and only animating
   on-screen objects for perf at map scale. Per-frame offset handling is already correct
   (frames anchor by `shiftX/shiftY`), so playback won't wobble. No new assets needed.
-- **Lighting / darkness — Medium.** Render honouring `header.darkness` and per-object light
-  (`light_radius`/`light_intensity`, already in the model) — an additive light pass / ambient
-  tint in `RenderingEngine`. The data already exists; it's a rendering feature.
+- **Lighting / darkness — Medium.** An additive light pass / ambient tint in `RenderingEngine`
+  from per-object light (`light_radius`/`light_intensity`; the hex light overlay already reads
+  them). **Not** from `header.darkness`: the engine never uses it — ambient light is reset on map
+  load and set by scripts (`lightSetAmbientIntensity`), so a preview needs an assumed ambient
+  level.
 - **Ambient sound — Large.** SFML audio is currently **disabled** (`SFML_BUILD_AUDIO=FALSE`,
-  `cmake/dependencies.cmake`), so step one is enabling it. F2 sounds are **ACM** files (custom
+  `cmake/dependencies.cmake`), so step one is enabling it. Fallout 2 sounds are **ACM** files (custom
   ADPCM-style codec) needing a decoder, and ambient audio isn't stored in the `.map`
   (script/worldmap-driven), so "what plays here" has to come from the map script or a
   convention. Biggest, most independent lift.
@@ -360,6 +367,18 @@ the running game (day/night, critter wander/AI) is **Large** and probably not wo
   `clearWorldMapAction()` for the paths that switch pages themselves, and a checkable action whose
   state has to be kept in step. Correct today, but a fourth mode should not add a fourth ad-hoc
   restore path — fold it into a small page controller when one arrives.
+- **`EditorWidget` (~3,100 lines) and `MainWindow` (~3,100 lines) keep growing.** Controllers
+  already split off (`EditorController`, `EditorSession`, `ObjectPicker`, `SelectionVisualizer`,
+  the `*EditService`s, `GameLauncher`), but map load / save-prompt / close
+  (`handleMapLoadRequest`, `maybeSaveChanges`, `closeEvent`, `closeCurrentMap`) still live in
+  `MainWindow`. Extract a workspace/document controller when next touching that flow.
+- **Section-level MAP reader/writer.** `MapReader::read()` and `MapWriter::write()` are each one
+  ~150–180-line function; round-trip coverage (byte-for-byte on a shipped map) is already there,
+  so the split is safe whenever it's wanted.
+- **Inventory edits.** `SelectionPanel` mutates `holder->inventory` itself and only records the
+  snapshot through `InventoryEditService`; `InventoryViewerDialog` mutates with no undo and is
+  used only by a test — delete it or route it through the service.
+- One `const_cast` left: `SFMLWidget.cpp` `ensureRenderTexture` from a const method.
 
 **Evaluated and intentionally NOT pursued (guard — churn > value):**
 - **PRO/MAP serialization visitor** — the type-specific tails (mixed field widths, optional-on-

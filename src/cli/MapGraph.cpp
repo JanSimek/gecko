@@ -75,7 +75,7 @@ namespace {
     using ScriptEdges = std::map<std::pair<std::string, std::string>, std::vector<ScriptMapTransition>>;
 
     // The program indices a map places: its own (header) script, 1-based in the header, and every
-    // map_scripts entry, 0-based (CLAUDE.md "Script Index Bases").
+    // map_scripts entry, 0-based (AGENTS.md "Script Index Bases").
     std::set<int> placedScripts(const Map& map) {
         const Map::MapFile& file = map.getMapFile();
         std::set<int> out;

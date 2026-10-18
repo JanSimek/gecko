@@ -21,7 +21,7 @@ lacks, and turn the gap into a prioritized backlog — adopting the engine's beh
   layers. Several of these are things the references **stubbed and never built**.
 - There are only **~8 genuine parity gaps**. The top three worth adopting: **`.edg` map-edge
   support**, **spatial-script visualization**, and a **minimap/overview**.
-- The existing TODO.md "Legacy F2_Mapper_Dims Missing Features" list is **mostly wrong-premised**:
+- The former TODO.md "Legacy F2_Mapper_Dims Missing Features" list is **mostly wrong-premised**:
   batch-property-editing and advanced-search are features *neither* reference has (net-new ideas, not
   parity gaps); script-assignment and a template/prefab system Gecko **already ships**. Only the
   **minimap** is a real Dims parity gap. Corrected table in §4.
@@ -111,7 +111,7 @@ The TODO list asserted Dims has these and Gecko lacks them. Verified against the
 
 **Net:** of seven TODO items, only the **minimap** is a genuine Dims parity gap. Two are net-new
 ideas neither reference has, two Gecko already ships, one Gecko exceeds, one is minor. This list should
-be retired from TODO.md in favor of this audit.
+be retired in favor of this audit (done: TODO.md was folded into PLAN.md).
 
 ---
 
