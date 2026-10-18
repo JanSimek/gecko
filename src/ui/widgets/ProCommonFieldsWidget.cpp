@@ -233,7 +233,7 @@ void ProCommonFieldsWidget::saveToPro(std::shared_ptr<Pro>& pro) {
         pro->commonItemData.weight = _weightEdit->value();
         pro->commonItemData.basePrice = _basePriceEdit->value();
         pro->commonItemData.soundId = static_cast<uint8_t>(_soundIdEdit->value());
-        pro->commonItemData.flagsExt = saveExtendedFlags();
+        pro->commonItemData.flagsExt = saveExtendedFlags(pro->commonItemData.flagsExt);
     }
 }
 
@@ -303,11 +303,9 @@ uint32_t ProCommonFieldsWidget::saveObjectFlags() const {
     return flags;
 }
 
-uint32_t ProCommonFieldsWidget::saveExtendedFlags() const {
-    uint32_t flags = 0;
-    flags = Pro::setAnimationPrimary(flags, _animationPrimaryEdit->value());
-    flags = Pro::setAnimationSecondary(flags, _animationSecondaryEdit->value());
-    return flags;
+uint32_t ProCommonFieldsWidget::saveExtendedFlags(uint32_t flagsExt) const {
+    uint32_t flags = Pro::setAnimationPrimary(flagsExt, _animationPrimaryEdit->value());
+    return Pro::setAnimationSecondary(flags, _animationSecondaryEdit->value());
 }
 
 QSpinBox* ProCommonFieldsWidget::createSpinBox(int min, int max, const QString& tooltip) {

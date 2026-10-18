@@ -42,8 +42,10 @@ namespace cli {
     ///     protoCount: N,
     ///     unreadable: [{pid,kind,file,reason}],
     ///     protos: [{pid,kind,file,name,description,fid,flags,extendedFlags,sid,script, ...}] }
-    /// An item adds itemType, attackModes, material, size, weight, cost, inventoryFid, soundId and
-    /// one object named after its type (weapon, ammo, armor, drug, container, misc, key). A critter
+    /// An item decodes extendedFlags as {raw,bigGun,twoHanded,energyWeapon,hiddenItem} (energyWeapon
+    /// is sfall's bit, ignored by fallout2-ce) and adds itemType, attackModes, material, size, weight,
+    /// cost, inventoryFid, soundId and one object named after its type (weapon, ammo, armor, drug,
+    /// container, misc, key). A critter
     /// adds headFid, aiPacket, team, critterFlags, base, bonus, skills, bodyType, xp, killType and
     /// damageType.
     ///

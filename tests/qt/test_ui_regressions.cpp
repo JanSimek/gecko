@@ -41,6 +41,7 @@
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/widgets/DataPathsWidget.h"
 #include "ui/widgets/ObjectPreviewWidget.h"
+#include "ui/widgets/ProCommonFieldsWidget.h"
 #include "ui/widgets/SFMLWidget.h"
 #include "ui/input/ActionSpec.h"
 #include "ui/input/KeyBindingRegistry.h"
@@ -454,6 +455,43 @@ TEST_CASE("Weapon widget preserves raw perk ids while using message-backed label
 
     REQUIRE(pro->weaponData.perk == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::PerkId::WeaponFastReload)));
     REQUIRE(pro->weaponData.ammoType == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::CaliberType::Gauge12)));
+}
+
+TEST_CASE("Weapon energy checkbox edits sfall's extended-flags bit without clobbering the others", "[qt][pro]") {
+    ResourceDataScope resources;
+    resources.writeGameMessageFile("text/english/game/proto.msg", buildProtoMsg());
+    resources.writeGameMessageFile("text/english/game/perk.msg", buildPerkMsg({}, true));
+    resources.mount();
+
+    using enum geck::Pro::ExtendedItemFlags;
+    const auto bit = [](geck::Pro::ExtendedItemFlags flag) { return static_cast<uint32_t>(flag); };
+    const uint32_t kept = bit(BIG_GUN) | bit(TWO_HANDED) | bit(ITEM_HIDDEN);
+
+    auto pro = makeItemPro(geck::ItemType::Weapon);
+    pro->commonItemData.flagsExt = kept | bit(ENERGY) | 0x76u; // attack modes 6 and 7
+
+    // ProEditorDialog::saveProData order: the common fields first, then the type tab.
+    geck::ProCommonFieldsWidget common(resources.resources());
+    geck::ProWeaponWidget weapon(resources.resources());
+    common.loadFromPro(pro);
+    weapon.loadFromPro(pro);
+
+    auto* energyCheck = findCheckBoxByText(weapon, "Energy weapon (sfall)");
+    auto* primaryMode = findSpinBoxByToolTip(common, "Primary attack animation index (0-15)");
+    REQUIRE(energyCheck != nullptr);
+    REQUIRE(primaryMode != nullptr);
+    REQUIRE(energyCheck->isChecked());
+
+    energyCheck->setChecked(false);
+    primaryMode->setValue(2);
+    common.saveToPro(pro);
+    weapon.saveToPro(pro);
+    REQUIRE(pro->commonItemData.flagsExt == (kept | 0x72u));
+
+    energyCheck->setChecked(true);
+    common.saveToPro(pro);
+    weapon.saveToPro(pro);
+    REQUIRE(pro->commonItemData.flagsExt == (kept | bit(ENERGY) | 0x72u));
 }
 
 TEST_CASE("Drug widget loads stat and perk options from message files", "[qt][pro]") {

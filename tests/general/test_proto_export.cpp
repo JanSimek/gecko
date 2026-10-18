@@ -70,8 +70,8 @@ public:
             "{101}{}{Metal}\n{251}{}{laser}\n{252}{}{fire}\n{308}{}{10mm}\n{401}{}{Quadruped}\n");
         writeText(_root / "text/english/game/perk.msg", "{159}{}{Long Range}\n");
 
-        // Primary attack mode 6, secondary 7, Big Gun and Two Handed.
-        ByteWriter weapon = itemHeader(1, 100, 0x00000376, 3);
+        // Primary attack mode 6, secondary 7, Big Gun, Two Handed and sfall's Energy bit.
+        ByteWriter weapon = itemHeader(1, 100, 0x00000776, 3);
         be32s(weapon, { 6, 10, 20, 1 /* laser */, 25, 20, -1, 4, 5, 6, 2, 58 /* Weapon Long Range */, 10, 8 /* 10mm */, 3, 30 });
         weapon.u8('A');
         REQUIRE(weapon.size() == 122);
@@ -176,9 +176,10 @@ TEST_CASE("exportProtos decodes a weapon the way the engine reads it", "[proto][
     CHECK(weapon["script"].is_null());
 
     // The attack modes come from the extended flags' low byte (item.cc), not from header.flags.
-    CHECK(weapon["extendedFlags"]["raw"] == 0x376);
+    CHECK(weapon["extendedFlags"]["raw"] == 0x776);
     CHECK(weapon["extendedFlags"]["bigGun"] == true);
     CHECK(weapon["extendedFlags"]["twoHanded"] == true);
+    CHECK(weapon["extendedFlags"]["energyWeapon"] == true);
     CHECK(weapon["extendedFlags"]["hiddenItem"] == false);
     CHECK(weapon["attackModes"]["primary"] == json({ { "index", 6 }, { "type", "ranged" }, { "animation", "fireSingle" } }));
     CHECK(weapon["attackModes"]["secondary"] == json({ { "index", 7 }, { "type", "ranged" }, { "animation", "fireBurst" } }));
@@ -197,8 +198,7 @@ TEST_CASE("exportProtos decodes a weapon the way the engine reads it", "[proto][
     CHECK(w["caliber"] == json({ { "id", 8 }, { "name", "10mm" } }));
     CHECK(w["ammoPid"] == 3);
     CHECK(w["ammoCapacity"] == 30);
-    CHECK(w["soundId"] == 65);    // 'A'
-    CHECK(w["weaponFlags"] == 0); // a 122-byte engine record has no trailing word
+    CHECK(w["soundId"] == 65); // 'A'
 }
 
 TEST_CASE("exportProtos names ammo, armour and misc fields for what the engine does with them", "[proto][export]") {

@@ -161,7 +161,8 @@ namespace {
     ordered_json extendedItemFlags(std::uint32_t flags) {
         using enum Pro::ExtendedItemFlags;
         return { { "raw", flags }, { "bigGun", Pro::hasFlag(flags, BIG_GUN) },
-            { "twoHanded", Pro::hasFlag(flags, TWO_HANDED) }, { "hiddenItem", Pro::hasFlag(flags, ITEM_HIDDEN) } };
+            { "twoHanded", Pro::hasFlag(flags, TWO_HANDED) }, { "energyWeapon", Pro::hasFlag(flags, ENERGY) },
+            { "hiddenItem", Pro::hasFlag(flags, ITEM_HIDDEN) } };
     }
 
     ordered_json weaponData(const Pro::WeaponData& w, const Labels& labels) {
@@ -180,12 +181,6 @@ namespace {
         out["ammoPid"] = w.ammoPID;
         out["ammoCapacity"] = s32(w.ammoCapacity);
         out["soundId"] = w.soundId;
-        // Not part of the engine's weapon record. fallout2-ce protoItemDataRead stops at the soundCode
-        // byte (a 122-byte file), and every shipped weapon proto is exactly that long, so ProReader only
-        // ever fills this with its 0 default. sfall's "Energy Weapon" flag is extendedFlags 0x0400
-        // (sfall Skills.cpp), not a trailing field. Exported because gecko reads it, and it is 0 for any
-        // proto the engine can load.
-        out["weaponFlags"] = w.weaponFlags;
         return out;
     }
 

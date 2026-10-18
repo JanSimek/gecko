@@ -2,10 +2,12 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 
 #include "format/pro/Pro.h"
 #include "reader/pro/ProReader.h"
 #include "writer/pro/ProWriter.h"
+#include "support/ByteWriter.h"
 #include "support/Fixtures.h"
 #include "support/ProBuilder.h"
 #include "support/TempFile.h"
@@ -234,15 +236,18 @@ TEST_CASE("PRO scenery round-trip preserves the common header and subtype data",
     REQUIRE(got.sceneryData.stairsData.destElevation == 2);
 }
 
-TEST_CASE("PRO weapon round-trip preserves the optional weaponFlags field", "[pro][roundtrip][weapon]") {
+TEST_CASE("PRO weapon round-trip keeps sfall's energy bit in the extended flags", "[pro][roundtrip][weapon]") {
     TempFile tmpFile{ "test_pro_roundtrip_weapon", ".pro" };
     const auto& tempPath = tmpFile.path();
+
+    using enum geck::Pro::ExtendedItemFlags;
+    const uint32_t flagsExt = static_cast<uint32_t>(ENERGY) | static_cast<uint32_t>(BIG_GUN) | 0x76u;
 
     geck::Pro weapon{ tempPath };
     weapon.header.PID = static_cast<int32_t>(
         geck::ProtoId(geck::ObjectType::Item, 0x20u).pid());
     weapon.header.flags = 0x00000008;
-    weapon.commonItemData.flagsExt = 0x11112222u;
+    weapon.commonItemData.flagsExt = flagsExt;
     weapon.commonItemData.SID = 0x33u;
     weapon.commonItemData.weight = 5;
     weapon.commonItemData.basePrice = 250;
@@ -253,19 +258,65 @@ TEST_CASE("PRO weapon round-trip preserves the optional weaponFlags field", "[pr
     weapon.weaponData.ammoPID = 0x00000029;
     weapon.weaponData.ammoCapacity = 30;
     weapon.weaponData.soundId = 4;
-    weapon.weaponData.weaponFlags = 0x00000001; // energy-weapon bit; optional trailing field
 
     const geck::Pro got = proRoundTrip(weapon, tempPath);
 
+    // fallout2-ce protoItemDataRead stops at the weapon's sound byte: nothing trails it.
+    REQUIRE(std::filesystem::file_size(tempPath) == 122);
     REQUIRE(got.itemType() == geck::ItemType::Weapon);
-    REQUIRE(got.commonItemData.flagsExt == 0x11112222u);
+    REQUIRE(got.commonItemData.flagsExt == flagsExt);
+    REQUIRE(geck::Pro::hasFlag(got.commonItemData.flagsExt, ENERGY));
     REQUIRE(got.commonItemData.SID == 0x33u);
     REQUIRE(got.commonItemData.weight == 5);
     REQUIRE(got.weaponData.damageMin == 8);
     REQUIRE(got.weaponData.damageMax == 16);
     REQUIRE(got.weaponData.ammoPID == 0x00000029);
     REQUIRE(got.weaponData.ammoCapacity == 30);
-    REQUIRE(got.weaponData.weaponFlags == 0x00000001u);
+    REQUIRE(got.weaponData.soundId == 4);
+}
+
+TEST_CASE("PRO weapon rewrites the engine's 122-byte record byte for byte and ignores trailing bytes", "[pro][roundtrip][weapon]") {
+    // Built by hand in fallout2-ce protoRead + protoItemDataRead order, so the test pins the engine
+    // layout rather than gecko's reader and writer agreeing with each other.
+    ByteWriter engine;
+    for (const uint32_t v : { 0x00000020u, 100u, 0x07000010u, 0u, 0u, 0x00000008u, 0x00000476u, 0xFFFFFFFFu,
+             3u /* weapon */, 1u, 3u, 7u, 250u, 0x07000020u }) {
+        engine.be32(v);
+    }
+    engine.u8('0');
+    for (const uint32_t v : { 6u, 10u, 20u, 1u, 25u, 20u, 0xFFFFFFFFu, 4u, 5u, 6u, 2u, 58u, 10u, 8u, 3u, 30u }) {
+        engine.be32(v);
+    }
+    engine.u8('A');
+    REQUIRE(engine.size() == 122);
+
+    // The engine reads a fixed-size record, so bytes past it are not an error.
+    ByteWriter padded = engine;
+    padded.be32(0x00000001u);
+
+    TempFile source{ "test_pro_weapon_engine_layout", ".pro" };
+    {
+        std::ofstream file(source.path(), std::ios::binary);
+        file.write(reinterpret_cast<const char*>(padded.data().data()), static_cast<std::streamsize>(padded.size()));
+    }
+
+    geck::ProReader reader{};
+    auto pro = reader.openFile(source.path());
+    REQUIRE(pro != nullptr);
+    REQUIRE(pro->itemType() == geck::ItemType::Weapon);
+    REQUIRE(pro->commonItemData.flagsExt == 0x00000476u);
+    REQUIRE(geck::Pro::hasFlag(pro->commonItemData.flagsExt, geck::Pro::ExtendedItemFlags::ENERGY));
+    REQUIRE(pro->weaponData.perk == 58u);
+    REQUIRE(pro->weaponData.ammoCapacity == 30u);
+    REQUIRE(pro->weaponData.soundId == 'A');
+
+    TempFile rewritten{ "test_pro_weapon_engine_layout_out", ".pro" };
+    {
+        geck::ProWriter writer{};
+        writer.openFile(rewritten.path());
+        REQUIRE(writer.write(*pro));
+    }
+    REQUIRE(readAllBytes(rewritten.path()) == engine.data());
 }
 
 TEST_CASE("PRO container round-trip preserves item subtype data", "[pro][roundtrip][item]") {

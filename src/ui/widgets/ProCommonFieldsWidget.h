@@ -98,7 +98,9 @@ private:
     void loadObjectFlags(uint32_t flags);
     void loadExtendedFlags(uint32_t flagsExt);
     uint32_t saveObjectFlags() const;
-    uint32_t saveExtendedFlags() const;
+    // Replaces only the attack-mode nibbles of `flagsExt`; its other bits (big gun, two-handed,
+    // sfall energy, ...) are kept for the tabs that edit them.
+    uint32_t saveExtendedFlags(uint32_t flagsExt) const;
 
     QSpinBox* createSpinBox(int min, int max, const QString& tooltip = QString());
     QComboBox* createMaterialComboBox(const QString& tooltip = QString());

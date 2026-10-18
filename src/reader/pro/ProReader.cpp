@@ -123,15 +123,6 @@ std::unique_ptr<Pro> ProReader::read() {
                         pro->weaponData.ammoPID = utils.readBE32Signed();
                         pro->weaponData.ammoCapacity = utils.readBE32();
                         pro->weaponData.soundId = utils.readU8();
-
-                        // gecko's own trailing word, past the end of the engine's weapon record (see
-                        // Pro::WeaponData::weaponFlags); shipped weapon protos never carry it.
-                        if (utils.bytesRemaining() >= Pro::FIELD_SIZE_BYTES) {
-                            pro->weaponData.weaponFlags = utils.readBE32();
-                        } else {
-                            pro->weaponData.weaponFlags = 0; // Default value for compatibility
-                            spdlog::debug("Weapon PRO has no trailing weaponFlags word (engine layout)");
-                        }
                         break;
                     }
                     case ItemType::Ammo: {

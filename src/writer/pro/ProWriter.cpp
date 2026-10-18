@@ -217,11 +217,7 @@ void ProWriter::writeWeaponData(const Pro& pro) {
     utils.writeBE32(pro.weaponData.ammoCapacity);
     utils.writeU8(pro.weaponData.soundId);
 
-    // gecko's trailing weaponFlags word. The engine reads a fixed record and ignores it.
-    utils.writeBE32(pro.weaponData.weaponFlags);
-
-    spdlog::trace("ProWriter: Wrote weapon data (damage: {}-{}, flags: 0x{:X})",
-        pro.weaponData.damageMin, pro.weaponData.damageMax, pro.weaponData.weaponFlags);
+    spdlog::trace("ProWriter: Wrote weapon data (damage: {}-{})", pro.weaponData.damageMin, pro.weaponData.damageMax);
 }
 
 void ProWriter::writeAmmoData(const Pro& pro) {
