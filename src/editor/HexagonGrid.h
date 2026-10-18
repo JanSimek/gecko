@@ -39,10 +39,11 @@ public:
     std::optional<GridCoordinates> coordinatesForPosition(int position) const;
     std::optional<int> positionForCoordinates(int x, int y) const;
     std::optional<int> tileIndexForPosition(int position) const;
-    std::vector<int> rectangleBorderPositions(int topLeftPosition,
-        int topRightPosition,
-        int bottomLeftPosition,
-        int bottomRightPosition) const;
+    /// The hexes along the inside edge of a screen-space rectangle: those whose centre lies within
+    /// [left, right] x [top, bottom] and that have a neighbour outside it (or off the grid). The ring
+    /// follows the screen axes and is closed under hex adjacency. Ascending; empty when no hex centre
+    /// falls inside.
+    std::vector<int> screenRectangleBorderPositions(float left, float top, float right, float bottom) const;
 };
 
 } // namespace geck

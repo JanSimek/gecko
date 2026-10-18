@@ -156,12 +156,6 @@ terrain-derived locations:
     single tiles; nothing paints a repeating multi-tile pattern by dragging.
 
 **Known bugs:**
-- **Scroll-blocker rectangle follows the hex grid, not the screen.** The drag preview is a screen
-  rectangle, but `HexagonGrid::rectangleBorderPositions` walks hex rows/columns from its corners,
-  so the placed border runs diagonally. `createScrollBlockersFromHexes` also bypasses undo.
-- **Switching elevation keeps the selection** (`EditorWidget::changeElevation` neither clears the
-  object nor the spatial-script selection), so Delete may act on the previous elevation —
-  unconfirmed, check by hand.
 - *Reported, unconfirmed from code:* the file browser panel is sometimes hard to resize; placing
   lights (`light.frm`, preloaded but never drawn) misbehaves.
 ---
