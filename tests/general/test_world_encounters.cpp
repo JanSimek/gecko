@@ -34,9 +34,13 @@ TEST_CASE("world encounters report the tables and the odds at a worldmap positio
                                               "terrain_types=Desert:1\n"
                                               "[Encounter Table 0]\nlookup_name=DstN\nmaps=Desert Encounter 1\n"
                                               "enc_00=Chance:50%,Enc:(2-5) Raiders AMBUSH Player,If(Global(1) > 1)\n"
+                                              "[Encounter Table 1]\nlookup_name=DstS\n"
+                                              "enc_00=Chance:50%,Enc:(2-5) Raiders AMBUSH Player\n"
+                                              "enc_01=Chance:50%,Enc:(3-8) Rats AMBUSH Player\n"
                                               "[Tile Data]\nnum_horizontal_tiles=1\n"
                                               "[Tile 0]\nart_idx=339\nencounter_difficulty=2\n"
                                               "1_0=Desert, Fill_N, Common, Frequent, Rare, dstn\n");
+    writeFile(root / "text" / "english" / "game" / "worldmap.msg", "{3000}{}{A party of raiders.}\n{3051}{}{Some rats.}\n");
 
     resource::GameResources resources;
     resources.files().addDataPath(root.string());
@@ -46,11 +50,15 @@ TEST_CASE("world encounters report the tables and the odds at a worldmap positio
         REQUIRE(cli::buildWorldEncounters(resources, oss) == 0);
         const auto j = nlohmann::json::parse(oss.str());
         CHECK(j["frequencies"]["frequent"] == 38);
-        REQUIRE(j["encounterTables"].size() == 1);
+        REQUIRE(j["encounterTables"].size() == 2);
         const auto& entry = j["encounterTables"][0]["entries"][0];
         CHECK(entry["groups"][0]["name"] == "Raiders");
         CHECK(entry["conditionGvars"][0]["index"] == 1);
         CHECK(entry["conditionGvars"][0]["name"] == "GVAR_HUNTERS");
+        // worldmap.msg 3000 + 50 * table + entry.
+        CHECK(entry["description"] == "A party of raiders.");
+        CHECK(j["encounterTables"][1]["entries"][0]["description"].is_null()); // 3050: no message
+        CHECK(j["encounterTables"][1]["entries"][1]["description"] == "Some rats.");
     }
 
     SECTION("one position: its sub-tile, the odds per part of the day and the table") {
