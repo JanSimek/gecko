@@ -62,7 +62,8 @@ option(GECK_BUILD_CLI "Build the headless gecko-cli tool" ON)
 # Needs the CLI lib; pulls in header-only nlohmann/json. Default ON, but opts out independently.
 option(GECK_BUILD_MCP "Build the MCP server (gecko-mcp)" ON)
 # Tier-2 scripting (embeds Luau + LuaBridge3). OFF by default so a normal build never
-# downloads or compiles Luau; CI builds it ON. See PLAN.md "Optional, compile-flag-gated".
+# downloads or compiles Luau; CI builds it ON. Design record: `git show edf773d:PLAN.md`,
+# "Optional, compile-flag-gated".
 option(GECK_ENABLE_SCRIPTING "Build the optional Luau scripting runtime" OFF)
 
 ##################################################

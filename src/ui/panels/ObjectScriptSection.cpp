@@ -293,7 +293,7 @@ void ObjectScriptSection::showObject(Map* map, std::shared_ptr<MapObject> object
         if (_statusProvider) {
             status = _statusProvider(_programIndex);
         }
-        // CLAUDE.md "Script Index Bases": the map stores the 0-based index, SSL headers name it 1-based.
+        // AGENTS.md "Script Index Bases": the map stores the 0-based index, SSL headers name it 1-based.
         const QString type = QString::fromUtf8(MapScript::toString(
             MapScript::fromPid(static_cast<uint32_t>(_object->map_scripts_pid))));
         _identity->setFullText(QString("Program #%1 · SCRIPT_* %2 · %3 script")
