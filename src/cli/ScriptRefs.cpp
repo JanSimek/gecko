@@ -12,7 +12,6 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <cctype>
 #include <filesystem>
 #include <format>
 #include <functional>
@@ -33,9 +32,7 @@ namespace {
 
     constexpr std::size_t kMaxRefs = 400; // cap output so a common name can't flood the response
 
-    bool sameName(std::string_view a, std::string_view b) {
-        return std::ranges::equal(a, b, [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
-    }
+    using text::equalsIgnoreCase;
 
     // A map name as the engine matches it (worldmap.cc wmMapMatchNameToIdx): lowercase, up to the first
     // '.', here also without a directory.
@@ -95,25 +92,25 @@ namespace {
         bool matches(const ScriptRefsOptions& options, const ssl::Expr& expr) const {
             if (options.kind == "call") {
                 const auto* call = std::get_if<ssl::Call>(&expr.node);
-                return call != nullptr && sameName(call->callee, options.name);
+                return call != nullptr && equalsIgnoreCase(call->callee, options.name);
             }
             if (options.kind == "procedure") {
                 return namesProcedure(expr, options.name);
             }
             // "macro": the outermost expression the macro produced, once per place the macro was used.
             const auto chain = _unit.macroChain(expr.range);
-            return std::ranges::any_of(chain, [&options](const ssl::Macro* macro) { return sameName(macro->name, options.name); });
+            return std::ranges::any_of(chain, [&options](const ssl::Macro* macro) { return equalsIgnoreCase(macro->name, options.name); });
         }
 
         static bool namesProcedure(const ssl::Expr& expr, std::string_view name) {
             if (const auto* call = std::get_if<ssl::Call>(&expr.node)) {
-                return sameName(call->callee, name);
+                return equalsIgnoreCase(call->callee, name);
             }
             if (const auto* bare = std::get_if<ssl::Name>(&expr.node)) {
-                return sameName(bare->name, name);
+                return equalsIgnoreCase(bare->name, name);
             }
             if (const auto* ref = std::get_if<ssl::ProcedureRef>(&expr.node)) {
-                return sameName(ref->name, name);
+                return equalsIgnoreCase(ref->name, name);
             }
             return false;
         }
@@ -121,7 +118,7 @@ namespace {
         void globalVariable(const std::string& gvarName) {
             const auto target = targetIndex(gvarName);
             for (const ssl::VariableRef& ref : ssl::globalVariableRefs(_unit, _graph)) {
-                const bool matches = target.has_value() && ref.index.has_value() ? *ref.index == *target : sameName(ref.name, gvarName);
+                const bool matches = target.has_value() && ref.index.has_value() ? *ref.index == *target : equalsIgnoreCase(ref.name, gvarName);
                 if (!matches) {
                     continue;
                 }

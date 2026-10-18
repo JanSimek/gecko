@@ -8,6 +8,7 @@
 #include "util/ExitGridDirection.h"
 #include "util/HexLine.h"
 #include "editor/HexagonGrid.h"
+#include "editor/HexGeometry.h"
 #include "editor/helper/ObjectQueries.h"
 #include "selection/SelectionManager.h"
 #include "selection/SelectionState.h"
@@ -227,7 +228,7 @@ namespace {
         const int hx = here->get().x();
         const int hy = here->get().y();
         std::vector<NeighborOffset> offsets;
-        for (const int nb : hexline::hexNeighbors(hex)) {
+        for (const int nb : hexgrid::neighbors(hex)) {
             const auto nbHex = grid.getHexByPosition(static_cast<uint32_t>(nb));
             if (nbHex.has_value()) {
                 offsets.push_back({ nb, nbHex->get().x() - hx, nbHex->get().y() - hy });

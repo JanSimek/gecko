@@ -7,6 +7,7 @@
 #include "format/dat/DatEntry.h"
 #include "format/IFile.h"
 #include "reader/ErrorMessages.h"
+#include "reader/TextParsing.h"
 #include <algorithm>
 
 namespace geck {
@@ -55,11 +56,9 @@ std::unique_ptr<Dat> DatReader::read() {
                     ErrorMessages::invalidStringLength(_path, filename_size), _path);
             }
 
-            std::string filename = utils.readFixedString(filename_size);
+            std::string filename = text::toLower(utils.readFixedString(filename_size));
             // normalize file path
             std::replace(filename.begin(), filename.end(), '\\', '/');
-            std::transform(filename.begin(), filename.end(), filename.begin(),
-                [](unsigned char c) { return std::tolower(c); });
             entry->setFilename(filename);
 
             bool compressed = static_cast<bool>(utils.readU8());

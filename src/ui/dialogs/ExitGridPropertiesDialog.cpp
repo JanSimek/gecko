@@ -2,7 +2,7 @@
 #include "ui/theme/ThemeManager.h"
 #include "ui/GameEnums.h"
 #include "util/Constants.h"
-#include "editor/HexagonGrid.h"
+#include "editor/HexGeometry.h"
 #include "resource/MapNameResolver.h"
 
 #include <QApplication>
@@ -297,7 +297,7 @@ bool ExitGridPropertiesDialog::isValidInput() const {
     }
 
     int position = _positionSpinBox->value();
-    if (position < 0 || position >= HexagonGrid::POSITION_COUNT) { // hex position 0-39999
+    if (!hexgrid::isValidPosition(position)) {
         return false;
     }
 

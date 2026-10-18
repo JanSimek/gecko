@@ -1,6 +1,5 @@
 # General tests (Catch2) - Pure C++ logic tests
 add_executable(general_tests
-    general/test_ammo_caliber_names.cpp
     general/test_fallout_engine_enums.cpp
     general/test_engine_ids.cpp
     general/test_hexagon_grid.cpp

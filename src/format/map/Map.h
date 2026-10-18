@@ -38,8 +38,9 @@ public:
     static constexpr int SCRIPT_SECTIONS = 5;
     static constexpr int FILENAME_LENGTH = 16;
 
-    //!< Fallout 2 maps always have three elevation slots (engine ELEVATION_COUNT).
-    static constexpr int ELEVATION_COUNT = 3;
+    //!< Fallout 2 maps always have three elevation slots (engine ELEVATION_COUNT); defined once on
+    //!< MapEdge, which this header includes and which sizes its per-elevation table with it.
+    static constexpr int ELEVATION_COUNT = MapEdge::ELEVATION_COUNT;
 
     Map(std::filesystem::path path)
         : IFile(path) { }

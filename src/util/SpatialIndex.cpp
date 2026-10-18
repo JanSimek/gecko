@@ -1,5 +1,7 @@
 #include "SpatialIndex.h"
 
+#include "format/map/Map.h"
+
 namespace geck {
 
 TileSpatialIndex::TileSpatialIndex()
@@ -14,14 +16,14 @@ void TileSpatialIndex::buildIndex(const std::vector<sf::Sprite>& floorSprites,
     _indexedTiles = 0;
 
     // Every sprite carries a texture (real or blank) under SFML 3, so no null check is needed
-    for (size_t i = 0; i < TILES_PER_ELEVATION; ++i) {
+    for (size_t i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
         const auto& floorSprite = floorSprites[i];
         sf::FloatRect bounds = floorSprite.getGlobalBounds();
         _floorIndex.addItem(static_cast<int>(i), bounds);
         _indexedTiles++;
     }
 
-    for (size_t i = 0; i < TILES_PER_ELEVATION; ++i) {
+    for (size_t i = 0; i < Map::TILES_PER_ELEVATION; ++i) {
         const auto& roofSprite = roofSprites[i];
         sf::FloatRect bounds = roofSprite.getGlobalBounds();
         _roofIndex.addItem(static_cast<int>(i), bounds);

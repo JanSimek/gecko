@@ -1,19 +1,16 @@
 #include "ssl/CallGraph.h"
 
+#include "reader/TextParsing.h"
+
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <vector>
 
 namespace geck::ssl {
 
 namespace {
 
-    std::string lower(std::string_view text) {
-        std::string out(text);
-        std::ranges::transform(out, out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return out;
-    }
+    using text::toLower;
 
     // fallout2-ce scripts.cc gScriptProcNames, without its "none_x_bad" placeholders.
     constexpr std::array<std::string_view, 24> ENGINE_PROCEDURES{ "no_p_proc", "start", "spatial_p_proc",
@@ -30,17 +27,17 @@ namespace {
     std::set<std::string> localNames(const Procedure& procedure) {
         std::set<std::string> names;
         for (const Parameter& parameter : procedure.parameters) {
-            names.insert(lower(parameter.name));
+            names.insert(toLower(parameter.name));
         }
         forEachStatement(*procedure.body, [&names](const Stmt& stmt) {
             if (const auto* locals = std::get_if<LocalVariables>(&stmt.node)) {
                 for (const Variable& variable : locals->variables) {
-                    names.insert(lower(variable.name));
+                    names.insert(toLower(variable.name));
                 }
             } else if (const auto* loop = std::get_if<ForEach>(&stmt.node); loop != nullptr && loop->declares) {
-                names.insert(lower(loop->value));
+                names.insert(toLower(loop->value));
                 if (!loop->key.empty()) {
-                    names.insert(lower(loop->key));
+                    names.insert(toLower(loop->key));
                 }
             }
         });
@@ -73,13 +70,13 @@ namespace {
     // an `@name` reference.
     std::string referencedName(const Expr& expr) {
         if (const auto* call = std::get_if<Call>(&expr.node)) {
-            return lower(call->callee);
+            return toLower(call->callee);
         }
         if (const auto* name = std::get_if<Name>(&expr.node)) {
-            return lower(name->name);
+            return toLower(name->name);
         }
         if (const auto* ref = std::get_if<ProcedureRef>(&expr.node)) {
-            return lower(ref->name); // `@proc`: sslc keeps a procedure passed by reference
+            return toLower(ref->name); // `@proc`: sslc keeps a procedure passed by reference
         }
         return {};
     }
@@ -87,7 +84,7 @@ namespace {
 } // namespace
 
 bool isEngineProcedure(std::string_view name) {
-    const std::string lowered = lower(name);
+    const std::string lowered = toLower(name);
     return std::ranges::find(ENGINE_PROCEDURES, lowered) != ENGINE_PROCEDURES.end();
 }
 
@@ -96,7 +93,7 @@ CallGraph::CallGraph(const Program& program)
     std::set<std::string> procedures;
     std::vector<std::string> roots;
     for (const Procedure& procedure : program.procedures) {
-        const std::string name = lower(procedure.name);
+        const std::string name = toLower(procedure.name);
         procedures.insert(name);
         const bool protectedName = isEngineProcedure(name) || name == FALLOUT1_DESCRIPTION;
         if (protectedName || procedure.linkage == Linkage::Export || procedure.timedDelay || procedure.condition) {
@@ -108,9 +105,9 @@ CallGraph::CallGraph(const Program& program)
         if (!procedure.body.has_value()) {
             continue;
         }
-        _localNames[lower(procedure.name)] = localNames(procedure);
-        auto& refs = _references[lower(procedure.name)];
-        const std::set<std::string>& shadowed = _localNames[lower(procedure.name)];
+        _localNames[toLower(procedure.name)] = localNames(procedure);
+        auto& refs = _references[toLower(procedure.name)];
+        const std::set<std::string>& shadowed = _localNames[toLower(procedure.name)];
         forEachLiveExpression(procedure, [&procedures, &shadowed, &refs](const Expr& expr) {
             if (std::string name = referencedName(expr); procedures.contains(name) && !shadowed.contains(name)) {
                 refs.insert(std::move(name));
@@ -134,7 +131,7 @@ CallGraph::CallGraph(const Program& program)
 
 const std::set<std::string>& CallGraph::references(std::string_view procedure) const {
     static const std::set<std::string> none;
-    const auto it = _references.find(lower(procedure));
+    const auto it = _references.find(toLower(procedure));
     return it == _references.end() ? none : it->second;
 }
 
@@ -146,7 +143,7 @@ void CallGraph::forEachLiveExpression(const Procedure& procedure, const ExprVisi
         return;
     }
     static const std::set<std::string> none;
-    const auto names = _localNames.find(lower(procedure.name));
+    const auto names = _localNames.find(toLower(procedure.name));
     const LiveScope scope{ _folder, names == _localNames.end() ? none : names->second };
     for (const StmtPtr& stmt : procedure.body->statements) {
         if (stmt) {
@@ -156,7 +153,7 @@ void CallGraph::forEachLiveExpression(const Procedure& procedure, const ExprVisi
 }
 
 bool CallGraph::isLive(std::string_view procedure) const {
-    return _live.contains(lower(procedure));
+    return _live.contains(toLower(procedure));
 }
 
 } // namespace geck::ssl

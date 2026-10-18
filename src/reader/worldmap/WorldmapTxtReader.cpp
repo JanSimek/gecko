@@ -304,7 +304,8 @@ namespace {
 
 } // namespace
 
-WorldmapTxt parseWorldmapTxt(std::istream& in) {
+WorldmapTxt parseWorldmapTxt(const std::string& text) {
+    std::istringstream in(text);
     WorldmapTxt out;
     ParseState st;
     ini::parse(
@@ -321,11 +322,6 @@ WorldmapTxt parseWorldmapTxt(std::istream& in) {
     }
     out.encounterTables = resolveEncounterTables(st.tables);
     return out;
-}
-
-WorldmapTxt parseWorldmapTxt(const std::string& text) {
-    std::istringstream in(text);
-    return parseWorldmapTxt(in);
 }
 
 } // namespace geck

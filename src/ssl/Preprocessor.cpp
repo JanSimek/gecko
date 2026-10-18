@@ -1,7 +1,9 @@
 #include "ssl/Preprocessor.h"
 
+#include "reader/TextParsing.h"
+#include "ssl/ConstantFolder.h"
+
 #include <algorithm>
-#include <cctype>
 #include <format>
 #include <utility>
 
@@ -26,9 +28,7 @@ namespace {
 
     // sslc's built-in constants (lex.c lexAddConstant), compared case-insensitively like its names.
     Value sslConstant(std::string_view name) {
-        const auto is = [name](std::string_view word) {
-            return std::ranges::equal(name, word, [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); });
-        };
+        const auto is = [name](std::string_view word) { return text::equalsIgnoreCase(name, word); };
         if (is("true")) {
             return 1;
         }
@@ -42,10 +42,6 @@ namespace {
         int level; // precedence, loosest first
         Value (*apply)(int64_t, int64_t);
     };
-
-    Value boolean(bool value) {
-        return value ? 1 : 0;
-    }
 
     // The C binary operators an #if line or a constant may use.
     const BinaryOperator* binaryOperator(const Token& token) {

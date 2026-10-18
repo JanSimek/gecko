@@ -2,9 +2,7 @@
 
 #include "cli/PatternJson.h"
 
-#include <fstream>
 #include <ostream>
-#include <sstream>
 
 #include "resource/GameResources.h"
 
@@ -35,22 +33,13 @@
 #include "rendering/MapSpriteLoader.h"
 #include "util/UndoStack.h"
 #include "resource/MapFileIO.h"
+#include "util/FileIo.h"
 #endif
 
 namespace geck::cli {
 
 #ifdef GECK_SCRIPTING_ENABLED
 namespace {
-
-    std::string readFile(const std::string& path) {
-        std::ifstream file(path, std::ios::binary);
-        if (!file) {
-            return {};
-        }
-        std::ostringstream buffer;
-        buffer << file.rdbuf();
-        return buffer.str();
-    }
 
     // "out/town.map", 3 -> "out/town_3.map" — the per-map output name of a batch run.
     std::string numberedOutPath(const std::string& outPath, int n) {
@@ -193,7 +182,7 @@ int generateMap(resource::GameResources& resources, const GenerateOptions& optio
         out << "error: --count must be at least 1.\n";
         return 2;
     }
-    const std::string source = readFile(options.scriptPath);
+    const std::string source = io::readFile(options.scriptPath);
     if (source.empty()) {
         out << "error: cannot read script (or it is empty): " << options.scriptPath << "\n";
         return 2;

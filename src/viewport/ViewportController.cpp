@@ -1,5 +1,6 @@
 #include "ViewportController.h"
 #include "editor/Hex.h"
+#include "editor/HexGeometry.h"
 #include "util/Constants.h"
 #include "util/TileUtils.h"
 #include <spdlog/spdlog.h>
@@ -145,7 +146,7 @@ int ViewportController::worldPosToHexIndex(sf::Vector2f worldPos) const {
     }
 
     const int hexIndex = static_cast<int>(hexPosition);
-    if (_hexGrid->containsPosition(hexIndex)) {
+    if (hexgrid::isValidPosition(hexIndex)) {
         spdlog::trace("ViewportController::worldPosToHexIndex: world({:.1f}, {:.1f}) -> hex({})",
             worldPos.x, worldPos.y, hexIndex);
         return hexIndex;
@@ -195,7 +196,7 @@ void ViewportController::updateViewForWindowSize(sf::Vector2u windowSize) {
 
 std::optional<HexPosition> ViewportController::worldPosToHexPosition(const WorldCoords& worldPos) const {
     int hexIndex = worldPosToHexIndex(worldPos.toVector());
-    if (hexIndex >= 0 && isValidHexPosition(hexIndex)) {
+    if (hexgrid::isValidPosition(hexIndex)) {
         return HexPosition(hexIndex);
     }
     return std::nullopt;

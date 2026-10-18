@@ -22,6 +22,10 @@
 using namespace geck;
 using namespace geck::selection;
 
+namespace {
+constexpr int kTileCount = static_cast<int>(Map::TILES_PER_ELEVATION);
+}
+
 //==============================================================================
 // Mock provider for SelectionManager tests.
 //
@@ -88,13 +92,13 @@ public:
 
     // --- Test setup helpers ---
 
-    // Seed an elevation with a full TILES_PER_ELEVATION-sized tile vector.
+    // Seed an elevation with a full Map::TILES_PER_ELEVATION-sized tile vector.
     // Every floor is set; every roof defaults to EMPTY_TILE so callers can mark
     // specific roof tiles as present per elevation.
     void seedElevation(int elevation) {
         std::vector<Tile> tiles;
-        tiles.reserve(TILES_PER_ELEVATION);
-        for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
+        tiles.reserve(kTileCount);
+        for (int i = 0; i < kTileCount; ++i) {
             // floor = arbitrary non-empty texture id, roof = EMPTY_TILE.
             tiles.emplace_back(static_cast<uint16_t>(2), static_cast<uint16_t>(Map::EMPTY_TILE));
         }
@@ -130,9 +134,9 @@ TEST_CASE("Mock provider position-based tile hit tests", "[selection_manager][mo
 
         // Verify tiles are within valid range
         REQUIRE(tile1.value() >= 0);
-        REQUIRE(tile1.value() < TILES_PER_ELEVATION);
+        REQUIRE(tile1.value() < kTileCount);
         REQUIRE(tile2.value() >= 0);
-        REQUIRE(tile2.value() < TILES_PER_ELEVATION);
+        REQUIRE(tile2.value() < kTileCount);
     }
 
     SECTION("Roof vs floor selection at same position") {
@@ -291,7 +295,7 @@ TEST_CASE("active selection layers gate ALL-mode selection", "[selection_manager
     SECTION("floor only") {
         mgr.setActiveLayers({ .floorTiles = true, .roofTiles = false, .objects = false });
         mgr.selectAll(SelectionMode::ALL, 0);
-        CHECK(mgr.getCurrentSelection().getFloorTileIndices().size() == static_cast<size_t>(TILES_PER_ELEVATION));
+        CHECK(mgr.getCurrentSelection().getFloorTileIndices().size() == static_cast<size_t>(Map::TILES_PER_ELEVATION));
         CHECK(mgr.getCurrentSelection().getRoofTileIndices().empty());
     }
 
@@ -305,7 +309,7 @@ TEST_CASE("active selection layers gate ALL-mode selection", "[selection_manager
     SECTION("floor + roof combined") {
         mgr.setActiveLayers({ .floorTiles = true, .roofTiles = true, .objects = false });
         mgr.selectAll(SelectionMode::ALL, 0);
-        CHECK(mgr.getCurrentSelection().getFloorTileIndices().size() == static_cast<size_t>(TILES_PER_ELEVATION));
+        CHECK(mgr.getCurrentSelection().getFloorTileIndices().size() == static_cast<size_t>(Map::TILES_PER_ELEVATION));
         CHECK(mgr.getCurrentSelection().getRoofTileIndices().size() == 2);
     }
 }
@@ -641,9 +645,9 @@ TEST_CASE("SelectionManager area selection honors host elevation (regression)", 
 
     // Build full floor/roof sprite vectors positioned at their isometric screen
     // coordinates, so TileSpatialIndex::buildIndex() can index every tile.
-    mockWidget.floorSprites.reserve(TILES_PER_ELEVATION);
-    mockWidget.roofSprites.reserve(TILES_PER_ELEVATION);
-    for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
+    mockWidget.floorSprites.reserve(kTileCount);
+    mockWidget.roofSprites.reserve(kTileCount);
+    for (int i = 0; i < kTileCount; ++i) {
         auto floorPos = indexToScreenPosition(i, false);
         sf::Sprite floorSprite(texture);
         floorSprite.setPosition({ static_cast<float>(floorPos.x), static_cast<float>(floorPos.y) });

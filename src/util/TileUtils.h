@@ -58,7 +58,7 @@ struct ScreenPosition {
 /**
  * @brief Convert linear tile index to tile coordinates
  *
- * @param tileIndex Linear index of the tile (0 to TILES_PER_ELEVATION-1)
+ * @param tileIndex Linear index of the tile (0 to Map::TILES_PER_ELEVATION-1)
  * @return TileCoordinates with x (row) and y (column) values
  */
 inline TileCoordinates indexToCoordinates(int tileIndex) {
@@ -160,7 +160,7 @@ inline std::optional<int> nearestTileCentreIndex(float worldX, float py, int row
  *
  * @param worldX,worldY Click position in the same world space as the tile sprites.
  * @param isRoof Resolve against the roof layer (applies the roof offset).
- * @return Tile index in [0, TILES_PER_ELEVATION), or std::nullopt if the point is off the grid.
+ * @return Tile index in [0, Map::TILES_PER_ELEVATION), or std::nullopt if the point is off the grid.
  */
 inline std::optional<int> screenToTileIndex(float worldX, float worldY, bool isRoof = false) {
     constexpr float X = static_cast<float>(TILE_X_OFFSET);       // column x-step

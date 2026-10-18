@@ -13,7 +13,8 @@ namespace {
     using geck::text::trim;
 } // namespace
 
-EndDeathTxt parseEndDeathTxt(std::istream& in) {
+EndDeathTxt parseEndDeathTxt(const std::string& text) {
+    std::istringstream in(text);
     EndDeathTxt out;
     std::string line;
     while (std::getline(in, line)) {
@@ -36,11 +37,6 @@ EndDeathTxt parseEndDeathTxt(std::istream& in) {
         out.endings.push_back(ending);
     }
     return out;
-}
-
-EndDeathTxt parseEndDeathTxt(const std::string& text) {
-    std::istringstream in(text);
-    return parseEndDeathTxt(in);
 }
 
 std::vector<std::string> parseEndingSubtitles(const std::string& text) {

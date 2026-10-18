@@ -26,9 +26,15 @@ inline std::string trim(const std::string& s) {
 }
 
 /// ASCII-lowercase a copy of the string.
-inline std::string toLower(std::string s) {
-    std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return s;
+inline std::string toLower(std::string_view text) {
+    std::string out(text);
+    std::ranges::transform(out, out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return out;
+}
+
+/// ASCII case-insensitive equality.
+inline bool equalsIgnoreCase(std::string_view a, std::string_view b) {
+    return std::ranges::equal(a, b, [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
 }
 
 /// A whole decimal or 0x/0X-prefixed hexadecimal integer, or nullopt for anything else: empty,

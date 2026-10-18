@@ -18,6 +18,7 @@
 #include "editing/commands/EdgeEditService.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "format/map/MapScript.h"
+#include "editor/HexGeometry.h"
 #include "util/BuiltTile.h"
 #include "rendering/MapEdgeOverlayGeometry.h"
 #include "rendering/MapSpriteLoader.h"
@@ -1922,7 +1923,7 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
         return;
     }
     const int hex = _controller.viewport().worldPosToHexIndex(worldPos);
-    if (!_session.hexgrid().containsPosition(hex)) {
+    if (!hexgrid::isValidPosition(hex)) {
         return;
     }
     if (_stampVariantIndex < 0 || _stampVariantIndex >= static_cast<int>(_stampPattern->variants.size())) {
@@ -1963,7 +1964,7 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
         return;
     }
     const int hex = _controller.viewport().worldPosToHexIndex(worldPos);
-    if (!_session.hexgrid().containsPosition(hex)) {
+    if (!hexgrid::isValidPosition(hex)) {
         clearStampPreview();
         return;
     }
@@ -2550,7 +2551,7 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     }
 
     int hexPosition = _controller.viewport().worldPosToHexIndex(worldPos);
-    if (!_session.hexgrid().containsPosition(hexPosition)) {
+    if (!hexgrid::isValidPosition(hexPosition)) {
         spdlog::warn("EditorWidget: Invalid hex position {} for object placement", hexPosition);
         return;
     }

@@ -1,10 +1,15 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "editor/HexagonGrid.h"
+#include "format/map/Map.h"
 #include "util/Constants.h"
 #include "util/TileUtils.h"
 
 using namespace geck;
+
+namespace {
+constexpr int kTileCount = static_cast<int>(Map::TILES_PER_ELEVATION);
+}
 
 //==============================================================================
 // SECTION: Tile Selection Tests
@@ -40,7 +45,7 @@ TEST_CASE("Tile-to-hex coordinate conversion", "[tile_selection]") {
 
             // Verify the hex is within valid range
             REQUIRE(tileIndex >= 0);
-            REQUIRE(tileIndex < TILES_PER_ELEVATION);
+            REQUIRE(tileIndex < kTileCount);
         }
     }
 
@@ -59,9 +64,9 @@ TEST_CASE("Tile-to-hex coordinate conversion", "[tile_selection]") {
 TEST_CASE("Floor tile selection validation", "[tile_selection][floor]") {
     SECTION("Valid floor tile indices") {
         // Test that all valid tile indices are within bounds
-        for (int i = 0; i < TILES_PER_ELEVATION; i += 1000) { // Sample every 1000th tile
+        for (int i = 0; i < kTileCount; i += 1000) { // Sample every 1000th tile
             REQUIRE(i >= 0);
-            REQUIRE(i < TILES_PER_ELEVATION);
+            REQUIRE(i < kTileCount);
 
             // Convert to coordinates and verify they're valid
             auto coords = indexToCoordinates(i);
@@ -98,7 +103,7 @@ TEST_CASE("Roof tile selection validation", "[tile_selection][roof]") {
 
     SECTION("Roof tile coordinate validation") {
         // Test that roof tiles use the same coordinate system as floor tiles
-        std::vector<int> testIndices = { 0, 500, 1500, 3000, 5000, TILES_PER_ELEVATION - 1 };
+        std::vector<int> testIndices = { 0, 500, 1500, 3000, 5000, kTileCount - 1 };
 
         for (int index : testIndices) {
             auto floorCoords = indexToCoordinates(index);
@@ -157,7 +162,7 @@ TEST_CASE("Hex vs tile coordinate system differences", "[hex_selection]") {
 
         REQUIRE(HexagonGrid::GRID_WIDTH == MAP_WIDTH * 2);
         REQUIRE(HexagonGrid::GRID_HEIGHT == MAP_HEIGHT * 2);
-        REQUIRE(HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT == TILES_PER_ELEVATION * 4);
+        REQUIRE(HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT == kTileCount * 4);
     }
 
     SECTION("Coordinate mapping validation") {

@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <format>
@@ -15,6 +14,7 @@
 
 #include "editor/FloorSynth.h"
 #include "editor/Hex.h"
+#include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
 #include "editor/Reachability.h"
@@ -31,6 +31,7 @@
 #include "pattern/FillPlan.h"
 #include "pattern/PatternSprite.h"
 #include "pattern/PatternStamper.h"
+#include "reader/TextParsing.h"
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
 #include <spdlog/spdlog.h>
@@ -55,12 +56,11 @@ MapScriptApi::MapScriptApi(resource::GameResources& resources, const HexagonGrid
 }
 
 bool MapScriptApi::isValidHex(int hex) const {
-    return hex >= 0 && hex < HexagonGrid::POSITION_COUNT;
+    return hexgrid::isValidPosition(hex);
 }
 
 std::vector<int> MapScriptApi::hexNeighbors(int hex) const {
-    // Parity-correct cube-coordinate neighbours; shared with the editor's exit-grid edge walk.
-    return hexline::hexNeighbors(hex);
+    return hexgrid::neighbors(hex);
 }
 
 int MapScriptApi::hexDir(int fromHex, int toHex) const {
@@ -78,12 +78,6 @@ namespace {
             return static_cast<uint16_t>(Map::EMPTY_TILE);
         }
         return isRoof ? it->second[tileIndex].getRoof() : it->second[tileIndex].getFloor();
-    }
-
-    std::string toLower(std::string text) {
-        std::ranges::transform(text, text.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return text;
     }
 
     // tiles.lst; a failure to load it is a real error (no data mounted) and is raised.
@@ -126,7 +120,7 @@ int MapScriptApi::tileId(const std::string& name) const {
     const Lst& lst = tilesLst(_resources);
     // tiles.lst entries are already lowercased/trimmed by the reader; normalise the query the
     // same way so "edg5000", "EDG5000.FRM" and "edg5000.frm" all match.
-    std::string needle = toLower(name);
+    std::string needle = text::toLower(name);
     if (needle.size() < 4 || needle.compare(needle.size() - 4, 4, ".frm") != 0) {
         needle += ".frm";
     }
@@ -143,7 +137,7 @@ std::map<std::string, int> MapScriptApi::tilesByPrefix(const std::string& prefix
     // Same availability contract as tileId(): a missing tiles.lst raises, an unmatched prefix is a
     // legitimate empty result.
     const Lst& lst = tilesLst(_resources);
-    const std::string needle = toLower(prefix);
+    const std::string needle = text::toLower(prefix);
     std::map<std::string, int> matches;
     const auto& entries = lst.list();
     for (std::size_t i = 0; i < entries.size(); ++i) {
@@ -278,11 +272,11 @@ namespace {
     // Resolved against the engine's own type names (Pro::typeToString), singular or plural, rather
     // than a second hardcoded table. Throws ScriptError on an unknown name.
     ObjectType objectTypeFromName(const std::string& typeName) {
-        const std::string wanted = toLower(typeName);
+        const std::string wanted = text::toLower(typeName);
 
         using enum ObjectType;
         for (const ObjectType type : { Item, Critter, Scenery, Wall, Tile, Misc }) {
-            const std::string name = toLower(Pro::typeToString(type));
+            const std::string name = text::toLower(Pro::typeToString(type));
             if (wanted == name || wanted == name + "s") {
                 return type;
             }
@@ -368,7 +362,7 @@ std::vector<std::string> MapScriptApi::listMaps() const {
     try {
         // Keep the .map files case-insensitively (robust against the DAT/mount's key casing).
         for (const auto& path : _resources.files().list("*")) {
-            if (toLower(path.extension().string()) == ".map") {
+            if (text::toLower(path.extension().string()) == ".map") {
                 maps.push_back(path.generic_string());
             }
         }
@@ -655,10 +649,7 @@ bool MapScriptApi::paintTile(int tileIndex, uint16_t tileId, bool isRoof) {
 
 // --- Coordinates -------------------------------------------------------------
 int MapScriptApi::hexIndex(int col, int row) const {
-    if (col < 0 || col >= HexagonGrid::GRID_WIDTH || row < 0 || row >= HexagonGrid::GRID_HEIGHT) {
-        return -1;
-    }
-    return row * HexagonGrid::GRID_WIDTH + col;
+    return hexgrid::positionOf({ col, row }).value_or(-1);
 }
 
 int MapScriptApi::tileIndex(int col, int row) const {
@@ -669,11 +660,11 @@ int MapScriptApi::tileIndex(int col, int row) const {
 }
 
 int MapScriptApi::hexCol(int hex) const {
-    return (hex >= 0 && hex < HexagonGrid::POSITION_COUNT) ? hex % HexagonGrid::GRID_WIDTH : -1;
+    return isValidHex(hex) ? hexgrid::columnOf(hex) : -1;
 }
 
 int MapScriptApi::hexRow(int hex) const {
-    return (hex >= 0 && hex < HexagonGrid::POSITION_COUNT) ? hex / HexagonGrid::GRID_WIDTH : -1;
+    return isValidHex(hex) ? hexgrid::rowOf(hex) : -1;
 }
 
 int MapScriptApi::tileCol(int tile) const {
@@ -1179,7 +1170,7 @@ namespace {
             throw ScriptError("placeExitGrid: destMapId must be a map id, -1 (town map) or -2 (worldmap), got "
                 + std::to_string(destMapId));
         }
-        if (destHex < 0 || destHex >= HexagonGrid::POSITION_COUNT) {
+        if (!hexgrid::isValidPosition(destHex)) {
             throw ScriptError("placeExitGrid: destHex must be 0..39999, got " + std::to_string(destHex));
         }
         if (destElevation < 0 || destElevation >= Map::ELEVATION_COUNT) {

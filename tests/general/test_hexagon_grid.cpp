@@ -2,7 +2,7 @@
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
 #include "editor/HexagonGrid.h"
-#include "editor/Reachability.h"
+#include "editor/HexGeometry.h"
 
 #include <algorithm>
 #include <set>
@@ -15,10 +15,10 @@ TEST_CASE("HexagonGrid validates positions and converts to tiles", "[hex_grid]")
 
     SECTION("position bounds reflect the grid size") {
         REQUIRE(grid.size() == HexagonGrid::POSITION_COUNT);
-        REQUIRE(grid.containsPosition(0));
-        REQUIRE(grid.containsPosition(HexagonGrid::POSITION_COUNT - 1));
-        REQUIRE_FALSE(grid.containsPosition(-1));
-        REQUIRE_FALSE(grid.containsPosition(HexagonGrid::POSITION_COUNT));
+        REQUIRE(hexgrid::isValidPosition(0));
+        REQUIRE(hexgrid::isValidPosition(HexagonGrid::POSITION_COUNT - 1));
+        REQUIRE_FALSE(hexgrid::isValidPosition(-1));
+        REQUIRE_FALSE(hexgrid::isValidPosition(HexagonGrid::POSITION_COUNT));
     }
 
     SECTION("neighboring 2x2 hex cells map to the same tile") {
@@ -60,7 +60,7 @@ std::set<int> connectedWithin(const std::set<int>& region, int start) {
     while (!frontier.empty()) {
         const int position = frontier.back();
         frontier.pop_back();
-        for (int neighbour : reachability::hexNeighbors(position)) {
+        for (int neighbour : hexgrid::neighbors(position)) {
             if (region.contains(neighbour) && reached.insert(neighbour).second) {
                 frontier.push_back(neighbour);
             }
@@ -103,7 +103,7 @@ TEST_CASE("HexagonGrid screenRectangleBorderPositions follows the screen rectang
         if (!rect.contains(hex) || ring.contains(position)) {
             continue;
         }
-        for (int neighbour : reachability::hexNeighbors(position)) {
+        for (int neighbour : hexgrid::neighbors(position)) {
             CHECK(rect.contains(hexAt(neighbour)));
         }
     }

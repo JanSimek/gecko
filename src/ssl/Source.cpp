@@ -1,27 +1,16 @@
 #include "ssl/Source.h"
 
+#include "reader/TextParsing.h"
+#include "util/FileIo.h"
+
 #include <algorithm>
-#include <fstream>
-#include <sstream>
 #include <system_error>
 
 namespace geck::ssl {
 
 namespace {
 
-    bool equalsIgnoreCase(std::string_view a, std::string_view b) {
-        return std::ranges::equal(a, b, [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
-    }
-
-    std::optional<std::string> readFile(const std::filesystem::path& path) {
-        std::ifstream in(path, std::ios::binary);
-        if (!in) {
-            return std::nullopt;
-        }
-        std::ostringstream text;
-        text << in.rdbuf();
-        return text.str();
-    }
+    using text::equalsIgnoreCase;
 
     // `path` with each component replaced by the directory entry that matches it ignoring case.
     std::optional<std::filesystem::path> resolveIgnoringCase(const std::filesystem::path& path) {
@@ -55,11 +44,11 @@ namespace {
 } // namespace
 
 std::optional<std::string> DiskSourceProvider::readText(const std::filesystem::path& path) const {
-    if (auto text = readFile(path); text.has_value()) {
+    if (auto text = io::tryReadFile(path); text.has_value()) {
         return text;
     }
     if (const auto resolved = resolveIgnoringCase(path.lexically_normal()); resolved.has_value()) {
-        return readFile(*resolved);
+        return io::tryReadFile(*resolved);
     }
     return std::nullopt;
 }

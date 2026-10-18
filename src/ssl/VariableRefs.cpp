@@ -1,16 +1,15 @@
 #include "ssl/VariableRefs.h"
 
+#include "reader/TextParsing.h"
+
 #include <algorithm>
-#include <cctype>
 #include <string_view>
 
 namespace geck::ssl {
 
 namespace {
 
-    bool sameName(std::string_view a, std::string_view b) {
-        return std::ranges::equal(a, b, [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
-    }
+    using text::equalsIgnoreCase;
 
     // The opcodes that read and write one family of variables: `get(index)` and `set(index, value)`.
     struct Accessors {
@@ -29,8 +28,8 @@ namespace {
                 if (call == nullptr || call->args.empty() || !call->args.front()) {
                     return;
                 }
-                const bool get = sameName(call->callee, accessors.get) && call->args.size() == 1;
-                const bool set = sameName(call->callee, accessors.set) && call->args.size() == 2;
+                const bool get = equalsIgnoreCase(call->callee, accessors.get) && call->args.size() == 1;
+                const bool set = equalsIgnoreCase(call->callee, accessors.set) && call->args.size() == 2;
                 if (!get && !set) {
                     return;
                 }

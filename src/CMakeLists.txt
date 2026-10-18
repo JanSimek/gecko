@@ -488,8 +488,6 @@ add_library(vault STATIC
     reader/StreamBuffer.cpp
     reader/StreamBuffer.h
 
-    util/AmmoCaliberNames.h
-    util/AmmoCaliberNames.cpp
     util/MessageEnumUtils.h
     util/MessageEnumUtils.cpp
 

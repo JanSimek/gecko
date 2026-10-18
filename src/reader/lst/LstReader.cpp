@@ -8,6 +8,7 @@
 #include <spdlog/spdlog.h>
 
 #include "format/lst/Lst.h"
+#include "reader/TextParsing.h"
 
 namespace geck {
 
@@ -28,9 +29,7 @@ std::string parseLine(std::string line) {
     // normalize backslash paths to forward slashes
     std::replace(line.begin(), line.end(), '\\', '/');
 
-    std::transform(line.begin(), line.end(), line.begin(), ::tolower);
-
-    return line;
+    return text::toLower(line);
 }
 
 // The human-readable comment after ';' on an LST line (e.g. a script's description in scripts.lst), with

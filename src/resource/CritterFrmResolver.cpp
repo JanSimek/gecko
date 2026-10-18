@@ -1,6 +1,7 @@
 #include "CritterFrmResolver.h"
 
 #include "format/frm/FrmId.h"
+#include "reader/TextParsing.h"
 #include "resource/FrmResolver.h"
 
 #include <spdlog/spdlog.h>
@@ -103,8 +104,7 @@ std::string CritterFrmResolver::getAnimationTypeName(const std::string& frmFilen
         { "ra", "Rotation" },
     };
 
-    std::string suffixKey = std::string(1, suffix1) + std::string(1, suffix2);
-    std::transform(suffixKey.begin(), suffixKey.end(), suffixKey.begin(), ::tolower);
+    const std::string suffixKey = text::toLower(std::string{ suffix1, suffix2 });
 
     auto it = animationNames.find(suffixKey);
     if (it != animationNames.end()) {
@@ -133,10 +133,8 @@ bool CritterFrmResolver::matchesCritterBase(const std::string& baseName, const s
         filename.erase(dotPos);
     }
 
-    std::string lowerFilename = filename;
-    std::string lowerBaseName = baseName;
-    std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(), ::tolower);
-    std::transform(lowerBaseName.begin(), lowerBaseName.end(), lowerBaseName.begin(), ::tolower);
+    const std::string lowerFilename = text::toLower(filename);
+    const std::string lowerBaseName = text::toLower(baseName);
 
     if (lowerFilename.length() != lowerBaseName.length() + 2) {
         return false;
@@ -250,7 +248,7 @@ bool CritterFrmResolver::parseAnimationSuffixes(const std::string& frmFilename,
         filename = filename.substr(lastSlash + 1);
     }
 
-    std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
+    filename = text::toLower(filename);
 
     size_t dotPos = filename.find_last_of('.');
     if (dotPos == std::string::npos || dotPos < 2) {

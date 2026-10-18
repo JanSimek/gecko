@@ -8,17 +8,17 @@ using namespace geck;
 
 TEST_CASE("HexPosition validity reflects the 0..39999 range", "[coordinates]") {
     CHECK(HexPosition(0).isValid());
-    CHECK(HexPosition(HexPosition::MAX_VALUE).isValid()); // 39999
+    CHECK(HexPosition(HexagonGrid::POSITION_COUNT - 1).isValid()); // 39999
     CHECK_FALSE(HexPosition(-1).isValid());
-    CHECK_FALSE(HexPosition(HexPosition::MAX_VALUE + 1).isValid()); // 40000
+    CHECK_FALSE(HexPosition(HexagonGrid::POSITION_COUNT).isValid()); // 40000
     CHECK(HexPosition(123).value() == 123);
 }
 
 TEST_CASE("HexPosition arithmetic does not clamp; isValid catches overflow", "[coordinates]") {
     // The wrapper never clamps, so callers must validate with isValid(). The
     // CLAUDE.md hex-vs-tile range rule depends on this staying true.
-    const auto over = HexPosition(HexPosition::MAX_VALUE) + 1;
-    CHECK(over.value() == HexPosition::MAX_VALUE + 1);
+    const auto over = HexPosition(HexagonGrid::POSITION_COUNT - 1) + 1;
+    CHECK(over.value() == HexagonGrid::POSITION_COUNT);
     CHECK_FALSE(over.isValid());
 
     const auto under = HexPosition(0) - 1;
@@ -33,12 +33,9 @@ TEST_CASE("HexPosition arithmetic does not clamp; isValid catches overflow", "[c
     CHECK_FALSE(p.isValid());
 }
 
-TEST_CASE("Free validity helpers agree with the grid boundaries", "[coordinates]") {
-    CHECK(isValidHexPosition(0));
-    CHECK(isValidHexPosition(HexPosition::MAX_VALUE));
-    CHECK_FALSE(isValidHexPosition(HexPosition::MAX_VALUE + 1));
-    CHECK(isValidTileIndex(TILES_PER_ELEVATION - 1));
-    CHECK_FALSE(isValidTileIndex(TILES_PER_ELEVATION));
+TEST_CASE("isValidTileIndex agrees with the tile grid boundaries", "[coordinates]") {
+    CHECK(isValidTileIndex(static_cast<int>(Map::TILES_PER_ELEVATION) - 1));
+    CHECK_FALSE(isValidTileIndex(static_cast<int>(Map::TILES_PER_ELEVATION)));
     CHECK_FALSE(isValidTileIndex(-1));
 }
 

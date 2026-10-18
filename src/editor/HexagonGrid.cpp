@@ -2,7 +2,6 @@
 #include "Hex.h"
 #include "HexGeometry.h"
 #include <algorithm>
-#include <array>
 #include <functional>
 #include <limits>
 
@@ -38,10 +37,6 @@ size_t HexagonGrid::size() const {
 
 bool HexagonGrid::empty() const {
     return _grid.empty();
-}
-
-bool HexagonGrid::containsPosition(int position) const {
-    return position >= 0 && position < static_cast<int>(_grid.size());
 }
 
 uint32_t HexagonGrid::positionAt(uint32_t x, uint32_t y) const {
@@ -81,22 +76,15 @@ std::optional<std::reference_wrapper<const Hex>> HexagonGrid::getHexByPosition(u
 }
 
 std::optional<HexagonGrid::GridCoordinates> HexagonGrid::coordinatesForPosition(int position) const {
-    if (!containsPosition(position)) {
+    if (!hexgrid::isValidPosition(position)) {
         return std::nullopt;
     }
 
-    return GridCoordinates{
-        position % GRID_WIDTH,
-        position / GRID_WIDTH
-    };
+    return GridCoordinates{ hexgrid::columnOf(position), hexgrid::rowOf(position) };
 }
 
 std::optional<int> HexagonGrid::positionForCoordinates(int x, int y) const {
-    if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) {
-        return std::nullopt;
-    }
-
-    return y * GRID_WIDTH + x;
+    return hexgrid::positionOf({ x, y });
 }
 
 std::optional<int> HexagonGrid::tileIndexForPosition(int position) const {
@@ -118,18 +106,15 @@ std::vector<int> HexagonGrid::screenRectangleBorderPositions(float left, float t
         return x >= left && x <= right && y >= top && y <= bottom;
     };
 
-    // Neighbours are taken in cube space, which absorbs the grid's column-parity offset.
-    static constexpr std::array<hexgrid::Cube, 6> DIRECTIONS{ { { 1, -1, 0 }, { 1, 0, -1 }, { 0, 1, -1 }, { -1, 1, 0 }, { -1, 0, 1 }, { 0, -1, 1 } } };
-
     std::vector<int> border;
     for (int position = 0; position < POSITION_COUNT; ++position) {
         if (!inside(position)) {
             continue;
         }
         const hexgrid::Cube center = hexgrid::cubeOfPosition(position);
-        const bool onEdge = std::ranges::any_of(DIRECTIONS, [this, &center, &inside](const hexgrid::Cube& direction) {
-            const hexgrid::ColRow cell = hexgrid::cubeToOffset(center + direction);
-            const auto neighbour = positionForCoordinates(cell.col, cell.row);
+        // Neighbours are taken in cube space, which absorbs the grid's column-parity offset.
+        const bool onEdge = std::ranges::any_of(hexgrid::DIRECTIONS, [&center, &inside](const hexgrid::Cube& direction) {
+            const auto neighbour = hexgrid::positionOf(hexgrid::cubeToOffset(center + direction));
             return !neighbour.has_value() || !inside(*neighbour);
         });
         if (onEdge) {

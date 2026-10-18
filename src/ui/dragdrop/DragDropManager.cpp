@@ -4,6 +4,7 @@
 #include "ui/theme/ThemeManager.h"
 #include "editor/Object.h"
 #include "editor/HexagonGrid.h"
+#include "editor/HexGeometry.h"
 #include "resource/GameResources.h"
 #include "format/frm/Frm.h"
 #include "format/map/MapObject.h"
@@ -159,7 +160,7 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
                 i, originalWorldPos.x, originalWorldPos.y, dragOffset.x, dragOffset.y,
                 newWorldPos.x, newWorldPos.y, newHexPosition);
 
-            if (hexGrid->containsPosition(newHexPosition)) {
+            if (hexgrid::isValidPosition(newHexPosition)) {
                 movedObjects.push_back({ originalHexPosition, newHexPosition });
                 continue;
             }

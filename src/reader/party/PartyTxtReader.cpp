@@ -72,7 +72,8 @@ namespace {
 
 } // namespace
 
-PartyTxt parsePartyTxt(std::istream& in) {
+PartyTxt parsePartyTxt(const std::string& text) {
+    std::istringstream in(text);
     std::map<int, Section> sections;
     Section* current = nullptr;
     ini::parse(
@@ -97,11 +98,6 @@ PartyTxt parsePartyTxt(std::istream& in) {
         out.members.push_back(toMember(index, it->second));
     }
     return out;
-}
-
-PartyTxt parsePartyTxt(const std::string& text) {
-    std::istringstream in(text);
-    return parsePartyTxt(in);
 }
 
 } // namespace geck

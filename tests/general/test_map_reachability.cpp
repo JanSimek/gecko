@@ -41,20 +41,20 @@ TEST_CASE("blocksMovementByInstance mirrors the engine's instance-flag rule", "[
     CHECK_FALSE(reachability::blocksMovementByInstance(kScenery, kNoBlock));
 }
 
-TEST_CASE("hexNeighbors yields parity-correct, symmetric neighbours", "[reachability]") {
+TEST_CASE("hexgrid::neighbors yields parity-correct, symmetric neighbours", "[reachability]") {
     // An interior hex has all six neighbours.
-    const std::vector<int> around = reachability::hexNeighbors(kCenter);
+    const std::vector<int> around = hexgrid::neighbors(kCenter);
     CHECK(around.size() == 6);
 
     // Neighbour-ness is symmetric: the centre is a neighbour of each of its neighbours.
     for (const int n : around) {
-        const std::vector<int> back = reachability::hexNeighbors(n);
+        const std::vector<int> back = hexgrid::neighbors(n);
         CHECK(std::find(back.begin(), back.end(), kCenter) != back.end());
     }
 
     // Off-grid positions have no neighbours.
-    CHECK(reachability::hexNeighbors(-1).empty());
-    CHECK(reachability::hexNeighbors(kCount).empty());
+    CHECK(hexgrid::neighbors(-1).empty());
+    CHECK(hexgrid::neighbors(kCount).empty());
 }
 
 TEST_CASE("hexComponents: an open grid is a single walkable region", "[reachability]") {
@@ -73,7 +73,7 @@ TEST_CASE("hexComponents: sealing all six neighbours isolates a hex", "[reachabi
     // Block the full ring around the centre — in a hex grid the six neighbours fully enclose it, so
     // the centre must become its own one-hex component (this also proves the neighbour ring is correct).
     std::vector<char> blocked(kCount, 0);
-    for (const int n : reachability::hexNeighbors(kCenter)) {
+    for (const int n : hexgrid::neighbors(kCenter)) {
         blocked[n] = 1;
     }
 
@@ -91,7 +91,7 @@ TEST_CASE("hexComponents: sealing all six neighbours isolates a hex", "[reachabi
     CHECK(samples[centreId] == kCenter);
 
     // The blocked ring hexes belong to no component.
-    for (const int n : reachability::hexNeighbors(kCenter)) {
+    for (const int n : hexgrid::neighbors(kCenter)) {
         CHECK(component[n] == -1);
     }
 }
@@ -119,7 +119,7 @@ TEST_CASE("entryHexes: player start counts only on its own elevation; every exit
 TEST_CASE("unreachableWalkableHexes: shades the walkable hexes cut off from every entry", "[reachability]") {
     // Seal the ring around the centre so it is a walkable one-hex pocket disconnected from the rest.
     std::vector<char> blocked(kCount, 0);
-    for (const int n : reachability::hexNeighbors(kCenter)) {
+    for (const int n : hexgrid::neighbors(kCenter)) {
         blocked[n] = 1;
     }
     std::vector<int> sizes;
@@ -145,7 +145,7 @@ TEST_CASE("unreachableWalkableHexes: shades the walkable hexes cut off from ever
     // The seeded region is reachable, and the blocked ring hexes are impassable (not walkable), so
     // neither is shaded.
     CHECK(std::find(unreachable.begin(), unreachable.end(), 0) == unreachable.end());
-    for (const int n : reachability::hexNeighbors(kCenter)) {
+    for (const int n : hexgrid::neighbors(kCenter)) {
         CHECK(std::find(unreachable.begin(), unreachable.end(), n) == unreachable.end());
     }
 }

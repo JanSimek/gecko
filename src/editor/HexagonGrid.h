@@ -31,7 +31,6 @@ public:
     const std::vector<Hex>& grid() const;
     size_t size() const;
     bool empty() const;
-    bool containsPosition(int position) const;
 
     uint32_t positionAt(uint32_t x, uint32_t y) const;
 

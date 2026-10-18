@@ -4,7 +4,8 @@
 #include <compare>
 #include <cstdint>
 
-#include "util/Constants.h"
+#include "editor/HexGeometry.h"
+#include "format/map/Map.h"
 
 namespace geck {
 
@@ -16,14 +17,12 @@ namespace geck {
  */
 class HexPosition {
 public:
-    static constexpr int MAX_VALUE = 39999; // 0-39999 range for 200x200 hex grid
-
     constexpr explicit HexPosition(int position = 0)
         : _position(position) { }
 
     [[nodiscard]] constexpr int value() const noexcept { return _position; }
     [[nodiscard]] constexpr bool isValid() const noexcept {
-        return _position >= 0 && _position <= MAX_VALUE;
+        return hexgrid::isValidPosition(_position);
     }
 
     // Comparison operators
@@ -102,11 +101,7 @@ private:
 
 // Helper functions for tile validation
 constexpr bool isValidTileIndex(int index) noexcept {
-    return index >= 0 && index < TILES_PER_ELEVATION;
-}
-
-constexpr bool isValidHexPosition(int position) noexcept {
-    return position >= 0 && position <= HexPosition::MAX_VALUE;
+    return index >= 0 && index < static_cast<int>(Map::TILES_PER_ELEVATION);
 }
 
 } // namespace geck

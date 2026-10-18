@@ -8,7 +8,7 @@
 #include <string>
 
 #include "cli/MapGraph.h"
-#include "editor/Reachability.h"
+#include "editor/HexGeometry.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/MapScript.h"
@@ -105,7 +105,7 @@ void writeFixture(const fs::path& base) {
     // mape: the return exit sits in a hex sealed by a full wall ring, cut off from the arrival hex.
     auto e = Map::createEmptyMapFile();
     e.map_objects[0].push_back(makeExitGrid(kSealedHex, 0, 106, 0));
-    for (const int neighbour : reachability::hexNeighbors(kSealedHex)) {
+    for (const int neighbour : hexgrid::neighbors(kSealedHex)) {
         e.map_objects[0].push_back(makeWall(neighbour));
     }
     writeMap(base / "maps" / "mape.map", std::move(e));
@@ -119,7 +119,7 @@ void writeFixture(const fs::path& base) {
     // option must veto the "return-unreachable" verdict.
     auto g = Map::createEmptyMapFile();
     g.map_objects[0].push_back(makeExitGrid(kSealedHex, 0, 110, 0));
-    for (const int neighbour : reachability::hexNeighbors(kSealedHex)) {
+    for (const int neighbour : hexgrid::neighbors(kSealedHex)) {
         g.map_objects[0].push_back(makeWall(neighbour));
     }
     g.map_objects[1].push_back(makeExitGrid(kOpenHexB, 0, 110, 0));

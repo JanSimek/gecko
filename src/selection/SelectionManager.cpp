@@ -5,6 +5,7 @@
 #include "util/Constants.h"
 #include "util/TileUtils.h"
 #include "editor/HexagonGrid.h"
+#include "editor/HexGeometry.h"
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
@@ -276,7 +277,7 @@ void SelectionManager::appendHexCandidate(std::vector<SelectedItem>& candidates,
     const auto* hexGrid = _provider.getHexagonGrid();
     if (viewport && hexGrid) {
         int hexIndex = viewport->worldPosToHexIndex(worldPos);
-        if (hexGrid->containsPosition(hexIndex)) {
+        if (hexgrid::isValidPosition(hexIndex)) {
             candidates.emplace_back(SelectionType::HEX, hexIndex);
         }
     }
@@ -399,11 +400,9 @@ void SelectionManager::selectAll(SelectionMode mode, int currentElevation) {
             break;
 
         case SelectionMode::HEXES:
-            if (const auto* hexGrid = _provider.getHexagonGrid()) {
-                for (int position = 0; position < HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT; ++position) {
-                    if (hexGrid->containsPosition(position)) {
-                        addItemToSelection(SelectedItem{ SelectionType::HEX, position });
-                    }
+            if (_provider.getHexagonGrid() != nullptr) {
+                for (int position = 0; position < HexagonGrid::POSITION_COUNT; ++position) {
+                    addItemToSelection(SelectedItem{ SelectionType::HEX, position });
                 }
             }
             break;
@@ -493,7 +492,7 @@ std::vector<int> SelectionManager::getTilesInAreaIncludingEmpty(const sf::FloatR
     const auto& floorSprites = _provider.getFloorSprites();
     const auto& roofSprites = _provider.getRoofSprites();
 
-    for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
+    for (int i = 0; i < static_cast<int>(Map::TILES_PER_ELEVATION); ++i) {
         sf::FloatRect tileBounds = roof ? roofSprites.at(i).getGlobalBounds() : floorSprites.at(i).getGlobalBounds();
 
         // Empty tiles have no sprite bounds, so synthesize bounds from the tile index using the same positioning as sprites.
@@ -589,7 +588,7 @@ SelectionResult SelectionManager::selectSingleAtPosition(sf::Vector2f worldPos, 
         case SelectionMode::HEXES: {
             int hexIndex = _provider.getViewportController()->worldPosToHexIndex(worldPos);
             const auto* hexGrid = _provider.getHexagonGrid();
-            if (hexGrid && hexGrid->containsPosition(hexIndex)) {
+            if (hexGrid && hexgrid::isValidPosition(hexIndex)) {
                 SelectedItem item{ SelectionType::HEX, hexIndex };
                 addItemToSelection(item);
                 notifySelectionChanged();

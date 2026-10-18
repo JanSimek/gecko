@@ -26,7 +26,7 @@
 #include "util/FileIo.h"
 #include "resource/ResourcePaths.h"
 #include "resource/ScriptNames.h"
-#include "util/Coordinates.h"
+#include "editor/HexagonGrid.h"
 #include "ui/IconHelper.h"
 #include "ui/widgets/IntCellDelegate.h"
 
@@ -154,7 +154,7 @@ void MapInfoPanel::setupUI() {
     QHBoxLayout* positionLayout = new QHBoxLayout();
     _playerPositionSpin = new QSpinBox();
     _playerPositionSpin->setObjectName("playerPosition");
-    _playerPositionSpin->setRange(0, HexPosition::MAX_VALUE); // Max hex position
+    _playerPositionSpin->setRange(0, HexagonGrid::POSITION_COUNT - 1);
     _setPositionButton = new QPushButton();
     _setPositionButton->setIcon(createIcon(":/icons/actions/target-arrow.svg"));
     _setPositionButton->setMaximumWidth(ui::constants::sizes::NAV_BUTTON);

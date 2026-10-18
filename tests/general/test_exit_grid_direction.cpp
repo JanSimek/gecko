@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
 #include "util/Constants.h"
 #include "util/ExitGridDirection.h"
@@ -648,7 +649,7 @@ int secondRowHexOnGrid(const HexagonGrid& grid, int hex, int dir, int steps) {
         const int hx = here->get().x();
         const int hy = here->get().y();
         std::vector<NeighborOffset> offsets;
-        for (const int nb : geck::hexline::hexNeighbors(current)) {
+        for (const int nb : geck::hexgrid::neighbors(current)) {
             const auto nbHex = grid.getHexByPosition(static_cast<uint32_t>(nb));
             if (nbHex.has_value()) {
                 offsets.push_back({ nb, nbHex->get().x() - hx, nbHex->get().y() - hy });

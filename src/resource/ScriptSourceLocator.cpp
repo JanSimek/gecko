@@ -2,6 +2,8 @@
 
 #include "DataFileSystem.h"
 
+#include "reader/TextParsing.h"
+
 #include <algorithm>
 #include <cctype>
 #include <string>
@@ -13,10 +15,7 @@ namespace geck::resource {
 
 namespace {
 
-    std::string toLower(std::string s) {
-        std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return s;
-    }
+    using text::toLower;
 
     // Every regular file under `root` whose lowercased filename equals `wantedFilename`. Uses the
     // error_code iterator overloads so an unreadable subtree is skipped rather than throwing.
@@ -76,9 +75,7 @@ std::string scriptBaseName(const std::string& lstEntry) {
         name.erase(dot);
     }
 
-    std::ranges::transform(name, name.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return name;
+    return toLower(name);
 }
 
 std::optional<ScriptFileLocation> locateScriptSource(const DataFileSystem& files, const std::string& baseName) {

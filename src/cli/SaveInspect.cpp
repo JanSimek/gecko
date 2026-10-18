@@ -61,7 +61,6 @@ namespace {
     // the critters of one elevation and so cannot exceed its hex count (map_defs.h HEX_GRID_SIZE).
     constexpr int32_t MAX_MAP_LIST = 100000;
     constexpr int32_t MAX_COMBAT_LIST = 200 * 200;
-    constexpr int ELEVATION_COUNT = 3; // map_defs.h
 
     class SaveReader {
     public:
@@ -317,7 +316,7 @@ namespace {
             }
             // map_objects is unordered; walk the elevations in file order.
             const auto& objectsByElevation = map->getMapFile().map_objects;
-            for (int mapElevation = 0; mapElevation < ELEVATION_COUNT; ++mapElevation) {
+            for (int mapElevation = 0; mapElevation < Map::ELEVATION_COUNT; ++mapElevation) {
                 const auto it = objectsByElevation.find(mapElevation);
                 if (it == objectsByElevation.end()) {
                     continue;

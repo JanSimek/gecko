@@ -3,7 +3,7 @@
 #include <utility>
 
 #include "editing/commands/UndoBatcher.h"
-#include "editor/HexagonGrid.h"
+#include "editor/HexGeometry.h"
 #include "format/map/Map.h"
 #include "util/UndoStack.h"
 
@@ -106,7 +106,7 @@ void EdgeEditService::previewZoneSide(int elevation, int zoneIndex, Side side, i
     if (!hasEdge() || !validElevation(elevation)) {
         return;
     }
-    if (hexIndex < 0 || hexIndex >= HexagonGrid::POSITION_COUNT) {
+    if (!hexgrid::isValidPosition(hexIndex)) {
         return;
     }
     MapEdge working = *_map->edge();

@@ -32,9 +32,6 @@ namespace reachability {
     /// but `blockedMask` treats them as passable.)
     bool blocksMovementByInstance(ObjectType objectType, std::uint32_t flags);
 
-    /// The up-to-6 parity-correct neighbour positions of a hex (empty if `hex` is off-grid).
-    std::vector<int> hexNeighbors(int hex);
-
     /// Connected components of the WIDTH*HEIGHT hex grid given a `blocked` mask (1 = impassable).
     /// Returns a component id per hex (-1 for blocked hexes); `sizes[id]` is each component's hex
     /// count and `samples[id]` one representative hex in it.

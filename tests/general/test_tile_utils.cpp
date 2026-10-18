@@ -1,11 +1,16 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "util/TileUtils.h"
+#include "format/map/Map.h"
 #include "util/Constants.h"
 
 #include "support/GraphicsTestEnv.h"
 
 using namespace geck;
+
+namespace {
+constexpr int kTileCount = static_cast<int>(Map::TILES_PER_ELEVATION);
+}
 
 TEST_CASE("Tile coordinate conversion", "[tile_utils]") {
     SECTION("indexToCoordinates conversion") {
@@ -32,7 +37,7 @@ TEST_CASE("Tile coordinate conversion", "[tile_utils]") {
         REQUIRE(coords_5050.y == 50);
 
         // Test last tile
-        auto coords_last = indexToCoordinates(TILES_PER_ELEVATION - 1);
+        auto coords_last = indexToCoordinates(kTileCount - 1);
         REQUIRE(coords_last.x == MAP_HEIGHT - 1);
         REQUIRE(coords_last.y == MAP_WIDTH - 1);
     }
@@ -48,12 +53,12 @@ TEST_CASE("Tile coordinate conversion", "[tile_utils]") {
         REQUIRE(coordinatesToIndex(TileCoordinates(50, 50)) == 5050);
 
         // Test last tile
-        REQUIRE(coordinatesToIndex(TileCoordinates(MAP_HEIGHT - 1, MAP_WIDTH - 1)) == TILES_PER_ELEVATION - 1);
+        REQUIRE(coordinatesToIndex(TileCoordinates(MAP_HEIGHT - 1, MAP_WIDTH - 1)) == kTileCount - 1);
     }
 
     SECTION("Round-trip conversion consistency") {
         // Test that converting index->coords->index gives same result
-        for (int index : { 0, 99, 100, 150, 5050, TILES_PER_ELEVATION - 1 }) {
+        for (int index : { 0, 99, 100, 150, 5050, kTileCount - 1 }) {
             auto coords = indexToCoordinates(index);
             auto back_to_index = coordinatesToIndex(coords);
             REQUIRE(back_to_index == index);
@@ -138,7 +143,7 @@ TEST_CASE("screenToTileIndex resolves clicks to the tile under them", "[tile_uti
             static_cast<float>(sp.y) + TILE_HEIGHT / 2.0f);
     };
 
-    const std::vector<int> samples = { 0, 99, 100, 150, 1234, 5050, TILES_PER_ELEVATION - 1 };
+    const std::vector<int> samples = { 0, 99, 100, 150, 1234, 5050, kTileCount - 1 };
 
     SECTION("a click on a tile centre resolves to that tile") {
         for (int index : samples) {
@@ -280,7 +285,7 @@ TEST_CASE("Sprite highlight functions", "[tile_utils]") {
 TEST_CASE("Mathematical property validation", "[tile_utils]") {
     SECTION("Ensure coordinates stay within bounds") {
         // Test that all valid tile indices produce valid coordinates
-        for (int index = 0; index < TILES_PER_ELEVATION; ++index) {
+        for (int index = 0; index < kTileCount; ++index) {
             auto coords = indexToCoordinates(index);
             REQUIRE(coords.x < MAP_HEIGHT);
             REQUIRE(coords.y < MAP_WIDTH);

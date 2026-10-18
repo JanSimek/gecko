@@ -7,6 +7,7 @@
 #include "gam/GamReader.h"
 #include "msg/MsgReader.h"
 #include "lst/LstReader.h"
+#include "reader/TextParsing.h"
 
 #include <algorithm>
 #include <string>
@@ -90,8 +91,7 @@ std::unique_ptr<FileParser<Lst>> ReaderFactory::createReader<Lst>(Format format)
 }
 
 ReaderFactory::Format ReaderFactory::detectByExtension(const std::filesystem::path& filePath) {
-    std::string extension = filePath.extension().string();
-    std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+    const std::string extension = text::toLower(filePath.extension().string());
 
     auto it = extension_format_map.find(extension);
     return (it != extension_format_map.end()) ? it->second : Format::UNKNOWN;
