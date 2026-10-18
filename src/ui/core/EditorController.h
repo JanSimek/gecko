@@ -43,7 +43,7 @@ public:
         std::function<void()> undoStackChanged;
         std::function<std::vector<Tile>&(int)> ensureElevationTiles;
         std::function<int()> currentElevation;
-        std::function<void(int hexIndex, bool isRoof, int elevation)> updateTileSprite;
+        std::function<void(int tileIndex, bool isRoof, int elevation)> updateTileSprite;
         std::function<void()> loadTileSprites;
         std::function<void()> mapHeaderChanged;
     };

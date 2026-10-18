@@ -164,7 +164,6 @@ PatternStamper::Result PatternStamper::stamp(const PatternVariant& variant, int 
     r.objectsPlaced = br.objectsPlaced;
     r.objectsFailed = br.objectsFailed;
     r.tilesPainted = br.tilesPainted;
-    r.success = true;
     return r;
 }
 

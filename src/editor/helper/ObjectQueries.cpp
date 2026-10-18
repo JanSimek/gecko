@@ -35,11 +35,6 @@ bool blocksMovement(const MapObject& object, resource::GameResources& resources)
     return !hasNoBlockFlag;
 }
 
-bool isWallBlocker(const MapObject& object, resource::GameResources& resources) {
-    // Any object that blocks movement is treated as a gap-filling wall blocker.
-    return blocksMovement(object, resources);
-}
-
 bool isShootThroughWallBlocker(const MapObject& object, resource::GameResources& resources) {
     Pro* pro = getProData(object, resources);
     if (!pro) {

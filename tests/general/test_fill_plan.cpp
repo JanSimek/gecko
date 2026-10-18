@@ -87,11 +87,10 @@ TEST_CASE("a captured-then-replayed run yields the same map as a direct run", "[
     seedTiles(direct);
     {
         MapScriptApi api(direct.resources, direct.hexgrid, direct.controller, *direct.map, ELEV, false);
-        api.beginBatch("Fill");
+        ScopedUndoBatch batch(direct.controller, "Fill");
         REQUIRE(api.paintFloor(10, TILE_A));
         REQUIRE(api.placeObject(PRO, FRM, 20100, 0));
         REQUIRE(api.placeObject(PRO, FRM, 20101, 2));
-        api.endBatch();
     }
 
     // Captured run: same calls into a sink, then replayed.

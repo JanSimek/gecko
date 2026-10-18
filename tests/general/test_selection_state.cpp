@@ -24,8 +24,6 @@ TEST_CASE("SelectionState basic functionality", "[selection_state]") {
     SECTION("Initial state is empty") {
         REQUIRE(state.isEmpty());
         REQUIRE(state.count() == 0);
-        REQUIRE_FALSE(state.isDragging);
-        REQUIRE_FALSE(state.isAreaSelecting());
     }
 
     SECTION("Adding and removing tile items") {
@@ -58,7 +56,6 @@ TEST_CASE("SelectionState basic functionality", "[selection_state]") {
 
         REQUIRE(state.count() == 1);
         REQUIRE(state.hasItem(hexItem));
-        REQUIRE(hexItem.isHex());
         REQUIRE(hexItem.getHexIndex() == 2500);
     }
 
@@ -73,82 +70,6 @@ TEST_CASE("SelectionState basic functionality", "[selection_state]") {
         state.clear();
         REQUIRE(state.isEmpty());
         REQUIRE(state.count() == 0);
-        REQUIRE_FALSE(state.isDragging);
-        REQUIRE_FALSE(state.isAreaSelecting());
-    }
-}
-
-TEST_CASE("SelectionState area selection", "[selection_state]") {
-    SelectionState state;
-
-    SECTION("Area selection lifecycle") {
-        sf::Vector2f startPos(100.0f, 150.0f);
-
-        // Start area selection
-        state.startAreaSelection(startPos, SelectionMode::FLOOR_TILES);
-        REQUIRE(state.isAreaSelecting());
-        REQUIRE(state.mode == SelectionMode::FLOOR_TILES);
-        REQUIRE(state.dragStartPosition == startPos);
-
-        // Update area selection
-        sf::Vector2f currentPos(200.0f, 250.0f);
-        state.updateAreaSelection(currentPos);
-        REQUIRE(state.isAreaSelecting());
-
-        if (state.selectionArea.has_value()) {
-            const auto& area = state.selectionArea.value();
-            REQUIRE(area.position.x == 100.0f);
-            REQUIRE(area.position.y == 150.0f);
-            REQUIRE(area.size.x == 100.0f); // 200 - 100
-            REQUIRE(area.size.y == 100.0f); // 250 - 150
-        }
-
-        // Finish area selection
-        state.finishAreaSelection();
-        REQUIRE_FALSE(state.isAreaSelecting());
-    }
-
-    SECTION("Cancel area selection") {
-        sf::Vector2f startPos(50.0f, 75.0f);
-
-        state.startAreaSelection(startPos, SelectionMode::ROOF_TILES);
-        REQUIRE(state.isAreaSelecting());
-
-        state.cancelAreaSelection();
-        REQUIRE_FALSE(state.isAreaSelecting());
-        REQUIRE_FALSE(state.selectionArea.has_value());
-    }
-}
-
-TEST_CASE("SelectionState drag operations", "[selection_state]") {
-    SelectionState state;
-
-    SECTION("Drag lifecycle") {
-        sf::Vector2f startPos(300.0f, 400.0f);
-
-        // Start drag
-        state.startDrag(startPos);
-        REQUIRE(state.isDragging);
-        REQUIRE(state.dragStartPosition == startPos);
-
-        // Update drag position
-        sf::Vector2f currentPos(350.0f, 450.0f);
-        state.updateDrag(currentPos);
-        REQUIRE(state.isDragging);
-
-        // Finish drag
-        state.finishDrag();
-        REQUIRE_FALSE(state.isDragging);
-    }
-
-    SECTION("Cancel drag") {
-        sf::Vector2f startPos(100.0f, 200.0f);
-
-        state.startDrag(startPos);
-        REQUIRE(state.isDragging);
-
-        state.cancelDrag();
-        REQUIRE_FALSE(state.isDragging);
     }
 }
 
@@ -199,17 +120,9 @@ TEST_CASE("SelectedItem functionality", "[selection_state]") {
         SelectedItem hexItem{ SelectionType::HEX, 300 };
 
         // Type checking methods
-        REQUIRE(floorTile.isTile());
         REQUIRE_FALSE(floorTile.isObject());
-        REQUIRE_FALSE(floorTile.isHex());
-
-        REQUIRE(roofTile.isTile());
         REQUIRE_FALSE(roofTile.isObject());
-        REQUIRE_FALSE(roofTile.isHex());
-
-        REQUIRE_FALSE(hexItem.isTile());
         REQUIRE_FALSE(hexItem.isObject());
-        REQUIRE(hexItem.isHex());
     }
 
     SECTION("Data retrieval") {

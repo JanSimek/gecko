@@ -231,11 +231,12 @@ TEST_CASE("MapScriptApi batches a run into one undo entry", "[scripting]") {
 
     REQUIRE_FALSE(fx.undoStack.canUndo());
 
-    api.beginBatch("Procedural fill");
-    for (int i = 10; i < 15; ++i) {
-        REQUIRE(api.paintFloor(i, SOME_TILE));
+    {
+        ScopedUndoBatch batch(fx.controller, "Procedural fill");
+        for (int i = 10; i < 15; ++i) {
+            REQUIRE(api.paintFloor(i, SOME_TILE));
+        }
     }
-    api.endBatch();
 
     for (int i = 10; i < 15; ++i) {
         CHECK(api.getFloor(i) == SOME_TILE);

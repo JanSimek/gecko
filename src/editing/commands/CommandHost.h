@@ -30,7 +30,7 @@ public:
     /// The elevation edits currently target.
     virtual int getCurrentElevation() const = 0;
     /// A single floor/roof tile's sprite changed and should be re-stitched.
-    virtual void updateTileSprite(int hexIndex, bool isRoof, int elevation) = 0;
+    virtual void updateTileSprite(int tileIndex, bool isRoof, int elevation) = 0;
     /// Reload every tile sprite (after a bulk tile change such as a cleared/copied elevation).
     virtual void reloadTiles() = 0;
     /// The map header changed (an edit, or its undo/redo), including which elevations are present.
@@ -66,7 +66,7 @@ public:
     void undoStackChanged() override { _undoStackChanged(); }
     std::vector<Tile>& ensureElevationTiles(int elevation) override { return _ensureElevationTiles(elevation); }
     int getCurrentElevation() const override { return _getCurrentElevation(); }
-    void updateTileSprite(int hexIndex, bool isRoof, int elevation) override { _updateTileSprite(hexIndex, isRoof, elevation); }
+    void updateTileSprite(int tileIndex, bool isRoof, int elevation) override { _updateTileSprite(tileIndex, isRoof, elevation); }
     void reloadTiles() override { _reloadTiles(); }
     void mapHeaderChanged() override {
         if (_mapHeaderChanged) {

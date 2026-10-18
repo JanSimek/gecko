@@ -69,40 +69,68 @@ int MapScriptApi::hexDir(int fromHex, int toHex) const {
     return hexline::hexDirection(fromHex, toHex);
 }
 
-uint16_t MapScriptApi::getFloor(int tileIndex) const {
-    const auto& tiles = _map.getMapFile().tiles;
-    const auto it = tiles.find(_elevation);
-    if (it == tiles.end() || tileIndex < 0 || tileIndex >= static_cast<int>(it->second.size())) {
-        return static_cast<uint16_t>(Map::EMPTY_TILE);
+namespace {
+    // The floor or roof id of `tileIndex` on `elevation`, or EMPTY_TILE when there is none.
+    uint16_t tileLayerAt(const Map& map, int elevation, int tileIndex, bool isRoof) {
+        const auto& tiles = map.getMapFile().tiles;
+        const auto it = tiles.find(elevation);
+        if (it == tiles.end() || tileIndex < 0 || tileIndex >= static_cast<int>(it->second.size())) {
+            return static_cast<uint16_t>(Map::EMPTY_TILE);
+        }
+        return isRoof ? it->second[tileIndex].getRoof() : it->second[tileIndex].getFloor();
     }
-    return it->second[tileIndex].getFloor();
+
+    std::string toLower(std::string text) {
+        std::ranges::transform(text, text.begin(),
+            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return text;
+    }
+
+    // tiles.lst; a failure to load it is a real error (no data mounted) and is raised.
+    const Lst& tilesLst(resource::GameResources& resources) {
+        const Lst* lst = resources.repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::TILES));
+        if (lst == nullptr) {
+            throw ScriptError("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
+        }
+        return *lst;
+    }
+
+    // A wrong answer from a proto query silently breaks what a generator builds, so an unloadable
+    // proto is a raised error, never a guess.
+    const Pro& loadProOrRaise(resource::GameResources& resources, int pid) {
+        const Pro* pro = nullptr;
+        try {
+            pro = resources.loadPro(static_cast<uint32_t>(pid));
+        } catch (const std::exception&) {
+            pro = nullptr;
+        }
+        if (pro == nullptr) {
+            throw ScriptError(std::format(
+                "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
+                static_cast<uint32_t>(pid)));
+        }
+        return *pro;
+    }
+} // namespace
+
+uint16_t MapScriptApi::getFloor(int tileIndex) const {
+    return tileLayerAt(_map, _elevation, tileIndex, false);
 }
 
 uint16_t MapScriptApi::getRoof(int tileIndex) const {
-    const auto& tiles = _map.getMapFile().tiles;
-    const auto it = tiles.find(_elevation);
-    if (it == tiles.end() || tileIndex < 0 || tileIndex >= static_cast<int>(it->second.size())) {
-        return static_cast<uint16_t>(Map::EMPTY_TILE);
-    }
-    return it->second[tileIndex].getRoof();
+    return tileLayerAt(_map, _elevation, tileIndex, true);
 }
 
 int MapScriptApi::tileId(const std::string& name) const {
-    // A failure to load tiles.lst is a real error (no data mounted) and is raised so the caller
-    // sees it; an unknown name in a *loaded* list is a legitimate "not found" -> -1.
-    const Lst* lst = _resources.repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::TILES));
-    if (lst == nullptr) {
-        throw ScriptError("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
-    }
+    // A missing tiles.lst raises; an unknown name in a *loaded* list is a legitimate "not found" -> -1.
+    const Lst& lst = tilesLst(_resources);
     // tiles.lst entries are already lowercased/trimmed by the reader; normalise the query the
     // same way so "edg5000", "EDG5000.FRM" and "edg5000.frm" all match.
-    std::string needle = name;
-    std::ranges::transform(needle, needle.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::string needle = toLower(name);
     if (needle.size() < 4 || needle.compare(needle.size() - 4, 4, ".frm") != 0) {
         needle += ".frm";
     }
-    const auto& entries = lst->list();
+    const auto& entries = lst.list();
     for (std::size_t i = 0; i < entries.size(); ++i) {
         if (entries[i] == needle) {
             return static_cast<int>(i);
@@ -112,17 +140,12 @@ int MapScriptApi::tileId(const std::string& name) const {
 }
 
 std::map<std::string, int> MapScriptApi::tilesByPrefix(const std::string& prefix) const {
-    // Same availability contract as tileId(): a missing tiles.lst is a real error, an
-    // unmatched prefix is a legitimate empty result.
-    const Lst* lst = _resources.repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::TILES));
-    if (lst == nullptr) {
-        throw ScriptError("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
-    }
-    std::string needle = prefix;
-    std::ranges::transform(needle, needle.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    // Same availability contract as tileId(): a missing tiles.lst raises, an unmatched prefix is a
+    // legitimate empty result.
+    const Lst& lst = tilesLst(_resources);
+    const std::string needle = toLower(prefix);
     std::map<std::string, int> matches;
-    const auto& entries = lst->list();
+    const auto& entries = lst.list();
     for (std::size_t i = 0; i < entries.size(); ++i) {
         if (!entries[i].starts_with(needle)) {
             continue;
@@ -255,15 +278,11 @@ namespace {
     // Resolved against the engine's own type names (Pro::typeToString), singular or plural, rather
     // than a second hardcoded table. Throws ScriptError on an unknown name.
     ObjectType objectTypeFromName(const std::string& typeName) {
-        const auto lower = [](std::string s) {
-            std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            return s;
-        };
-        const std::string wanted = lower(typeName);
+        const std::string wanted = toLower(typeName);
 
         using enum ObjectType;
         for (const ObjectType type : { Item, Critter, Scenery, Wall, Tile, Misc }) {
-            const std::string name = lower(Pro::typeToString(type));
+            const std::string name = toLower(Pro::typeToString(type));
             if (wanted == name || wanted == name + "s") {
                 return type;
             }
@@ -308,55 +327,24 @@ std::vector<int> MapScriptApi::mapObjectsAt(const std::string& mapPath, int elev
 }
 
 bool MapScriptApi::protoBlocks(int pid) const {
-    // A wrong answer here silently breaks walkability, so an unloadable proto is a raised error,
-    // never a guess (same contract as tileId's missing tiles.lst).
-    const Pro* pro = nullptr;
-    try {
-        pro = _resources.loadPro(static_cast<uint32_t>(pid));
-    } catch (const std::exception&) {
-        pro = nullptr;
-    }
-    if (pro == nullptr) {
-        throw ScriptError(std::format(
-            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
-            static_cast<uint32_t>(pid)));
-    }
-    return !Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_NO_BLOCK);
+    // A wrong answer here silently breaks walkability: an unloadable proto raises.
+    const Pro& pro = loadProOrRaise(_resources, pid);
+    return !Pro::hasFlag(pro.header.flags, Pro::ObjectFlags::OBJECT_NO_BLOCK);
 }
 
 bool MapScriptApi::protoFlat(int pid) const {
     // OBJECT_FLAT marks ground-hugging art drawn below standing objects, as opposed to a wall face -
     // cave walls come in both. Hard-fail like protoBlocks: an unloadable proto is never guessed.
-    const Pro* pro = nullptr;
-    try {
-        pro = _resources.loadPro(static_cast<uint32_t>(pid));
-    } catch (const std::exception&) {
-        pro = nullptr;
-    }
-    if (pro == nullptr) {
-        throw ScriptError(std::format(
-            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
-            static_cast<uint32_t>(pid)));
-    }
-    return Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
+    const Pro& pro = loadProOrRaise(_resources, pid);
+    return Pro::hasFlag(pro.header.flags, Pro::ObjectFlags::OBJECT_FLAT);
 }
 
 std::string MapScriptApi::protoSceneryType(int pid) const {
-    const Pro* pro = nullptr;
-    try {
-        pro = _resources.loadPro(static_cast<uint32_t>(pid));
-    } catch (const std::exception&) {
-        pro = nullptr;
-    }
-    if (pro == nullptr) {
-        throw ScriptError(std::format(
-            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
-            static_cast<uint32_t>(pid)));
-    }
+    const Pro& pro = loadProOrRaise(_resources, pid);
     if (ProtoId(static_cast<uint32_t>(pid)).objectType() != ObjectType::Scenery) {
         throw ScriptError(std::format("protoSceneryType: proto 0x{:08x} is not scenery", static_cast<uint32_t>(pid)));
     }
-    switch (static_cast<SceneryType>(pro->objectSubtypeId())) {
+    switch (static_cast<SceneryType>(pro.objectSubtypeId())) {
         case SceneryType::Door:
             return "Door";
         case SceneryType::Stairs:
@@ -371,7 +359,7 @@ std::string MapScriptApi::protoSceneryType(int pid) const {
             return "Generic";
         default:
             throw ScriptError(std::format("protoSceneryType: proto 0x{:08x} has unknown scenery type {}",
-                static_cast<uint32_t>(pid), pro->objectSubtypeId()));
+                static_cast<uint32_t>(pid), pro.objectSubtypeId()));
     }
 }
 
@@ -380,10 +368,7 @@ std::vector<std::string> MapScriptApi::listMaps() const {
     try {
         // Keep the .map files case-insensitively (robust against the DAT/mount's key casing).
         for (const auto& path : _resources.files().list("*")) {
-            std::string ext = path.extension().string();
-            std::ranges::transform(ext, ext.begin(),
-                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (ext == ".map") {
+            if (toLower(path.extension().string()) == ".map") {
                 maps.push_back(path.generic_string());
             }
         }
@@ -398,16 +383,8 @@ namespace {
     // Smootherstep, for C1-continuous interpolation between lattice values.
     double fade(double t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
 
-    // Hash a lattice corner to a stable pseudo-random value in [0,1).
-    double latticeValue(int xi, int yi) {
-        uint32_t h = static_cast<uint32_t>(xi) * 374761393u + static_cast<uint32_t>(yi) * 668265263u;
-        h = (h ^ (h >> 13)) * 1274126177u;
-        h ^= h >> 16;
-        return (h & 0xFFFFFFu) / static_cast<double>(0x1000000);
-    }
-
-    // 3D form of latticeValue: a stable [0,1) hash of a (xi, yi, zi) lattice corner.
-    double latticeValue3(int xi, int yi, int zi) {
+    // Hash a lattice corner to a stable pseudo-random value in [0,1); 2D noise uses the z = 0 plane.
+    double latticeValue(int xi, int yi, int zi) {
         uint32_t h = static_cast<uint32_t>(xi) * 374761393u + static_cast<uint32_t>(yi) * 668265263u
             + static_cast<uint32_t>(zi) * 2246822519u;
         h = (h ^ (h >> 13)) * 1274126177u;
@@ -424,10 +401,10 @@ double MapScriptApi::noise2d(double x, double y) const {
     const double tx = fade(x - xf);
     const double ty = fade(y - yf);
 
-    const double v00 = latticeValue(xi, yi);
-    const double v10 = latticeValue(xi + 1, yi);
-    const double v01 = latticeValue(xi, yi + 1);
-    const double v11 = latticeValue(xi + 1, yi + 1);
+    const double v00 = latticeValue(xi, yi, 0);
+    const double v10 = latticeValue(xi + 1, yi, 0);
+    const double v01 = latticeValue(xi, yi + 1, 0);
+    const double v11 = latticeValue(xi + 1, yi + 1, 0);
 
     return std::lerp(std::lerp(v00, v10, tx), std::lerp(v01, v11, tx), ty); // bilinear -> [0,1)
 }
@@ -444,10 +421,10 @@ double MapScriptApi::noise3d(double x, double y, double z) const {
     const double tz = fade(z - zf);
 
     // Trilinear blend of the 8 cube-corner lattice values -> [0,1).
-    const double x00 = std::lerp(latticeValue3(xi, yi, zi), latticeValue3(xi + 1, yi, zi), tx);
-    const double x10 = std::lerp(latticeValue3(xi, yi + 1, zi), latticeValue3(xi + 1, yi + 1, zi), tx);
-    const double x01 = std::lerp(latticeValue3(xi, yi, zi + 1), latticeValue3(xi + 1, yi, zi + 1), tx);
-    const double x11 = std::lerp(latticeValue3(xi, yi + 1, zi + 1), latticeValue3(xi + 1, yi + 1, zi + 1), tx);
+    const double x00 = std::lerp(latticeValue(xi, yi, zi), latticeValue(xi + 1, yi, zi), tx);
+    const double x10 = std::lerp(latticeValue(xi, yi + 1, zi), latticeValue(xi + 1, yi + 1, zi), tx);
+    const double x01 = std::lerp(latticeValue(xi, yi, zi + 1), latticeValue(xi + 1, yi, zi + 1), tx);
+    const double x11 = std::lerp(latticeValue(xi, yi + 1, zi + 1), latticeValue(xi + 1, yi + 1, zi + 1), tx);
     return std::lerp(std::lerp(x00, x10, ty), std::lerp(x01, x11, ty), tz);
 }
 
@@ -476,18 +453,7 @@ std::string MapScriptApi::protoName(int pid) const {
 int MapScriptApi::protoFid(int pid) const {
     // The proto's art FID, what placeProto resolves and stores, so a generator can identify art rather
     // than reason from the proto number. Hard-fail: an unloadable proto is raised, never guessed.
-    const Pro* pro = nullptr;
-    try {
-        pro = _resources.loadPro(static_cast<uint32_t>(pid));
-    } catch (const std::exception&) {
-        pro = nullptr;
-    }
-    if (pro == nullptr) {
-        throw ScriptError(std::format(
-            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
-            static_cast<uint32_t>(pid)));
-    }
-    return pro->header.FID;
+    return loadProOrRaise(_resources, pid).header.FID;
 }
 
 const Frm& MapScriptApi::protoFrm(int pid) const {
@@ -557,14 +523,6 @@ std::vector<int> MapScriptApi::artRect(int pid, int hex) const {
     const int anchorY = y + 8 + direction.shiftY();
     const int left = anchorX - frame.width() / 2;
     return { left, anchorY - frame.height() + 1, left + frame.width() - 1, anchorY };
-}
-
-void MapScriptApi::beginBatch(const std::string& description) {
-    _controller.beginBatch(description);
-}
-
-void MapScriptApi::endBatch() {
-    _controller.endBatch();
 }
 
 std::size_t MapScriptApi::sinkCap() const {
@@ -853,24 +811,22 @@ bool MapScriptApi::paintFloorXY(int col, int row, uint16_t tileId) {
     return paintFloor(tileIndex(col, row), tileId);
 }
 
-int MapScriptApi::fillFloorRect(int col0, int row0, int col1, int row1, uint16_t tileId) {
+int MapScriptApi::fillTileRect(int col0, int row0, int col1, int row1, uint16_t tileId, bool isRoof) {
     int painted = 0;
     for (const int tile : tilesInRect(col0, row0, col1, row1)) {
-        if (paintFloor(tile, tileId)) {
+        if (paintTile(tile, tileId, isRoof)) {
             ++painted;
         }
     }
     return painted;
 }
 
+int MapScriptApi::fillFloorRect(int col0, int row0, int col1, int row1, uint16_t tileId) {
+    return fillTileRect(col0, row0, col1, row1, tileId, false);
+}
+
 int MapScriptApi::fillRoofRect(int col0, int row0, int col1, int row1, uint16_t tileId) {
-    int painted = 0;
-    for (const int tile : tilesInRect(col0, row0, col1, row1)) {
-        if (paintRoof(tile, tileId)) {
-            ++painted;
-        }
-    }
-    return painted;
+    return fillTileRect(col0, row0, col1, row1, tileId, true);
 }
 
 int MapScriptApi::fillRegion(int col, int row, uint16_t tileId) {

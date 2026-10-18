@@ -45,7 +45,6 @@ private:
     void drawOverlaySprite(sf::RenderTarget& target,
         const Hex& hex,
         const sf::Sprite& spriteTemplate) const;
-    bool isHexVisible(const Hex& hex, const sf::View& view) const;
 
     resource::GameResources& _resources;
     sf::Sprite _gridSprite;

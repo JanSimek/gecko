@@ -23,7 +23,6 @@ TEST_CASE("Mixed selection scenarios", "[integration]") {
     SelectionState state;
 
     SECTION("ALL mode mixed selection") {
-        state.mode = SelectionMode::ALL;
 
         // Add different types of items (excluding objects for now due to constructor complexity)
         state.addItem({ SelectionType::FLOOR_TILE, 100 });
@@ -47,26 +46,6 @@ TEST_CASE("Mixed selection scenarios", "[integration]") {
         REQUIRE(hexes[0] == 1500);
     }
 
-    SECTION("Mode-specific selection filtering") {
-        // Test that each mode should theoretically filter appropriately
-        // (Actual filtering would be implemented in SelectionManager)
-
-        std::vector<SelectionMode> modes = {
-            SelectionMode::FLOOR_TILES,
-            SelectionMode::ROOF_TILES,
-            SelectionMode::ROOF_TILES_ALL,
-            SelectionMode::OBJECTS,
-            SelectionMode::HEXES
-        };
-
-        for (auto mode : modes) {
-            state.clear();
-            state.mode = mode;
-
-            // Verify mode is set correctly
-            REQUIRE(state.mode == mode);
-        }
-    }
 }
 
 TEST_CASE("Coordinate system boundary testing", "[integration]") {
@@ -246,85 +225,7 @@ TEST_CASE("Mouse position accuracy and disambiguation (original)", "[mouse_accur
 TEST_CASE("Complex selection workflows (original)", "[complex_scenarios_original]") {
     SelectionState state;
 
-    SECTION("Single click to area selection transition") {
-        // Start with single tile selection
-        state.addItem({ SelectionType::FLOOR_TILE, 100 });
-        REQUIRE(state.count() == 1);
-        REQUIRE_FALSE(state.isAreaSelecting());
-
-        // Transition to area selection
-        sf::Vector2f startPos(200.0f, 150.0f);
-        state.startAreaSelection(startPos, SelectionMode::FLOOR_TILES);
-
-        REQUIRE(state.isAreaSelecting());
-        REQUIRE(state.mode == SelectionMode::FLOOR_TILES);
-
-        // Update area
-        sf::Vector2f endPos(400.0f, 300.0f);
-        state.updateAreaSelection(endPos);
-
-        // Verify area is calculated correctly
-        if (state.selectionArea.has_value()) {
-            auto& area = state.selectionArea.value();
-            REQUIRE(area.size.x == 200.0f); // 400 - 200
-            REQUIRE(area.size.y == 150.0f); // 300 - 150
-        }
-
-        // Finish area selection
-        state.finishAreaSelection();
-        REQUIRE_FALSE(state.isAreaSelecting());
-    }
-
-    SECTION("Selection mode transitions") {
-        // Test switching between different selection modes
-        std::vector<SelectionMode> modes = {
-            SelectionMode::FLOOR_TILES,
-            SelectionMode::ROOF_TILES,
-            SelectionMode::OBJECTS,
-            SelectionMode::HEXES,
-            SelectionMode::ALL
-            // Note: SCROLL_BLOCKER_RECTANGLE mode doesn't add items, it's for drawing
-        };
-
-        for (auto mode : modes) {
-            state.clear();
-            state.mode = mode;
-
-            // Add appropriate items for each mode
-            switch (mode) {
-                case SelectionMode::FLOOR_TILES:
-                    state.addItem({ SelectionType::FLOOR_TILE, 100 });
-                    break;
-                case SelectionMode::ROOF_TILES:
-                case SelectionMode::ROOF_TILES_ALL:
-                    state.addItem({ SelectionType::ROOF_TILE, 200 });
-                    break;
-                case SelectionMode::HEXES:
-                    state.addItem({ SelectionType::HEX, 1500 });
-                    break;
-                case SelectionMode::ALL:
-                    state.addItem({ SelectionType::FLOOR_TILE, 100 });
-                    state.addItem({ SelectionType::ROOF_TILE, 200 });
-                    state.addItem({ SelectionType::HEX, 1500 });
-                    break;
-                case SelectionMode::OBJECTS:
-                    // Objects mode - skip since we don't have object mocking yet
-                    state.addItem({ SelectionType::FLOOR_TILE, 300 }); // Add something for test
-                    break;
-                default:
-                    // For other modes like SCROLL_BLOCKER_RECTANGLE, add a dummy item
-                    state.addItem({ SelectionType::FLOOR_TILE, 500 });
-                    break;
-            }
-
-            // Verify mode is set correctly
-            REQUIRE(state.mode == mode);
-            REQUIRE_FALSE(state.isEmpty());
-        }
-    }
-
     SECTION("Mixed elevation selection handling") {
-        state.mode = SelectionMode::ALL;
 
         // Add items that would be on different elevations
         state.addItem({ SelectionType::FLOOR_TILE, 100 }); // Elevation 0
@@ -402,53 +303,6 @@ TEST_CASE("Regression prevention for known issues (original)", "[regression_prev
         REQUIRE(maxHexTileIndex < TILES_PER_ELEVATION);
     }
 
-    SECTION("Prevent area selection size calculation errors") {
-        SelectionState state;
-
-        // Test area selection with negative deltas (drag backwards/upwards)
-        sf::Vector2f startPos(200.0f, 200.0f);
-        state.startAreaSelection(startPos, SelectionMode::FLOOR_TILES);
-
-        // Drag to a position "before" the start (negative delta)
-        sf::Vector2f endPos(100.0f, 100.0f);
-        state.updateAreaSelection(endPos);
-
-        if (state.selectionArea.has_value()) {
-            auto& area = state.selectionArea.value();
-            // Size should be negative, which is geometrically correct
-            REQUIRE(area.size.x == -100.0f); // 100 - 200
-            REQUIRE(area.size.y == -100.0f); // 100 - 200
-
-            // Position should remain at start point
-            REQUIRE(area.position.x == 200.0f);
-            REQUIRE(area.position.y == 200.0f);
-        }
-
-        state.finishAreaSelection();
-        REQUIRE_FALSE(state.isAreaSelecting());
-    }
-
-    SECTION("Prevent selection state corruption on mode changes") {
-        SelectionState state;
-
-        // Fill state with mixed selection types
-        state.mode = SelectionMode::ALL;
-        state.addItem({ SelectionType::FLOOR_TILE, 100 });
-        state.addItem({ SelectionType::ROOF_TILE, 200 });
-        state.addItem({ SelectionType::HEX, 1500 });
-
-        REQUIRE(state.count() == 3);
-
-        // Change mode - items should remain but mode should change
-        state.mode = SelectionMode::FLOOR_TILES;
-        REQUIRE(state.mode == SelectionMode::FLOOR_TILES);
-        REQUIRE(state.count() == 3); // Items preserved
-
-        // Clear should work properly
-        state.clear();
-        REQUIRE(state.isEmpty());
-        REQUIRE(state.mode == SelectionMode::FLOOR_TILES); // Mode preserved after clear
-    }
 }
 
 //==============================================================================
@@ -663,7 +517,6 @@ TEST_CASE("Complex selection workflows", "[complex_scenarios]") {
 
     SECTION("Mixed selection type workflow") {
         // Start with floor tiles
-        state.mode = SelectionMode::FLOOR_TILES;
         state.addItem({ SelectionType::FLOOR_TILE, 100 });
         state.addItem({ SelectionType::FLOOR_TILE, 101 });
 
@@ -671,82 +524,15 @@ TEST_CASE("Complex selection workflows", "[complex_scenarios]") {
         REQUIRE(state.getRoofTileIndices().size() == 0);
 
         // Switch to roof tiles - items should remain
-        state.mode = SelectionMode::ROOF_TILES;
         state.addItem({ SelectionType::ROOF_TILE, 200 });
 
         REQUIRE(state.getFloorTileIndices().size() == 2); // Previous items remain
         REQUIRE(state.getRoofTileIndices().size() == 1);  // New item added
 
         // Switch to ALL mode - should see everything
-        state.mode = SelectionMode::ALL;
         REQUIRE(state.count() == 3);
     }
 
-    SECTION("Area selection with mode filtering") {
-        sf::Vector2f startPos(100.0f, 100.0f);
-        sf::Vector2f endPos(200.0f, 200.0f);
-
-        // Start area selection in floor mode
-        state.mode = SelectionMode::FLOOR_TILES;
-        state.startAreaSelection(startPos, SelectionMode::FLOOR_TILES);
-        state.updateAreaSelection(endPos);
-
-        REQUIRE(state.isAreaSelecting());
-        REQUIRE(state.selectionArea.has_value());
-
-        auto& area = state.selectionArea.value();
-        REQUIRE(area.position == startPos);
-        REQUIRE(area.size.x == 100.0f);
-        REQUIRE(area.size.y == 100.0f);
-
-        state.finishAreaSelection();
-        REQUIRE_FALSE(state.isAreaSelecting());
-    }
-
-    SECTION("Selection mode transitions") {
-        // Test all valid mode transitions
-        std::vector<SelectionMode> modes = {
-            SelectionMode::ALL,
-            SelectionMode::FLOOR_TILES,
-            SelectionMode::ROOF_TILES,
-            SelectionMode::OBJECTS,
-            SelectionMode::HEXES,
-            SelectionMode::SCROLL_BLOCKER_RECTANGLE
-        };
-
-        for (auto fromMode : modes) {
-            for (auto toMode : modes) {
-                state.mode = fromMode;
-
-                // Add appropriate item for current mode
-                switch (fromMode) {
-                    case SelectionMode::FLOOR_TILES:
-                    case SelectionMode::ALL:
-                        state.addItem({ SelectionType::FLOOR_TILE, 50 });
-                        break;
-                    case SelectionMode::ROOF_TILES:
-                    case SelectionMode::ROOF_TILES_ALL:
-                        state.addItem({ SelectionType::ROOF_TILE, 60 });
-                        break;
-                    case SelectionMode::HEXES:
-                        state.addItem({ SelectionType::HEX, 1000 });
-                        break;
-                    case SelectionMode::OBJECTS:
-                    case SelectionMode::SCROLL_BLOCKER_RECTANGLE:
-                    case SelectionMode::NUM_SELECTION_TYPES:
-                        // These modes might not add items in basic test
-                        break;
-                }
-
-                // Transition to new mode
-                state.mode = toMode;
-                REQUIRE(state.mode == toMode);
-
-                // Clear for next test
-                state.clear();
-            }
-        }
-    }
 }
 
 //==============================================================================
@@ -780,29 +566,6 @@ TEST_CASE("Regression prevention for known issues", "[regression_prevention]") {
 
     // (Roof/floor disambiguation is exercised against the real algorithm in
     // test_viewport_controller.cpp's ROOF_OFFSET case, not a mock formula.)
-
-    SECTION("Prevent area selection size calculation errors") {
-        SelectionState state;
-
-        // Test the specific case that was failing
-        sf::Vector2f startPos(150.0f, 100.0f);
-        sf::Vector2f endPos(50.0f, 200.0f); // End is "before" start in X, "after" in Y
-
-        state.startAreaSelection(startPos, SelectionMode::FLOOR_TILES);
-        state.updateAreaSelection(endPos);
-
-        if (state.selectionArea.has_value()) {
-            auto& area = state.selectionArea.value();
-
-            // Size can be negative (geometric correctness)
-            REQUIRE(area.size.x == (endPos.x - startPos.x)); // -100
-            REQUIRE(area.size.y == (endPos.y - startPos.y)); // 100
-
-            // Position should be start point
-            REQUIRE(area.position.x == startPos.x);
-            REQUIRE(area.position.y == startPos.y);
-        }
-    }
 
     SECTION("Prevent coordinate system overflow") {
         // Test edge cases that could cause integer overflow
@@ -841,14 +604,6 @@ TEST_CASE("Regression prevention for known issues", "[regression_prevention]") {
 
         auto initialCount = state.count();
         REQUIRE(initialCount == 3);
-
-        // Start and cancel area selection - shouldn't corrupt state
-        state.startAreaSelection(sf::Vector2f(0, 0), SelectionMode::ALL);
-        REQUIRE(state.count() == initialCount); // Items preserved
-
-        state.cancelAreaSelection();
-        REQUIRE(state.count() == initialCount); // Items still preserved
-        REQUIRE_FALSE(state.isAreaSelecting());
 
         // Items should still be accessible
         REQUIRE(state.getFloorTileIndices().size() == 1);

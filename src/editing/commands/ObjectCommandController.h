@@ -60,12 +60,6 @@ public:
     void addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
 
-    /// Add/remove a MapObject in the map data only — no sprite, no MapSpriteLoader. The
-    /// headless counterpart to add/removePlacedObject: usable without a GL context (CLI,
-    /// scripts), since a MapObject is pure data the engine renders at load time.
-    void addObjectData(const std::shared_ptr<MapObject>& mapObject);
-    void removeObjectData(const std::shared_ptr<MapObject>& mapObject);
-
     /// Pushes a command onto the shared undo stack and notifies (the single owner
     /// of "a command was recorded"). All register*() helpers funnel through here.
     /// While a batch is open (see beginBatch), commands are buffered instead of
@@ -174,14 +168,11 @@ public:
     // (0=left,1=top,2=right,3=bottom). See EdgeEditService for details.
     int addEdgeZone(int elevation, const MapEdge::Rect& seed);
     bool deleteEdgeZone(int elevation, int zoneIndex);
-    bool setEdgeZoneSide(int elevation, int zoneIndex, EdgeEditService::Side side, int hexIndex);
     bool upgradeEdgeToVersion2();
-    bool setEdgeSquareSide(int elevation, EdgeEditService::Side side, int colOrRow);
     bool toggleEdgeClipSide(int elevation, EdgeEditService::Side side);
     bool resetEdgeSquare(int elevation);
     /// The current map-edge model (may be empty), for reading zone geometry to render/hit-test.
     const std::optional<MapEdge>& mapEdge() const;
-    int edgeZoneCount(int elevation) const;
     // Live side-drag: snapshot the edge at drag start, previewZoneSide each move (no undo), then either
     // commitEdgeEdit (records the whole gesture as one undo) or restoreEdge (cancel).
     std::optional<MapEdge> edgeSnapshot() const;

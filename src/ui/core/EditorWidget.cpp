@@ -170,7 +170,7 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
             .undoStackChanged = [this]() { Q_EMIT undoStackChanged(); },
             .ensureElevationTiles = [this](int elevation) -> std::vector<Tile>& { return ensureElevationTiles(elevation); },
             .currentElevation = [this]() { return _session.currentElevation(); },
-            .updateTileSprite = [this](int hexIndex, bool isRoof, int elevation) { updateTileSprite(hexIndex, isRoof, elevation); },
+            .updateTileSprite = [this](int tileIndex, bool isRoof, int elevation) { updateTileSprite(tileIndex, isRoof, elevation); },
             .loadTileSprites = [this]() { loadTileSprites(); },
             .mapHeaderChanged = [this]() { Q_EMIT mapHeaderChanged(); },
         });
@@ -1058,12 +1058,12 @@ void EditorWidget::commitDragAreaSelection(sf::Vector2f startPos, sf::Vector2f e
         createScrollBlockersFromHexes(calculateRectangleBorderHexes(selectionArea));
     } else if (isDeselect) {
         // Ctrl+drag only removes already-selected items in the area; it never adds.
-        _session.selectionManager()->deselectArea(selectionArea, _currentSelectionMode, _session.currentElevation());
+        _session.selectionManager()->deselectArea(selectionArea, _currentSelectionMode);
     } else if (isAdditive) {
         // Alt+drag adds the covered items to the selection, keeping what was already selected.
-        _session.selectionManager()->addArea(selectionArea, _currentSelectionMode, _session.currentElevation());
+        _session.selectionManager()->addArea(selectionArea, _currentSelectionMode);
     } else {
-        const auto result = _session.selectionManager()->selectArea(selectionArea, _currentSelectionMode, _session.currentElevation());
+        const auto result = _session.selectionManager()->selectArea(selectionArea, _currentSelectionMode);
         if (result.success) {
             spdlog::debug("Area selection completed: {}", result.message);
         }
@@ -1650,16 +1650,16 @@ bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, SelectionModifier mod
 
     switch (modifier) {
         case SelectionModifier::NONE:
-            result = _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
+            result = _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode);
             break;
 
         case SelectionModifier::ADD:
-            result = _session.selectionManager()->addToSelection(worldPos, _currentSelectionMode, _session.currentElevation());
+            result = _session.selectionManager()->addToSelection(worldPos, _currentSelectionMode);
             spdlog::debug("Add to selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
 
         case SelectionModifier::TOGGLE:
-            result = _session.selectionManager()->deselectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
+            result = _session.selectionManager()->deselectAtPosition(worldPos, _currentSelectionMode);
             spdlog::debug("Deselect at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
 
@@ -2254,21 +2254,17 @@ void EditorWidget::refreshObjects() {
     spdlog::debug("Refreshed objects for current elevation");
 }
 
-void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
-    updateTileSprite(hexIndex, isRoof, _session.currentElevation());
+void EditorWidget::updateTileSprite(int tileIndex, bool isRoof) {
+    updateTileSprite(tileIndex, isRoof, _session.currentElevation());
 }
 
-void EditorWidget::updateTileSprite(int hexIndex, bool isRoof, int elevation) {
-    if (!_session.map() || !isValidHexPosition(hexIndex)) {
+void EditorWidget::updateTileSprite(int tileIndex, bool isRoof, int elevation) {
+    if (!_session.map()) {
         return;
     }
 
     const auto& elevationTiles = ensureElevationTiles(elevation);
-    _controller.spriteLoader().updateTileSprite(hexIndex, isRoof, elevation, elevationTiles, _session.floorSprites(), _session.roofSprites());
-}
-
-bool EditorWidget::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite) {
-    return sprite.getGlobalBounds().contains(worldPos);
+    _controller.spriteLoader().updateTileSprite(tileIndex, isRoof, elevation, elevationTiles, _session.floorSprites(), _session.roofSprites());
 }
 
 std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool isRoof) {
@@ -2309,7 +2305,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
     const auto& currentSelection = _session.selectionManager()->getCurrentSelection();
 
     if (currentSelection.isEmpty()) {
-        return _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
+        return _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode);
     }
 
     // First selected tile becomes the range start point
@@ -2327,7 +2323,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
     }
 
     if (!hasStartTile) {
-        return _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
+        return _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode);
     }
 
     float left = std::min(startPos.x, worldPos.x);
@@ -2345,7 +2341,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
         areaMode = SelectionMode::FLOOR_TILES; // ALL mode defaults to floor tiles for range selection
     }
 
-    auto result = _session.selectionManager()->selectArea(selectionArea, areaMode, _session.currentElevation());
+    auto result = _session.selectionManager()->selectArea(selectionArea, areaMode);
 
     spdlog::debug("Range selection: area ({:.1f}, {:.1f}, {:.1f}, {:.1f})",
         selectionArea.position.x, selectionArea.position.y, selectionArea.size.x, selectionArea.size.y);
@@ -2368,7 +2364,7 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
     if (isDeselect) {
         // Ctrl+drag previews with the covered items un-highlighted. The commit and the preview share the
         // same visibility rules, so the preview matches what will be deselected.
-        auto toRemove = _session.selectionManager()->itemsToDeselectInArea(selectionArea, _currentSelectionMode, _session.currentElevation());
+        auto toRemove = _session.selectionManager()->itemsToDeselectInArea(selectionArea, _currentSelectionMode);
         selection::SelectionState preview = _session.selectionManager()->getCurrentSelection();
         for (const auto& item : toRemove) {
             preview.removeItem(item);
@@ -2417,8 +2413,8 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
 }
 
 void EditorWidget::previewAreaTiles(const sf::FloatRect& area, bool roof, bool includeEmpty) {
-    auto tiles = includeEmpty ? _session.selectionManager()->getTilesInAreaIncludingEmpty(area, roof, _session.currentElevation())
-                              : _session.selectionManager()->getTilesInArea(area, roof, _session.currentElevation());
+    auto tiles = includeEmpty ? _session.selectionManager()->getTilesInAreaIncludingEmpty(area, roof)
+                              : _session.selectionManager()->getTilesInArea(area, roof);
     auto& sprites = roof ? _session.roofSprites() : _session.floorSprites();
     for (int tileIndex : tiles) {
         if (isValidTileIndex(tileIndex)) {
@@ -2429,7 +2425,7 @@ void EditorWidget::previewAreaTiles(const sf::FloatRect& area, bool roof, bool i
 }
 
 void EditorWidget::previewAreaObjects(const sf::FloatRect& area) {
-    auto objects = _session.selectionManager()->getObjectsInArea(area, _session.currentElevation());
+    auto objects = _session.selectionManager()->getObjectsInArea(area);
     std::ranges::for_each(objects, [](auto& object) {
         if (object) {
             applyPreviewHighlight(object->getSprite());
@@ -2448,7 +2444,7 @@ void EditorWidget::updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vec
     sf::FloatRect selectionArea({ left, top }, { width, height });
 
     bool isRoof = _tilePlacementManager->getTilePlacementIsRoof();
-    _previewTiles = _session.selectionManager()->getTilesInArea(selectionArea, isRoof, _session.currentElevation());
+    _previewTiles = _session.selectionManager()->getTilesInArea(selectionArea, isRoof);
 
     auto& sprites = isRoof ? _session.roofSprites() : _session.floorSprites();
     for (int tileIndex : _previewTiles) {
@@ -2548,7 +2544,7 @@ void EditorWidget::pickAtCursor(sf::Vector2f worldPos) {
         return;
     }
     const int elevation = _session.currentElevation();
-    const auto pick = selectionManager->pickAt(worldPos, elevation);
+    const auto pick = selectionManager->pickAt(worldPos);
 
     // An object under the cursor -> arm click-to-place with a live ghost.
     if (pick.object) {

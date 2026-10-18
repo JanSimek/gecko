@@ -260,12 +260,7 @@ void MapLoader::loadMapResources() {
                 unresolvedObjectArt.size(), _elevation, joinCapped(unresolvedObjectArt, kMaxNamesInWarning));
         }
 
-        // Load essential editor textures
-        _resources->textures().preload(ResourcePaths::Frm::BLANK_TILE);
-        _resources->textures().preload(ResourcePaths::Frm::LIGHT);
-        _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK);
-        _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK_FULL);
-        _resources->textures().preload(ResourcePaths::Frm::SCROLL_BLOCKER);
+        ResourceInitializer::loadEssentialTextures(*_resources);
 
         _percentDone = 100;
         setProgress("Map loading complete");

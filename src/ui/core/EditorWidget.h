@@ -211,8 +211,8 @@ public:
     void cancelDragPreview();
 
     // Efficient tile update
-    void updateTileSprite(int hexIndex, bool isRoof) override;
-    void updateTileSprite(int hexIndex, bool isRoof, int elevation) override;
+    void updateTileSprite(int tileIndex, bool isRoof) override;
+    void updateTileSprite(int tileIndex, bool isRoof, int elevation) override;
 
     // Single tool-mode entry point: activates `mode` and exits all others.
     void setMode(EditorMode mode, int tileIndex = -1, bool isRoof = false);
@@ -294,7 +294,6 @@ public:
 
     // SelectionManager helpers
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos) override;
-    bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite);
 
     // Tile hit testing methods
     std::optional<int> getTileAtPosition(sf::Vector2f worldPos, bool isRoof) override;

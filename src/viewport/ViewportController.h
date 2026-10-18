@@ -102,31 +102,14 @@ public:
     std::optional<HexPosition> worldPosToHexPosition(const WorldCoords& worldPos) const;
 
     /**
-     * @brief Snap world position to nearest hex grid center
-     * @param worldPos World position to snap
-     * @return Snapped position
-     */
-    sf::Vector2f snapToHexGrid(sf::Vector2f worldPos) const;
-
-    /**
-     * @brief Snap world position to nearest hex grid center (type-safe)
-     * @param worldPos World position to snap
-     * @return Snapped position
-     */
-    WorldCoords snapToHexGrid(const WorldCoords& worldPos) const;
-
-    /**
      * @brief Get current zoom level
      */
     float getZoomLevel() const { return _zoomLevel; }
 
-    /**
-     * @brief Set zoom level directly
-     * @param zoom New zoom level (clamped to valid range)
-     */
+private:
+    // Sets the zoom level (clamped to the valid range), keeping the view centre.
     void setZoomLevel(float zoom);
 
-private:
     const HexagonGrid* _hexGrid;
     sf::View _view;
     sf::Vector2u _windowSize{ 800u, 600u };

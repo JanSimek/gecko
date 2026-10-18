@@ -1,7 +1,6 @@
 #include "HexRenderer.h"
 #include "editor/Hex.h"
 #include "editor/HexagonGrid.h"
-#include "format/frm/Frm.h"
 #include "resource/GameResources.h"
 #include "viewport/ViewportController.h"
 #include "util/Constants.h"
@@ -12,7 +11,6 @@ namespace geck {
 namespace {
 
     constexpr int HEX_OVERLAY_FRAME_COUNT = 2;
-    constexpr int HEX_GRID_BASELINE_OFFSET = 4;
 
 }
 
@@ -39,7 +37,7 @@ void HexRenderer::renderGrid(sf::RenderTarget& target,
     const HexagonGrid& hexGrid,
     int currentHoverHex) const {
     for (const auto& hex : hexGrid.grid()) {
-        if (static_cast<int>(hex.position()) == currentHoverHex || !isHexVisible(hex, view)) {
+        if (static_cast<int>(hex.position()) == currentHoverHex || !ViewportController::isHexVisible(hex.x(), hex.y(), view)) {
             continue;
         }
 
@@ -89,7 +87,7 @@ void HexRenderer::renderHexOverlay(sf::RenderTarget& target,
     overlay.setColor(color);
     for (int hexPosition : hexPositions) {
         auto hex = hexGrid.getHexByPosition(static_cast<uint32_t>(hexPosition));
-        if (!hex.has_value() || !isHexVisible(hex->get(), view)) {
+        if (!hex.has_value() || !ViewportController::isHexVisible(hex->get().x(), hex->get().y(), view)) {
             continue;
         }
         drawOverlaySprite(target, hex->get(), overlay);
@@ -97,7 +95,6 @@ void HexRenderer::renderHexOverlay(sf::RenderTarget& target,
 }
 
 const sf::Texture& HexRenderer::hexTexture() const {
-    [[maybe_unused]] auto* hexFrm = _resources.repository().load<Frm>(ResourcePaths::Frm::HEX_GRID);
     return _resources.textures().get(ResourcePaths::Frm::HEX_GRID);
 }
 
@@ -113,7 +110,7 @@ sf::IntRect HexRenderer::overlayTextureRect(const sf::Texture& texture) {
 void HexRenderer::drawGridSprite(sf::RenderTarget& target, const Hex& hex) const {
     sf::Sprite hexSprite = _gridSprite;
     hexSprite.setPosition({ static_cast<float>(hex.x() - Hex::HEX_WIDTH),
-        static_cast<float>(hex.y() - Hex::HEX_HEIGHT + HEX_GRID_BASELINE_OFFSET) });
+        static_cast<float>(hex.y() - Hex::HEX_HEIGHT + Hex::SPRITE_BASELINE_OFFSET) });
     target.draw(hexSprite);
 }
 
@@ -124,10 +121,6 @@ void HexRenderer::drawOverlaySprite(sf::RenderTarget& target,
     overlaySprite.setPosition({ static_cast<float>(hex.x() + SpriteOffset::HEX_HIGHLIGHT_X),
         static_cast<float>(hex.y() + SpriteOffset::HEX_HIGHLIGHT_Y) });
     target.draw(overlaySprite);
-}
-
-bool HexRenderer::isHexVisible(const Hex& hex, const sf::View& view) const {
-    return ViewportController::isHexVisible(hex.x(), hex.y(), view);
 }
 
 } // namespace geck

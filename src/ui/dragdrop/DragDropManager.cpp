@@ -107,8 +107,7 @@ void DragDropManager::updateObjectDrag(sf::Vector2f currentWorldPos) {
             sf::Vector2f originalWorldPos(static_cast<float>(originalHex->get().x()), static_cast<float>(originalHex->get().y()));
 
             sf::Vector2f newWorldPos = originalWorldPos + _objectDragOffset;
-            sf::Vector2f snappedPos = _context.getViewportController()->snapToHexGrid(newWorldPos);
-            int targetHexPosition = _context.getViewportController()->worldPosToHexIndex(snappedPos);
+            int targetHexPosition = _context.getViewportController()->worldPosToHexIndex(newWorldPos);
 
             if (targetHexPosition >= 0) {
                 _context.getCurrentHoverHex() = targetHexPosition;
@@ -154,12 +153,11 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
             sf::Vector2f newWorldPos = originalWorldPos + moveTranslation;
 
             // Don't manually apply shift offsets here - setHexPosition() will handle them
-            sf::Vector2f snappedPos = _context.getViewportController()->snapToHexGrid(newWorldPos);
-            int newHexPosition = _context.getViewportController()->worldPosToHexIndex(snappedPos);
+            int newHexPosition = _context.getViewportController()->worldPosToHexIndex(newWorldPos);
 
             spdlog::debug("DragDropManager: Object {} - original({:.1f},{:.1f}) + offset({:.1f},{:.1f}) = new({:.1f},{:.1f}) -> hex {}",
                 i, originalWorldPos.x, originalWorldPos.y, dragOffset.x, dragOffset.y,
-                snappedPos.x, snappedPos.y, newHexPosition);
+                newWorldPos.x, newWorldPos.y, newHexPosition);
 
             if (hexGrid->containsPosition(newHexPosition)) {
                 movedObjects.push_back({ originalHexPosition, newHexPosition });

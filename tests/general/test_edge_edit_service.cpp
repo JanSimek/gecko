@@ -27,57 +27,34 @@ struct EdgeFixture {
 
 TEST_CASE("EdgeEditService::addZone creates the edge and is undoable", "[edge_edit]") {
     EdgeFixture f;
-    CHECK_FALSE(f.svc.hasEdge());
+    CHECK_FALSE(f.svc.edge().has_value());
 
     const int index = f.svc.addZone(0, EdgeFixture::seed());
     CHECK(index == 0);
-    REQUIRE(f.svc.hasEdge());
-    CHECK(f.svc.zoneCount(0) == 1);
+    REQUIRE(f.svc.edge().has_value());
+    CHECK(f.svc.edge()->elevations[0].zones.size() == 1);
     CHECK(f.svc.edge()->elevations[0].zones[0] == EdgeFixture::seed());
 
     REQUIRE(f.stack.undo());
-    CHECK_FALSE(f.svc.hasEdge()); // back to no edge at all
+    CHECK_FALSE(f.svc.edge().has_value()); // back to no edge at all
 
     REQUIRE(f.stack.redo());
-    REQUIRE(f.svc.hasEdge());
-    CHECK(f.svc.zoneCount(0) == 1);
-}
-
-TEST_CASE("EdgeEditService::setZoneSide moves a corner and round-trips through undo/redo", "[edge_edit]") {
-    EdgeFixture f;
-    f.svc.addZone(1, EdgeFixture::seed());
-
-    CHECK(f.svc.setZoneSide(1, 0, EdgeEditService::LEFT, 1234));
-    CHECK(f.svc.edge()->elevations[1].zones[0].left == 1234);
-
-    REQUIRE(f.stack.undo());
-    CHECK(f.svc.edge()->elevations[1].zones[0].left == EdgeFixture::seed().left);
-    REQUIRE(f.stack.redo());
-    CHECK(f.svc.edge()->elevations[1].zones[0].left == 1234);
-}
-
-TEST_CASE("EdgeEditService::setZoneSide rejects bad args", "[edge_edit]") {
-    EdgeFixture f;
-    f.svc.addZone(0, EdgeFixture::seed());
-
-    CHECK_FALSE(f.svc.setZoneSide(0, 0, EdgeEditService::RIGHT, -1));
-    CHECK_FALSE(f.svc.setZoneSide(0, 0, EdgeEditService::RIGHT, HexagonGrid::POSITION_COUNT));
-    CHECK_FALSE(f.svc.setZoneSide(0, 9, EdgeEditService::RIGHT, 10)); // no such zone
-    CHECK_FALSE(f.svc.setZoneSide(9, 0, EdgeEditService::RIGHT, 10)); // no such elevation
+    REQUIRE(f.svc.edge().has_value());
+    CHECK(f.svc.edge()->elevations[0].zones.size() == 1);
 }
 
 TEST_CASE("EdgeEditService::deleteZone removes the right zone and is undoable", "[edge_edit]") {
     EdgeFixture f;
     f.svc.addZone(0, EdgeFixture::seed());
     f.svc.addZone(0, MapEdge::Rect{ 1, 2, 3, 4 });
-    CHECK(f.svc.zoneCount(0) == 2);
+    CHECK(f.svc.edge()->elevations[0].zones.size() == 2);
 
     CHECK(f.svc.deleteZone(0, 0));
-    CHECK(f.svc.zoneCount(0) == 1);
+    CHECK(f.svc.edge()->elevations[0].zones.size() == 1);
     CHECK(f.svc.edge()->elevations[0].zones[0] == (MapEdge::Rect{ 1, 2, 3, 4 }));
 
     REQUIRE(f.stack.undo());
-    CHECK(f.svc.zoneCount(0) == 2);
+    CHECK(f.svc.edge()->elevations[0].zones.size() == 2);
     CHECK(f.svc.edge()->elevations[0].zones[0] == EdgeFixture::seed());
 }
 
@@ -104,8 +81,19 @@ TEST_CASE("EdgeEditService live side drag previews without undo, commits once", 
     // the stack.
     REQUIRE(f.stack.undo()); // undo the drag
     REQUIRE(f.stack.undo()); // undo the add
-    CHECK_FALSE(f.svc.hasEdge());
+    CHECK_FALSE(f.svc.edge().has_value());
     CHECK_FALSE(f.stack.canUndo());
+}
+
+TEST_CASE("EdgeEditService::previewZoneSide ignores bad args", "[edge_edit]") {
+    EdgeFixture f;
+    f.svc.addZone(0, EdgeFixture::seed());
+
+    f.svc.previewZoneSide(0, 0, EdgeEditService::RIGHT, -1);
+    f.svc.previewZoneSide(0, 0, EdgeEditService::RIGHT, HexagonGrid::POSITION_COUNT);
+    f.svc.previewZoneSide(0, 9, EdgeEditService::RIGHT, 10); // no such zone
+    f.svc.previewZoneSide(9, 0, EdgeEditService::RIGHT, 10); // no such elevation
+    CHECK(f.svc.edge()->elevations[0].zones[0] == EdgeFixture::seed());
 }
 
 TEST_CASE("EdgeEditService restore discards a preview without recording", "[edge_edit]") {
@@ -124,7 +112,7 @@ TEST_CASE("EdgeEditService restore discards a preview without recording", "[edge
 
     // Only the add is on the stack: neither restore nor the no-op commit recorded anything.
     REQUIRE(f.stack.undo());
-    CHECK_FALSE(f.svc.hasEdge());
+    CHECK_FALSE(f.svc.edge().has_value());
     CHECK_FALSE(f.stack.canUndo());
 }
 
@@ -135,16 +123,15 @@ TEST_CASE("EdgeEditService rejects v2 square/clip edits on a v1 edge", "[edge_ed
 
     // These only serialize for v2, so they must be rejected (not silently non-persisting edits).
     CHECK_FALSE(f.svc.toggleClipSide(0, EdgeEditService::LEFT));
-    CHECK_FALSE(f.svc.setSquareSide(0, EdgeEditService::LEFT, 10));
     CHECK_FALSE(f.svc.resetSquare(0));
     CHECK_FALSE(f.svc.edge()->elevations[0].clipSides.left); // v1 block untouched
 
-    // Only the addZone is on the undo stack — the three rejected edits recorded nothing.
+    // Only the addZone is on the undo stack — the two rejected edits recorded nothing.
     REQUIRE(f.stack.undo());
     CHECK_FALSE(f.stack.canUndo());
 }
 
-TEST_CASE("EdgeEditService v2 upgrade, clip, square and reset are undoable", "[edge_edit]") {
+TEST_CASE("EdgeEditService v2 upgrade, clip and reset are undoable", "[edge_edit]") {
     EdgeFixture f;
     f.svc.addZone(0, EdgeFixture::seed()); // creates the edge as v1
     CHECK(f.svc.edge()->version == 1);
@@ -155,11 +142,6 @@ TEST_CASE("EdgeEditService v2 upgrade, clip, square and reset are undoable", "[e
 
     CHECK(f.svc.toggleClipSide(0, EdgeEditService::TOP));
     CHECK(f.svc.edge()->elevations[0].clipSides.top);
-
-    CHECK(f.svc.setSquareSide(0, EdgeEditService::LEFT, 42));
-    CHECK(f.svc.edge()->elevations[0].squareRect.left == 42);
-    CHECK(f.svc.setSquareSide(0, EdgeEditService::LEFT, 9999)); // clamped to grid width - 1
-    CHECK(f.svc.edge()->elevations[0].squareRect.left == MapEdge::SQUARE_GRID_WIDTH - 1);
 
     CHECK(f.svc.resetSquare(0));
     CHECK(f.svc.edge()->elevations[0].squareRect

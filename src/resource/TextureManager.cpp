@@ -22,14 +22,6 @@ void TextureManager::clear() {
     _textures.clear();
 }
 
-bool TextureManager::has(std::string_view key) const {
-    return _textures.contains(std::string(key));
-}
-
-void TextureManager::store(std::string_view key, std::unique_ptr<sf::Texture> texture) {
-    _textures.try_emplace(std::string(key), std::move(texture));
-}
-
 bool TextureManager::isFrmPath(const std::filesystem::path& path) {
     // Reuse the canonical FRM-extension test (.frm plus directional .fr0-.fr5)
     // rather than re-deriving the set here.
@@ -60,13 +52,7 @@ const sf::Texture& TextureManager::get(const std::filesystem::path& path) {
 
 const sf::Texture& TextureManager::createFrmTexture(const std::filesystem::path& path) {
     const std::string key = path.generic_string();
-    Frm* frm = _repository.find<Frm>(path);
-    if (!frm) {
-        frm = _repository.load<Frm>(path);
-    }
-    if (!frm) {
-        throw ResourceException("Texture does not exist", key);
-    }
+    const Frm* frm = _repository.load<Frm>(path);
 
     Pal* palette = _repository.tryLoad<Pal>(ResourcePaths::Pal::COLOR);
     if (!palette) {

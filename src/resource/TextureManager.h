@@ -5,7 +5,6 @@
 #include <filesystem>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 
 namespace geck {
@@ -25,7 +24,7 @@ class DataFileSystem;
  *  - preload() is parse-only and safe to call from background loaders: it just
  *    warms the ResourceRepository's parsed-resource cache and never touches the
  *    texture cache or the GL context.
- *  - get()/has()/store()/clear() touch the sf::Texture cache and create GPU
+ *  - get()/clear() touch the sf::Texture cache and create GPU
  *    textures, so they must run on the main (rendering) thread that owns the
  *    GL context. The texture cache is therefore not separately synchronized.
  */
@@ -34,8 +33,6 @@ public:
     TextureManager(ResourceRepository& repository, DataFileSystem& files);
 
     void clear();
-    [[nodiscard]] bool has(std::string_view key) const;
-    void store(std::string_view key, std::unique_ptr<sf::Texture> texture);
 
     // Parse-only; background-thread safe. Never creates a texture.
     void preload(const std::filesystem::path& path);

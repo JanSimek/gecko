@@ -94,15 +94,13 @@ struct ProFixture {
 TEST_CASE("object_query::blocksMovement reads the PRO NoBlock flag", "[object_query]") {
     ProFixture fx;
 
-    // No NoBlock flag -> the object blocks movement (and is a wall blocker).
+    // No NoBlock flag -> the object blocks movement.
     const auto blocking = wallObject(ProFixture::BLOCKING);
     CHECK(object_query::blocksMovement(blocking, fx.resources));
-    CHECK(object_query::isWallBlocker(blocking, fx.resources));
 
     // NoBlock flag set -> passable.
     const auto passable = wallObject(ProFixture::NON_BLOCKING);
     CHECK_FALSE(object_query::blocksMovement(passable, fx.resources));
-    CHECK_FALSE(object_query::isWallBlocker(passable, fx.resources));
 }
 
 TEST_CASE("object_query::isShootThroughWallBlocker reads the PRO ShootThrough flag", "[object_query]") {

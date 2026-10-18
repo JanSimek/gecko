@@ -530,8 +530,8 @@ target_link_libraries(vault PUBLIC
 add_library(gecko_resource STATIC
     vfs/Dat2File.hpp
     vfs/Dat2FileSystem.hpp
+    vfs/UndefWindowsFileMacros.h
 
-    resource/PathUtils.h
     resource/CritterFrmResolver.h
     resource/CritterFrmResolver.cpp
 

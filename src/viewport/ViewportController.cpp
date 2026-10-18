@@ -158,7 +158,6 @@ bool ViewportController::isHexVisible(int hexWorldX, int hexWorldY, const sf::Vi
     // A hex sprite spans ~2 hex-widths and sits a few px below its baseline, so pad
     // the right/bottom test by those amounts to avoid culling partially-visible hexes.
     constexpr int HEX_SPRITE_WIDTH_SPAN = Hex::HEX_WIDTH * 2;
-    constexpr int HEX_BASELINE_OFFSET = 4;
 
     const sf::Vector2f viewCenter = view.getCenter();
     const sf::Vector2f viewSize = view.getSize();
@@ -168,21 +167,7 @@ bool ViewportController::isHexVisible(int hexWorldX, int hexWorldY, const sf::Vi
     const int viewHeight = static_cast<int>(viewSize.y);
 
     return (hexWorldX + HEX_SPRITE_WIDTH_SPAN > worldX && hexWorldX < worldX + viewWidth)
-        && (hexWorldY + Hex::HEX_HEIGHT + HEX_BASELINE_OFFSET > worldY && hexWorldY < worldY + viewHeight);
-}
-
-sf::Vector2f ViewportController::snapToHexGrid(sf::Vector2f worldPos) const {
-    if (!_hexGrid) {
-        return worldPos;
-    }
-
-    // Find closest hex and return its center position
-    int hexIndex = worldPosToHexIndex(worldPos);
-    if (auto hex = _hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex)); hex.has_value()) {
-        return sf::Vector2f(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
-    }
-
-    return worldPos; // Return original position if no valid hex found
+        && (hexWorldY + Hex::HEX_HEIGHT + Hex::SPRITE_BASELINE_OFFSET > worldY && hexWorldY < worldY + viewHeight);
 }
 
 void ViewportController::updateViewForWindowSize(sf::Vector2u windowSize) {
@@ -214,11 +199,6 @@ std::optional<HexPosition> ViewportController::worldPosToHexPosition(const World
         return HexPosition(hexIndex);
     }
     return std::nullopt;
-}
-
-WorldCoords ViewportController::snapToHexGrid(const WorldCoords& worldPos) const {
-    sf::Vector2f snapped = snapToHexGrid(worldPos.toVector());
-    return WorldCoords(snapped.x, snapped.y);
 }
 
 } // namespace geck

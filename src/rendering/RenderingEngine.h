@@ -312,12 +312,6 @@ private:
     std::shared_ptr<Object> buildExitGridPreviewObject(const RenderData& renderData, int hexIndex,
         uint32_t frmPid) const;
 
-    /**
-     * @brief Check if a hex is within the visible viewport
-     */
-    bool isHexVisible(int hexWorldX, int hexWorldY,
-        const sf::View& view) const;
-
     resource::GameResources& _resources;
     HexRenderer _hexRenderer;
     SelectionPalette _selectionColors;

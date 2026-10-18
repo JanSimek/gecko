@@ -1,6 +1,7 @@
 #include "CritterFrmResolver.h"
 
 #include "format/frm/FrmId.h"
+#include "resource/FrmResolver.h"
 
 #include <spdlog/spdlog.h>
 #include <algorithm>
@@ -126,12 +127,10 @@ bool CritterFrmResolver::matchesCritterBase(const std::string& baseName, const s
 
     size_t dotPos = filename.find_last_of('.');
     if (dotPos != std::string::npos) {
-        std::string extension = filename.substr(dotPos + 1);
-        if (extension == "frm" || (extension.length() == 3 && extension.substr(0, 2) == "fr")) {
-            filename.erase(dotPos);
-        } else {
+        if (!resource::hasFrmExtension(filename.substr(dotPos))) {
             return false;
         }
+        filename.erase(dotPos);
     }
 
     std::string lowerFilename = filename;
@@ -258,21 +257,13 @@ bool CritterFrmResolver::parseAnimationSuffixes(const std::string& frmFilename,
         return false;
     }
 
-    std::string extension = filename.substr(dotPos + 1);
-    filename.erase(dotPos);
-
-    if (extension == "frm") {
-        direction = 'm';
-    } else if (extension.length() == 3 && extension.substr(0, 2) == "fr") {
-        char dirChar = extension[2];
-        if (dirChar >= '0' && dirChar <= '5') {
-            direction = dirChar;
-        } else {
-            return false;
-        }
-    } else {
+    const std::string extension = filename.substr(dotPos + 1);
+    if (!resource::hasFrmExtension(filename.substr(dotPos))) {
         return false;
     }
+    filename.erase(dotPos);
+    // .frm holds every direction; a directional .fr0-.fr5 names its one.
+    direction = extension == "frm" ? 'm' : extension[2];
 
     if (filename.length() < 2) {
         return false;

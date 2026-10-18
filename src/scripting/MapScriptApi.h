@@ -40,9 +40,8 @@ public:
 /// ObjectCommandController. Pure C++ with no scripting-runtime dependency, so it is usable
 /// (and unit-testable) without Lua.
 ///
-/// A run that touches many hexes must be wrapped in beginBatch()/endBatch() (or a
-/// ScopedUndoBatch) so it collapses into ONE undo entry instead of one-per-hex — the
-/// UndoStack has a hard command cap.
+/// A run that touches many hexes must be wrapped in a ScopedUndoBatch so it collapses into ONE
+/// undo entry instead of one-per-hex — the UndoStack has a hard command cap.
 class MapScriptApi {
 public:
     /// Binds to a live editing session at `elevation`. References are borrowed and must
@@ -210,10 +209,6 @@ public:
     /// [lo,hi]. Deterministic and cross-platform (mt19937 + integer reduction), so a seed reproduces.
     double rng();
     int rngInt(int lo, int hi);
-
-    // --- Undo batching -----------------------------------------------------------
-    void beginBatch(const std::string& description);
-    void endBatch();
 
     // --- Plan sink (host-only; not script-bound) ---------------------------------
     /// Redirect the mutators: while a sink is installed, placeObject/placeProto/paint*/placeStamp/
@@ -391,6 +386,7 @@ private:
     // placeExitGridRect and hexesOnScreenRect. Callers validate the centre and extents.
     std::array<std::vector<int>, 4> screenRectEdges(int centerHex, int screenHalfWidth, int screenHalfHeight) const;
     bool paintTile(int tileIndex, uint16_t tileId, bool isRoof);
+    int fillTileRect(int col0, int row0, int col1, int row1, uint16_t tileId, bool isRoof);
     // Parse a reference map headlessly (GL-free) for the palette queries; raises if unreadable.
     std::unique_ptr<Map> loadReferenceMap(const std::string& mapPath) const;
     // loadReferenceMap through a per-api cache keyed by the path string, so a run that learns from a
