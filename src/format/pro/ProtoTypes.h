@@ -103,7 +103,7 @@ concept ProtoTypeIdEnum = requires { ProtoTypeIdObjectType<T>::value; };
 /// A proto PID: the object type in the high byte, the proto index in the low 24 bits.
 ///
 /// Mirrors the engine's ProtoId (proto_types.h) with the same accessor names, but holds the raw
-/// value losslessly: gecko round-trips PIDs the engine would reject (e.g. -1, see CLAUDE.md
+/// value losslessly: gecko round-trips PIDs the engine would reject (e.g. -1, see AGENTS.md
 /// "Objects With No Known Type"), so validity is a query here, never a normalisation.
 class ProtoId {
 public:

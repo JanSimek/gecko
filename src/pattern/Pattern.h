@@ -22,7 +22,7 @@ struct PatternObject {
 
 /// A floor or roof tile captured in a pattern variant, positioned by its tile offset
 /// relative to the anchor. Tile space is a distinct 100x100 grid from hex space —
-/// never validate one against the other's range (see CLAUDE.md).
+/// never validate one against the other's range (see AGENTS.md).
 struct PatternTile {
     int dxTile = 0;
     int dyTile = 0;

@@ -77,7 +77,7 @@ public:
 
         /// The 0-based scripts.lst program index the 1-based script_id names, or nullopt when the map
         /// has no script. The engine does the same conversion (fallout2-ce map.cc,
-        /// `script->index = gMapHeader.scriptIndex - 1`); see CLAUDE.md "Script Index Bases".
+        /// `script->index = gMapHeader.scriptIndex - 1`); see AGENTS.md "Script Index Bases".
         [[nodiscard]] std::optional<int> programIndex() const {
             return script_id > 0 ? std::optional<int>(script_id - 1) : std::nullopt;
         }
@@ -115,7 +115,7 @@ public:
     const std::optional<MapEdge>& edge() const { return _edge; }
     void setEdge(std::optional<MapEdge> edge) { _edge = std::move(edge); }
 
-    /// The scripts.lst program index (0-based, what gecko speaks — see CLAUDE.md "Script Index
+    /// The scripts.lst program index (0-based, what gecko speaks — see AGENTS.md "Script Index
     /// Bases") of the map script an object's SID names, or nullopt when this map has no script
     /// with that SID. The SID's section picks which of the five script lists to search.
     std::optional<int> scriptProgramIndexForSid(uint32_t sid) const;
