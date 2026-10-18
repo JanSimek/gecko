@@ -49,7 +49,7 @@ PatternVariant sampleVariant() {
 
 } // namespace
 
-TEST_CASE("PatternStamper::plan resolves object and tile positions", "[pattern][stamper]") {
+TEST_CASE("PatternStamper::plan resolves object and tile positions", "[pattern_stamper]") {
     const PatternVariant v = sampleVariant();
     const auto plan = PatternStamper::plan(v, TARGET);
 
@@ -75,7 +75,7 @@ TEST_CASE("PatternStamper::plan resolves object and tile positions", "[pattern][
     CHECK(plan.tiles[0].tileId == 271);
 }
 
-TEST_CASE("PatternStamper::plan keeps tiles aligned with objects at any click parity", "[pattern][stamper]") {
+TEST_CASE("PatternStamper::plan keeps tiles aligned with objects at any click parity", "[pattern_stamper]") {
     using namespace geck::hexgrid;
     PatternVariant aligned;
     aligned.anchorHex = 80 * WIDTH + 80; // col 80 (even), row 80
@@ -97,7 +97,7 @@ TEST_CASE("PatternStamper::plan keeps tiles aligned with objects at any click pa
     }
 }
 
-TEST_CASE("PatternStamper::plan drops entries that fall off the grid", "[pattern][stamper]") {
+TEST_CASE("PatternStamper::plan drops entries that fall off the grid", "[pattern_stamper]") {
     PatternVariant v;
     v.anchorHex = 0;                                              // top-left corner
     v.objects.push_back(PatternObject{ -5, -5, 1u, 1u, 0u, 0u }); // up-left of a corner anchor
@@ -110,7 +110,7 @@ TEST_CASE("PatternStamper::plan drops entries that fall off the grid", "[pattern
     CHECK(plan.tilesDropped == 1);
 }
 
-TEST_CASE("PatternStamper::stamp applies a variant as one undo entry", "[pattern][stamper]") {
+TEST_CASE("PatternStamper::stamp applies a variant as one undo entry", "[pattern_stamper]") {
     ControllerFixture fx;
     // Seed elevation 0 with a full set of empty tiles so the tile edits have somewhere
     // to land and a readable before-value.
@@ -154,7 +154,7 @@ TEST_CASE("PatternStamper::stamp applies a variant as one undo entry", "[pattern
 // recorded as map data even when their art can't be resolved (no GL, or critter.dat absent). With
 // the default buildSprites=true and no art the same objects are skipped (the case above), so this
 // guards the regression the review flagged: generate --stamp silently dropping objects.
-TEST_CASE("PatternStamper records objects as data when buildSprites is false", "[pattern][stamper]") {
+TEST_CASE("PatternStamper records objects as data when buildSprites is false", "[pattern_stamper]") {
     ControllerFixture fx;
     fx.mapFile().tiles[0] = std::vector<Tile>(
         Map::TILES_PER_ELEVATION, Tile(static_cast<uint16_t>(Map::EMPTY_TILE), static_cast<uint16_t>(Map::EMPTY_TILE)));
@@ -177,7 +177,7 @@ TEST_CASE("PatternStamper records objects as data when buildSprites is false", "
 // A stamp places NEW objects, so they start from their proto like any obj_new: its flags (unless the
 // stamp captured its own), its light and its script. A hand-written stamp without "flags" used to
 // land with flags 0, so a flat proto stood and a NoBlock one blocked.
-TEST_CASE("PatternStamper seeds stamped objects from their proto", "[pattern][stamper]") {
+TEST_CASE("PatternStamper seeds stamped objects from their proto", "[pattern_stamper]") {
     const test::TempDir rootDir{ "geck_stamp_proto_defaults" };
     const std::filesystem::path& root = rootDir.path();
     test::writeFile(root / "proto" / "walls" / "walls.lst", "lamp.pro\n");

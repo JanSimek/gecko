@@ -145,7 +145,7 @@ json describe(const fs::path& dataRoot, const fs::path& slot, int* rc = nullptr,
 
 } // namespace
 
-TEST_CASE("describeSave decodes a slot and joins the combat list to the slot map", "[cli][save]") {
+TEST_CASE("describeSave decodes a slot and joins the combat list to the slot map", "[save_inspect][cli]") {
     const test::TempDir rootDir{ "save_inspect" };
     const fs::path& root = rootDir.path();
     const fs::path data = root / "gamedata";
@@ -189,7 +189,7 @@ TEST_CASE("describeSave decodes a slot and joins the combat list to the slot map
 
 // combatLoad lists only the non-hidden critters of the player's elevation and looks each saved combat id up among
 // them; a hidden critter, or one on another floor, keeps a stale id that can duplicate a listed critter's.
-TEST_CASE("describeSave joins combat ids among the critters combatLoad lists", "[cli][save]") {
+TEST_CASE("describeSave joins combat ids among the critters combatLoad lists", "[save_inspect][cli]") {
     const test::TempDir rootDir{ "save_inspect_unlisted" };
     const fs::path& root = rootDir.path();
     const fs::path data = root / "gamedata";
@@ -226,7 +226,7 @@ TEST_CASE("describeSave joins combat ids among the critters combatLoad lists", "
     CHECK(outside[1].at("hidden") == false);
 }
 
-TEST_CASE("describeSave reports a vault13.gam that does not match the save", "[cli][save]") {
+TEST_CASE("describeSave reports a vault13.gam that does not match the save", "[save_inspect][cli]") {
     const test::TempDir rootDir{ "save_inspect_mismatch" };
     const fs::path& root = rootDir.path();
     const fs::path data = root / "gamedata";

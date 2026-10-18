@@ -17,7 +17,7 @@ namespace fs = std::filesystem;
 using nlohmann::json;
 using namespace geck;
 
-TEST_CASE("parseFid accepts hex and decimal, rejects junk", "[frm][cli]") {
+TEST_CASE("parseFid accepts hex and decimal, rejects junk", "[frm_inspect][cli]") {
     using cli::parseFid;
     CHECK(parseFid("0x05000021") == 0x05000021u);
     CHECK(parseFid("83886113") == 0x05000021u); // same value, decimal
@@ -30,7 +30,7 @@ TEST_CASE("parseFid accepts hex and decimal, rejects junk", "[frm][cli]") {
     CHECK_FALSE(parseFid("").has_value());
 }
 
-TEST_CASE("normalizeArtToken canonicalizes path + extension", "[frm][cli]") {
+TEST_CASE("normalizeArtToken canonicalizes path + extension", "[frm_inspect][cli]") {
     using cli::normalizeArtToken;
     // Adds .frm when missing, lowercases, flips backslashes, strips a leading slash.
     CHECK(normalizeArtToken("ext2grd1") == "ext2grd1.frm");
@@ -40,7 +40,7 @@ TEST_CASE("normalizeArtToken canonicalizes path + extension", "[frm][cli]") {
     CHECK(normalizeArtToken("/art/misc/ext2grd1.frm") == "art/misc/ext2grd1.frm");
 }
 
-TEST_CASE("resolveFrmTarget finds a bare name across art LSTs", "[frm][cli]") {
+TEST_CASE("resolveFrmTarget finds a bare name across art LSTs", "[frm_inspect][cli]") {
     geck::test::ArtLstTree fx{ "geck_frminspect_test" };
     std::string error;
 
@@ -58,7 +58,7 @@ TEST_CASE("resolveFrmTarget finds a bare name across art LSTs", "[frm][cli]") {
     CHECK_FALSE(error.empty());
 }
 
-TEST_CASE("resolveFrmTarget resolves a FID and a full art path", "[frm][cli]") {
+TEST_CASE("resolveFrmTarget resolves a FID and a full art path", "[frm_inspect][cli]") {
     geck::test::ArtLstTree fx{ "geck_frminspect_test" };
     std::string error;
 
@@ -73,7 +73,7 @@ TEST_CASE("resolveFrmTarget resolves a FID and a full art path", "[frm][cli]") {
     CHECK(*byPath == "art/walls/wall1.frm");
 }
 
-TEST_CASE("resolveFidCommand emits decoded JSON for a FID", "[frm][cli]") {
+TEST_CASE("resolveFidCommand emits decoded JSON for a FID", "[frm_inspect][cli]") {
     geck::test::ArtLstTree fx{ "geck_frminspect_test" };
     // 0x05000002: type byte 5 (misc), index 2 -> ext2grd1 in the fixture misc.lst.
     const json decoded = geck::test::runJson([&](std::ostream& out) { return cli::resolveFidCommand(fx.mount(), "0x05000002", out); });
@@ -83,7 +83,7 @@ TEST_CASE("resolveFidCommand emits decoded JSON for a FID", "[frm][cli]") {
     CHECK(decoded["artPath"] == "art/misc/ext2grd1.frm");
 }
 
-TEST_CASE("resolveFidCommand decodes a FID with no data mounted", "[frm][cli]") {
+TEST_CASE("resolveFidCommand decodes a FID with no data mounted", "[frm_inspect][cli]") {
     // The type and index are pure FID arithmetic; only the art path needs the LSTs, so it is null.
     resource::GameResources resources;
     const json decoded = geck::test::runJson([&](std::ostream& out) { return cli::resolveFidCommand(resources, "0x05000021", out); });
@@ -93,13 +93,13 @@ TEST_CASE("resolveFidCommand decodes a FID with no data mounted", "[frm][cli]") 
     CHECK(decoded["artPath"].is_null());
 }
 
-TEST_CASE("resolveFidCommand rejects a non-numeric token", "[frm][cli]") {
+TEST_CASE("resolveFidCommand rejects a non-numeric token", "[frm_inspect][cli]") {
     geck::test::ArtLstTree fx{ "geck_frminspect_test" };
     std::ostringstream oss;
     CHECK(cli::resolveFidCommand(fx.mount(), "notafid", oss) != 0);
 }
 
-TEST_CASE("listFrms matches a glob across the art LSTs", "[frm][cli]") {
+TEST_CASE("listFrms matches a glob across the art LSTs", "[frm_inspect][cli]") {
     geck::test::ArtLstTree fx{ "geck_frminspect_test" };
 
     const auto list = [&fx](const char* glob) {
@@ -119,7 +119,7 @@ TEST_CASE("listFrms matches a glob across the art LSTs", "[frm][cli]") {
     CHECK(list("zzz*").empty());
 }
 
-TEST_CASE("frmInfo reports a clear error for an unresolvable target", "[frm][cli]") {
+TEST_CASE("frmInfo reports a clear error for an unresolvable target", "[frm_inspect][cli]") {
     geck::test::ArtLstTree fx{ "geck_frminspect_test" };
     std::ostringstream oss;
     CHECK(cli::frmInfo(fx.mount(), "nope", oss) != 0);

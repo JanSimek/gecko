@@ -14,7 +14,7 @@ using geck::io::readFile;
 using geck::test::writeFile;
 namespace fs = std::filesystem;
 
-TEST_CASE("ensureWritableCopy copies a mounted file out (CRLF preserved) and is idempotent", "[writableroot]") {
+TEST_CASE("ensureWritableCopy copies a mounted file out (CRLF preserved) and is idempotent", "[writable_data_root]") {
     const test::TempDir baseDir{ "wr_test" };
     const fs::path& base = baseDir.path();
     const fs::path source = base / "source";
@@ -35,14 +35,14 @@ TEST_CASE("ensureWritableCopy copies a mounted file out (CRLF preserved) and is 
     CHECK(readFile(again) == "EDITED\r\n");
 }
 
-TEST_CASE("ensureWritableCopy throws when the file is not in the mounted data", "[writableroot]") {
+TEST_CASE("ensureWritableCopy throws when the file is not in the mounted data", "[writable_data_root]") {
     const test::TempDir rootDir{ "wr_empty" };
     const fs::path& root = rootDir.path();
     resource::DataFileSystem files; // nothing mounted
     CHECK_THROWS(resource::ensureWritableCopy(files, root, "data/nope.txt"));
 }
 
-TEST_CASE("findWritableDataPath returns the last directory, skipping archives", "[writableroot]") {
+TEST_CASE("findWritableDataPath returns the last directory, skipping archives", "[writable_data_root]") {
     const test::TempDir baseDir{ "fwdp" };
     const fs::path& base = baseDir.path();
     const fs::path dirA = base / "a";
@@ -68,7 +68,7 @@ TEST_CASE("findWritableDataPath returns the last directory, skipping archives", 
     }
 }
 
-TEST_CASE("findWritableDataPath writes into an install folder's data tree", "[writableroot]") {
+TEST_CASE("findWritableDataPath writes into an install folder's data tree", "[writable_data_root]") {
     const test::TempDir baseDir{ "fwdp_install" };
     const fs::path& base = baseDir.path();
     writeFile(base / "master.dat", "x"); // an archive next to data/ is what makes it an install
@@ -82,7 +82,7 @@ TEST_CASE("findWritableDataPath writes into an install folder's data tree", "[wr
     CHECK(resource::findWritableDataPath({ base }, base) == base / "data");
 }
 
-TEST_CASE("findWritableDataPath honours an explicit save-location marker", "[writableroot]") {
+TEST_CASE("findWritableDataPath honours an explicit save-location marker", "[writable_data_root]") {
     const test::TempDir baseDir{ "fwdp_marker" };
     const fs::path& base = baseDir.path();
     const fs::path dirA = base / "a";

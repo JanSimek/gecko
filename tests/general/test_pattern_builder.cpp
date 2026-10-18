@@ -4,7 +4,9 @@
 #include <vector>
 
 #include "editor/HexGeometry.h"
+#include "format/frm/FrmId.h"
 #include "format/map/MapObject.h"
+#include "format/pro/ProtoTypes.h"
 #include "pattern/Pattern.h"
 #include "pattern/PatternBuilder.h"
 #include "pattern/PatternStamper.h"
@@ -15,6 +17,9 @@ using namespace geck::pattern;
 namespace {
 
 constexpr int ANCHOR = 80 * hexgrid::WIDTH + 80; // col 80, row 80
+
+constexpr uint32_t sceneryPid(uint32_t index) { return ProtoId(ObjectType::Scenery, index).pid(); }
+constexpr uint32_t critterFid(uint32_t frameId) { return FrmId(ObjectType::Critter, frameId).fid(); }
 
 MapObject objAt(int hex, uint32_t proPid, uint32_t frmPid, uint32_t direction, uint32_t flags) {
     MapObject o;
@@ -28,10 +33,10 @@ MapObject objAt(int hex, uint32_t proPid, uint32_t frmPid, uint32_t direction, u
 
 } // namespace
 
-TEST_CASE("PatternBuilder::buildVariant captures offsets and engine ids verbatim", "[pattern][builder]") {
-    const MapObject a = objAt(ANCHOR, 33555201u, 16777345u, 0u, 0u);
-    const MapObject b = objAt(ANCHOR + 1, 33555202u, 16777346u, 2u, 0x10u);           // col +1
-    const MapObject c = objAt(ANCHOR + hexgrid::WIDTH, 33555203u, 16777347u, 4u, 0u); // row +1
+TEST_CASE("PatternBuilder::buildVariant captures offsets and engine ids verbatim", "[pattern_builder]") {
+    const MapObject a = objAt(ANCHOR, sceneryPid(769), critterFid(129), 0u, 0u);
+    const MapObject b = objAt(ANCHOR + 1, sceneryPid(770), critterFid(130), 2u, 0x10u);           // col +1
+    const MapObject c = objAt(ANCHOR + hexgrid::WIDTH, sceneryPid(771), critterFid(131), 4u, 0u); // row +1
     const std::vector<const MapObject*> objects{ &a, &b, &c };
 
     // Floor tile at the anchor's own tile (col 40, row 40 -> index 4040), and one shifted.
@@ -47,12 +52,12 @@ TEST_CASE("PatternBuilder::buildVariant captures offsets and engine ids verbatim
     REQUIRE(v.objects.size() == 3);
     CHECK(v.objects[0].dxHex == 0);
     CHECK(v.objects[0].dyHex == 0);
-    CHECK(v.objects[0].proPid == 33555201u);
+    CHECK(v.objects[0].proPid == sceneryPid(769));
     CHECK(v.objects[1].dxHex == 1);
     CHECK(v.objects[1].direction == 2u);
     CHECK(v.objects[1].flags == 0x10u);
     CHECK(v.objects[2].dyHex == 1);
-    CHECK(v.objects[2].frmPid == 16777347u);
+    CHECK(v.objects[2].frmPid == critterFid(131));
 
     REQUIRE(v.floor.size() == 2);
     CHECK(v.floor[0].dxTile == 0);
@@ -62,7 +67,7 @@ TEST_CASE("PatternBuilder::buildVariant captures offsets and engine ids verbatim
     CHECK(v.floor[1].tileId == 272);
 }
 
-TEST_CASE("PatternBuilder and PatternStamper are inverses", "[pattern][builder]") {
+TEST_CASE("PatternBuilder and PatternStamper are inverses", "[pattern_builder]") {
     const MapObject a = objAt(ANCHOR, 1u, 1u, 0u, 0u);
     const MapObject b = objAt(ANCHOR + 2, 2u, 2u, 1u, 0u);
     const MapObject c = objAt(ANCHOR + 3 * hexgrid::WIDTH - 1, 3u, 3u, 5u, 0u);

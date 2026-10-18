@@ -55,7 +55,7 @@ constexpr const char* kMapsTxtLf = "; Map datafile\n"
 
 } // namespace
 
-TEST_CASE("MapsTxt resolves maps by index, filename, and lookup_name", "[maps]") {
+TEST_CASE("MapsTxt resolves maps by index, filename, and lookup_name", "[maps_txt]") {
     const MapsTxt doc = parseMapsTxt(std::string{ kMapsTxt });
 
     // By [Map NNN] index, deriving the typed view (unmodelled keys like music/ambient_sfx are ignored).
@@ -90,14 +90,14 @@ TEST_CASE("MapsTxt resolves maps by index, filename, and lookup_name", "[maps]")
     CHECK_FALSE(doc.findByLookupName("nope").has_value());
 }
 
-TEST_CASE("MapsTxt tolerates empty / section-less input", "[maps]") {
+TEST_CASE("MapsTxt tolerates empty / section-less input", "[maps_txt]") {
     CHECK_FALSE(parseMapsTxt(std::string{}).find(0).has_value());
     const auto doc = parseMapsTxt(std::string{ "map_name=stray.map\n" }); // keys before any [section]
     CHECK(doc.sections.empty());
     CHECK_FALSE(doc.findByName("stray.map").has_value());
 }
 
-TEST_CASE("MapsTxt round-trips an LF file byte-for-byte (no trailing newline)", "[maps_roundtrip]") {
+TEST_CASE("MapsTxt round-trips an LF file byte-for-byte (no trailing newline)", "[maps_txt][roundtrip]") {
     const MapsTxt doc = parseMapsTxt(std::string{ kMapsTxtLf });
 
     REQUIRE(doc.sections.size() == 2);
@@ -108,7 +108,7 @@ TEST_CASE("MapsTxt round-trips an LF file byte-for-byte (no trailing newline)", 
     CHECK(writer::serializeMapsTxt(doc) == std::string{ kMapsTxtLf });
 }
 
-TEST_CASE("MapsTxt normalizes CRLF to LF while preserving all data", "[maps_roundtrip]") {
+TEST_CASE("MapsTxt normalizes CRLF to LF while preserving all data", "[maps_txt][roundtrip]") {
     const std::string crlf = geck::test::toCrlf(kMapsTxtLf);
 
     const MapsTxt doc = parseMapsTxt(crlf);
@@ -116,7 +116,7 @@ TEST_CASE("MapsTxt normalizes CRLF to LF while preserving all data", "[maps_roun
     CHECK(writer::serializeMapsTxt(doc) == std::string{ kMapsTxtLf });
 }
 
-TEST_CASE("MapsTxt edits one field and leaves every other byte untouched", "[maps_roundtrip]") {
+TEST_CASE("MapsTxt edits one field and leaves every other byte untouched", "[maps_txt]") {
     MapsTxt doc = parseMapsTxt(std::string{ kMapsTxtLf });
 
     REQUIRE(writer::findField(doc, 0, "lookup_name").value_or("") == "Desert Encounter 1");
@@ -140,7 +140,7 @@ TEST_CASE("MapsTxt edits one field and leaves every other byte untouched", "[map
     CHECK_FALSE(writer::setField(doc, 99, "lookup_name", "x"));
 }
 
-TEST_CASE("validateMapsTxt enforces the engine's hard rules", "[maps_roundtrip]") {
+TEST_CASE("validateMapsTxt enforces the engine's hard rules", "[maps_txt]") {
     using writer::MapsTxtIssue;
 
     SECTION("a gapless, well-formed registry has no errors") {
@@ -171,7 +171,7 @@ TEST_CASE("validateMapsTxt enforces the engine's hard rules", "[maps_roundtrip]"
     }
 }
 
-TEST_CASE("addSection / removeSection edit the registry, keeping it serialisable", "[maps_roundtrip]") {
+TEST_CASE("addSection / removeSection edit the registry, keeping it serialisable", "[maps_txt]") {
     auto doc = parseMapsTxt(std::string{
         "[Map 0]\nlookup_name=A\nmap_name=a\n[Map 1]\nlookup_name=B\nmap_name=b" });
 

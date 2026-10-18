@@ -20,7 +20,7 @@ using namespace geck::test;
 
 // mounts exists because a data path that did not open used to be skipped in silence, and every
 // answer afterwards came from whatever else mounted while reading as confidently as a correct one.
-TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]") {
+TEST_CASE("mounts reports what is mounted and what refused to", "[mcp]") {
     SECTION("a healthy server reports its mounts and no failures") {
         test::DataTree tree{ "gecko_mounts_ok" };
         tree.write("text/english/dialog/patchinf.msg",
@@ -81,7 +81,7 @@ TEST_CASE("mounts reports what is mounted and what refused to", "[mcp][mounts]")
 // proto_info reports effective figures, base plus bonus. Base alone reads a Turret at 30 hit points
 // against the 75 the engine gives it, and every critter in the game as resisting nothing, because a
 // critter's resistances live entirely in the bonus arrays.
-TEST_CASE("proto_info reports a critter's effective stats and skills", "[mcp][proto_info]") {
+TEST_CASE("proto_info reports a critter's effective stats and skills", "[mcp]") {
     test::DataTree tree{ "gecko_proto_info" };
     tree.write("proto/critters/critters.lst", "critter.pro\n");
     tree.write("text/english/game/pro_crit.msg", "{200}{}{Test Critter}\n");
@@ -130,7 +130,7 @@ TEST_CASE("proto_info reports a critter's effective stats and skills", "[mcp][pr
 
 // The weapon block is what turned "which weapons carry Long Range?" from opening .pro files by hand
 // into one call — and getting the perk wrong is quiet, because a wrong perk name reads perfectly.
-TEST_CASE("proto_info reports a weapon's perk and numbers", "[mcp][proto_info]") {
+TEST_CASE("proto_info reports a weapon's perk and numbers", "[mcp]") {
     test::DataTree tree{ "gecko_proto_weapon" };
     tree.write("proto/items/items.lst", "weapon.pro\n");
     tree.write("text/english/game/pro_item.msg", "{100}{}{Test Rifle}\n{101}{}{A rifle.}\n");

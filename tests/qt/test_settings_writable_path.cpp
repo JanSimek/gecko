@@ -8,7 +8,7 @@
 
 namespace fs = std::filesystem;
 
-TEST_CASE("Settings keeps its save-location marker listed and persists it", "[settings][writableroot]") {
+TEST_CASE("Settings keeps its save-location marker listed and persists it", "[settings]") {
     const geck::test::TempDir temp("settings-paths");
     const fs::path dirA = temp.path() / "a";
     const fs::path dirB = temp.path() / "b";
@@ -87,7 +87,7 @@ TEST_CASE("Settings keeps its save-location marker listed and persists it", "[se
     }
 }
 
-TEST_CASE("Settings script-source markers: subset invariant and persistence", "[settings][ssl]") {
+TEST_CASE("Settings keeps its script-source markers among the data paths and persists them", "[settings]") {
     const geck::test::TempDir temp("settings-paths");
     const fs::path dirA = temp.path() / "a";
     const fs::path dirB = temp.path() / "b";
@@ -121,7 +121,7 @@ TEST_CASE("Settings script-source markers: subset invariant and persistence", "[
         geck::Settings reloaded;
         reloaded.load(); // prune against the file's data paths -> dirB is dropped
         const auto sources = reloaded.getScriptSourcePaths();
-        CHECK(sources.size() == 1);
+        REQUIRE(sources.size() == 1);
         CHECK(sources.front() == dirA);
     }
 
@@ -135,5 +135,4 @@ TEST_CASE("Settings script-source markers: subset invariant and persistence", "[
         reloaded.load();
         CHECK(reloaded.getScriptSourcePaths().empty());
     }
-
 }

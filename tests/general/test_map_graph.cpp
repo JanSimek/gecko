@@ -120,7 +120,7 @@ void writeFixture(const fs::path& base) {
 // "return-unreachable"; a walkable return (or an unanalysed / stairs-only destination) is not
 // flagged. Built on a written-map fixture: maps.txt gives the destination indices names, and the
 // .map files are read back through cli::loadMap's disk fallback.
-TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapgraph]") {
+TEST_CASE("map_graph flags one-way edges via the reachability join", "[map_graph][cli]") {
     test::DataTree tree{ "mapgraph" };
     const fs::path& base = tree.root();
     writeFixture(base);
@@ -198,7 +198,7 @@ TEST_CASE("map_graph flags one-way edges via the reachability join", "[cli][mapg
 // Script transitions: a load_map call becomes an edge from every map that places its script — the
 // map's own (header) script, 1-based, or a map_scripts entry, 0-based — whichever way the script
 // names the target. A script no map places keeps its call in unplacedScriptCalls.
-TEST_CASE("map_graph adds load_map transitions from the maps that place each script", "[cli][mapgraph]") {
+TEST_CASE("map_graph adds load_map transitions from the maps that place each script", "[map_graph][cli]") {
     test::DataTree tree{ "mapgraph_scripts" };
     const fs::path& base = tree.root();
     fs::create_directories(base / "maps");

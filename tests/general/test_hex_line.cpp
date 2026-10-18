@@ -58,7 +58,7 @@ double maxOffsetFromChord(const HexagonGrid& grid, const std::vector<int>& line)
 
 } // namespace
 
-TEST_CASE("hexLine is a straight, gap-free walk between its endpoints", "[hexline]") {
+TEST_CASE("hexLine is a straight, gap-free walk between its endpoints", "[hex_line]") {
     constexpr int W = HexagonGrid::GRID_WIDTH;
     // Edges in different directions: horizontal, vertical, and both diagonals, so the iso staircase
     // must step in both axes. The old greedy distance-to-endpoint walk bowed hundreds of pixels off
@@ -90,20 +90,20 @@ TEST_CASE("hexLine is a straight, gap-free walk between its endpoints", "[hexlin
     CHECK(maxOffsetFromChord(grid, line) <= static_cast<double>(geck::Hex::HEX_WIDTH));
 }
 
-TEST_CASE("hexLine from a hex to itself is just that hex", "[hexline]") {
+TEST_CASE("hexLine from a hex to itself is just that hex", "[hex_line]") {
     const int hex = 50 * HexagonGrid::GRID_WIDTH + 50;
     const auto line = hexline::hexLine(hex, hex);
     REQUIRE(line.size() == 1);
     CHECK(line.front() == hex);
 }
 
-TEST_CASE("hexLine with an off-grid endpoint is empty", "[hexline]") {
+TEST_CASE("hexLine with an off-grid endpoint is empty", "[hex_line]") {
     const int valid = 100 * HexagonGrid::GRID_WIDTH + 100;
     CHECK(hexline::hexLine(-1, valid).empty());
     CHECK(hexline::hexLine(valid, HexagonGrid::POSITION_COUNT).empty());
 }
 
-TEST_CASE("hexDirection inverts hexgrid::neighbors' order", "[hexline]") {
+TEST_CASE("hexDirection inverts hexgrid::neighbors' order", "[hex_line]") {
     // For an interior hex every neighbour is on-grid, so neighbors() returns all six in DIRECTIONS
     // order and the i-th one must report direction i. This is the contract the wall-segment chain
     // relies on: the step onto a neighbour has a stable, parity-independent direction index.
@@ -115,7 +115,7 @@ TEST_CASE("hexDirection inverts hexgrid::neighbors' order", "[hexline]") {
     }
 }
 
-TEST_CASE("hexDirection is antisymmetric and parity-independent", "[hexline]") {
+TEST_CASE("hexDirection is antisymmetric and parity-independent", "[hex_line]") {
     // The reverse step is the opposite direction (d and d+3 are the three opposite pairs), and this
     // holds regardless of the hexes' column parity — the reason wall pieces on either side of a
     // shared edge attach: hex A's direction d onto B is B's direction d+3 back onto A.
@@ -131,7 +131,7 @@ TEST_CASE("hexDirection is antisymmetric and parity-independent", "[hexline]") {
     }
 }
 
-TEST_CASE("hexDirection is -1 for non-neighbours and off-grid hexes", "[hexline]") {
+TEST_CASE("hexDirection is -1 for non-neighbours and off-grid hexes", "[hex_line]") {
     const int hex = 100 * HexagonGrid::GRID_WIDTH + 100;
     CHECK(hexline::hexDirection(hex, hex) == -1);                         // a hex is not its own neighbour
     CHECK(hexline::hexDirection(hex, hex + 2) == -1);                     // two columns away: not adjacent

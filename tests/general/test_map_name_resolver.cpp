@@ -14,7 +14,7 @@ namespace fs = std::filesystem;
 // fallout2-ce: per-map names at map.msg[index*3 + elevation + 200] (map.cc mapGetName) and worldmap
 // area/city labels at map.msg[1500 + areaIndex] (worldmap.cc wmGetAreaIdxName). Built on a tiny
 // mounted maps.txt + map.msg fixture so the index math is exercised, not just the no-data fallback.
-TEST_CASE("MapNameResolver resolves map and area names from map.msg", "[mapnameresolver]") {
+TEST_CASE("MapNameResolver resolves map and area names from map.msg", "[map_name_resolver]") {
     test::DataTree tree{ "mapnameresolver" };
     tree.write("data/maps.txt",
         "[Map 0]\nlookup_name=Arroyo Bridge\nmap_name=artemple\n"

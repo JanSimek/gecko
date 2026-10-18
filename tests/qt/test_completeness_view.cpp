@@ -29,7 +29,7 @@ resource::MapCompletenessReport reportWithGaps() {
 
 } // namespace
 
-TEST_CASE("CompletenessView starts in the no-map state", "[qt][completeness]") {
+TEST_CASE("CompletenessView starts in the no-map state", "[completeness_view]") {
     CompletenessView view;
 
     auto* tree = view.findChild<QTreeWidget*>();
@@ -39,7 +39,7 @@ TEST_CASE("CompletenessView starts in the no-map state", "[qt][completeness]") {
     CHECK_FALSE(test::findButton(view, "Refresh")->isEnabled());
 }
 
-TEST_CASE("CompletenessView renders a report as four grouped sections", "[qt][completeness]") {
+TEST_CASE("CompletenessView renders a report as four grouped sections", "[completeness_view]") {
     CompletenessView view;
     view.setReport(reportWithGaps(), "artemple.map");
 
@@ -76,7 +76,7 @@ TEST_CASE("CompletenessView renders a report as four grouped sections", "[qt][co
     CHECK(status->text().contains("2"));
 }
 
-TEST_CASE("CompletenessView reports a clean map without warning rows", "[qt][completeness]") {
+TEST_CASE("CompletenessView reports a clean map without warning rows", "[completeness_view]") {
     CompletenessView view;
     resource::MapCompletenessReport report;
     report.usedTileCount = 10;
@@ -93,7 +93,7 @@ TEST_CASE("CompletenessView reports a clean map without warning rows", "[qt][com
     CHECK(test::labelContaining(view, "every referenced resource resolves") != nullptr);
 }
 
-TEST_CASE("CompletenessView clearReport returns to the no-map state", "[qt][completeness]") {
+TEST_CASE("CompletenessView clearReport returns to the no-map state", "[completeness_view]") {
     CompletenessView view;
     view.setReport(reportWithGaps(), "artemple.map");
     view.clearReport();
@@ -106,7 +106,7 @@ TEST_CASE("CompletenessView clearReport returns to the no-map state", "[qt][comp
     CHECK_FALSE(refresh->isEnabled());
 }
 
-TEST_CASE("CompletenessView refresh button emits refreshRequested", "[qt][completeness]") {
+TEST_CASE("CompletenessView refresh button emits refreshRequested", "[completeness_view]") {
     CompletenessView view;
     view.setReport(reportWithGaps(), "artemple.map");
 

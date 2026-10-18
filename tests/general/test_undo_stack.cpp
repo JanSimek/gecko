@@ -21,7 +21,7 @@ UndoCommand loggingCommand(const std::string& desc, std::vector<std::string>& lo
 
 } // namespace
 
-TEST_CASE("UndoStack runs the right closures in LIFO order", "[undo]") {
+TEST_CASE("UndoStack runs the right closures in LIFO order", "[undo_stack][undo]") {
     UndoStack stack;
     std::vector<std::string> log;
 
@@ -50,7 +50,7 @@ TEST_CASE("UndoStack runs the right closures in LIFO order", "[undo]") {
     CHECK(log == std::vector<std::string>{ "undo:B", "undo:A", "redo:A", "redo:B" });
 }
 
-TEST_CASE("UndoStack push invalidates the redo stack", "[undo]") {
+TEST_CASE("UndoStack push invalidates the redo stack", "[undo_stack][undo]") {
     UndoStack stack;
     std::vector<std::string> log;
 
@@ -63,7 +63,7 @@ TEST_CASE("UndoStack push invalidates the redo stack", "[undo]") {
     CHECK(stack.lastRedoLabel().empty());
 }
 
-TEST_CASE("UndoStack rejects commands missing an undo or redo closure", "[undo]") {
+TEST_CASE("UndoStack rejects commands missing an undo or redo closure", "[undo_stack][undo]") {
     UndoStack stack;
 
     UndoCommand noUndo;
@@ -79,7 +79,7 @@ TEST_CASE("UndoStack rejects commands missing an undo or redo closure", "[undo]"
     CHECK_FALSE(stack.canUndo());
 }
 
-TEST_CASE("UndoStack evicts the oldest command past maxCommands", "[undo]") {
+TEST_CASE("UndoStack evicts the oldest command past maxCommands", "[undo_stack][undo]") {
     UndoStack stack(2);
     std::vector<std::string> log;
 
@@ -94,7 +94,7 @@ TEST_CASE("UndoStack evicts the oldest command past maxCommands", "[undo]") {
     CHECK(log == std::vector<std::string>{ "undo:C", "undo:B" });
 }
 
-TEST_CASE("UndoStack clear empties both stacks", "[undo]") {
+TEST_CASE("UndoStack clear empties both stacks", "[undo_stack][undo]") {
     UndoStack stack;
     std::vector<std::string> log;
 
@@ -106,7 +106,7 @@ TEST_CASE("UndoStack clear empties both stacks", "[undo]") {
     CHECK_FALSE(stack.canRedo());
 }
 
-TEST_CASE("UndoStack folds a push into the newest entry with the same merge key", "[undo]") {
+TEST_CASE("UndoStack folds a push into the newest entry with the same merge key", "[undo_stack][undo]") {
     UndoStack stack;
     int value = 0;
     auto setTo = [&value](int from, int to, std::string key) {

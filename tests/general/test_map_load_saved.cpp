@@ -42,7 +42,7 @@ std::shared_ptr<MapObject> addCritter(Map::MapFile& mapFile, int32_t seed, int32
 
 // A save slot stores each map gzip-compressed (fallout2-ce loadsave.cc _GameMap2Slot), and a saved map's
 // critters carry live combat state in slots that shipped maps leave zero.
-TEST_CASE("a save slot's gzip map loads and reports live critter combat state", "[cli][map][saved]") {
+TEST_CASE("a save slot's gzip map loads and reports live critter combat state", "[map_load][cli]") {
     auto mapFile = Map::createEmptyMapFile();
     mapFile.header.flags |= MAP_HEADER_SAVED;
 
@@ -87,7 +87,7 @@ TEST_CASE("a save slot's gzip map loads and reports live critter combat state", 
 
 // combatLoad relinks whoHitMe only among the critters it lists again, so a hidden critter neither resolves its own
 // id nor shadows a listed critter holding the same stale one, and ids do not cross elevations.
-TEST_CASE("a saved map resolves whoHitMe among the non-hidden critters of one elevation", "[cli][map][saved]") {
+TEST_CASE("a saved map resolves whoHitMe among the non-hidden critters of one elevation", "[map_load][cli]") {
     auto mapFile = Map::createEmptyMapFile();
     mapFile.header.flags |= MAP_HEADER_SAVED;
 
@@ -114,7 +114,7 @@ TEST_CASE("a saved map resolves whoHitMe among the non-hidden critters of one el
     CHECK(byHex.at(18086).at("combat").at("whoHitMe").is_null());
 }
 
-TEST_CASE("an unsaved map reports no combat state", "[cli][map][saved]") {
+TEST_CASE("an unsaved map reports no combat state", "[map_load][cli]") {
     auto mapFile = Map::createEmptyMapFile();
     mapFile.header.flags &= ~MAP_HEADER_SAVED;
     addCritter(mapFile, 1, 0, 18082);
@@ -123,7 +123,7 @@ TEST_CASE("an unsaved map reports no combat state", "[cli][map][saved]") {
     CHECK_FALSE(root.at("maps").at(0).at("critters").at(0).contains("combat"));
 }
 
-TEST_CASE("a truncated gzip map fails with the reason", "[cli][map][saved]") {
+TEST_CASE("a truncated gzip map fails with the reason", "[map_load][cli]") {
     auto compressed = gzipBytes(mapBytes(Map::createEmptyMapFile()));
     compressed.resize(compressed.size() / 2);
     TempFile gz{ "geck_truncated_gzip", ".SAV" };

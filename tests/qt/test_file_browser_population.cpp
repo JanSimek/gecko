@@ -40,7 +40,7 @@ bool populated(const FileBrowserPanel& panel) {
 
 } // namespace
 
-TEST_CASE("FileBrowserPanel populates the tree with worker-computed metadata", "[qt][filebrowser]") {
+TEST_CASE("FileBrowserPanel populates the tree with worker-computed metadata", "[file_browser]") {
     auto resources = std::make_shared<resource::GameResources>();
     resources->files().addDataPath(geck::test::dataPath("f2_res.dat"));
     resources->files().addDataPath(geck::test::dataDir()); // loose files, incl. a .pro fixture

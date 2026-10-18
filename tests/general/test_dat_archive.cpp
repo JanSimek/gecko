@@ -23,16 +23,16 @@ using geck::resource::DataFileSystem;
 using geck::test::byteSum;
 using geck::test::findBySuffix;
 
-TEST_CASE("DAT2 archive lists every entry", "[dat][vfs]") {
+TEST_CASE("DAT2 archive lists every entry", "[dat]") {
     REQUIRE(std::filesystem::exists(geck::test::f2ResDat()));
 
     DataFileSystem dfs;
     dfs.addDataPath(geck::test::f2ResDat());
 
-    REQUIRE(dfs.list("*").size() == geck::test::F2_RES_ENTRY_COUNT);
+    CHECK(dfs.list("*").size() == geck::test::F2_RES_ENTRY_COUNT);
 }
 
-TEST_CASE("DAT2 archive decompresses a small entry byte-for-byte", "[dat][vfs]") {
+TEST_CASE("DAT2 archive decompresses a small entry byte-for-byte", "[dat]") {
     DataFileSystem dfs;
     dfs.addDataPath(geck::test::f2ResDat());
 
@@ -42,84 +42,23 @@ TEST_CASE("DAT2 archive decompresses a small entry byte-for-byte", "[dat][vfs]")
     const auto data = dfs.readRawBytes(*path);
     REQUIRE(data.has_value());
 
+    // clang-format off
     static const std::vector<uint8_t> kExpected = {
-        0x45,
-        0x44,
-        0x47,
-        0x45,
-        0x00,
-        0x00,
-        0x00,
-        0x01,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x20,
-        0x7A,
-        0x00,
-        0x00,
-        0x21,
-        0x1E,
-        0x00,
-        0x00,
-        0x7C,
-        0x95,
-        0x00,
-        0x00,
-        0x65,
-        0x6E,
-        0x00,
-        0x00,
-        0x00,
-        0x01,
-        0x00,
-        0x00,
-        0x00,
-        0xC7,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x9B,
-        0x78,
-        0x00,
-        0x00,
-        0x9C,
-        0x3F,
-        0x00,
-        0x00,
-        0x00,
-        0x02,
-        0x00,
-        0x00,
-        0x00,
-        0xC7,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x9B,
-        0x78,
-        0x00,
-        0x00,
-        0x9C,
-        0x3F,
+        0x45, 0x44, 0x47, 0x45, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x7A,
+        0x00, 0x00, 0x21, 0x1E, 0x00, 0x00, 0x7C, 0x95, 0x00, 0x00, 0x65, 0x6E, 0x00, 0x00, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0xC7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x9B, 0x78, 0x00, 0x00, 0x9C, 0x3F,
+        0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0xC7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x9B, 0x78,
+        0x00, 0x00, 0x9C, 0x3F,
     };
+    // clang-format on
 
-    REQUIRE(data->size() == 68);
-    REQUIRE(*data == kExpected);
+    CHECK(data->size() == 68);
+    CHECK(*data == kExpected);
 
-    REQUIRE(dfs.exists(*path));
+    CHECK(dfs.exists(*path));
 }
 
-TEST_CASE("DAT2 archive decompresses a large entry", "[dat][vfs]") {
+TEST_CASE("DAT2 archive decompresses a large entry", "[dat]") {
     DataFileSystem dfs;
     dfs.addDataPath(geck::test::f2ResDat());
 
@@ -128,23 +67,23 @@ TEST_CASE("DAT2 archive decompresses a large entry", "[dat][vfs]") {
 
     const auto data = dfs.readRawBytes(*path);
     REQUIRE(data.has_value());
-    REQUIRE(data->size() == geck::test::HR_ALLTLK_SIZE);
-    REQUIRE(byteSum(*data) == 29414514u);
+    CHECK(data->size() == geck::test::HR_ALLTLK_SIZE);
+    CHECK(byteSum(*data) == 29414514u);
 }
 
-TEST_CASE("DAT2 archive reports a missing file as absent", "[dat][vfs]") {
+TEST_CASE("DAT2 archive reports a missing file as absent", "[dat]") {
     DataFileSystem dfs;
     dfs.addDataPath(geck::test::f2ResDat());
 
-    REQUIRE_FALSE(dfs.exists("does/not/exist.xyz"));
-    REQUIRE_FALSE(dfs.readRawBytes("does/not/exist.xyz").has_value());
+    CHECK_FALSE(dfs.exists("does/not/exist.xyz"));
+    CHECK_FALSE(dfs.readRawBytes("does/not/exist.xyz").has_value());
 }
 
 // Regression for the crash when selecting a map "quickly" in the browser: the background
 // map-loader thread and the UI thread both read the DAT's shared reader, and an unsynchronised
 // seek+read corrupted each other -> zlib inflate failed -> uncaught throw -> abort(). Reads
 // through the DAT2 filesystem must therefore be safe to run concurrently.
-TEST_CASE("DAT2 archive serves concurrent reads without corruption", "[dat][vfs][concurrency]") {
+TEST_CASE("DAT2 archive serves concurrent reads without corruption", "[dat]") {
     DataFileSystem dfs;
     dfs.addDataPath(geck::test::f2ResDat());
 

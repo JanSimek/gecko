@@ -67,7 +67,7 @@ void checkRealFileRoundTrips(const std::string& name, int expectedZones) {
 
 } // namespace
 
-TEST_CASE("MapEdge round-trips v1 zone layouts", "[map_edge]") {
+TEST_CASE("MapEdge round-trips v1 zone layouts", "[map_edge][roundtrip]") {
     using Zones = std::vector<MapEdge::Rect>;
     struct Layout {
         const char* description;
@@ -134,7 +134,7 @@ TEST_CASE("MapEdge omits the terminal indicator when the last zone is on the las
     CHECK(parseBytes(expected.data()) == edge);
 }
 
-TEST_CASE("MapEdge round-trips shipped Restoration Project .edg files byte-for-byte", "[map_edge]") {
+TEST_CASE("MapEdge round-trips shipped Restoration Project .edg files byte-for-byte", "[map_edge][roundtrip]") {
     checkRealFileRoundTrips("vault13.edg", 3); // 3 zones, one per elevation (68 bytes)
     checkRealFileRoundTrips("newr2.edg", 4);   // 4 zones, elevation 1 has two (88 bytes)
 }
@@ -165,7 +165,7 @@ TEST_CASE("Map-edge overlay geometry maps real zones to sane world rects", "[map
     CHECK_FALSE(mapEdgeZoneWorldBounds(grid, offGrid).has_value());
 }
 
-TEST_CASE("MapEdge round-trips a v2 file with square rect and clip sides", "[map_edge]") {
+TEST_CASE("MapEdge round-trips a v2 file with square rect and clip sides", "[map_edge][roundtrip]") {
     MapEdge edge;
     edge.version = 2;
     edge.elevations[0].squareRect = rect(50, 1, 2, 60);
@@ -188,7 +188,7 @@ TEST_CASE("MapEdge round-trips a v2 file with square rect and clip sides", "[map
     CHECK(parsed.elevations[1].squareRect == rect(99, 0, 0, 99)); // untouched default
 }
 
-TEST_CASE("MapEdge v2 preserves every clip-side bit independently", "[map_edge]") {
+TEST_CASE("MapEdge v2 preserves every clip-side bit independently", "[map_edge][roundtrip]") {
     // Each side maps to a distinct byte of the packed int32; verify no cross-talk.
     for (int mask = 0; mask < 16; ++mask) {
         MapEdge edge;

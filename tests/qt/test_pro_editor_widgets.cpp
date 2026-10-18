@@ -27,7 +27,7 @@
 
 namespace test = geck::test;
 
-TEST_CASE("Ammo widget uses caliber labels loaded from proto.msg", "[qt][pro]") {
+TEST_CASE("Ammo widget uses caliber labels loaded from proto.msg", "[pro_editor]") {
     test::DataTree data("pro-editor");
     data.write("text/english/game/proto.msg", test::protoMsg());
     auto& resources = data.mount();
@@ -40,10 +40,10 @@ TEST_CASE("Ammo widget uses caliber labels loaded from proto.msg", "[qt][pro]") 
 
     auto* caliberCombo = test::findByToolTip<QComboBox>(widget, "Ammo caliber or energy cell type");
     REQUIRE(caliberCombo != nullptr);
-    REQUIRE(caliberCombo->currentText() == "10mm");
+    CHECK(caliberCombo->currentText() == "10mm");
 }
 
-TEST_CASE("Weapon widget preserves raw perk ids while using message-backed labels", "[qt][pro]") {
+TEST_CASE("Weapon widget preserves raw perk ids while using message-backed labels", "[pro_editor]") {
     test::DataTree data("pro-editor");
     data.write("text/english/game/proto.msg", test::protoMsg());
     data.write("text/english/game/perk.msg", test::perkMsg({
@@ -72,9 +72,9 @@ TEST_CASE("Weapon widget preserves raw perk ids while using message-backed label
 
     REQUIRE(perkCombo != nullptr);
     REQUIRE(ammoTypeCombo != nullptr);
-    REQUIRE(perkCombo->currentText() == "Night Sight");
-    REQUIRE(perkCombo->currentData().toInt() == geck::fallout::enumValue(geck::fallout::PerkId::WeaponNightSight));
-    REQUIRE(ammoTypeCombo->currentText() == "10mm");
+    CHECK(perkCombo->currentText() == "Night Sight");
+    CHECK(perkCombo->currentData().toInt() == geck::fallout::enumValue(geck::fallout::PerkId::WeaponNightSight));
+    CHECK(ammoTypeCombo->currentText() == "10mm");
 
     const int fastReloadIndex = perkCombo->findData(geck::fallout::enumValue(geck::fallout::PerkId::WeaponFastReload));
     REQUIRE(fastReloadIndex >= 0);
@@ -83,11 +83,11 @@ TEST_CASE("Weapon widget preserves raw perk ids while using message-backed label
 
     widget.saveToPro(pro);
 
-    REQUIRE(pro->weaponData.perk == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::PerkId::WeaponFastReload)));
-    REQUIRE(pro->weaponData.ammoType == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::CaliberType::Gauge12)));
+    CHECK(pro->weaponData.perk == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::PerkId::WeaponFastReload)));
+    CHECK(pro->weaponData.ammoType == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::CaliberType::Gauge12)));
 }
 
-TEST_CASE("Weapon energy checkbox edits sfall's extended-flags bit without clobbering the others", "[qt][pro]") {
+TEST_CASE("Weapon energy checkbox edits sfall's extended-flags bit without clobbering the others", "[pro_editor]") {
     test::DataTree data("pro-editor");
     data.write("text/english/game/proto.msg", test::protoMsg());
     data.write("text/english/game/perk.msg", test::perkMsg({}, true));
@@ -110,21 +110,21 @@ TEST_CASE("Weapon energy checkbox edits sfall's extended-flags bit without clobb
     auto* primaryMode = test::findByToolTip<QSpinBox>(common, "Primary attack animation index (0-15)");
     REQUIRE(energyCheck != nullptr);
     REQUIRE(primaryMode != nullptr);
-    REQUIRE(energyCheck->isChecked());
+    CHECK(energyCheck->isChecked());
 
     energyCheck->setChecked(false);
     primaryMode->setValue(2);
     common.saveToPro(pro);
     weapon.saveToPro(pro);
-    REQUIRE(pro->commonItemData.flagsExt == (kept | 0x72u));
+    CHECK(pro->commonItemData.flagsExt == (kept | 0x72u));
 
     energyCheck->setChecked(true);
     common.saveToPro(pro);
     weapon.saveToPro(pro);
-    REQUIRE(pro->commonItemData.flagsExt == (kept | bit(ENERGY) | 0x72u));
+    CHECK(pro->commonItemData.flagsExt == (kept | bit(ENERGY) | 0x72u));
 }
 
-TEST_CASE("Drug widget maps stat and perk labels from message files to engine ids", "[qt][pro]") {
+TEST_CASE("Drug widget maps stat and perk labels from message files to engine ids", "[pro_editor]") {
     test::DataTree data("pro-editor");
     data.write("text/english/game/stat.msg", test::statMsg());
     data.write("text/english/game/perk.msg",
@@ -140,13 +140,13 @@ TEST_CASE("Drug widget maps stat and perk labels from message files to engine id
         REQUIRE(statCombo != nullptr);
         REQUIRE(perkCombo != nullptr);
         REQUIRE(statCombo->count() >= 3);
-        REQUIRE(statCombo->itemText(0) == "None");
-        REQUIRE(statCombo->itemText(1) == "Strength");
-        REQUIRE(statCombo->itemText(2) == "Perception");
+        CHECK(statCombo->itemText(0) == "None");
+        CHECK(statCombo->itemText(1) == "Strength");
+        CHECK(statCombo->itemText(2) == "Perception");
 
         const int addictionIndex = perkCombo->findData(geck::fallout::enumValue(geck::fallout::PerkId::JetAddiction));
         REQUIRE(addictionIndex >= 0);
-        REQUIRE(perkCombo->itemText(addictionIndex) == "Jet Addiction");
+        CHECK(perkCombo->itemText(addictionIndex) == "Jet Addiction");
     }
 
     SECTION("stat ids round-trip through the value mapping, including None") {
@@ -163,19 +163,19 @@ TEST_CASE("Drug widget maps stat and perk labels from message files to engine id
         REQUIRE(stat0Combo != nullptr);
         REQUIRE(stat1Combo != nullptr);
         // Selection is bound to the engine stat id (itemData), not the list position.
-        REQUIRE(stat0Combo->currentData().toInt() == geck::fallout::enumValue(geck::fallout::StatId::Perception));
-        REQUIRE(stat1Combo->currentText() == "None");
+        CHECK(stat0Combo->currentData().toInt() == geck::fallout::enumValue(geck::fallout::StatId::Perception));
+        CHECK(stat1Combo->currentText() == "None");
 
         auto out = test::makeItemPro(geck::ItemType::Drug);
         widget.saveToPro(out);
 
-        REQUIRE(out->drugData.stat0 == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Perception)));
-        REQUIRE(out->drugData.stat1 == 0xFFFFFFFFu);
-        REQUIRE(out->drugData.stat2 == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Strength)));
+        CHECK(out->drugData.stat0 == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Perception)));
+        CHECK(out->drugData.stat1 == 0xFFFFFFFFu);
+        CHECK(out->drugData.stat2 == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::StatId::Strength)));
     }
 }
 
-TEST_CASE("Scenery widget switches subtype editors and preserves subtype values", "[qt][pro]") {
+TEST_CASE("Scenery widget switches subtype editors and preserves subtype values", "[pro_editor]") {
     test::DataTree data("pro-editor");
     data.write("text/english/game/proto.msg", test::protoMsg());
     auto& resources = data.mount();
@@ -199,14 +199,14 @@ TEST_CASE("Scenery widget switches subtype editors and preserves subtype values"
     REQUIRE(typeCombo != nullptr);
     REQUIRE(doorGroup != nullptr);
     REQUIRE(elevatorGroup != nullptr);
-    REQUIRE_FALSE(elevatorGroup->isHidden());
-    REQUIRE(doorGroup->isHidden());
+    CHECK_FALSE(elevatorGroup->isHidden());
+    CHECK(doorGroup->isHidden());
 
     typeCombo->setCurrentIndex(static_cast<int>(geck::SceneryType::Door));
     QApplication::processEvents();
 
-    REQUIRE_FALSE(doorGroup->isHidden());
-    REQUIRE(elevatorGroup->isHidden());
+    CHECK_FALSE(doorGroup->isHidden());
+    CHECK(elevatorGroup->isHidden());
 
     auto checks = widget.findChildren<QCheckBox*>();
     REQUIRE(checks.size() == 1);
@@ -214,11 +214,11 @@ TEST_CASE("Scenery widget switches subtype editors and preserves subtype values"
 
     widget.saveToPro(pro);
 
-    REQUIRE(pro->objectSubtypeId() == static_cast<unsigned>(geck::SceneryType::Door));
-    REQUIRE(pro->sceneryData.doorData.walkThroughFlag == 1U);
+    CHECK(pro->objectSubtypeId() == static_cast<unsigned>(geck::SceneryType::Door));
+    CHECK(pro->sceneryData.doorData.walkThroughFlag == 1U);
 }
 
-TEST_CASE("Critter widget preserves live critter fields after extraction", "[qt][pro]") {
+TEST_CASE("Critter widget shows the proto fields and saves edits without dropping the rest", "[pro_editor]") {
     test::DataTree data("pro-editor");
     data.write("text/english/game/proto.msg", test::protoMsg());
     data.write("text/english/game/stat.msg", test::statMsg());
@@ -251,10 +251,10 @@ TEST_CASE("Critter widget preserves live critter fields after extraction", "[qt]
     REQUIRE(barterCheck != nullptr);
     REQUIRE(noDropCheck != nullptr);
 
-    REQUIRE(aiPacketSpin->value() == 12);
-    REQUIRE(barterCheck->isChecked());
-    REQUIRE(genderCombo->currentIndex() == 1);
-    REQUIRE(bodyTypeCombo->currentIndex() == geck::fallout::enumValue(geck::fallout::BodyType::Robotic));
+    CHECK(aiPacketSpin->value() == 12);
+    CHECK(barterCheck->isChecked());
+    CHECK(genderCombo->currentIndex() == 1);
+    CHECK(bodyTypeCombo->currentIndex() == geck::fallout::enumValue(geck::fallout::BodyType::Robotic));
 
     aiPacketSpin->setValue(21);
     genderCombo->setCurrentIndex(0);
@@ -263,14 +263,14 @@ TEST_CASE("Critter widget preserves live critter fields after extraction", "[qt]
 
     widget.saveToPro(pro);
 
-    REQUIRE(pro->critterData.aiPacket == 21U);
-    REQUIRE(pro->critterData.gender == 0U);
-    REQUIRE(pro->critterData.bodyType == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::BodyType::Quadruped)));
-    REQUIRE(geck::Pro::hasFlag(pro->critterData.flags, geck::Pro::CritterFlags::CRITTER_BARTER));
-    REQUIRE(geck::Pro::hasFlag(pro->critterData.flags, geck::Pro::CritterFlags::CRITTER_NO_DROP));
+    CHECK(pro->critterData.aiPacket == 21U);
+    CHECK(pro->critterData.gender == 0U);
+    CHECK(pro->critterData.bodyType == static_cast<uint32_t>(geck::fallout::enumValue(geck::fallout::BodyType::Quadruped)));
+    CHECK(geck::Pro::hasFlag(pro->critterData.flags, geck::Pro::CritterFlags::CRITTER_BARTER));
+    CHECK(geck::Pro::hasFlag(pro->critterData.flags, geck::Pro::CritterFlags::CRITTER_NO_DROP));
 }
 
-TEST_CASE("Info panel derives display state from PRO data", "[qt][pro]") {
+TEST_CASE("Info panel shows the proto's name, file and window title from its message and list files", "[pro_editor]") {
     test::DataTree data("pro-editor");
     data.write("text/english/game/pro_item.msg",
         test::msgLine(200, "10mm JHP")
@@ -286,12 +286,12 @@ TEST_CASE("Info panel derives display state from PRO data", "[qt][pro]") {
     widget.setPid(static_cast<int>(pro->header.PID));
     widget.refreshFromPro(resources, pro, static_cast<uint32_t>(widget.pid()));
 
-    REQUIRE(widget.nameText() == "10mm JHP");
-    REQUIRE(widget.filenameText() == "00000030.pro");
-    REQUIRE(widget.windowTitleText() == "10mm JHP (Ammo) - PRO editor");
+    CHECK(widget.nameText() == "10mm JHP");
+    CHECK(widget.filenameText() == "00000030.pro");
+    CHECK(widget.windowTitleText() == "10mm JHP (Ammo) - PRO editor");
 }
 
-TEST_CASE("Preview panel uses dual item previews and a single object preview", "[qt][pro]") {
+TEST_CASE("Preview panel uses dual item previews and a single object preview", "[pro_editor]") {
     auto itemPro = test::makeItemPro(geck::ItemType::Ammo);
     itemPro->header.FID = 123;
     itemPro->commonItemData.inventoryFID = 456;
@@ -299,12 +299,12 @@ TEST_CASE("Preview panel uses dual item previews and a single object preview", "
     geck::resource::GameResources resources;
     geck::ProPreviewPanelWidget itemPreview(resources, itemPro);
     const auto itemPreviews = itemPreview.findChildren<geck::ObjectPreviewWidget*>();
-    REQUIRE(itemPreviews.size() == 2);
+    CHECK(itemPreviews.size() == 2);
 
     auto critterPro = test::makeCritterPro();
     critterPro->header.FID = 789;
 
     geck::ProPreviewPanelWidget critterPreview(resources, critterPro);
     const auto critterPreviews = critterPreview.findChildren<geck::ObjectPreviewWidget*>();
-    REQUIRE(critterPreviews.size() == 1);
+    CHECK(critterPreviews.size() == 1);
 }

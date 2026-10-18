@@ -87,7 +87,7 @@ const json& protoByPid(const json& out, std::uint32_t pid) {
 
 } // namespace
 
-TEST_CASE("exportProtos lists every .lst entry and reports the ones that do not load", "[proto][export]") {
+TEST_CASE("exportProtos lists every .lst entry and reports the ones that do not load", "[proto_export][cli]") {
     ProtoFixture fixture;
     const json out = fixture.run();
 
@@ -101,7 +101,7 @@ TEST_CASE("exportProtos lists every .lst entry and reports the ones that do not 
     CHECK(out["unreadable"][0]["file"] == "missing.pro");
 }
 
-TEST_CASE("exportProtos decodes a weapon the way the engine reads it", "[proto][export]") {
+TEST_CASE("exportProtos decodes a weapon the way the engine reads it", "[proto_export][cli]") {
     ProtoFixture fixture;
     const json out = fixture.run();
     const json& weapon = protoByPid(out, 1);
@@ -143,7 +143,7 @@ TEST_CASE("exportProtos decodes a weapon the way the engine reads it", "[proto][
     CHECK(w["soundId"] == 65); // 'A'
 }
 
-TEST_CASE("exportProtos names ammo, armour and misc fields for what the engine does with them", "[proto][export]") {
+TEST_CASE("exportProtos names ammo, armour and misc fields for what the engine does with them", "[proto_export][cli]") {
     ProtoFixture fixture;
     const json out = fixture.run();
 
@@ -166,7 +166,7 @@ TEST_CASE("exportProtos names ammo, armour and misc fields for what the engine d
     CHECK(protoByPid(out, 5)["misc"] == json({ { "powerTypePid", 38 }, { "powerType", 3 }, { "charges", 200 } }));
 }
 
-TEST_CASE("exportProtos reads a critter's stat blocks by stat id", "[proto][export]") {
+TEST_CASE("exportProtos reads a critter's stat blocks by stat id", "[proto_export][cli]") {
     ProtoFixture fixture;
     const json out = fixture.run();
     const json& critter = protoByPid(out, 0x01000001);
@@ -212,7 +212,7 @@ TEST_CASE("exportProtos reads a critter's stat blocks by stat id", "[proto][expo
     CHECK(critter["damageType"] == json({ { "id", 2 }, { "name", "fire" } }));
 }
 
-TEST_CASE("exportProtos filters by kind and item type", "[proto][export]") {
+TEST_CASE("exportProtos filters by kind and item type", "[proto_export][cli]") {
     ProtoFixture fixture;
 
     cli::ProtoExportOptions ammoOnly;
@@ -229,7 +229,7 @@ TEST_CASE("exportProtos filters by kind and item type", "[proto][export]") {
     CHECK(critters["protos"][0]["kind"] == "critter");
 }
 
-TEST_CASE("parseProtoFilter rejects what it cannot honour", "[proto][export]") {
+TEST_CASE("parseProtoFilter rejects what it cannot honour", "[proto_export][cli]") {
     cli::ProtoExportOptions options;
     CHECK(cli::parseProtoFilter("robot", "", options).has_value());
     CHECK(cli::parseProtoFilter("", "gun", options).has_value());
@@ -240,7 +240,7 @@ TEST_CASE("parseProtoFilter rejects what it cannot honour", "[proto][export]") {
     CHECK(options.itemType == ItemType::Key);
 }
 
-TEST_CASE("exportProtos without mounted data is an error", "[proto][export]") {
+TEST_CASE("exportProtos without mounted data is an error", "[proto_export][cli]") {
     resource::GameResources resources;
     std::ostringstream oss;
     CHECK(cli::exportProtos(resources, {}, oss) == 1);

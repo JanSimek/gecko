@@ -87,7 +87,7 @@ TEST_CASE("GamReader rejects a variable declared outside any section", "[gam]") 
     REQUIRE_THROWS(reader.openFile("bad.gam", test::bytesOf("GVAR_X := 1 ;\nGAME_GLOBAL_VARS:\n")));
 }
 
-TEST_CASE("Gam round-trips a .gam byte-for-byte", "[gam_roundtrip]") {
+TEST_CASE("Gam round-trips a .gam byte-for-byte", "[gam][roundtrip]") {
     const Gam gam = sampleGam();
 
     // The MAP_GLOBAL_VARS variables are read in file order with their values.
@@ -108,14 +108,14 @@ TEST_CASE("Gam round-trips a .gam byte-for-byte", "[gam_roundtrip]") {
     CHECK(writer::serializeGam(gam) == std::string{ kGamLf });
 }
 
-TEST_CASE("Gam normalizes CRLF to LF while preserving all data", "[gam_roundtrip]") {
+TEST_CASE("Gam normalizes CRLF to LF while preserving all data", "[gam][roundtrip]") {
     const std::string crlf = geck::test::toCrlf(kGamLf);
 
     const Gam gam = GamReader::parse(crlf);
     CHECK(writer::serializeGam(gam) == std::string{ kGamLf });
 }
 
-TEST_CASE("Gam::setMapGlobalVar rewrites only the value substring", "[gam_roundtrip]") {
+TEST_CASE("Gam::setMapGlobalVar rewrites only the value substring", "[gam]") {
     Gam gam = sampleGam();
 
     // Grow the value on the line with a trailing comment (1 digit -> 4 digits). Name, `:=` alignment,
@@ -162,7 +162,7 @@ TEST_CASE("Gam::setMapGlobalVar rewrites only the value substring", "[gam_roundt
     }
 }
 
-TEST_CASE("Gam::addMapGlobalVar appends a new variable last", "[gam_roundtrip]") {
+TEST_CASE("Gam::addMapGlobalVar appends a new variable last", "[gam]") {
     Gam gam = sampleGam();
 
     // The new variable is appended as the positionally-last map global, so the two existing variables
@@ -191,14 +191,14 @@ TEST_CASE("Gam::addMapGlobalVar appends a new variable last", "[gam_roundtrip]")
     CHECK(rmvars[2].second == 5);
 }
 
-TEST_CASE("Gam::addMapGlobalVar with no MAP_GLOBAL_VARS section returns false", "[gam_roundtrip]") {
+TEST_CASE("Gam::addMapGlobalVar with no MAP_GLOBAL_VARS section returns false", "[gam]") {
     // A .gam carrying only GAME_GLOBAL_VARS has nowhere to append a map global to.
     Gam gam = GamReader::parse(std::string{ "GAME_GLOBAL_VARS:\nGVAR_TEST := 5;\n" });
     CHECK_FALSE(gam.addMapGlobalVar("MVAR_NEW", 1));
     CHECK(gam.mapGlobalVars().empty());
 }
 
-TEST_CASE("Gam::removeMapGlobalVar drops a variable and shifts the rest", "[gam_roundtrip]") {
+TEST_CASE("Gam::removeMapGlobalVar drops a variable and shifts the rest", "[gam]") {
     Gam gam = sampleGam();
 
     // Removing index 1 (MVAR_SECOND) leaves MVAR_FIRST as the sole — now index 0 — variable.
@@ -220,7 +220,7 @@ TEST_CASE("Gam::removeMapGlobalVar drops a variable and shifts the rest", "[gam_
     CHECK(gam.mapGlobalVars().size() == 1);
 }
 
-TEST_CASE("validateGam accepts a normal parsed and edited document", "[gam_validator]") {
+TEST_CASE("validateGam accepts a normal parsed and edited document", "[gam]") {
     Gam gam = sampleGam();
     REQUIRE_FALSE(writer::hasErrors(writer::validateGam(gam)));
 
@@ -229,7 +229,7 @@ TEST_CASE("validateGam accepts a normal parsed and edited document", "[gam_valid
     CHECK_FALSE(writer::hasErrors(writer::validateGam(gam)));
 }
 
-TEST_CASE("validateGam catches a corrupted variable line", "[gam_validator]") {
+TEST_CASE("validateGam catches a corrupted variable line", "[gam]") {
     Gam gam = sampleGam();
 
     // Mangle a MAP_GLOBAL_VARS line's raw so it no longer serialises to the parsed (name, value): the raw
@@ -246,7 +246,7 @@ TEST_CASE("validateGam catches a corrupted variable line", "[gam_validator]") {
     CHECK(writer::hasErrors(writer::validateGam(gam)));
 }
 
-TEST_CASE("validateGam flags a value span that breaks the engine shape", "[gam_validator]") {
+TEST_CASE("validateGam flags a value span that breaks the engine shape", "[gam]") {
     Gam gam = sampleGam();
 
     // A line whose raw no longer matches `NAME := value;` (here the `;` is gone) must be an Error: the

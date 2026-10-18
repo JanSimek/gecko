@@ -196,7 +196,7 @@ TEST_CASE("MAP round-trip preserves all object types and inventory", "[map][roun
 // (objectSaveAll / objectLoadAll); before the fix the reader consumed only one
 // count block here and desynced the stream. Walls/critters don't dereference a
 // Pro, so a provider that returns nullptr is sufficient.
-TEST_CASE("MAP single-enabled-elevation map keeps engine 3-block object framing", "[map][roundtrip][compat]") {
+TEST_CASE("MAP single-enabled-elevation map keeps engine 3-block object framing", "[map][roundtrip]") {
     StubProvider provider;
 
     auto original = Map::createEmptyMapFile();
@@ -236,7 +236,7 @@ TEST_CASE("MAP single-enabled-elevation map keeps engine 3-block object framing"
 // otherwise-identical single-object maps - one exit-grid MISC, one ordinary
 // MISC - must differ in size by exactly those 4 int32 fields (16 bytes). The
 // ordinary MISC must also still round-trip without desyncing.
-TEST_CASE("MAP non-exit MISC object writes no trailing exit data", "[map][roundtrip][compat]") {
+TEST_CASE("MAP non-exit MISC object writes no trailing exit data", "[map][roundtrip]") {
     StubProvider provider;
 
     auto singleMiscBytes = [&](uint32_t miscIndex) {
@@ -307,7 +307,7 @@ TEST_CASE("MAP read -> write reproduces a shipped map byte for byte", "[map][rou
     CHECK(mapBytes(map->getMapFile(), provider) == original);
 }
 
-TEST_CASE("MAP write -> read -> write keeps every script section byte for byte", "[map][roundtrip][scripts]") {
+TEST_CASE("MAP write -> read -> write keeps every script section byte for byte", "[map][roundtrip]") {
     StubProvider provider;
     auto original = Map::createEmptyMapFile();
     // More than one 16-slot block in a section exercises the padding and per-block check words.
@@ -406,7 +406,7 @@ TEST_CASE("MAP reader follows nested inventories", "[map][roundtrip]") {
     CHECK(objects[1]->position == after->position);
 }
 
-TEST_CASE("MapHeader::programIndex converts the 1-based header script id", "[map][scripts]") {
+TEST_CASE("MapHeader::programIndex converts the 1-based header script id", "[map]") {
     Map::MapHeader header{};
     header.script_id = -1;
     CHECK_FALSE(header.programIndex().has_value());

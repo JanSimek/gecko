@@ -11,7 +11,7 @@ using namespace geck;
 using geck::test::writeFile;
 namespace fs = std::filesystem;
 
-TEST_CASE("scriptBaseName strips extension, whitespace and comments and lowercases", "[ssl]") {
+TEST_CASE("scriptBaseName strips extension, whitespace and comments and lowercases", "[script_source_locator]") {
     CHECK(resource::scriptBaseName("ARTEMPLE.INT") == "artemple");
     CHECK(resource::scriptBaseName("  obj_dude.int \r") == "obj_dude");
     CHECK(resource::scriptBaseName("ACBRAHMN.int ; brahmin in Arroyo") == "acbrahmn");
@@ -19,7 +19,7 @@ TEST_CASE("scriptBaseName strips extension, whitespace and comments and lowercas
     CHECK(resource::scriptBaseName("   ") == "");
 }
 
-TEST_CASE("locateScriptSource resolves loose files to disk paths", "[ssl]") {
+TEST_CASE("locateScriptSource resolves loose files to disk paths", "[script_source_locator]") {
     const test::TempDir baseDir{ "ssl_locator" };
     const fs::path& base = baseDir.path();
     const fs::path dataRoot = base / "mod";
@@ -50,7 +50,7 @@ TEST_CASE("locateScriptSource resolves loose files to disk paths", "[ssl]") {
     }
 }
 
-TEST_CASE("findScriptSourceInRoots matches by stem across an RP-style area tree", "[ssl]") {
+TEST_CASE("findScriptSourceInRoots matches by stem across an RP-style area tree", "[script_source_locator]") {
     const test::TempDir baseDir{ "ssl_source_roots" };
     const fs::path& base = baseDir.path();
     const fs::path root = base / "scripts_src";

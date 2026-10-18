@@ -27,7 +27,7 @@ using namespace geck;
 // The table is what every menu, toolbar and canvas binding reads, and what settings.json points
 // at, so its invariants are worth asserting directly: a duplicate id would make one row
 // unreachable, and two actions sharing a key would make Qt fire neither.
-TEST_CASE("The shipped keybinding table is internally consistent", "[qt][keybindings]") {
+TEST_CASE("The shipped keybinding table is internally consistent", "[keybindings]") {
     std::set<std::string, std::less<>> ids;
     std::set<std::string, std::less<>> keys;
 
@@ -67,7 +67,7 @@ TEST_CASE("The shipped keybinding table is internally consistent", "[qt][keybind
     }
 }
 
-TEST_CASE("An override is stored, reloaded and dropped again on reset", "[qt][keybindings]") {
+TEST_CASE("An override is stored, reloaded and dropped again on reset", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     const QKeySequence rebound("Ctrl+Alt+K");
 
@@ -103,7 +103,7 @@ TEST_CASE("An override is stored, reloaded and dropped again on reset", "[qt][ke
 
 // Unbinding is a real state, distinct from "never changed": it has to survive a round trip, or a
 // reload would hand the key back.
-TEST_CASE("An unbound action persists as unbound", "[qt][keybindings]") {
+TEST_CASE("An unbound action persists as unbound", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     {
         KeyBindingRegistry registry(settings);
@@ -118,7 +118,7 @@ TEST_CASE("An unbound action persists as unbound", "[qt][keybindings]") {
     CHECK(reloaded.isCustomized(actions::TOOL_ROTATE));
 }
 
-TEST_CASE("Conflicts are found across scopes and ignore unbound actions", "[qt][keybindings]") {
+TEST_CASE("Conflicts are found across scopes and ignore unbound actions", "[keybindings]") {
     KeyBindingRegistry registry(std::make_shared<Settings>());
 
     // Alt+2 belongs to the Selection panel.
@@ -139,7 +139,7 @@ TEST_CASE("Conflicts are found across scopes and ignore unbound actions", "[qt][
 
 // The point of the sink registration: a rebind reaches the live UI without a restart and without
 // re-walking the menu bar.
-TEST_CASE("Bound actions and shortcuts follow a rebind", "[qt][keybindings]") {
+TEST_CASE("Bound actions and shortcuts follow a rebind", "[keybindings]") {
     KeyBindingRegistry registry(std::make_shared<Settings>());
 
     QWidget host;
@@ -165,7 +165,7 @@ TEST_CASE("Bound actions and shortcuts follow a rebind", "[qt][keybindings]") {
 }
 
 // A sink dies with the map view it hangs off; the registry must not touch it afterwards.
-TEST_CASE("A destroyed sink is dropped instead of dangling", "[qt][keybindings]") {
+TEST_CASE("A destroyed sink is dropped instead of dangling", "[keybindings]") {
     KeyBindingRegistry registry(std::make_shared<Settings>());
 
     {
@@ -179,7 +179,7 @@ TEST_CASE("A destroyed sink is dropped instead of dangling", "[qt][keybindings]"
 
 // Canvas shortcuts are re-bound on every map load, so binding the same id again has to drop the
 // sinks that died with the previous map rather than piling nulls up for the session's lifetime.
-TEST_CASE("Re-binding an action drops sinks that have been destroyed", "[qt][keybindings]") {
+TEST_CASE("Re-binding an action drops sinks that have been destroyed", "[keybindings]") {
     KeyBindingRegistry registry(std::make_shared<Settings>());
 
     for (int round = 0; round < 3; ++round) {
@@ -198,7 +198,7 @@ TEST_CASE("Re-binding an action drops sinks that have been destroyed", "[qt][key
 
 // A settings file naming an action the table no longer has (renamed, retired) must not resurrect
 // a key that nothing listens for.
-TEST_CASE("An override for an unknown action is discarded", "[qt][keybindings]") {
+TEST_CASE("An override for an unknown action is discarded", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     settings->setKeyBindings({ { "panel.thatNeverExisted", "Ctrl+Alt+Z" } });
 
@@ -211,7 +211,7 @@ TEST_CASE("An override for an unknown action is discarded", "[qt][keybindings]")
 
 // The Preferences page: one row per table entry, a filter over them, and edits that only reach the
 // registry on apply — so Cancel really cancels.
-TEST_CASE("The keybindings page lists the table and commits only on apply", "[qt][keybindings]") {
+TEST_CASE("The keybindings page lists the table and commits only on apply", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
     KeybindingsWidget widget(&registry);
@@ -241,7 +241,7 @@ TEST_CASE("The keybindings page lists the table and commits only on apply", "[qt
 
 // Reset All is the page's escape hatch, so it has to clear an override made in an earlier sitting,
 // not just the edits typed in this one.
-TEST_CASE("Reset All on the keybindings page clears a stored override", "[qt][keybindings]") {
+TEST_CASE("Reset All on the keybindings page clears a stored override", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
     registry.setShortcut(actions::PANEL_SELECTION, QKeySequence("Ctrl+Alt+K"));
@@ -264,7 +264,7 @@ TEST_CASE("Reset All on the keybindings page clears a stored override", "[qt][ke
 
 // The tab is optional: a dialog built without a registry (the first-run one, and a bare-constructed
 // one in a test) must still build, just without the page.
-TEST_CASE("The Preferences dialog gains a shortcuts tab only with a registry", "[qt][keybindings]") {
+TEST_CASE("The Preferences dialog gains a shortcuts tab only with a registry", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
 
@@ -289,7 +289,7 @@ TEST_CASE("The Preferences dialog gains a shortcuts tab only with a registry", "
 
 // Resolving a conflict changes two rows, not one: the row typed into and whichever was holding
 // that key before. Both have to lose the error colour.
-TEST_CASE("The keybindings page repaints both sides of a conflict", "[qt][keybindings]") {
+TEST_CASE("The keybindings page repaints both sides of a conflict", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
     KeybindingsWidget widget(&registry);
@@ -325,7 +325,7 @@ TEST_CASE("The keybindings page repaints both sides of a conflict", "[qt][keybin
 }
 
 // The tree is rebuilt on reload/apply, so a filter left in the box has to survive it.
-TEST_CASE("The keybindings page keeps its filter across a rebuild", "[qt][keybindings]") {
+TEST_CASE("The keybindings page keeps its filter across a rebuild", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
     KeybindingsWidget widget(&registry);
@@ -347,7 +347,7 @@ TEST_CASE("The keybindings page keeps its filter across a rebuild", "[qt][keybin
 // Esc, Delete, Backspace and Space belong to the map view's tool state machine, and a shortcut on
 // one would consume it before the canvas sees it; a bare letter on an Application action would
 // fire while typing in any panel.
-TEST_CASE("Reserved and canvas-only keys cannot be bound", "[qt][keybindings]") {
+TEST_CASE("Reserved and canvas-only keys cannot be bound", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     settings->setKeyBindings({ { actions::FIT_MAP, "Del" }, { actions::PANEL_LOG, "Q" } });
     KeyBindingRegistry registry(settings);
@@ -393,7 +393,7 @@ TEST_CASE("Reserved and canvas-only keys cannot be bound", "[qt][keybindings]") 
 
 // Dropping one conflicting edit puts that action back on its committed key, which can collide with
 // an edit that only looked free while the dropped one was pending.
-TEST_CASE("Applying drops edits that conflict once another edit is dropped", "[qt][keybindings]") {
+TEST_CASE("Applying drops edits that conflict once another edit is dropped", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
     KeybindingsWidget widget(&registry);
@@ -418,7 +418,7 @@ TEST_CASE("Applying drops edits that conflict once another edit is dropped", "[q
     CHECK(registry.shortcut(actions::PANEL_TILE_PALETTE) == QKeySequence("Alt+4"));
 }
 
-TEST_CASE("Clear unbinds the selected row and resolves its conflict", "[qt][keybindings]") {
+TEST_CASE("Clear unbinds the selected row and resolves its conflict", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
     KeybindingsWidget widget(&registry);

@@ -23,7 +23,7 @@
 
 namespace test = geck::test;
 
-TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name", "[qt][scripts]") {
+TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name", "[scripts_panel]") {
     test::DataTree data("ui-data");
     data.write("scripts/scripts.lst", "obj_dude.int    ; player\nzclrat.int      ; rat\n");
     // scriptDisplayName(programIndex 0) reads scrname.msg[0 + 101] = 101.
@@ -100,7 +100,7 @@ TEST_CASE("ScriptsPanel lists the map's scripts with resolved filename and name"
     CHECK(table->rowCount() == 0);
 }
 
-TEST_CASE("ScriptsPanel shows the selected script's local variables", "[qt][scripts]") {
+TEST_CASE("ScriptsPanel shows the selected script's local variables", "[scripts_panel]") {
     test::DataTree data("ui-data");
     data.write("scripts/scripts.lst", "obj_dude.int    ; player\n");
     auto& resources = data.mount();
@@ -145,7 +145,7 @@ QTableWidgetItem* scriptFilenameCell(const QTableWidget& table, int programIndex
 
 // After the table fills, each script is linted (one per event-loop turn) and its rows get a marker:
 // the lint's findings, and a placed script whose local variable block overlaps another's.
-TEST_CASE("ScriptsPanel marks scripts the lint finds problems in", "[qt][scripts]") {
+TEST_CASE("ScriptsPanel marks scripts the lint finds problems in", "[scripts_panel]") {
     test::DataTree data("ui-data");
     data.write("scripts/scripts.lst", "obj_dude.int    ; player # local_vars=4\nclean.int ; fine # local_vars=1\n");
     auto& resources = data.mount();
@@ -195,7 +195,7 @@ TEST_CASE("ScriptsPanel marks scripts the lint finds problems in", "[qt][scripts
 
 // The marker also checks each script against where the map places it: the map's own script may not
 // use local variables, and a spatial script needs spatial_p_proc.
-TEST_CASE("ScriptsPanel marks scripts wrong for where the map places them", "[qt][scripts]") {
+TEST_CASE("ScriptsPanel marks scripts wrong for where the map places them", "[scripts_panel]") {
     test::DataTree data("ui-data");
     data.write("scripts/scripts.lst", "mapscr.int ; map # local_vars=1\nspot.int ; trigger # local_vars=0\n");
     auto& resources = data.mount();
@@ -230,7 +230,7 @@ TEST_CASE("ScriptsPanel marks scripts wrong for where the map places them", "[qt
 
 // Without an .ssl source the status comes from the compiled .int, so a vanilla install is checked too.
 // What the bytecode lint finds is covered by test_script_lint; this checks the service hands it on.
-TEST_CASE("ScriptSourceService checks a script's compiled .int when it has no source", "[qt][scripts]") {
+TEST_CASE("ScriptSourceService checks a script's compiled .int when it has no source", "[script_source_service]") {
     test::DataTree data("ui-data");
     data.write("scripts/scripts.lst", "two.int ; second # local_vars=0\n");
     geck::test::ByteWriter code;

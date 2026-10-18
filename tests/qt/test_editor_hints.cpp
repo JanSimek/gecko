@@ -16,7 +16,7 @@ using geck::hintForContext;
 // genuinely act in that context. These pin the per-mode keys against InputHandler so the
 // status-bar hint can't silently drift from the real bindings. No GL / widgets needed.
 
-TEST_CASE("Each mode's hint advertises the keys that act in it", "[hints]") {
+TEST_CASE("Each mode's hint advertises the keys that act in it", "[editor_hints]") {
     struct Row {
         EditorMode mode;
         bool hasSelection;
@@ -48,7 +48,7 @@ TEST_CASE("Each mode's hint advertises the keys that act in it", "[hints]") {
     }
 }
 
-TEST_CASE("Select mode names rebound keys and leaves unbound actions out", "[hints]") {
+TEST_CASE("Select mode names rebound keys and leaves unbound actions out", "[editor_hints]") {
     const auto lookup = [](const QString& actionId) {
         if (actionId == QLatin1StringView(geck::actions::TOOL_ROTATE)) {
             return QString(); // unbound
@@ -61,12 +61,12 @@ TEST_CASE("Select mode names rebound keys and leaves unbound actions out", "[hin
     CHECK(hint.contains("Delete: remove"));
 }
 
-TEST_CASE("Select mode with nothing selected is empty", "[hints]") {
+TEST_CASE("The select-mode hint is empty when nothing is selected", "[editor_hints]") {
     // R / Delete do nothing without a selection, so the hint stays minimal (empty).
     REQUIRE(hintForContext(EditorMode::Select, /*hasSelection=*/false).isEmpty());
 }
 
-TEST_CASE("Every hint uses the middot separator between multiple keys", "[hints]") {
+TEST_CASE("Every hint uses the middot separator between multiple keys", "[editor_hints]") {
     // Each part is "<key>: <what>", so a hint of N parts carries N-1 separators. MarkExits has four
     // parts (Space, Shift, Enter/double-click, Esc), so it must contain the separator exactly three times.
     const QString separator = QStringLiteral("  ") + QChar(0x00B7) + QStringLiteral("  ");
@@ -84,7 +84,7 @@ TEST_CASE("Every hint uses the middot separator between multiple keys", "[hints]
     }
 }
 
-TEST_CASE("PluginTool hint renders the active tool's own items when provided", "[hints]") {
+TEST_CASE("PluginTool hint renders the active tool's own items when provided", "[editor_hints]") {
     // A registered tool supplies its keys one per line (ITool::statusHint); the provider
     // joins them with the standard middot separator. The object-placement tool's hint must
     // match what the dedicated PlaceObject mode used to show, so porting it onto the

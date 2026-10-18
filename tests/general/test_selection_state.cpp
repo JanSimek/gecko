@@ -22,8 +22,8 @@ TEST_CASE("SelectionState adds, removes and clears typed items", "[selection_sta
     SelectionState state;
 
     SECTION("Initial state is empty") {
-        REQUIRE(state.isEmpty());
-        REQUIRE(state.count() == 0);
+        CHECK(state.isEmpty());
+        CHECK(state.count() == 0);
     }
 
     SECTION("Adding and removing tile items") {
@@ -31,23 +31,23 @@ TEST_CASE("SelectionState adds, removes and clears typed items", "[selection_sta
         SelectedItem floorTile{ SelectionType::FLOOR_TILE, 150 };
         state.addItem(floorTile);
 
-        REQUIRE_FALSE(state.isEmpty());
-        REQUIRE(state.count() == 1);
-        REQUIRE(state.hasItem(floorTile));
+        CHECK_FALSE(state.isEmpty());
+        CHECK(state.count() == 1);
+        CHECK(state.hasItem(floorTile));
 
         // Test roof tile selection
         SelectedItem roofTile{ SelectionType::ROOF_TILE, 250 };
         state.addItem(roofTile);
 
-        REQUIRE(state.count() == 2);
-        REQUIRE(state.hasItem(floorTile));
-        REQUIRE(state.hasItem(roofTile));
+        CHECK(state.count() == 2);
+        CHECK(state.hasItem(floorTile));
+        CHECK(state.hasItem(roofTile));
 
         // Test removing items
         state.removeItem(floorTile);
-        REQUIRE(state.count() == 1);
-        REQUIRE_FALSE(state.hasItem(floorTile));
-        REQUIRE(state.hasItem(roofTile));
+        CHECK(state.count() == 1);
+        CHECK_FALSE(state.hasItem(floorTile));
+        CHECK(state.hasItem(roofTile));
     }
 
     SECTION("Clear functionality") {
@@ -59,8 +59,8 @@ TEST_CASE("SelectionState adds, removes and clears typed items", "[selection_sta
         REQUIRE(state.count() == 3);
 
         state.clear();
-        REQUIRE(state.isEmpty());
-        REQUIRE(state.count() == 0);
+        CHECK(state.isEmpty());
+        CHECK(state.count() == 0);
     }
 
     SECTION("floor, roof and hex items stay apart by type") {
@@ -82,7 +82,7 @@ TEST_CASE("SelectionState adds, removes and clears typed items", "[selection_sta
 // SECTION: Selection Mode Tests
 //==============================================================================
 
-TEST_CASE("selectionModeToString names every selection mode", "[selection_modes]") {
+TEST_CASE("selectionModeToString names every selection mode", "[selection_state]") {
     CHECK(std::string_view(selectionModeToString(SelectionMode::ALL)) == "All");
     CHECK(std::string_view(selectionModeToString(SelectionMode::FLOOR_TILES)) == "Floor Tiles");
     CHECK(std::string_view(selectionModeToString(SelectionMode::ROOF_TILES)) == "Roof Tiles");
@@ -103,9 +103,9 @@ TEST_CASE("SelectedItem reports its type and data and compares by both", "[selec
         SelectedItem hexItem{ SelectionType::HEX, 300 };
 
         // Type checking methods
-        REQUIRE_FALSE(floorTile.isObject());
-        REQUIRE_FALSE(roofTile.isObject());
-        REQUIRE_FALSE(hexItem.isObject());
+        CHECK_FALSE(floorTile.isObject());
+        CHECK_FALSE(roofTile.isObject());
+        CHECK_FALSE(hexItem.isObject());
     }
 
     SECTION("Data retrieval") {
@@ -113,8 +113,8 @@ TEST_CASE("SelectedItem reports its type and data and compares by both", "[selec
         SelectedItem hexItem{ SelectionType::HEX, 2500 };
 
         // Data retrieval methods
-        REQUIRE(tileItem.getTileIndex() == 150);
-        REQUIRE(hexItem.getHexIndex() == 2500);
+        CHECK(tileItem.getTileIndex() == 150);
+        CHECK(hexItem.getHexIndex() == 2500);
     }
 
     SECTION("Equality comparison") {
@@ -124,17 +124,17 @@ TEST_CASE("SelectedItem reports its type and data and compares by both", "[selec
         SelectedItem roof1{ SelectionType::ROOF_TILE, 100 };
 
         // Same type, same data should be equal
-        REQUIRE(tile1 == tile2);
+        CHECK(tile1 == tile2);
 
         // Same type, different data should not be equal
-        REQUIRE_FALSE(tile1 == tile3);
+        CHECK_FALSE(tile1 == tile3);
 
         // Different type, same data should not be equal
-        REQUIRE_FALSE(tile1 == roof1);
+        CHECK_FALSE(tile1 == roof1);
     }
 }
 
-TEST_CASE("remapSelectedItem carries objects across a wrapper rebuild and drops removed ones", "[selection]") {
+TEST_CASE("remapSelectedItem carries objects across a wrapper rebuild and drops removed ones", "[selection_state]") {
     GECK_SKIP_IF_HEADLESS_CI(); // an Object owns an sf::Texture
     geck::Frm frm("test.frm");
     geck::Direction direction;

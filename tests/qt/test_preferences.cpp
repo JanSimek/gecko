@@ -32,7 +32,7 @@ const QLineEdit* dataDirectoryEdit(const GameLocationWidget& widget) {
 
 } // namespace
 
-TEST_CASE("Choosing an .app fills the data directory from it and locks the field", "[qt][settings]") {
+TEST_CASE("Choosing an .app fills the data directory from it and locks the field", "[preferences][macos]") {
     // The engine chdir's to the bundle's base path, so for a bundle this setting cannot change
     // where the map goes. Leaving it editable invites exactly the mistake it cannot correct.
     const geck::test::TempDir tempDir("game-location");
@@ -90,7 +90,7 @@ TEST_CASE("Choosing an .app fills the data directory from it and locks the field
     }
 }
 
-TEST_CASE("An .app is validated as an executable, and a plain folder is not one", "[qt][settings]") {
+TEST_CASE("An .app is validated as an executable, and a plain folder is not one", "[preferences][macos]") {
     // A bundle is a directory that is nonetheless an executable choice: its binary is in
     // Contents/MacOS. Any other directory cannot be launched.
     const geck::test::TempDir tempDir("game-location");
@@ -142,7 +142,7 @@ TEST_CASE("An .app is validated as an executable, and a plain folder is not one"
     }
 }
 
-TEST_CASE("Choosing an executable notifies once, not once per field it touches", "[qt][settings]") {
+TEST_CASE("Choosing an executable notifies once, not once per field it touches", "[preferences]") {
     // Deriving the data directory writes to that field, and its own textChanged would raise a
     // second configurationChanged nested inside the first - the dialog then re-entered its refresh
     // while still handling the executable change.
@@ -172,7 +172,7 @@ TEST_CASE("Choosing an executable notifies once, not once per field it touches",
     }
 }
 
-TEST_CASE("DataPathsWidget shows highest priority on top and preserves stored order", "[qt][datapaths]") {
+TEST_CASE("DataPathsWidget shows highest priority on top and preserves stored order", "[data_paths_widget]") {
     auto settings = std::make_shared<geck::Settings>();
     geck::DataPathsWidget widget(settings);
 

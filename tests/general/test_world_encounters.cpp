@@ -15,7 +15,7 @@
 using namespace geck;
 namespace fs = std::filesystem;
 
-TEST_CASE("world encounters report the tables and the odds at a worldmap position", "[world_encounters]") {
+TEST_CASE("world encounters report the tables and the odds at a worldmap position", "[world_encounters][cli]") {
     test::DataTree tree{ "world_encounters_data" };
     tree.write("data/vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_REP :=0;\nGVAR_HUNTERS :=0;\n");
     tree.write("data/worldmap.txt", "[Data]\nNone=0%\nRare=4%\nUncommon=12%\nCommon=22%\nFrequent=38%\nForced=100%\n"

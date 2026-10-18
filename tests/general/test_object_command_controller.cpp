@@ -43,7 +43,7 @@ std::shared_ptr<MapObject> addScriptedObject(ControllerFixture& fx, int elevatio
 
 } // namespace
 
-TEST_CASE("clearElevationObjects removes attached scripts and undo restores both", "[undo][controller]") {
+TEST_CASE("clearElevationObjects removes attached scripts and undo restores both", "[object_command_controller][undo]") {
     ControllerFixture fx;
     addScriptedObject(fx, 0, 1, 0);
     addScriptedObject(fx, 0, 2, 1);
@@ -68,7 +68,7 @@ TEST_CASE("clearElevationObjects removes attached scripts and undo restores both
     CHECK(fx.mapFile().map_scripts[ITEM_SECTION].empty());
 }
 
-TEST_CASE("registerObjectData places a MapObject as data only, undoably", "[undo][controller]") {
+TEST_CASE("registerObjectData places a MapObject as data only, undoably", "[object_command_controller][undo]") {
     ControllerFixture fx;
 
     auto obj = std::make_shared<MapObject>();
@@ -90,13 +90,13 @@ TEST_CASE("registerObjectData places a MapObject as data only, undoably", "[undo
     CHECK_FALSE(fx.controller.registerObjectData(nullptr));
 }
 
-TEST_CASE("clearElevationObjects returns false for an empty elevation", "[undo][controller]") {
+TEST_CASE("clearElevationObjects returns false for an empty elevation", "[object_command_controller][undo]") {
     ControllerFixture fx;
     CHECK_FALSE(fx.controller.clearElevationObjects(0));
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 
-TEST_CASE("copyElevation detaches cloned objects from source scripts", "[undo][controller]") {
+TEST_CASE("copyElevation detaches cloned objects from source scripts", "[object_command_controller][undo]") {
     ControllerFixture fx;
     auto src = addScriptedObject(fx, 0, 5, 0);
     const size_t scriptsBefore = fx.mapFile().map_scripts[ITEM_SECTION].size();
@@ -127,14 +127,14 @@ TEST_CASE("copyElevation detaches cloned objects from source scripts", "[undo][c
     CHECK(fx.mapFile().map_objects[1].size() == 1);
 }
 
-TEST_CASE("copyElevation rejects copying an elevation onto itself", "[undo][controller]") {
+TEST_CASE("copyElevation rejects copying an elevation onto itself", "[object_command_controller][undo]") {
     ControllerFixture fx;
     addScriptedObject(fx, 0, 1, 0);
     CHECK_FALSE(fx.controller.copyElevation(0, 0));
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 
-TEST_CASE("registerInstanceEdit applies the after-state and reverts on undo", "[undo][controller]") {
+TEST_CASE("registerInstanceEdit applies the after-state and reverts on undo", "[object_command_controller][undo]") {
     ControllerFixture fx;
     auto obj = std::make_shared<MapObject>(); // starts in the before-state (all zero)
 
@@ -156,13 +156,13 @@ TEST_CASE("registerInstanceEdit applies the after-state and reverts on undo", "[
     CHECK(obj->light_radius == 5u);
 }
 
-TEST_CASE("registerInstanceEdit rejects a null object", "[undo][controller]") {
+TEST_CASE("registerInstanceEdit rejects a null object", "[object_command_controller][undo]") {
     ControllerFixture fx;
     CHECK_FALSE(fx.controller.registerInstanceEdit(nullptr, {}, {}, "Edit"));
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 
-TEST_CASE("attachScript and detachScript are undoable", "[undo][controller]") {
+TEST_CASE("attachScript and detachScript are undoable", "[object_command_controller][undo]") {
     ControllerFixture fx;
 
     SECTION("an item script links, unlinks and relinks the object") {
@@ -210,7 +210,7 @@ TEST_CASE("attachScript and detachScript are undoable", "[undo][controller]") {
     }
 }
 
-TEST_CASE("editSpatialScript edits in place, keeps the SID, and is undoable", "[undo][controller][spatial]") {
+TEST_CASE("editSpatialScript edits in place, keeps the SID, and is undoable", "[object_command_controller][undo]") {
     ControllerFixture fx;
     REQUIRE(fx.mapFile().map_scripts[SPATIAL_SECTION].empty());
 
@@ -253,7 +253,7 @@ TEST_CASE("editSpatialScript edits in place, keeps the SID, and is undoable", "[
     CHECK(built_tile::tileOf(redone->timer) == 250u);
 }
 
-TEST_CASE("removeSpatialScript deletes by SID and undo restores it", "[undo][controller][spatial]") {
+TEST_CASE("removeSpatialScript deletes by SID and undo restores it", "[object_command_controller][undo]") {
     ControllerFixture fx;
     REQUIRE(fx.controller.addSpatialScript(/*programIndex*/ 5, /*tile*/ 42, /*elevation*/ 0, /*radius*/ 2));
     REQUIRE(fx.controller.addSpatialScript(/*programIndex*/ 6, /*tile*/ 99, /*elevation*/ 0, /*radius*/ 4));
@@ -278,7 +278,7 @@ TEST_CASE("removeSpatialScript deletes by SID and undo restores it", "[undo][con
     CHECK(fx.controller.findSpatialScript(firstSid) == nullptr);
 }
 
-TEST_CASE("editSpatialScript and removeSpatialScript reject unknown SIDs", "[undo][controller][spatial]") {
+TEST_CASE("editSpatialScript and removeSpatialScript reject unknown SIDs", "[object_command_controller][undo]") {
     ControllerFixture fx;
     const uint32_t missing = MapScript::makeSid(MapScript::ScriptType::SPATIAL, 3);
     CHECK_FALSE(fx.controller.removeSpatialScript(missing));
@@ -289,7 +289,7 @@ TEST_CASE("editSpatialScript and removeSpatialScript reject unknown SIDs", "[und
     CHECK(fx.controller.findSpatialScript(itemSid) == nullptr);
 }
 
-TEST_CASE("registerInventoryEdit restores inventory snapshots", "[undo][controller]") {
+TEST_CASE("registerInventoryEdit restores inventory snapshots", "[object_command_controller][undo]") {
     ControllerFixture fx;
     auto container = std::make_shared<MapObject>();
 
@@ -324,7 +324,7 @@ std::shared_ptr<MapObject> editFlags(ObjectCommandController& controller, uint32
 }
 } // namespace
 
-TEST_CASE("beginBatch/endBatch collapse many edits into one undo entry", "[undo][controller][batch]") {
+TEST_CASE("beginBatch/endBatch collapse many edits into one undo entry", "[object_command_controller][undo]") {
     ControllerFixture fx;
 
     fx.controller.beginBatch("Batch edit");
@@ -359,7 +359,7 @@ TEST_CASE("beginBatch/endBatch collapse many edits into one undo entry", "[undo]
     CHECK(o3->flags == 0x04u);
 }
 
-TEST_CASE("an empty batch records nothing", "[undo][controller][batch]") {
+TEST_CASE("an empty batch records nothing", "[object_command_controller][undo]") {
     ControllerFixture fx;
 
     fx.controller.beginBatch("Nothing happens");
@@ -368,14 +368,14 @@ TEST_CASE("an empty batch records nothing", "[undo][controller][batch]") {
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 
-TEST_CASE("an unbalanced endBatch is a no-op", "[undo][controller][batch]") {
+TEST_CASE("an unbalanced endBatch is a no-op", "[object_command_controller][undo]") {
     ControllerFixture fx;
     CHECK_FALSE(fx.controller.endBatch());
     CHECK_FALSE(fx.controller.isBatching());
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 
-TEST_CASE("nested batches flush once at the outermost endBatch", "[undo][controller][batch]") {
+TEST_CASE("nested batches flush once at the outermost endBatch", "[object_command_controller][undo]") {
     ControllerFixture fx;
 
     fx.controller.beginBatch("Outer");
@@ -399,7 +399,7 @@ TEST_CASE("nested batches flush once at the outermost endBatch", "[undo][control
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 
-TEST_CASE("ScopedUndoBatch flushes on scope exit, even via an exception", "[undo][controller][batch]") {
+TEST_CASE("ScopedUndoBatch flushes on scope exit, even via an exception", "[object_command_controller][undo]") {
     ControllerFixture fx;
     std::shared_ptr<MapObject> o1;
     std::shared_ptr<MapObject> o2;
@@ -438,7 +438,7 @@ TEST_CASE("ScopedUndoBatch flushes on scope exit, even via an exception", "[undo
     }
 }
 
-TEST_CASE("newEmptyMap drops the undo history recorded against the old map", "[undo][controller]") {
+TEST_CASE("newEmptyMap drops the undo history recorded against the old map", "[object_command_controller][undo]") {
     ControllerFixture fx;
     auto placed = std::make_shared<MapObject>();
     placed->position = 12345;
@@ -455,7 +455,7 @@ TEST_CASE("newEmptyMap drops the undo history recorded against the old map", "[u
     CHECK(fx.mapFile().map_objects[0].empty());
 }
 
-TEST_CASE("EditorSession::resetToEmptyMap drops the old map's undo history", "[undo]") {
+TEST_CASE("EditorSession::resetToEmptyMap drops the old map's undo history", "[editor_session][undo]") {
     EditorSession session;
     session.resetToEmptyMap();
     int undone = 0;
@@ -471,7 +471,7 @@ TEST_CASE("EditorSession::resetToEmptyMap drops the old map's undo history", "[u
     CHECK(undone == 0);
 }
 
-TEST_CASE("newEmptyMap inside a batch discards the edits buffered before it", "[undo][controller][batch]") {
+TEST_CASE("newEmptyMap inside a batch discards the edits buffered before it", "[object_command_controller][undo]") {
     ControllerFixture fx;
     {
         ScopedUndoBatch batch(fx.controller, "Script");
@@ -492,7 +492,7 @@ TEST_CASE("newEmptyMap inside a batch discards the edits buffered before it", "[
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 
-TEST_CASE("setMapHeader is undoable and folds a run of same-field edits into one step", "[undo][controller]") {
+TEST_CASE("setMapHeader is undoable and folds a run of same-field edits into one step", "[object_command_controller][undo]") {
     ControllerFixture fx;
     const uint32_t original = fx.mapFile().header.player_default_position;
 
@@ -521,7 +521,7 @@ TEST_CASE("setMapHeader is undoable and folds a run of same-field edits into one
     CHECK(fx.mapFile().header.player_default_position == 123u);
 }
 
-TEST_CASE("setElevationPresent removes an elevation with its objects and scripts, undoably", "[undo][controller]") {
+TEST_CASE("setElevationPresent removes an elevation with its objects and scripts, undoably", "[object_command_controller][undo]") {
     ControllerFixture fx;
     addScriptedObject(fx, 1, 7, 0);
     REQUIRE(fx.controller.addSpatialScript(/*programIndex*/ 3, /*tile*/ 5000, /*elevation*/ 1, /*radius*/ 2));
@@ -551,7 +551,7 @@ TEST_CASE("setElevationPresent removes an elevation with its objects and scripts
     CHECK_FALSE(fx.mapFile().map_objects.contains(1));
 }
 
-TEST_CASE("setElevationPresent adds an empty elevation and refuses to remove the last one", "[undo][controller]") {
+TEST_CASE("setElevationPresent adds an empty elevation and refuses to remove the last one", "[object_command_controller][undo]") {
     ControllerFixture fx;
     REQUIRE(fx.controller.setElevationPresent(2, false));
     REQUIRE(fx.controller.setElevationPresent(1, false));
@@ -572,7 +572,7 @@ TEST_CASE("setElevationPresent adds an empty elevation and refuses to remove the
     CHECK_FALSE(fx.mapFile().tiles.contains(2));
 }
 
-TEST_CASE("Move and rotate undo edit the map data even after the wrappers were rebuilt", "[undo][controller]") {
+TEST_CASE("Move and rotate undo edit the map data even after the wrappers were rebuilt", "[object_command_controller][undo]") {
     GECK_SKIP_IF_HEADLESS_CI(); // an Object owns an sf::Texture
     ControllerFixture fx;
     Frm frm("test.frm");

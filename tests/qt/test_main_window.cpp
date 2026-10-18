@@ -29,7 +29,7 @@
 
 namespace test = geck::test;
 
-TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][mainwindow]") {
+TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[main_window]") {
     test::MainWindowFixture fixture;
     geck::MainWindow& window = fixture.window;
 
@@ -68,7 +68,7 @@ TEST_CASE("MainWindow panel toggles stay wired in the no-map layout", "[qt][main
 }
 
 // One MainWindow serves the three checks on its window-scoped action shortcuts (each block scoped).
-TEST_CASE("Window-scoped actions carry the shortcut table's keys, each key once", "[qt][mainwindow][keys]") {
+TEST_CASE("Window-scoped actions carry the shortcut table's keys, each key once", "[main_window]") {
     test::MainWindowFixture fixture;
     geck::MainWindow& window = fixture.window;
 
@@ -136,7 +136,7 @@ TEST_CASE("Window-scoped actions carry the shortcut table's keys, each key once"
 // The reason the panel keys reveal rather than plain-toggle: panels are tabbed, so a dock Qt calls
 // visible may be sitting behind another tab. Toggling would take it away exactly when the user asked
 // to see it.
-TEST_CASE("A panel action raises a tabbed-behind dock instead of hiding it", "[qt][mainwindow][keys]") {
+TEST_CASE("A panel action raises a tabbed-behind dock instead of hiding it", "[main_window]") {
     test::MainWindowFixture fixture;
     geck::MainWindow& window = fixture.window;
 
@@ -172,7 +172,7 @@ TEST_CASE("A panel action raises a tabbed-behind dock instead of hiding it", "[q
 // File > Close Map returns to the welcome screen. It must exist with the standard Close shortcut,
 // and triggering it with nothing open must be a safe no-op (no editor spawned, no crash) — the
 // handler guards on hasActiveMap() before touching the teardown path.
-TEST_CASE("File menu offers Close Map, and closing with no map open is a safe no-op", "[qt][mainwindow]") {
+TEST_CASE("File menu offers Close Map, and closing with no map open is a safe no-op", "[main_window]") {
     test::MainWindowFixture fixture;
     geck::MainWindow& window = fixture.window;
 
@@ -192,7 +192,7 @@ TEST_CASE("File menu offers Close Map, and closing with no map open is a safe no
 // The editor-navigation keys. Elevation is the everyday one: Ctrl+digit, the counterpart of the
 // panels' Alt+digit. They start disabled and updateElevationMenu() enables only what the open map
 // has, so the key is a no-op on a map without that elevation rather than a switch to nothing.
-TEST_CASE("Elevation actions carry Ctrl+digit and stay no-ops until a map has that elevation", "[qt][mainwindow][keys]") {
+TEST_CASE("Elevation actions carry Ctrl+digit and stay no-ops until a map has that elevation", "[main_window]") {
     test::MainWindowFixture fixture(test::editorResources());
     geck::MainWindow& window = fixture.window;
 
@@ -239,7 +239,7 @@ TEST_CASE("Elevation actions carry Ctrl+digit and stay no-ops until a map has th
 // both must stand down in MarkExits mode, where Enter finalizes the in-progress Draw-edge polyline
 // (InputHandler). Constructing an EditorWidget eagerly loads art/misc/HEX.frm, which the bundled
 // resources/ ships.
-TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge mode", "[qt][mainwindow][keys]") {
+TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge mode", "[main_window]") {
     test::MainWindowFixture fixture(test::editorResources());
     geck::MainWindow& window = fixture.window;
 
@@ -351,7 +351,7 @@ TEST_CASE("Inspect-selection keys live on the canvas and stand down in Draw-edge
 // The no-map welcome screen offers New Map / Browse Maps / Preferences buttons; each must emit the
 // matching request signal (MainWindow wires these to the File-menu handlers) so the screen is
 // actionable.
-TEST_CASE("Welcome screen buttons request New Map, Browse Maps and Preferences", "[qt][welcome]") {
+TEST_CASE("Welcome screen buttons request New Map, Browse Maps and Preferences", "[welcome_widget]") {
     geck::WelcomeWidget welcome;
 
     QSignalSpy newSpy(&welcome, &geck::WelcomeWidget::newMapRequested);

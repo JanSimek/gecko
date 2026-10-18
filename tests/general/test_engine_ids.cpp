@@ -80,7 +80,7 @@ static_assert(fallout::ARMOR_ITEM_PERKS.back() == PerkId::ArmorCharisma);
 static_assert(fallout::NO_ITEM_PERK == -1);
 } // namespace engine_enums
 
-TEST_CASE("ProtoId decodes a PID like the engine", "[engine][ids]") {
+TEST_CASE("ProtoId decodes a PID like the engine", "[engine_ids]") {
     const ProtoId scrub{ 0x02000066u };
     CHECK(scrub.objectType() == ObjectType::Scenery);
     CHECK(scrub.protoId() == 0x66u);
@@ -91,7 +91,7 @@ TEST_CASE("ProtoId decodes a PID like the engine", "[engine][ids]") {
     CHECK_FALSE(ProtoId(0x0500000Du) == MiscProtoTypeId::ScrollBlocker);
 }
 
-TEST_CASE("ProtoId keeps a PID with no known type losslessly", "[engine][ids]") {
+TEST_CASE("ProtoId keeps a PID with no known type losslessly", "[engine_ids]") {
     // RPU's epamain1/epamain2 carry pid -1 records; the raw value must survive untouched.
     const ProtoId none{ 0xFFFFFFFFu };
     CHECK(none.pid() == 0xFFFFFFFFu);
@@ -104,7 +104,7 @@ TEST_CASE("ProtoId keeps a PID with no known type losslessly", "[engine][ids]") 
     CHECK(ProtoId(0x06000001u).objectType() == ObjectType::Invalid);
 }
 
-TEST_CASE("Pro::type reads the PID's whole high byte, as the engine does", "[engine][ids][pro]") {
+TEST_CASE("Pro::type reads the PID's whole high byte, as the engine does", "[engine_ids]") {
     // Pro::type() used to mask with 0x0F000000, so it disagreed with every other PID decoder (and
     // the engine's `pid >> 24`) whenever the top nibble was set: pid -1 read as type 15.
     Pro pro{ "test.pro" };
@@ -119,7 +119,7 @@ TEST_CASE("Pro::type reads the PID's whole high byte, as the engine does", "[eng
     CHECK(pro.type() == ObjectType::Wall);
 }
 
-TEST_CASE("MapObject exposes typed ids and classifies by them", "[engine][ids][map]") {
+TEST_CASE("MapObject exposes typed ids and classifies by them", "[engine_ids]") {
     MapObject object;
     object.pro_pid = ProtoId(MiscProtoTypeId::ScrollBlocker).pid();
     object.frm_pid = FrmId(MiscFrameId::Block).fid();
@@ -133,7 +133,7 @@ TEST_CASE("MapObject exposes typed ids and classifies by them", "[engine][ids][m
     CHECK_FALSE(object.isExitGridMarker());
 }
 
-TEST_CASE("FrmId decodes every FID field", "[engine][ids]") {
+TEST_CASE("FrmId decodes every FID field", "[engine_ids]") {
     // rotation 2 | critter | animation 0x0B | weapon 0x3 | frame 0x123
     const FrmId fid{ 0x210B3123u };
     CHECK(fid.objectType() == ObjectType::Critter); // rotation bits do not leak into the type
@@ -149,13 +149,13 @@ TEST_CASE("FrmId decodes every FID field", "[engine][ids]") {
     CHECK(FrmId(0x0F000000u).objectType() == ObjectType::Invalid);
 }
 
-TEST_CASE("FrmId's frame id is the engine's 12-bit lst index", "[engine][ids]") {
+TEST_CASE("FrmId's frame id is the engine's 12-bit lst index", "[engine_ids]") {
     // fallout2-ce art.cc reads `fid & 0xFFF` for every type; bits 12-23 are animation codes.
     CHECK(FrmId(0x05001001u).frameId() == 1u);
     CHECK(FrmId(ObjectType::Tile, 0x1234).fid() == 0x04000234u);
 }
 
-TEST_CASE("Critter FID names round-trip through FrmId", "[engine][ids][critter]") {
+TEST_CASE("Critter FID names round-trip through FrmId", "[engine_ids]") {
     const uint32_t multi = CritterFrmResolver::deriveCritterFrmPid("hmjmpsaa.frm", 7);
     CHECK(FrmId(multi) == FrmId(ObjectType::Critter, 7, 0, 0, Rotation::NE));
     CHECK(CritterFrmResolver::generateCritterFrmName("hmjmps", multi) == "hmjmpsaa.frm");
@@ -166,7 +166,7 @@ TEST_CASE("Critter FID names round-trip through FrmId", "[engine][ids][critter]"
     CHECK(CritterFrmResolver::generateCritterFrmName("hmjmps", single) == "hmjmpsab.fr2");
 }
 
-TEST_CASE("Map header elevation flags name the engine bits", "[engine][ids][map]") {
+TEST_CASE("Map header elevation flags name the engine bits", "[engine_ids]") {
     CHECK(Map::elevationFlag(0) == static_cast<uint32_t>(MapHeaderFlags::Elevation0));
     CHECK(Map::elevationFlag(2) == static_cast<uint32_t>(MapHeaderFlags::Elevation2));
     const uint32_t onlyMiddle = static_cast<uint32_t>(MapHeaderFlags::Elevation0) | static_cast<uint32_t>(MapHeaderFlags::Elevation2);

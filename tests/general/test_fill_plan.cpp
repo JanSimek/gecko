@@ -39,7 +39,7 @@ void seedTiles(ControllerFixture& fx) {
 }
 } // namespace
 
-TEST_CASE("plan sink records edits without committing; replay applies them as one undo entry", "[scripting][fill]") {
+TEST_CASE("plan sink records edits without committing; replay applies them as one undo entry", "[fill_plan][scripting]") {
     ScriptApiFixture fx{ false };
     seedTiles(fx);
 
@@ -81,7 +81,7 @@ TEST_CASE("plan sink records edits without committing; replay applies them as on
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 
-TEST_CASE("a captured-then-replayed run yields the same map as a direct run", "[scripting][fill]") {
+TEST_CASE("a captured-then-replayed run yields the same map as a direct run", "[fill_plan][scripting]") {
     // Direct run: mutators commit immediately inside one batch.
     ScriptApiFixture direct{ false };
     seedTiles(direct);
@@ -118,7 +118,7 @@ TEST_CASE("a captured-then-replayed run yields the same map as a direct run", "[
     }
 }
 
-TEST_CASE("placeStamp under a plan sink is captured, not committed", "[scripting][fill][stamper]") {
+TEST_CASE("placeStamp under a plan sink is captured, not committed", "[fill_plan][scripting]") {
     ScriptApiFixture fx{ false };
     seedTiles(fx);
 
@@ -157,7 +157,7 @@ TEST_CASE("placeStamp under a plan sink is captured, not committed", "[scripting
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 
-TEST_CASE("the same seed yields an identical fill plan; a different seed differs", "[scripting][fill]") {
+TEST_CASE("the same seed yields an identical fill plan; a different seed differs", "[fill_plan][scripting]") {
     // A seeded scatter over a strip of hexes, captured into a plan. Reproducibility is the contract
     // that lets a previewed fill match the apply and a saved recipe regenerate the same map.
     const auto buildPlan = [](uint32_t seed) {
@@ -199,7 +199,7 @@ TEST_CASE("the same seed yields an identical fill plan; a different seed differs
     CHECK(differs);
 }
 
-TEST_CASE("area accessors report the bound selection and test membership", "[scripting][fill]") {
+TEST_CASE("area accessors report the bound selection and test membership", "[fill_plan][scripting]") {
     ScriptApiFixture fx{ false };
 
     CHECK_FALSE(fx.api.hasArea());

@@ -54,7 +54,7 @@ private:
 
 } // namespace
 
-TEST_CASE("FillBrushTool paints a deduped stroke inside one batch", "[tools][brush]") {
+TEST_CASE("FillBrushTool paints a deduped stroke inside one batch", "[fill_brush_tool]") {
     BrushHarness h;
     FillBrushTool tool = h.makeTool();
     tool.setTile(271, false);
@@ -82,7 +82,7 @@ TEST_CASE("FillBrushTool paints a deduped stroke inside one batch", "[tools][bru
     CHECK(h.batchLog[1] == "end");
 }
 
-TEST_CASE("FillBrushTool strokes are independent: a new stroke repaints old ground", "[tools][brush]") {
+TEST_CASE("FillBrushTool strokes are independent: a new stroke repaints old ground", "[fill_brush_tool]") {
     BrushHarness h;
     FillBrushTool tool = h.makeTool();
     tool.setTile(300, true);
@@ -98,7 +98,7 @@ TEST_CASE("FillBrushTool strokes are independent: a new stroke repaints old grou
     CHECK(h.batchLog == std::vector<std::string>{ "begin:Fill Brush", "end", "begin:Fill Brush", "end" });
 }
 
-TEST_CASE("FillBrushTool deactivation flushes an open stroke exactly once", "[tools][brush]") {
+TEST_CASE("FillBrushTool deactivation flushes an open stroke exactly once", "[fill_brush_tool]") {
     BrushHarness h;
     FillBrushTool tool = h.makeTool();
     tool.setTile(271, false);
@@ -117,7 +117,7 @@ TEST_CASE("FillBrushTool deactivation flushes an open stroke exactly once", "[to
     REQUIRE(h.batchLog.size() == 2);
 }
 
-TEST_CASE("FillBrushTool leaves right-click and Escape to the host's cancel path", "[tools][brush]") {
+TEST_CASE("FillBrushTool leaves right-click and Escape to the host's cancel path", "[fill_brush_tool]") {
     BrushHarness h;
     FillBrushTool tool = h.makeTool();
     tool.setTile(271, false);
@@ -129,7 +129,7 @@ TEST_CASE("FillBrushTool leaves right-click and Escape to the host's cancel path
     CHECK(h.batchLog.empty());
 }
 
-TEST_CASE("FillBrushTool without a loaded tile paints nothing and opens no batch", "[tools][brush]") {
+TEST_CASE("FillBrushTool without a loaded tile paints nothing and opens no batch", "[fill_brush_tool]") {
     BrushHarness h;
     FillBrushTool tool = h.makeTool();
 
@@ -139,7 +139,7 @@ TEST_CASE("FillBrushTool without a loaded tile paints nothing and opens no batch
     CHECK(tool.buildPreview(BrushHarness::at(5.f)).empty());
 }
 
-TEST_CASE("FillBrushTool skips off-map positions but keeps the stroke alive", "[tools][brush]") {
+TEST_CASE("FillBrushTool skips off-map positions but keeps the stroke alive", "[fill_brush_tool]") {
     BrushHarness h;
     FillBrushTool tool = h.makeTool();
     tool.setTile(271, false);
@@ -156,7 +156,7 @@ TEST_CASE("FillBrushTool skips off-map positions but keeps the stroke alive", "[
     CHECK(h.paints[1].resolvedTile == 2);
 }
 
-TEST_CASE("FillBrushTool ghosts the hovered tile on the loaded layer", "[tools][brush]") {
+TEST_CASE("FillBrushTool ghosts the hovered tile on the loaded layer", "[fill_brush_tool]") {
     BrushHarness h;
     FillBrushTool tool = h.makeTool();
 
@@ -177,7 +177,7 @@ TEST_CASE("FillBrushTool ghosts the hovered tile on the loaded layer", "[tools][
     CHECK(tool.buildPreview(BrushHarness::at(25.f)).empty());
 }
 
-TEST_CASE("FillBrushTool advertises its keys via statusHint", "[tools][brush]") {
+TEST_CASE("FillBrushTool advertises its keys via statusHint", "[fill_brush_tool]") {
     BrushHarness h;
     FillBrushTool tool = h.makeTool();
     CHECK_FALSE(tool.statusHint().empty());

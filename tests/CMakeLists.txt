@@ -12,13 +12,10 @@ add_executable(general_tests
     general/test_map_name_resolver.cpp
     general/test_city_txt.cpp
     general/test_worldmap_txt.cpp
-    general/test_world_encounters.cpp
     general/test_palette_blend.cpp
     general/test_worldmap_scene.cpp
     general/test_quests_txt.cpp
     general/test_endgame_txt.cpp
-    general/test_gvar_tables_txt.cpp
-    general/test_gvar_refs.cpp
     general/test_pro.cpp
     general/test_pro_helper.cpp
     general/test_tile_utils.cpp
@@ -82,13 +79,16 @@ if(GECK_ENABLE_SCRIPTING)
 endif()
 
 # Tests of the headless CLI library (gecko_cli): the analyze/describe/export/find-examples/lint/frm/
-# resource tools, pattern JSON, reachability, the map graph and saved-map loading. None needs scripting or game data.
+# resource/gvar/world-encounter tools, pattern JSON, reachability, the map graph and saved-map loading.
+# None needs scripting or game data.
 if(TARGET gecko_cli)
     target_sources(general_tests PRIVATE
         general/test_cli_tools.cpp
         general/test_engine_tile.cpp
         general/test_find_examples.cpp
         general/test_frm_inspect.cpp
+        general/test_gvar_refs.cpp
+        general/test_gvar_tables_txt.cpp
         general/test_int_disassembler.cpp
         general/test_map_analyzer.cpp
         general/test_map_dump_grid.cpp
@@ -101,6 +101,7 @@ if(TARGET gecko_cli)
         general/test_save_inspect.cpp
         general/test_script_lint.cpp
         general/test_ssl_corpus.cpp
+        general/test_world_encounters.cpp
     )
     target_link_libraries(general_tests PRIVATE gecko_cli)
 endif()
@@ -202,19 +203,21 @@ target_compile_definitions(qt_tests PRIVATE
     GECK_RESOURCES_DIR="${CMAKE_SOURCE_DIR}/resources"
 )
 
-# Catch2 test discovery for general tests (testing is enabled by the top-level CMakeLists)
+# Catch2 test discovery (testing is enabled by the top-level CMakeLists)
 include(Catch)
 
 # In CI environments, use simpler test registration to avoid library loading issues
 if(DEFINED ENV{CI} OR DEFINED ENV{GITHUB_ACTIONS})
-    # Register tests without discovery - this avoids running the executable during configure
+    # Register each suite as one test - this avoids running the executables at build time
     add_test(NAME general_tests COMMAND general_tests)
+    add_test(NAME qt_tests COMMAND qt_tests)
 else()
-    # Use automatic test discovery for local development
+    # Locally, one ctest entry per case, so a crash in one case does not hide the others' results
     catch_discover_tests(general_tests)
+    # The qt cases share the Qt config location (on macOS it is not redirected by the harness's
+    # temporary HOME), and each case clears it, so they must not run concurrently with each other.
+    catch_discover_tests(qt_tests PROPERTIES RESOURCE_LOCK qt_config_location)
 endif()
-
-add_test(NAME qt_tests COMMAND qt_tests)
 
 
 # Windows runtime DLLs for the test executables are staged by copy_runtime_dlls (top-level

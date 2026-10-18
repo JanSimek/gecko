@@ -45,7 +45,7 @@ private:
 
 } // namespace
 
-TEST_CASE("ToolRegistry activates one tool at a time", "[tools]") {
+TEST_CASE("ToolRegistry activates one tool at a time", "[tool_registry]") {
     ToolRegistry registry;
     auto first = std::make_unique<CountingTool>("first");
     auto second = std::make_unique<CountingTool>("second");
@@ -70,7 +70,7 @@ TEST_CASE("ToolRegistry activates one tool at a time", "[tools]") {
     CHECK(secondPtr->deactivations() == 1);
 }
 
-TEST_CASE("ToolRegistry rejects duplicate ids", "[tools]") {
+TEST_CASE("ToolRegistry rejects duplicate ids", "[tool_registry]") {
     ToolRegistry registry;
     auto tool = std::make_unique<CountingTool>("tool");
     const ITool* first = tool.get();
@@ -81,7 +81,7 @@ TEST_CASE("ToolRegistry rejects duplicate ids", "[tools]") {
     CHECK_FALSE(registry.setActiveTool("missing"));
 }
 
-TEST_CASE("ToolRegistry re-activating the active tool is an idempotent no-op", "[tools]") {
+TEST_CASE("ToolRegistry re-activating the active tool is an idempotent no-op", "[tool_registry]") {
     // Documented contract: stateful tools cannot rely on onActivate re-firing when the user
     // re-invokes the already-active tool; they reset via onDeactivate or their own events.
     ToolRegistry registry;

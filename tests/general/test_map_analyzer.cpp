@@ -46,7 +46,7 @@ bool hasEntry(const json& adjacency, int a, int b, const std::string& dir) {
 // its slice of the map's local-variable pool — and a critter's attached `script` carries the same
 // localVars. Built on a synthetic .map written headlessly (no game data mounted): scrname.msg names
 // don't resolve, so this asserts the structural fields, not the friendly names.
-TEST_CASE("analyze surfaces per-section scripts with their local variables", "[cli][analyze][scripts]") {
+TEST_CASE("analyze surfaces per-section scripts with their local variables", "[map_analyzer][cli]") {
     const uint32_t critterPid = ProtoId(ObjectType::Critter, 50).pid();
 
     auto mapFile = Map::createEmptyMapFile();
@@ -139,7 +139,7 @@ TEST_CASE("analyze surfaces per-section scripts with their local variables", "[c
 
 // A stale local_var_count (more than the pool holds) must never read past the LVAR vector: the
 // emitted slice stops at the pool's end rather than over-reading.
-TEST_CASE("analyze clamps a script's local-var slice to the pool", "[cli][analyze][scripts]") {
+TEST_CASE("analyze clamps a script's local-var slice to the pool", "[map_analyzer][cli]") {
     auto mapFile = Map::createEmptyMapFile();
     mapFile.map_local_vars = { 1, 2 };
     mapFile.header.num_local_vars = static_cast<uint32_t>(mapFile.map_local_vars.size());
@@ -161,7 +161,7 @@ TEST_CASE("analyze clamps a script's local-var slice to the pool", "[cli][analyz
 // analyze's `adjacency` is ordered and directional: dir "E" means b sits immediately east (col+1)
 // of a, "S" immediately south (row+1). The reverse direction is the swapped pair, same-tile
 // borders are dropped, and borders against the empty tile are never counted.
-TEST_CASE("analyze emits directional floor-tile adjacency", "[cli][analyze][adjacency]") {
+TEST_CASE("analyze emits directional floor-tile adjacency", "[map_analyzer][cli]") {
     auto mapFile = Map::createEmptyMapFile();
 
     // Row 0: [191][194][194] — one 191->194 east border, one same-id border (dropped).

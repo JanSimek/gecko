@@ -31,7 +31,7 @@ constexpr std::chrono::milliseconds BUDGET{ 60000 }; // every guard's ceiling
 
 } // namespace
 
-TEST_CASE("A cross-thread log flood drains without starving the UI thread", "[qt][performance]") {
+TEST_CASE("A cross-thread log flood drains without starving the UI thread", "[log_panel][performance]") {
     // Full stack: model + panel (filter proxy, tree view, follow-tail scrolling), the way the
     // application wires it. Regression history: one queued event + row insert + scroll relayout
     // PER RECORD made a --debug proto pass (tens of thousands of records) stall the main thread
@@ -58,7 +58,7 @@ TEST_CASE("A cross-thread log flood drains without starving the UI thread", "[qt
     CHECK(elapsed < BUDGET.count());
 }
 
-TEST_CASE("A UI-thread log flood is buffered, not inserted row by row", "[qt][performance]") {
+TEST_CASE("A UI-thread log flood is buffered, not inserted row by row", "[log_panel][performance]") {
     // Regression history: records logged ON the UI thread were inserted one row at a time, and the
     // panel's ResizeToContents columns re-measure every row on each insert, so a script console run
     // under --debug (a debug line per painted tile) spent ~15ms per record and hit the console's
@@ -86,7 +86,7 @@ TEST_CASE("A UI-thread log flood is buffered, not inserted row by row", "[qt][pe
     CHECK(timer.elapsed() < BUDGET.count());
 }
 
-TEST_CASE("File-browser tree population stays within its time budget", "[qt][performance]") {
+TEST_CASE("File-browser tree population stays within its time budget", "[file_browser][performance]") {
     // Regression history: per-row VFS/proto lookups, sorted proxy inserts on repopulation, and
     // an event-loop-starving chunk pump each independently pushed a ~100ms build into the
     // 10-30 second range. 30k synthetic rows through the real population path must stay fast.

@@ -25,7 +25,7 @@ struct EdgeFixture {
 };
 } // namespace
 
-TEST_CASE("EdgeEditService::addZone creates the edge and is undoable", "[edge_edit]") {
+TEST_CASE("EdgeEditService::addZone creates the edge and is undoable", "[edge_edit_service]") {
     EdgeFixture f;
     CHECK_FALSE(f.svc.edge().has_value());
 
@@ -43,7 +43,7 @@ TEST_CASE("EdgeEditService::addZone creates the edge and is undoable", "[edge_ed
     CHECK(f.svc.edge()->elevations[0].zones.size() == 1);
 }
 
-TEST_CASE("EdgeEditService::deleteZone removes the right zone and is undoable", "[edge_edit]") {
+TEST_CASE("EdgeEditService::deleteZone removes the right zone and is undoable", "[edge_edit_service]") {
     EdgeFixture f;
     f.svc.addZone(0, EdgeFixture::seed());
     f.svc.addZone(0, MapEdge::Rect{ 1, 2, 3, 4 });
@@ -58,7 +58,7 @@ TEST_CASE("EdgeEditService::deleteZone removes the right zone and is undoable", 
     CHECK(f.svc.edge()->elevations[0].zones[0] == EdgeFixture::seed());
 }
 
-TEST_CASE("EdgeEditService live side drag previews without undo, commits once", "[edge_edit]") {
+TEST_CASE("EdgeEditService live side drag previews without undo, commits once", "[edge_edit_service]") {
     EdgeFixture f;
     f.svc.addZone(0, EdgeFixture::seed()); // undo entry #1 (creates the edge)
 
@@ -85,7 +85,7 @@ TEST_CASE("EdgeEditService live side drag previews without undo, commits once", 
     CHECK_FALSE(f.stack.canUndo());
 }
 
-TEST_CASE("EdgeEditService::previewZoneSide ignores bad args", "[edge_edit]") {
+TEST_CASE("EdgeEditService::previewZoneSide ignores bad args", "[edge_edit_service]") {
     EdgeFixture f;
     f.svc.addZone(0, EdgeFixture::seed());
 
@@ -96,7 +96,7 @@ TEST_CASE("EdgeEditService::previewZoneSide ignores bad args", "[edge_edit]") {
     CHECK(f.svc.edge()->elevations[0].zones[0] == EdgeFixture::seed());
 }
 
-TEST_CASE("EdgeEditService restore discards a preview without recording", "[edge_edit]") {
+TEST_CASE("EdgeEditService restore discards a preview without recording", "[edge_edit_service]") {
     EdgeFixture f;
     f.svc.addZone(0, EdgeFixture::seed()); // the only undo entry
 
@@ -116,7 +116,7 @@ TEST_CASE("EdgeEditService restore discards a preview without recording", "[edge
     CHECK_FALSE(f.stack.canUndo());
 }
 
-TEST_CASE("EdgeEditService rejects v2 square/clip edits on a v1 edge", "[edge_edit]") {
+TEST_CASE("EdgeEditService rejects v2 square/clip edits on a v1 edge", "[edge_edit_service]") {
     EdgeFixture f;
     f.svc.addZone(0, EdgeFixture::seed()); // edge starts at v1
     REQUIRE(f.svc.edge()->version == 1);
@@ -131,7 +131,7 @@ TEST_CASE("EdgeEditService rejects v2 square/clip edits on a v1 edge", "[edge_ed
     CHECK_FALSE(f.stack.canUndo());
 }
 
-TEST_CASE("EdgeEditService v2 upgrade, clip and reset are undoable", "[edge_edit]") {
+TEST_CASE("EdgeEditService v2 upgrade, clip and reset are undoable", "[edge_edit_service]") {
     EdgeFixture f;
     f.svc.addZone(0, EdgeFixture::seed()); // creates the edge as v1
     CHECK(f.svc.edge()->version == 1);

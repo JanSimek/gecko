@@ -6,7 +6,7 @@
 
 using namespace geck;
 
-TEST_CASE("computeAnimationLayout sizes the canvas to the union of anchored frames", "[animation]") {
+TEST_CASE("computeAnimationLayout sizes the canvas to the union of anchored frames", "[animation_layout]") {
     // Two same-size frames, no offsets: the canvas equals the frame size and both
     // sit at the same place, so playback cannot wobble.
     std::vector<FrameBox> frames{
@@ -23,7 +23,7 @@ TEST_CASE("computeAnimationLayout sizes the canvas to the union of anchored fram
     CHECK(layout.placements[0].top == layout.placements[1].top);
 }
 
-TEST_CASE("computeAnimationLayout keeps a fixed anchor across differing frame sizes", "[animation]") {
+TEST_CASE("computeAnimationLayout keeps a fixed anchor across differing frame sizes", "[animation_layout]") {
     // A narrower/shorter second frame must stay bottom-centre aligned with the
     // first, not be re-centred — that re-centring is the jitter we are fixing.
     std::vector<FrameBox> frames{
@@ -45,7 +45,7 @@ TEST_CASE("computeAnimationLayout keeps a fixed anchor across differing frame si
     CHECK(a.top + a.height == b.top + b.height);
 }
 
-TEST_CASE("computeAnimationLayout accumulates per-frame offsets", "[animation]") {
+TEST_CASE("computeAnimationLayout accumulates per-frame offsets", "[animation_layout]") {
     // Each frame shifts by (+2, +1) cumulatively; the canvas must grow to contain
     // the whole travelled path and placements must step by the same delta.
     std::vector<FrameBox> frames{
@@ -66,7 +66,7 @@ TEST_CASE("computeAnimationLayout accumulates per-frame offsets", "[animation]")
     CHECK(layout.placements[1].top - layout.placements[0].top == 1);
 }
 
-TEST_CASE("computeAnimationLayout ignores empty frames when sizing", "[animation]") {
+TEST_CASE("computeAnimationLayout ignores empty frames when sizing", "[animation_layout]") {
     std::vector<FrameBox> frames{
         { 0, 0, 0, 0 }, // empty: keeps a slot, does not size the canvas
         { 0, 0, 8, 8 },
@@ -79,12 +79,12 @@ TEST_CASE("computeAnimationLayout ignores empty frames when sizing", "[animation
     REQUIRE(layout.placements.size() == 2); // empty frame still has a placement slot
 }
 
-TEST_CASE("computeAnimationLayout reports invalid for no renderable frames", "[animation]") {
+TEST_CASE("computeAnimationLayout reports invalid for no renderable frames", "[animation_layout]") {
     CHECK_FALSE(computeAnimationLayout({}).valid());
     CHECK_FALSE(computeAnimationLayout({ { 0, 0, 0, 0 } }).valid());
 }
 
-TEST_CASE("computeAnimationLayout rejects an implausibly large canvas", "[animation]") {
+TEST_CASE("computeAnimationLayout rejects an implausibly large canvas", "[animation_layout]") {
     // A corrupt FRM with a huge frame must not produce a giant-canvas allocation.
     const int tooBig = MAX_ANIMATION_CANVAS_DIMENSION + 1;
     CHECK_FALSE(computeAnimationLayout({ { 0, 0, tooBig, 10 } }).valid());

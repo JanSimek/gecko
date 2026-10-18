@@ -17,7 +17,7 @@ namespace {
 // scrname.msg names scripts at id (0-based scripts.lst index + 101). resource::scriptDisplayName must
 // apply exactly that offset, and degrade to "" when the file or entry is absent (callers then show the
 // bare .lst name).
-TEST_CASE("scriptDisplayName resolves scrname.msg[programIndex + 101]", "[scriptnames]") {
+TEST_CASE("scriptDisplayName resolves scrname.msg[programIndex + 101]", "[script_names]") {
     test::DataTree tree{ "scriptnames_test" };
     tree.write("text/english/game/scrname.msg",
         "{101}{}{Combat AI}\n"
@@ -31,7 +31,7 @@ TEST_CASE("scriptDisplayName resolves scrname.msg[programIndex + 101]", "[script
     CHECK(resource::scriptDisplayName(resources, 50).empty());       // no id 151 in the file
 }
 
-TEST_CASE("scriptDisplayName is empty when scrname.msg isn't mounted", "[scriptnames]") {
+TEST_CASE("scriptDisplayName is empty when scrname.msg isn't mounted", "[script_names]") {
     resource::GameResources resources; // nothing mounted
     CHECK(resource::scriptDisplayName(resources, 0).empty());
 }
@@ -39,7 +39,7 @@ TEST_CASE("scriptDisplayName is empty when scrname.msg isn't mounted", "[scriptn
 // scriptDescription is the label the editor shows for a script program: prefer the scrname.msg name,
 // then fall back to the scripts.lst trailing comment (which names spatial/generic scripts scrname.msg
 // leaves blank), then "" so callers show the bare .int filename.
-TEST_CASE("scriptDescription falls back to the scripts.lst comment when scrname.msg is blank", "[scriptnames]") {
+TEST_CASE("scriptDescription falls back to the scripts.lst comment when scrname.msg is blank", "[script_names]") {
     test::DataTree tree{ "scriptdesc_test" };
 
     // scrname.msg names only index 0 (id 101).

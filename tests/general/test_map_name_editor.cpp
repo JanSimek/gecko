@@ -16,7 +16,7 @@ namespace fs = std::filesystem;
 using geck::io::readFile;
 using geck::test::writeFile;
 
-TEST_CASE("saveMapNames writes lookup_name and/or display name to the writable overlay", "[mapnameeditor]") {
+TEST_CASE("saveMapNames writes lookup_name and/or display name to the writable overlay", "[map_name_editor]") {
     const test::TempDir baseDir{ "mne_ok" };
     const fs::path& base = baseDir.path();
     const fs::path source = base / "source";
@@ -46,7 +46,7 @@ TEST_CASE("saveMapNames writes lookup_name and/or display name to the writable o
     }
 }
 
-TEST_CASE("saveMapNames hard-blocks an edit that would make maps.txt invalid, writing nothing", "[mapnameeditor]") {
+TEST_CASE("saveMapNames hard-blocks an edit that would make maps.txt invalid, writing nothing", "[map_name_editor]") {
     const test::TempDir baseDir{ "mne_invalid" };
     const fs::path& base = baseDir.path();
     const fs::path source = base / "source";
@@ -67,7 +67,7 @@ TEST_CASE("saveMapNames hard-blocks an edit that would make maps.txt invalid, wr
     }
 }
 
-TEST_CASE("saveMapNames reports a missing lookup_name key (no write)", "[mapnameeditor]") {
+TEST_CASE("saveMapNames reports a missing lookup_name key (no write)", "[map_name_editor]") {
     const test::TempDir baseDir{ "mne_nokey" };
     const fs::path& base = baseDir.path();
     const fs::path source = base / "source";

@@ -35,7 +35,7 @@ nlohmann::json run(const fs::path& root, Build build) {
 
 } // namespace
 
-TEST_CASE("parseHolodiskTxt and parseKarmaVarTxt read the engine's flat gvar tables", "[gvar_tables]") {
+TEST_CASE("parseHolodiskTxt and parseKarmaVarTxt read the engine's flat gvar tables", "[gvar_tables_txt]") {
     const HolodiskTxt holodisks = parseHolodiskTxt(std::string{ "# gvar, title, text\n#214, 400, 1000\n220, 401, 2000\n221 402\n" });
     REQUIRE(holodisks.holodisks.size() == 1); // the commented row and the short row are skipped
     CHECK(holodisks.holodisks[0].gvar == 220);
@@ -50,7 +50,7 @@ TEST_CASE("parseHolodiskTxt and parseKarmaVarTxt read the engine's flat gvar tab
     CHECK(karma.entries[1].description == 1101);
 }
 
-TEST_CASE("parsePartyTxt reads members up to the first missing index", "[gvar_tables]") {
+TEST_CASE("parsePartyTxt reads members up to the first missing index", "[gvar_tables_txt]") {
     const PartyTxt party = parsePartyTxt(std::string{ "[Party Member 0]   ; Player\n"
                                                       "party_member_pid=16777216\n"
                                                       "level_pids=-1\n"
@@ -79,14 +79,14 @@ TEST_CASE("parsePartyTxt reads members up to the first missing index", "[gvar_ta
     CHECK(party.members[0].levelPids.empty());
 }
 
-TEST_CASE("Party member level fields need level_up_every", "[gvar_tables]") {
+TEST_CASE("parsePartyTxt ignores level fields without level_up_every", "[gvar_tables_txt]") {
     const PartyTxt party = parsePartyTxt(std::string{ "[Party Member 0]\nparty_member_pid=1\nlevel_minimum=3\nlevel_pids=5,6\n" });
     REQUIRE(party.members.size() == 1);
     CHECK(party.members[0].levelMinimum == 0);
     CHECK(party.members[0].levelPids.empty());
 }
 
-TEST_CASE("The endings, gvars and party tools surface the engine tables", "[gvar_tables]") {
+TEST_CASE("The endings, gvars and party tools surface the engine tables", "[gvar_tables_txt][cli]") {
     const test::TempDir rootDir{ "gvar_tables_data" };
     const fs::path& root = rootDir.path();
     writeFile(root / "data" / "vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_REP :=0;\nGVAR_DISK :=0;\nGVAR_END :=0;\n");

@@ -12,7 +12,7 @@ namespace fs = std::filesystem;
 // DataFileSystem::addDataPath tests
 // =============================================================================
 
-TEST_CASE("DataFileSystem mounts a .dat file path", "[paths][dfs]") {
+TEST_CASE("DataFileSystem mounts a .dat file path", "[data_file_system]") {
     const geck::test::TempDir root("dfs_missing_dat");
 
     // We can't easily create a valid .dat file, but we can verify addDataPath
@@ -21,22 +21,22 @@ TEST_CASE("DataFileSystem mounts a .dat file path", "[paths][dfs]") {
     dfs.addDataPath(root.path() / "nonexistent.dat");
 
     // Should not crash and the VFS should have no files
-    REQUIRE(dfs.list("*").empty());
+    CHECK(dfs.list("*").empty());
 }
 
-TEST_CASE("DataFileSystem skips empty resolved mount roots", "[paths][dfs]") {
+TEST_CASE("DataFileSystem skips empty resolved mount roots", "[data_file_system]") {
     geck::resource::DataFileSystem dfs;
 
     // Empty path should be handled gracefully
     dfs.addDataPath(fs::path{ });
-    REQUIRE(dfs.list("*").empty());
+    CHECK(dfs.list("*").empty());
 }
 
 #ifdef __APPLE__
 
 // Integration: the mount goes through util::resolveGameDataRoot (its bundle cases are covered in
 // test_game_data_path_resolver), so a GOG .app mounts its wrapped game root and nothing else.
-TEST_CASE("DataFileSystem mounts a macOS .app bundle only through its GOG wrapper", "[paths][dfs][macos]") {
+TEST_CASE("DataFileSystem mounts a macOS .app bundle only through its GOG wrapper", "[data_file_system][macos]") {
     const geck::test::TempDir root("dfs_app");
 
     SECTION("the wrapped game root is mounted") {
@@ -68,7 +68,7 @@ TEST_CASE("DataFileSystem mounts a macOS .app bundle only through its GOG wrappe
 // Edge cases
 // =============================================================================
 
-TEST_CASE("DataFileSystem handles multiple addDataPath calls", "[paths][dfs]") {
+TEST_CASE("DataFileSystem handles multiple addDataPath calls", "[data_file_system]") {
     const geck::test::TempDir root1("dfs_multi_1");
     const geck::test::TempDir root2("dfs_multi_2");
 
@@ -79,11 +79,11 @@ TEST_CASE("DataFileSystem handles multiple addDataPath calls", "[paths][dfs]") {
     dfs.addDataPath(root1.path());
     dfs.addDataPath(root2.path());
 
-    REQUIRE(dfs.exists("data/maps/map1.map"));
-    REQUIRE(dfs.exists("data/maps/map2.map"));
+    CHECK(dfs.exists("data/maps/map1.map"));
+    CHECK(dfs.exists("data/maps/map2.map"));
 }
 
-TEST_CASE("DataFileSystem clear removes all mounted paths", "[paths][dfs]") {
+TEST_CASE("DataFileSystem clear removes all mounted paths", "[data_file_system]") {
     const geck::test::TempDir root("dfs_clear");
 
     geck::test::writeFile(root.path() / "data/maps/test.map", "");
@@ -93,10 +93,10 @@ TEST_CASE("DataFileSystem clear removes all mounted paths", "[paths][dfs]") {
     REQUIRE(dfs.exists("data/maps/test.map"));
 
     dfs.clear();
-    REQUIRE_FALSE(dfs.exists("data/maps/test.map"));
+    CHECK_FALSE(dfs.exists("data/maps/test.map"));
 }
 
-TEST_CASE("DataFileSystem mounts a data tree as given", "[paths][vfs]") {
+TEST_CASE("DataFileSystem mounts a data tree as given", "[data_file_system]") {
     const geck::test::TempDir tmp{ "dfs_layout" };
     geck::test::writeFile(tmp.path() / "data/maps.txt", ""); // the data tree's own data/maps.txt
     geck::test::writeFile(tmp.path() / "proto/scenery/scenery.lst", "");
@@ -112,7 +112,7 @@ TEST_CASE("DataFileSystem mounts a data tree as given", "[paths][vfs]") {
 // `data` files landed at "/data/proto/..." - a path nothing looks up - and master.dat answered
 // instead. A Restoration Project map then hit PIDs past the end of vanilla's proto lists and failed
 // to load at all ("PID index out of range").
-TEST_CASE("DataFileSystem mounts an install folder's loose data files", "[paths][vfs]") {
+TEST_CASE("DataFileSystem mounts an install folder's loose data files", "[data_file_system]") {
     const geck::test::TempDir tmp{ "dfs_layout" };
     geck::test::writeFile(tmp.path() / "master.dat", "");
     geck::test::writeFile(tmp.path() / "data/proto/scenery/scenery.lst", "");
@@ -120,14 +120,14 @@ TEST_CASE("DataFileSystem mounts an install folder's loose data files", "[paths]
     geck::resource::DataFileSystem dfs;
     dfs.addDataPath(tmp.path());
 
-    REQUIRE(dfs.exists("proto/scenery/scenery.lst"));
+    CHECK(dfs.exists("proto/scenery/scenery.lst"));
 }
 
 // Regression for "edited .gam resets on reload": vfspp's NativeFileSystem builds its file list once at
 // mount and never rescans, so a file written to a mounted directory afterwards (e.g. a saved .gam under
 // a writable data path) stays invisible to readRawBytes — the archived copy is read back instead.
 // refresh() must re-expose it.
-TEST_CASE("DataFileSystem::refresh exposes files written after mount", "[vfs][refresh]") {
+TEST_CASE("DataFileSystem::refresh exposes files written after mount", "[data_file_system]") {
     const geck::test::TempDir tmp{ "geck_refresh_test" };
     const auto& root = tmp.path();
 

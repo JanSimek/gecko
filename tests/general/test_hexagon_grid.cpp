@@ -11,7 +11,7 @@
 
 using namespace geck;
 
-TEST_CASE("HexagonGrid validates positions and converts to tiles", "[hex_grid]") {
+TEST_CASE("HexagonGrid validates positions and converts to tiles", "[hexagon_grid]") {
     HexagonGrid grid;
 
     SECTION("position bounds reflect the grid size") {
@@ -32,8 +32,7 @@ TEST_CASE("HexagonGrid validates positions and converts to tiles", "[hex_grid]")
     }
 }
 
-TEST_CASE("tileIndexToHexIndex picks a tile's top-left hex and round-trips through tileIndexForPosition",
-    "[hex_grid]") {
+TEST_CASE("tileIndexToHexIndex picks a tile's top-left hex and round-trips through tileIndexForPosition", "[hexagon_grid]") {
     const HexagonGrid grid;
 
     CHECK(tileIndexToHexIndex(0) == 0);
@@ -86,7 +85,7 @@ std::set<int> connectedWithin(const std::set<int>& region, int start) {
 }
 } // namespace
 
-TEST_CASE("HexagonGrid screenRectangleBorderPositions follows the screen rectangle", "[hex_grid]") {
+TEST_CASE("HexagonGrid screenRectangleBorderPositions follows the screen rectangle", "[hexagon_grid]") {
     HexagonGrid grid;
     const auto hexAt = [&grid](int position) -> const Hex& {
         return grid.getHexByPosition(static_cast<uint32_t>(position))->get();
@@ -127,7 +126,7 @@ TEST_CASE("HexagonGrid screenRectangleBorderPositions follows the screen rectang
     CHECK(grid.screenRectangleBorderPositions(-100.f, -100.f, -50.f, -50.f).empty());
 }
 
-TEST_CASE("HexagonGrid position<->coordinates round-trip over the whole grid", "[hex_grid]") {
+TEST_CASE("HexagonGrid position<->coordinates round-trip over the whole grid", "[hexagon_grid]") {
     HexagonGrid grid;
 
     // Row-major mapping: position = y * GRID_WIDTH + x.
@@ -156,7 +155,7 @@ TEST_CASE("HexagonGrid position<->coordinates round-trip over the whole grid", "
     }
 }
 
-TEST_CASE("HexagonGrid rejects out-of-range positions and coordinates", "[hex_grid]") {
+TEST_CASE("HexagonGrid rejects out-of-range positions and coordinates", "[hexagon_grid]") {
     HexagonGrid grid;
 
     CHECK_FALSE(grid.coordinatesForPosition(-1).has_value());
@@ -169,7 +168,7 @@ TEST_CASE("HexagonGrid rejects out-of-range positions and coordinates", "[hex_gr
     CHECK_FALSE(grid.positionForCoordinates(0, HexagonGrid::GRID_HEIGHT).has_value());
 }
 
-TEST_CASE("HexagonGrid positionAt resolves a screen point to the hex sitting there", "[hex_grid]") {
+TEST_CASE("HexagonGrid positionAt resolves a screen point to the hex sitting there", "[hexagon_grid]") {
     HexagonGrid grid;
 
     // A hex's own logical (x, y) must resolve back to a hex at that exact point

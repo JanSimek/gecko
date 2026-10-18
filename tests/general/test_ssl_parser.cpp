@@ -70,7 +70,7 @@ std::string grouping(const std::string& text) {
 
 } // namespace
 
-TEST_CASE("Parser groups operators with sslc's precedence", "[ssl][parser]") {
+TEST_CASE("Parser groups operators with sslc's precedence", "[ssl_parser][ssl]") {
     CHECK(grouping("1 + 2 * 3") == "(1 + (2 * 3))");
     CHECK(grouping("a - b - c") == "((a - b) - c)");
     CHECK(grouping("a == 1 and b != 2 or c") == "(((a == 1) and (b != 2)) or c)");
@@ -83,7 +83,7 @@ TEST_CASE("Parser groups operators with sslc's precedence", "[ssl][parser]") {
     CHECK(grouping("A AND B") == "(A and B)"); // keywords are case-insensitive
 }
 
-TEST_CASE("Parser reads declarations: procedures, forward declarations, variables, imports", "[ssl][parser]") {
+TEST_CASE("Parser reads declarations: procedures, forward declarations, variables, imports", "[ssl_parser][ssl]") {
     const ScriptUnit unit = parseSsl(R"ssl(
 variable counter := 0;
 variable begin first; second := 2; end
@@ -117,7 +117,7 @@ end
     CHECK(locals.variables[1].arraySize != nullptr);
 }
 
-TEST_CASE("Parser reads every statement form", "[ssl][parser]") {
+TEST_CASE("Parser reads every statement form", "[ssl_parser][ssl]") {
     const ScriptUnit unit = parseSsl(R"ssl(
 procedure p begin
    if (a) then b := 1; else begin c += 2; end
@@ -162,7 +162,7 @@ end
     CHECK(std::holds_alternative<Empty>(statements[12]->node));
 }
 
-TEST_CASE("Parser reports a syntax error where it was written and reads on", "[ssl][parser]") {
+TEST_CASE("Parser reports a syntax error where it was written and reads on", "[ssl_parser][ssl]") {
     const ScriptUnit unit = parseSsl(R"ssl(
 procedure broken begin
    x := ;
@@ -180,7 +180,7 @@ end
     CHECK(unit.program().definition("fine") != nullptr);
 }
 
-TEST_CASE("Parser locates code a macro wrote at the line that used the macro", "[ssl][parser]") {
+TEST_CASE("Parser locates code a macro wrote at the line that used the macro", "[ssl_parser][ssl]") {
     const ScriptUnit unit = parseSsl("#define give(x) give_exp_points(x)\n#define REWARD (100)\nprocedure p begin\n   give(REWARD);\nend\n");
     REQUIRE(unit.diagnostics().empty());
     const auto& statement = *unit.program().procedures.at(0).body->statements.at(0);
@@ -190,7 +190,7 @@ TEST_CASE("Parser locates code a macro wrote at the line that used the macro", "
     CHECK(unit.evaluate(*std::get<Call>(call.node).args.at(0)) == 100);
 }
 
-TEST_CASE("forEachExpression visits nested expressions and statements", "[ssl][parser]") {
+TEST_CASE("forEachExpression visits nested expressions and statements", "[ssl_parser][ssl]") {
     const ScriptUnit unit = parseSsl(R"ssl(
 procedure p begin
    if (a(1)) then begin

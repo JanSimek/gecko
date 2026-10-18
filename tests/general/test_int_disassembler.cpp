@@ -49,7 +49,7 @@ std::vector<uint8_t> buildProgram() {
 
 } // namespace
 
-TEST_CASE("disassembleInt decodes the procedure table, pushes and global-variable annotations", "[int_disassembler]") {
+TEST_CASE("disassembleInt decodes the procedure table, pushes and global-variable annotations", "[int_disassembler][ssl]") {
     const auto bytes = buildProgram();
     const std::vector<std::string> globals{ "GVAR_A", "GVAR_B" };
     const auto program = ssl::disassembleInt(bytes, &globals);
@@ -70,7 +70,7 @@ TEST_CASE("disassembleInt decodes the procedure table, pushes and global-variabl
     CHECK(procedure.code[6].name == "OPCODE_EXIT_PROGRAM");
 }
 
-TEST_CASE("disassembleInt names only literal global-variable indices", "[int_disassembler]") {
+TEST_CASE("disassembleInt names only literal global-variable indices", "[int_disassembler][ssl]") {
     // push 1, push 1, OPCODE_ADD, op_get_global_var: the index is computed, so it is left unnamed.
     test::ByteWriter bytes;
     bytes.fill(0, 42);
@@ -102,7 +102,7 @@ TEST_CASE("disassembleInt names only literal global-variable indices", "[int_dis
     CHECK(unnamed.procedures.at(0).code.at(1).note.empty());
 }
 
-TEST_CASE("disassembleInt accepts a script without static strings", "[int_disassembler]") {
+TEST_CASE("disassembleInt accepts a script without static strings", "[int_disassembler][ssl]") {
     // Shipped scripts with no string literals store -1 as the static-string table length.
     test::ByteWriter bytes;
     bytes.fill(0, 42);
@@ -122,7 +122,7 @@ TEST_CASE("disassembleInt accepts a script without static strings", "[int_disass
     CHECK(program.procedures[0].code[0].name == "OPCODE_EXIT_PROGRAM");
 }
 
-TEST_CASE("disassembleInt disassembles a conditional procedure's condition", "[int_disassembler]") {
+TEST_CASE("disassembleInt disassembles a conditional procedure's condition", "[int_disassembler][ssl]") {
     // The body (OPCODE_EXIT_PROGRAM) is followed by the condition (push 1, OPCODE_POP_RETURN). The
     // condition offset only bounds the body; the condition itself must still come back.
     test::ByteWriter bytes;
@@ -154,13 +154,13 @@ TEST_CASE("disassembleInt disassembles a conditional procedure's condition", "[i
     CHECK(procedure.condition[1].name == "OPCODE_POP_RETURN");
 }
 
-TEST_CASE("disassembleInt rejects tables that point outside the file", "[int_disassembler]") {
+TEST_CASE("disassembleInt rejects tables that point outside the file", "[int_disassembler][ssl]") {
     auto bytes = buildProgram();
     bytes.resize(50);
     CHECK_THROWS_AS(ssl::disassembleInt(bytes), std::runtime_error);
 }
 
-TEST_CASE("disassembleInt reads an imported or exported variable's name from the identifier table", "[int_disassembler]") {
+TEST_CASE("disassembleInt reads an imported or exported variable's name from the identifier table", "[int_disassembler][ssl]") {
     // Vanilla wientdor.int: no static strings, and `push "<name>"; STORE_EXTERNAL` with the name's
     // offset into the identifier table, where the engine's programGetIdentifier reads it.
     test::ByteWriter code;

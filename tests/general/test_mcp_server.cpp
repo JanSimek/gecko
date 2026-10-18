@@ -231,7 +231,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
 }
 
 #ifdef GECK_SCRIPTING_ENABLED
-TEST_CASE("McpServer generate stops a runaway script and stays responsive", "[mcp][generate]") {
+TEST_CASE("McpServer generate stops a runaway script and stays responsive", "[mcp][scripting]") {
     resource::GameResources resources;
     mcp::McpServer server(resources);
     geck::test::TempFile script{ "geck_mcp_loop", ".luau" };

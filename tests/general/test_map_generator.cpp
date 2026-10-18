@@ -16,7 +16,7 @@
 
 using namespace geck;
 
-TEST_CASE("gecko-cli generate runs a tile script and writes a reloadable map", "[cli][generate]") {
+TEST_CASE("gecko-cli generate runs a tile script and writes a reloadable map", "[map_generator][cli][scripting]") {
     geck::test::TempFile scriptFile{ "geck_gen_script", ".luau" };
     geck::test::TempFile mapFile{ "geck_gen_out", ".map" };
 
@@ -42,7 +42,7 @@ TEST_CASE("gecko-cli generate runs a tile script and writes a reloadable map", "
     }
 }
 
-TEST_CASE("gecko-cli generate --in decorates an existing map", "[cli][generate]") {
+TEST_CASE("gecko-cli generate --in decorates an existing map", "[map_generator][cli][scripting]") {
     geck::test::TempFile baseScript{ "geck_gen_in_base", ".luau" };
     geck::test::TempFile decorScript{ "geck_gen_in_decor", ".luau" };
     geck::test::TempFile baseMap{ "geck_gen_in_basemap", ".map" };
@@ -77,7 +77,7 @@ TEST_CASE("gecko-cli generate --in decorates an existing map", "[cli][generate]"
     }
 }
 
-TEST_CASE("gecko-cli generate --count writes N maps with consecutive seeds", "[cli][generate]") {
+TEST_CASE("gecko-cli generate --count writes N maps with consecutive seeds", "[map_generator][cli][scripting]") {
     geck::test::TempFile scriptFile{ "geck_gen_batch_script", ".luau" };
     // count=3 derives <out>_1.map .. <out>_3.map from the base out path, all in a scratch directory
     // that removes them afterwards.
@@ -103,7 +103,7 @@ TEST_CASE("gecko-cli generate --count writes N maps with consecutive seeds", "[c
     }
 }
 
-TEST_CASE("gecko-cli generate validates its inputs", "[cli][generate]") {
+TEST_CASE("gecko-cli generate validates its inputs", "[map_generator][cli][scripting]") {
     geck::resource::GameResources resources;
     std::ostringstream log;
     // Both cases fail before writing, so the file is never created — but route the out path
@@ -149,7 +149,7 @@ TEST_CASE("gecko-cli generate validates its inputs", "[cli][generate]") {
     }
 }
 
-TEST_CASE("gecko-cli generate stops a script that outruns its time budget", "[cli][generate]") {
+TEST_CASE("gecko-cli generate stops a script that outruns its time budget", "[map_generator][cli][scripting]") {
     geck::test::TempFile scriptFile{ "geck_gen_loop", ".luau" };
     geck::test::TempFile mapFile{ "geck_gen_loop_out", ".map" };
     geck::test::writeFile(scriptFile.path(), "while true do end");
@@ -165,7 +165,7 @@ TEST_CASE("gecko-cli generate stops a script that outruns its time budget", "[cl
     CHECK(log.str().find("time budget") != std::string::npos);
 }
 
-TEST_CASE("gecko-cli generate --in keeps the map edge of the map it decorates", "[cli][generate][map_edge]") {
+TEST_CASE("gecko-cli generate --in keeps the map edge of the map it decorates", "[map_generator][cli][scripting]") {
     geck::test::TempFile baseScript{ "geck_gen_edge_base", ".luau" };
     geck::test::TempFile baseMap{ "geck_gen_edge_base", ".map" };
     geck::test::TempFile baseEdge{ "geck_gen_edge_base", ".EDG" };

@@ -16,7 +16,7 @@ using namespace geck;
 // scripts.lst, or tile art, so every index-backed check degrades to its "not mounted" reason —
 // exactly the state the scan must report rather than throw on.
 
-TEST_CASE("scanMapCompleteness reports an empty map as complete", "[completeness]") {
+TEST_CASE("scanMapCompleteness reports an empty map as complete", "[map_completeness]") {
     resource::GameResources resources;
     resources.files().addDataPath(test::f2ResDat());
     auto map = test::mapOf();
@@ -35,7 +35,7 @@ TEST_CASE("scanMapCompleteness reports an empty map as complete", "[completeness
     CHECK(report.mounts.front().kind == resource::MountedSourceInfo::Kind::Dat);
 }
 
-TEST_CASE("scanMapCompleteness reports used tiles that no index can resolve", "[completeness]") {
+TEST_CASE("scanMapCompleteness reports used tiles that no index can resolve", "[map_completeness]") {
     resource::GameResources resources;
     resources.files().addDataPath(test::f2ResDat());
     auto map = test::mapOf();
@@ -53,7 +53,7 @@ TEST_CASE("scanMapCompleteness reports used tiles that no index can resolve", "[
     CHECK_FALSE(report.complete());
 }
 
-TEST_CASE("scanMapCompleteness reports unresolvable object sprites, skipping inventory children", "[completeness]") {
+TEST_CASE("scanMapCompleteness reports unresolvable object sprites, skipping inventory children", "[map_completeness]") {
     resource::GameResources resources;
     resources.files().addDataPath(test::f2ResDat());
     auto map = test::mapOf();
@@ -71,7 +71,7 @@ TEST_CASE("scanMapCompleteness reports unresolvable object sprites, skipping inv
     CHECK(report.missingObjectArt[0].reason == "FID does not resolve");
 }
 
-TEST_CASE("scanMapCompleteness reports script references from the header and the script sections", "[completeness]") {
+TEST_CASE("scanMapCompleteness reports script references from the header and the script sections", "[map_completeness]") {
     resource::GameResources resources;
     resources.files().addDataPath(test::f2ResDat());
     auto map = test::mapOf();

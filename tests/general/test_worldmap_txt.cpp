@@ -31,7 +31,7 @@ type_00=ratio:100%, pid:16777276, Distance:3
 )";
 } // namespace
 
-TEST_CASE("parseWorldmapTxt reads terrain types and encounter groups", "[worldmap]") {
+TEST_CASE("parseWorldmapTxt reads terrain types and encounter groups", "[worldmap_txt]") {
     const WorldmapTxt world = parseWorldmapTxt(std::string{ kWorldmapTxt });
 
     REQUIRE(world.terrains.size() == 4);
@@ -67,7 +67,7 @@ TEST_CASE("parseWorldmapTxt reads terrain types and encounter groups", "[worldma
     CHECK(world.frequencyPercent == std::array<int, 6>{});
 }
 
-TEST_CASE("parseWorldmapTxt reads the [Tile NN] grid and terrainAt maps pixels to terrain", "[worldmap]") {
+TEST_CASE("parseWorldmapTxt reads the [Tile NN] grid and terrainAt maps pixels to terrain", "[worldmap_txt]") {
     constexpr const char* kTiles = R"(
 [Data]
 terrain_types=Desert:1, Mountain:4, Ocean:2
@@ -122,7 +122,7 @@ encounter_difficulty=3
     CHECK(world.subtileAt(-1, 0) == nullptr);
 }
 
-TEST_CASE("parseWorldmapTxt reads encounter frequencies and tables as the engine does", "[worldmap]") {
+TEST_CASE("parseWorldmapTxt reads encounter frequencies and tables as the engine does", "[worldmap_txt]") {
     constexpr const char* kTables = R"(
 [Data]
 Forced=100%
@@ -199,7 +199,7 @@ art_idx=339
     CHECK(world.findEncounterTable("Orphan") == nullptr);
 }
 
-TEST_CASE("parseWorldmapTxt tolerates empty input", "[worldmap]") {
+TEST_CASE("parseWorldmapTxt tolerates empty input", "[worldmap_txt]") {
     CHECK(parseWorldmapTxt(std::string{}).encounters.empty());
     CHECK(parseWorldmapTxt(std::string{}).terrains.empty());
     CHECK(parseWorldmapTxt(std::string{}).terrainAt(0, 0).empty());

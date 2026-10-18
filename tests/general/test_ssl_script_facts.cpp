@@ -43,7 +43,7 @@ ScriptFacts inspect(const std::string& script) {
 
 } // namespace
 
-TEST_CASE("readFacts reads the team and AI packet a script sets on itself, with their values", "[ssl][facts]") {
+TEST_CASE("readFacts reads the team and AI packet a script sets on itself, with their values", "[ssl_script_facts][ssl]") {
     // RP arroyo/acvillgr.ssl: every villager is given the villager packet on each map entry.
     const auto facts = inspect(R"ssl(
 procedure map_enter_p_proc;
@@ -67,7 +67,7 @@ end
     CHECK(ai.line == 10); // the five #includes, the blank line, then the procedure
 }
 
-TEST_CASE("readFacts finds the opcode through any macro, and only where it runs", "[ssl][facts]") {
+TEST_CASE("readFacts finds the opcode through any macro, and only where it runs", "[ssl_script_facts][ssl]") {
     const auto facts = inspect(R"ssl(
 #define become_hostile set_ai(self_obj, 7)
 #define unused_helper set_self_team(3)
@@ -90,7 +90,7 @@ end
     CHECK(facts.overrides[1].value == 4);
 }
 
-TEST_CASE("readFacts attributes a call to the procedure it is in", "[ssl][facts]") {
+TEST_CASE("readFacts attributes a call to the procedure it is in", "[ssl_script_facts][ssl]") {
     const auto facts = inspect(R"ssl(
 procedure helper(variable who) begin
    if (who) then begin
@@ -107,7 +107,7 @@ end
     CHECK(facts.overrides[1].procedure == "map_enter_p_proc");
 }
 
-TEST_CASE("readFacts ignores code the compiled script does not run", "[ssl][facts]") {
+TEST_CASE("readFacts ignores code the compiled script does not run", "[ssl_script_facts][ssl]") {
     // sslc drops a procedure nothing calls, and the branch of an `if` on a constant that can't run.
     const auto facts = inspect(R"ssl(
 #define USE_BERSERK false
@@ -123,7 +123,7 @@ end
     CHECK(facts.overrides[0].value == 6);
 }
 
-TEST_CASE("readFacts still recognises the command.h aliases when the headers are missing", "[ssl][facts]") {
+TEST_CASE("readFacts still recognises the command.h aliases when the headers are missing", "[ssl_script_facts][ssl]") {
     MemorySourceProvider files;
     files.add("script.ssl", "#include \"../headers/command.h\"\nprocedure map_enter_p_proc begin\n set_self_ai(AI_X);\nend\n");
     const auto facts = readFacts(ScriptUnit::load(files, "script.ssl"));
@@ -134,7 +134,7 @@ TEST_CASE("readFacts still recognises the command.h aliases when the headers are
     CHECK(facts.problems[0] == "script.ssl:1: cannot open include file ../headers/command.h");
 }
 
-TEST_CASE("readFacts names local variables from the script and the headers it includes", "[ssl][facts]") {
+TEST_CASE("readFacts names local variables from the script and the headers it includes", "[ssl_script_facts][ssl]") {
     // RP: 560 scripts take LVAR 0-3 from modreact.h or doors_containers.h and number their own from 4.
     const auto facts = inspect(R"ssl(
 #define LVAR_Herebefore                 (4)

@@ -26,7 +26,7 @@ nlohmann::json runFindGvar(const fs::path& root, const std::string& gvar) {
 
 } // namespace
 
-TEST_CASE("findGvarRefs reports the reads and writes compiled code makes, through macro aliases", "[gvar_refs]") {
+TEST_CASE("findGvarRefs reports the reads and writes compiled code makes, through macro aliases", "[gvar_refs][cli]") {
     const test::TempDir rootDir{ "gvar_refs_src" };
     const fs::path& root = rootDir.path();
     writeFile(root / "headers" / "global.h", "#define GVAR_FOO (7)\n#define GVAR_FOOBAR (8)\n");
@@ -64,7 +64,7 @@ TEST_CASE("findGvarRefs reports the reads and writes compiled code makes, throug
     CHECK(refs[2]["via"] == "get_foo");
 }
 
-TEST_CASE("findGvarRefs: unused-with-sources is success, no-sources is an error", "[gvar_refs]") {
+TEST_CASE("findGvarRefs reports an unused gvar as success but no mounted sources as an error", "[gvar_refs][cli]") {
     const test::TempDir rootDir{ "gvar_refs_empty" };
     const fs::path& root = rootDir.path();
     writeFile(root / "a.ssl", "procedure start begin\n   set_global_var(GVAR_OTHER, 1);\nend\n");
@@ -79,7 +79,7 @@ TEST_CASE("findGvarRefs: unused-with-sources is success, no-sources is an error"
     CHECK(cli::findGvarRefs(empty, "GVAR_FOO", oss) != 0);
 }
 
-TEST_CASE("findGvarRefs matches a gvar whose header is missing by its name", "[gvar_refs]") {
+TEST_CASE("findGvarRefs matches a gvar whose header is missing by its name", "[gvar_refs][cli]") {
     const test::TempDir rootDir{ "gvar_refs_nohdr" };
     const fs::path& root = rootDir.path();
     writeFile(root / "a.ssl", "procedure start begin\n   set_global_var(GVAR_FOO, 1);\n   x := global_var(GVAR_FOOBAR);\nend\n");

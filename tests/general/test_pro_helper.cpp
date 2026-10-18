@@ -14,7 +14,7 @@ namespace fs = std::filesystem;
 using geck::ProHelper;
 using geck::resource::GameResources;
 
-TEST_CASE("ProHelper::basePath resolves a 1-based PID index to its LST entry", "[prohelper][pro]") {
+TEST_CASE("ProHelper::basePath resolves a 1-based PID index to its LST entry", "[pro_helper]") {
     geck::test::DataTree tree{ "geck_prohelper_test" };
     tree.write("proto/items/items.lst", "knife.pro\nspear.pro\n");
 
@@ -25,7 +25,7 @@ TEST_CASE("ProHelper::basePath resolves a 1-based PID index to its LST entry", "
     CHECK(ProHelper::basePath(resources, geck::ProtoId(geck::ObjectType::Item, 2).pid()) == "proto/items/spear.pro");
 }
 
-TEST_CASE("ProHelper::basePath rejects out-of-range PID indices", "[prohelper][pro]") {
+TEST_CASE("ProHelper::basePath rejects out-of-range PID indices", "[pro_helper]") {
     geck::test::DataTree tree{ "geck_prohelper_test_oob" };
     tree.write("proto/items/items.lst", "knife.pro\n");
 

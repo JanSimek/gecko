@@ -87,7 +87,7 @@ TEST_CASE("MsgReader rejects an empty file", "[msg]") {
     REQUIRE_THROWS(reader.openFile("empty.msg", std::vector<uint8_t>{}));
 }
 
-TEST_CASE("Msg round-trips LF byte-for-byte (no trailing newline)", "[msg_roundtrip]") {
+TEST_CASE("Msg round-trips LF byte-for-byte (no trailing newline)", "[msg][roundtrip]") {
     const Msg msg = parseMsg("test.msg", std::string{ kMsgLf });
 
     REQUIRE(msg.getMessages().count(200) == 1);
@@ -99,12 +99,12 @@ TEST_CASE("Msg round-trips LF byte-for-byte (no trailing newline)", "[msg_roundt
     CHECK(writer::serializeMsg(msg) == std::string{ kMsgLf });
 }
 
-TEST_CASE("Msg normalizes CRLF to LF preserving data", "[msg_roundtrip]") {
+TEST_CASE("Msg normalizes CRLF to LF preserving data", "[msg][roundtrip]") {
     const std::string crlf = geck::test::toCrlf(kMsgLf);
     CHECK(writer::serializeMsg(parseMsg("test.msg", crlf)) == std::string{ kMsgLf });
 }
 
-TEST_CASE("Msg::setMessageText updates (keeping audio + comment) or appends", "[msg_roundtrip]") {
+TEST_CASE("Msg::setMessageText updates (keeping audio + comment) or appends", "[msg]") {
     Msg msg = parseMsg("test.msg", std::string{ kMsgLf });
 
     msg.setMessageText(200, "Wasteland");   // update; keep "# DESERT1.MAP"
@@ -119,7 +119,7 @@ TEST_CASE("Msg::setMessageText updates (keeping audio + comment) or appends", "[
     CHECK(msg.message(500).text == "Brand New");
 }
 
-TEST_CASE("Msg round-trips a message whose text runs over several lines", "[msg_roundtrip]") {
+TEST_CASE("Msg round-trips a message whose text runs over several lines", "[msg][roundtrip]") {
     const std::string wrapped = "{160}{}{One line.}\n"
                                 "{161}{}{Talk to Mynoc, the guardian of the\n"
                                 " caravans.}  # trailing comment\n"

@@ -26,7 +26,7 @@ sf::Vector2f hexCentre(const HexagonGrid& grid, int position) {
 // ViewportController's world->hex conversion is a thin wrapper over HexagonGrid::positionAt (whose
 // behaviour test_hexagon_grid covers); this checks the wrapper passes positions through and maps
 // "no hex" to -1, headlessly (no SFML window needed).
-TEST_CASE("ViewportController converts a world position to the hex under it", "[viewport][hex]") {
+TEST_CASE("ViewportController converts a world position to the hex under it", "[viewport_controller]") {
     HexagonGrid grid;
     ViewportController viewport(&grid);
 
@@ -37,7 +37,7 @@ TEST_CASE("ViewportController converts a world position to the hex under it", "[
 
 // "F" fits the whole map in view. The grid's extent comes from the same forward projection the
 // tiles are drawn with, so the two cannot drift apart.
-TEST_CASE("ViewportController fits the whole tile grid in view", "[viewport][zoom]") {
+TEST_CASE("ViewportController fits the whole tile grid in view", "[viewport_controller]") {
     const sf::FloatRect bounds = ViewportController::mapWorldBounds();
 
     // Every tile in the grid lands inside the reported bounds.
@@ -71,7 +71,7 @@ TEST_CASE("ViewportController fits the whole tile grid in view", "[viewport][zoo
 
 // A viewport far too small to ever show the map still ends centred on it, at the zoom floor
 // rather than at some unreachable value.
-TEST_CASE("ViewportController fit stops at the minimum zoom", "[viewport][zoom]") {
+TEST_CASE("ViewportController fit stops at the minimum zoom", "[viewport_controller]") {
     HexagonGrid grid;
     ViewportController viewport(&grid);
     viewport.initialize({ 64u, 64u });

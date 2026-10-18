@@ -31,7 +31,7 @@ std::string preprocessText(const std::string& text, std::vector<Diagnostic>* dia
 
 } // namespace
 
-TEST_CASE("Lexer treats comments as blanks and joins backslash-continued lines", "[ssl][lexer]") {
+TEST_CASE("Lexer treats comments as blanks and joins backslash-continued lines", "[ssl_preprocessor][ssl]") {
     std::vector<Diagnostic> diagnostics;
     const auto tokens = lex("a := 1; // comment\n/* block\n */ b \\  \n c \"x // y\" 0x1F", 1, diagnostics);
     std::vector<std::string> texts;
@@ -45,7 +45,7 @@ TEST_CASE("Lexer treats comments as blanks and joins backslash-continued lines",
     CHECK(diagnostics.empty());
 }
 
-TEST_CASE("Preprocessor expands object- and function-like macros and rescans the result", "[ssl][preprocessor]") {
+TEST_CASE("Preprocessor expands object- and function-like macros and rescans the result", "[ssl_preprocessor][ssl]") {
     CHECK(preprocessText("#define TEAM_ARROYO (1)\n"
                          "#define set_team(cr, team) critter_add_trait(cr, TRAIT_OBJECT, OBJECT_TEAM_NUM, team)\n"
                          "#define set_self_team(team) set_team(self_obj, team)\n"
@@ -53,23 +53,23 @@ TEST_CASE("Preprocessor expands object- and function-like macros and rescans the
         == "critter_add_trait ( self_obj , TRAIT_OBJECT , OBJECT_TEAM_NUM , ( 1 ) ) ;");
 }
 
-TEST_CASE("Preprocessor does not expand a macro inside its own expansion", "[ssl][preprocessor]") {
+TEST_CASE("Preprocessor does not expand a macro inside its own expansion", "[ssl_preprocessor][ssl]") {
     CHECK(preprocessText("#define foo foo + 1\nfoo") == "foo + 1");
     CHECK(preprocessText("#define a b\n#define b a\na") == "a");
     CHECK(preprocessText("#define f(x) x f\nf(1)(2)") == "1 f ( 2 )"); // the f from f's body stays an f
 }
 
-TEST_CASE("Preprocessor leaves a function-like macro name alone when no call follows", "[ssl][preprocessor]") {
+TEST_CASE("Preprocessor leaves a function-like macro name alone when no call follows", "[ssl_preprocessor][ssl]") {
     CHECK(preprocessText("#define f(x) [x]\nf + f(2)") == "f + [ 2 ]");
 }
 
-TEST_CASE("Preprocessor pastes with ## and stringizes with #", "[ssl][preprocessor]") {
+TEST_CASE("Preprocessor pastes with ## and stringizes with #", "[ssl_preprocessor][ssl]") {
     // RP modoc.h: check_seat_party_member(Vic) reads Vic_In_Party.
     CHECK(preprocessText("#define in_party(who) who##_In_Party\n#define str(x) #x\nin_party(Vic) str(a \"b\")")
         == "Vic_In_Party \"a \\\"b\\\"\"");
 }
 
-TEST_CASE("Preprocessor supports variadic macros", "[ssl][preprocessor]") {
+TEST_CASE("Preprocessor supports variadic macros", "[ssl_preprocessor][ssl]") {
     // sfall.h picks an overload by argument count this way.
     CHECK(preprocessText("#define SEL(_1,_2,_3,F,...) F\n"
                          "#define box(...) SEL(__VA_ARGS__, box3, box2, box1)(__VA_ARGS__)\n"
@@ -77,7 +77,7 @@ TEST_CASE("Preprocessor supports variadic macros", "[ssl][preprocessor]") {
         == "box2 ( a , b )");
 }
 
-TEST_CASE("Preprocessor follows #if, #ifdef, #ifndef, #elif and #else", "[ssl][preprocessor]") {
+TEST_CASE("Preprocessor follows #if, #ifdef, #ifndef, #elif and #else", "[ssl_preprocessor][ssl]") {
     CHECK(preprocessText("#define A 2\n"
                          "#ifdef A\nyes1\n#else\nno1\n#endif\n"
                          "#ifndef B\nyes2\n#endif\n"
@@ -87,7 +87,7 @@ TEST_CASE("Preprocessor follows #if, #ifdef, #ifndef, #elif and #else", "[ssl][p
         == "yes1 yes2 yes3");
 }
 
-TEST_CASE("Preprocessor includes files relative to the includer, ignoring Windows separators", "[ssl][preprocessor]") {
+TEST_CASE("Preprocessor includes files relative to the includer, ignoring Windows separators", "[ssl_preprocessor][ssl]") {
     MemorySourceProvider files;
     files.add("headers/define.h", "#ifndef DEFINE_H\n#define DEFINE_H\n#define TRUE 1\n#endif\n");
     files.add("headers/command.h", "#include \"define.h\"\n#define ok TRUE\n");
@@ -97,7 +97,7 @@ TEST_CASE("Preprocessor includes files relative to the includer, ignoring Window
     CHECK(diagnostics.empty());
 }
 
-TEST_CASE("Preprocessor includes a file named by a macro", "[ssl][preprocessor]") {
+TEST_CASE("Preprocessor includes a file named by a macro", "[ssl_preprocessor][ssl]") {
     // RP generic/zilocker.ssl: `#ifdef EXTRA_HEADER  #include EXTRA_HEADER`, set by the script including it.
     MemorySourceProvider files;
     files.add("headers/newreno.h", "#define CITY reno\n");
@@ -106,7 +106,7 @@ TEST_CASE("Preprocessor includes a file named by a macro", "[ssl][preprocessor]"
     CHECK(preprocess(files, "newreno/niowrilk.ssl") == "reno");
 }
 
-TEST_CASE("Preprocessor reports what it cannot do and carries on", "[ssl][preprocessor]") {
+TEST_CASE("Preprocessor reports what it cannot do and carries on", "[ssl_preprocessor][ssl]") {
     std::vector<Diagnostic> diagnostics;
     CHECK(preprocessText("#include \"missing.h\"\n#if 1\nkept", &diagnostics) == "kept");
     REQUIRE(diagnostics.size() == 2);
@@ -114,7 +114,7 @@ TEST_CASE("Preprocessor reports what it cannot do and carries on", "[ssl][prepro
     CHECK(diagnostics[1].message == "#if without #endif");
 }
 
-TEST_CASE("Preprocessor tells where an expanded token was written and through which macros", "[ssl][preprocessor]") {
+TEST_CASE("Preprocessor tells where an expanded token was written and through which macros", "[ssl_preprocessor][ssl]") {
     MemorySourceProvider files;
     files.add("main.ssl", "#define inner(x) op(x)\n#define outer(x) inner(x)\n\n  outer(V);");
     SourceManager sources(files);
@@ -131,7 +131,7 @@ TEST_CASE("Preprocessor tells where an expanded token was written and through wh
     CHECK(pp.macroChain(tokens[2]).empty()); // V: an argument, written by the user
 }
 
-TEST_CASE("Preprocessor evaluates a macro as a constant", "[ssl][preprocessor]") {
+TEST_CASE("Preprocessor evaluates a macro as a constant", "[ssl_preprocessor][ssl]") {
     MemorySourceProvider files;
     files.add("main.ssl", "#define BASE (4)\n#define LVAR_Hostile (BASE + 1)\n#define NOT_CONST self_obj\n");
     SourceManager sources(files);

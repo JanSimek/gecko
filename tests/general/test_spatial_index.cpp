@@ -15,7 +15,7 @@ bool contains(const std::vector<int>& v, int value) {
 }
 } // namespace
 
-TEST_CASE("SpatialIndex queryArea returns only items whose bounds intersect", "[spatial]") {
+TEST_CASE("SpatialIndex queryArea returns only items whose bounds intersect", "[spatial_index]") {
     SpatialIndex<int> index(100.0f);
     index.addItem(1, sf::FloatRect({ 0.f, 0.f }, { 10.f, 10.f }));     // cell (0,0)
     index.addItem(2, sf::FloatRect({ 500.f, 500.f }, { 10.f, 10.f })); // cell (5,5)
@@ -34,7 +34,7 @@ TEST_CASE("SpatialIndex queryArea returns only items whose bounds intersect", "[
     CHECK(index.queryArea(sf::FloatRect({ 2000.f, 2000.f }, { 10.f, 10.f })).empty());
 }
 
-TEST_CASE("SpatialIndex returns an item spanning multiple cells exactly once", "[spatial]") {
+TEST_CASE("SpatialIndex returns an item spanning multiple cells exactly once", "[spatial_index]") {
     SpatialIndex<int> index(100.0f);
     // Bounds span x,y in [50, 250] -> grid cells (0..2, 0..2) == 9 cells.
     index.addItem(42, sf::FloatRect({ 50.f, 50.f }, { 200.f, 200.f }));
@@ -44,7 +44,7 @@ TEST_CASE("SpatialIndex returns an item spanning multiple cells exactly once", "
     CHECK(results.front() == 42);
 }
 
-TEST_CASE("SpatialIndex clear drops every item from queries", "[spatial]") {
+TEST_CASE("SpatialIndex clear drops every item from queries", "[spatial_index]") {
     SpatialIndex<int> index(100.0f);
     index.addItem(1, sf::FloatRect({ 0.f, 0.f }, { 10.f, 10.f }));
     index.addItem(2, sf::FloatRect({ 500.f, 500.f }, { 10.f, 10.f }));
@@ -54,7 +54,7 @@ TEST_CASE("SpatialIndex clear drops every item from queries", "[spatial]") {
     CHECK(index.queryArea(sf::FloatRect({ 490.f, 490.f }, { 50.f, 50.f })).empty());
 }
 
-TEST_CASE("SpatialIndex queryArea callback can stop early", "[spatial]") {
+TEST_CASE("SpatialIndex queryArea callback can stop early", "[spatial_index]") {
     SpatialIndex<int> index(100.0f);
     for (int i = 0; i < 5; ++i) {
         index.addItem(i, sf::FloatRect({ 0.f, 0.f }, { 10.f, 10.f })); // all in cell (0,0)

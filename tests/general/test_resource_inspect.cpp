@@ -15,7 +15,7 @@ using namespace geck;
 
 // Each case mounts f2_res.dat, the committed DAT fixture, of which test::HR_ALLTLK is a known entry.
 
-TEST_CASE("resourceFind locates a DAT entry and names its source", "[resource]") {
+TEST_CASE("resourceFind locates a DAT entry and names its source", "[resource_inspect][cli]") {
     resource::GameResources resources;
     resources.files().addDataPath(test::f2ResDat());
     const json j = test::runJson([&](std::ostream& out) { return cli::resourceFind(resources, std::string(test::HR_ALLTLK), out); });
@@ -25,7 +25,7 @@ TEST_CASE("resourceFind locates a DAT entry and names its source", "[resource]")
     CHECK(j["source"]["path"].get<std::string>().find("f2_res.dat") != std::string::npos);
 }
 
-TEST_CASE("resourceFind reports an absent path as found=false, not an error", "[resource]") {
+TEST_CASE("resourceFind reports an absent path as found=false, not an error", "[resource_inspect][cli]") {
     resource::GameResources resources;
     resources.files().addDataPath(test::f2ResDat());
     const json j = test::runJson([&](std::ostream& out) { return cli::resourceFind(resources, "art/tiles/nope12345.frm", out); });
@@ -33,7 +33,7 @@ TEST_CASE("resourceFind reports an absent path as found=false, not an error", "[
     CHECK(j["source"].is_null());
 }
 
-TEST_CASE("resourceList matches case-insensitively and tags each entry's source", "[resource]") {
+TEST_CASE("resourceList matches case-insensitively and tags each entry's source", "[resource_inspect][cli]") {
     resource::GameResources resources;
     resources.files().addDataPath(test::f2ResDat());
     // Upper-case glob against a lower-case entry exercises the case-insensitive match.
@@ -51,7 +51,7 @@ TEST_CASE("resourceList matches case-insensitively and tags each entry's source"
     CHECK(found);
 }
 
-TEST_CASE("resourceMissing reports an unreadable map as an error", "[resource]") {
+TEST_CASE("resourceMissing reports an unreadable map as an error", "[resource_inspect][cli]") {
     resource::GameResources resources;
     resources.files().addDataPath(test::f2ResDat());
     std::ostringstream oss;

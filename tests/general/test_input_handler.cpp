@@ -64,7 +64,7 @@ struct Harness {
 // tool mode. They are the safety net for collapsing the per-mode bool flags into
 // the single EditorMode enum: the same callbacks must fire afterwards.
 
-TEST_CASE("InputHandler routes a click to the active placement mode's callback", "[input]") {
+TEST_CASE("InputHandler routes a click to the active placement mode's callback", "[input_handler]") {
     using EnterMode = void (InputHandler::*)(bool);
     using ClickSlot = std::function<void(sf::Vector2f)> InputHandler::Callbacks::*;
     struct Route {
@@ -93,7 +93,7 @@ TEST_CASE("InputHandler routes a click to the active placement mode's callback",
     CHECK_FALSE(h.handler.isInPlayerPositionMode());
 }
 
-TEST_CASE("InputHandler forwards mouse events to the active registered-tool branch", "[input][tools]") {
+TEST_CASE("InputHandler forwards mouse events to the active registered-tool branch", "[input_handler]") {
     Harness h;
     int pressed = 0;
     int moved = 0;
@@ -130,7 +130,7 @@ TEST_CASE("InputHandler forwards mouse events to the active registered-tool bran
     CHECK(lastButton == sf::Mouse::Button::Left);
 }
 
-TEST_CASE("InputHandler falls back when a registered-tool mouse press is not consumed", "[input][tools]") {
+TEST_CASE("InputHandler falls back when a registered-tool mouse press is not consumed", "[input_handler]") {
     GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     InputHandler::Callbacks cb;
@@ -145,7 +145,7 @@ TEST_CASE("InputHandler falls back when a registered-tool mouse press is not con
     CHECK(h.handler.getCurrentAction() == InputHandler::EditorAction::DRAG_SELECTING);
 }
 
-TEST_CASE("InputHandler cancels the active registered-tool branch on unconsumed right-click", "[input][tools]") {
+TEST_CASE("InputHandler cancels the active registered-tool branch on unconsumed right-click", "[input_handler]") {
     Harness h;
     bool cancelled = false;
     InputHandler::Callbacks cb;
@@ -164,7 +164,7 @@ TEST_CASE("InputHandler cancels the active registered-tool branch on unconsumed 
     CHECK(h.handler.getCurrentAction() == InputHandler::EditorAction::NONE);
 }
 
-TEST_CASE("InputHandler enters tile-placing action on click in tile mode", "[input]") {
+TEST_CASE("InputHandler enters tile-placing action on click in tile mode", "[input_handler]") {
     GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     h.handler.setCallbacks(InputHandler::Callbacks{});
@@ -175,7 +175,7 @@ TEST_CASE("InputHandler enters tile-placing action on click in tile mode", "[inp
     CHECK(h.handler.getCurrentAction() == InputHandler::EditorAction::TILE_PLACING);
 }
 
-TEST_CASE("InputHandler begins drag-selection on a plain click in select mode", "[input]") {
+TEST_CASE("InputHandler begins drag-selection on a plain click in select mode", "[input_handler]") {
     GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     h.handler.setCallbacks(InputHandler::Callbacks{});
@@ -188,7 +188,7 @@ TEST_CASE("InputHandler begins drag-selection on a plain click in select mode", 
 
 // The "Draw edge" polyline state machine: clicks append vertices, moves fire a live preview, right-click
 // with >=2 vertices finalizes.
-TEST_CASE("InputHandler builds an exit-grid edge line and finalizes it on right-click", "[input][line]") {
+TEST_CASE("InputHandler builds an exit-grid edge line and finalizes it on right-click", "[input_handler]") {
     GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     std::vector<sf::Vector2f> finalized;
@@ -220,7 +220,7 @@ TEST_CASE("InputHandler builds an exit-grid edge line and finalizes it on right-
     CHECK(h.handler.isInMarkExitsMode()); // still active so another edge can be drawn
 }
 
-TEST_CASE("InputHandler cancels an exit-grid edge line on right-click with too few vertices", "[input][line]") {
+TEST_CASE("InputHandler cancels an exit-grid edge line on right-click with too few vertices", "[input_handler]") {
     GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     bool finalized = false;
@@ -240,7 +240,7 @@ TEST_CASE("InputHandler cancels an exit-grid edge line on right-click with too f
     CHECK_FALSE(h.handler.isInMarkExitsMode()); // tool dropped
 }
 
-TEST_CASE("InputHandler's flip key toggles the Draw-edge side and re-fires the preview", "[input][line][flip]") {
+TEST_CASE("InputHandler's flip key toggles the Draw-edge side and re-fires the preview", "[input_handler]") {
     GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     int previewCalls = 0;
@@ -269,7 +269,7 @@ TEST_CASE("InputHandler's flip key toggles the Draw-edge side and re-fires the p
     CHECK(lastPreviewFlip == false);
 }
 
-TEST_CASE("InputHandler forwards keys to the active registered-tool branch before global handlers", "[input][tools]") {
+TEST_CASE("InputHandler forwards keys to the active registered-tool branch before global handlers", "[input_handler]") {
     Harness h;
     int toolKeys = 0;
     bool deleteCalled = false;
@@ -295,7 +295,7 @@ TEST_CASE("InputHandler forwards keys to the active registered-tool branch befor
 // Holding Shift can't be driven headlessly (sf::Keyboard reads the OS), so the snapped behaviour is
 // GUI-only — see the pure snapToExitGridAngle tests for the geometry. Here we pin the no-op path: with
 // a live segment that Shift would snap, Shift up leaves the vertices and the preview cursor raw.
-TEST_CASE("InputHandler's Draw-edge preview leaves the cursor unsnapped when Shift is up", "[input][line][snap]") {
+TEST_CASE("InputHandler's Draw-edge preview leaves the cursor unsnapped when Shift is up", "[input_handler]") {
     GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     std::vector<sf::Vector2f> lastVertices;
@@ -329,7 +329,7 @@ TEST_CASE("InputHandler's Draw-edge preview leaves the cursor unsnapped when Shi
     CHECK(isNear(lastCursor, raw));
 }
 
-TEST_CASE("InputHandler's flip key does nothing outside Draw-edge mode, and resets on mode change", "[input][line][flip]") {
+TEST_CASE("InputHandler's flip key does nothing outside Draw-edge mode, and resets on mode change", "[input_handler]") {
     GECK_SKIP_IF_NO_KEYBOARD_STATE();
     Harness h;
     int previewCalls = 0;

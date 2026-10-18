@@ -42,7 +42,7 @@ int panelChrome(const SelectionPanel& panel) {
 // edits and button rows - so the default 360 px dock scrolled sideways and had to be widened by hand.
 // Show every section an object can have, fill every value with text far wider than the dock, and the
 // panel must still fit: values shorten, warnings wrap, nothing sets a minimum from its content.
-TEST_CASE("Selection panel's object view fits the default dock width whatever it shows", "[ui][selection]") {
+TEST_CASE("Selection panel's object view fits the default dock width whatever it shows", "[selection_panel]") {
     resource::GameResources resources;
     SelectionPanel panel(resources);
 
@@ -76,7 +76,7 @@ TEST_CASE("Selection panel's object view fits the default dock width whatever it
     CHECK(needed <= ui::constants::sizes::PANEL_PREFERRED_WIDTH);
 }
 
-TEST_CASE("Selection panel remembers which sections are collapsed", "[ui][selection]") {
+TEST_CASE("Selection panel remembers which sections are collapsed", "[selection_panel]") {
     resource::GameResources resources;
     auto settings = std::make_shared<Settings>();
     settings->setCollapsedSections({});
@@ -104,7 +104,7 @@ TEST_CASE("Selection panel remembers which sections are collapsed", "[ui][select
 
 // The Script section reports what the script's parsed source does wrong (resource::ScriptLinter) and
 // when the map puts the script's local variables where another script's are.
-TEST_CASE("Script section shows the script's lint findings and an overlapping local variable block", "[ui][selection]") {
+TEST_CASE("Script section shows the script's lint findings and an overlapping local variable block", "[selection_panel]") {
     test::DataTree data("selection-script");
     data.write("scripts/scripts.lst", "one.int ; first  # local_vars=4\nother.int ; second  # local_vars=2\n");
     resource::GameResources& resources = data.mount();

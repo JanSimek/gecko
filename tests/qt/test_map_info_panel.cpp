@@ -33,7 +33,7 @@ namespace test = geck::test;
 // test::mapOf leaves the header's own filename field ("newmap") unlike the file's, so the panel must
 // resolve by the file basename (map->filename()), not header.filename.
 
-TEST_CASE("MapInfoPanel names the map's own script from scripts.lst and scrname.msg", "[qt][mapinfo]") {
+TEST_CASE("MapInfoPanel names the map's own script from scripts.lst and scrname.msg", "[map_info_panel]") {
     test::DataTree data("ui-data");
     data.write("scripts/scripts.lst", "obj_dude.int    ; player\nzclrat.int      ; rat\n");
     // scriptDisplayName(programIndex 0) reads scrname.msg[0 + 101] = 101.
@@ -53,7 +53,7 @@ TEST_CASE("MapInfoPanel names the map's own script from scripts.lst and scrname.
     CHECK(scriptEdit->text() == QStringLiteral("obj_dude.int — The Chosen One"));
 }
 
-TEST_CASE("MapInfoPanel shows resolved map.msg display name and maps.txt lookup name", "[qt][mapinfo]") {
+TEST_CASE("MapInfoPanel shows resolved map.msg display name and maps.txt lookup name", "[map_info_panel]") {
     test::DataTree data("ui-data");
     data.write("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
     // displayName(index 0, elevation 0) reads map.msg[0*3 + 0 + 200] = 200.
@@ -80,7 +80,7 @@ TEST_CASE("MapInfoPanel shows resolved map.msg display name and maps.txt lookup 
     CHECK(lookupEdit->isReadOnly());
 }
 
-TEST_CASE("MapInfoPanel persists edited map names to a writable Data Path and reflects them", "[qt][mapinfo]") {
+TEST_CASE("MapInfoPanel persists edited map names to a writable Data Path and reflects them", "[map_info_panel]") {
     test::DataTree data("ui-data");
     data.write("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
     data.write("text/english/game/map.msg", test::msgLine(200, "Test Display"));
@@ -133,7 +133,7 @@ TEST_CASE("MapInfoPanel persists edited map names to a writable Data Path and re
     CHECK(hint->isHidden()); // still a writable Data Path -> still no hint
 }
 
-TEST_CASE("MapInfoPanel hints to add a writable Data Path when none is configured", "[qt][mapinfo]") {
+TEST_CASE("MapInfoPanel hints to add a writable Data Path when none is configured", "[map_info_panel]") {
     test::DataTree data("ui-data");
     data.write("data/maps.txt", "[Map 0]\nlookup_name=Test Town\nmap_name=testmap\n");
     data.write("text/english/game/map.msg", test::msgLine(200, "Test Display"));
@@ -189,7 +189,7 @@ private:
 
 } // namespace
 
-TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map's .gam", "[qt][mapinfo]") {
+TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map's .gam", "[map_info_panel]") {
     GlobalVarFixture fixture("MAP_GLOBAL_VARS:\nMVAR_first := 10;\nMVAR_second := 20;\n");
     auto& mapFile = fixture.map->getMapFile();
     // A real base map's stored block mirrors its .gam (the engine snapshots it on save); start aligned.
@@ -236,7 +236,7 @@ TEST_CASE("MapInfoPanel edits a global variable value and persists it to the map
     CHECK(saved.find("MVAR_second := 20;") != std::string::npos); // the other variable is untouched
 }
 
-TEST_CASE("MapInfoPanel adds a map global variable via the name field and Add button", "[qt][mapinfo]") {
+TEST_CASE("MapInfoPanel adds a map global variable via the name field and Add button", "[map_info_panel]") {
     GlobalVarFixture fixture("MAP_GLOBAL_VARS:\nMVAR_first := 10;\n");
     fixture.map->getMapFile().map_global_vars = { 10 }; // .map block aligned with the .gam
     fixture.map->getMapFile().header.num_global_vars = 1;
@@ -286,7 +286,7 @@ TEST_CASE("MapInfoPanel adds a map global variable via the name field and Add bu
     CHECK(out.find("MVAR_first") < out.find("MVAR_new"));
 }
 
-TEST_CASE("MapInfoPanel removes the last map global variable after confirmation", "[qt][mapinfo]") {
+TEST_CASE("MapInfoPanel removes the last map global variable after confirmation", "[map_info_panel]") {
     GlobalVarFixture fixture("MAP_GLOBAL_VARS:\nMVAR_first := 10;\nMVAR_last := 99;\n");
     fixture.map->getMapFile().map_global_vars = { 10, 99 }; // .map block aligned with the .gam
     fixture.map->getMapFile().header.num_global_vars = 2;
@@ -335,7 +335,7 @@ TEST_CASE("MapInfoPanel removes the last map global variable after confirmation"
     CHECK(out.find("MVAR_last") == std::string::npos);
 }
 
-TEST_CASE("MapInfoPanel global-variable edits can be undone through the state it emits", "[qt][mapinfo][undo]") {
+TEST_CASE("MapInfoPanel global-variable edits can be undone through the state it emits", "[map_info_panel][undo]") {
     GlobalVarFixture fixture("MAP_GLOBAL_VARS:\nMVAR_first := 10;\n");
     fixture.map->getMapFile().map_global_vars = { 10 };
     fixture.map->getMapFile().header.num_global_vars = 1;
@@ -368,7 +368,7 @@ TEST_CASE("MapInfoPanel global-variable edits can be undone through the state it
     CHECK(geck::io::readFile(fixture.savedGam()).find("MVAR_first := 10;") != std::string::npos);
 }
 
-TEST_CASE("MapInfoPanel requests header and elevation edits instead of writing the map", "[qt][mapinfo][undo]") {
+TEST_CASE("MapInfoPanel requests header and elevation edits instead of writing the map", "[map_info_panel][undo]") {
     test::DataTree data("ui-data");
     data.write("scripts/scripts.lst", "obj_dude.int    ; player\n");
     auto& resources = data.mount();

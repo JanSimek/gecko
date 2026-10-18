@@ -70,7 +70,7 @@ void writeArtlessWorldmapData(test::DataTree& fixture) {
 // that is not mounted, FrmResolver::resolve on an LST that is missing or too short. The scene has
 // to absorb that, because in the editor load() runs inside a Qt slot, where an escaping exception
 // is a terminate() rather than an error message.
-TEST_CASE("WorldMapScene reports missing worldmap data instead of throwing", "[worldmap][scene]") {
+TEST_CASE("WorldMapScene reports missing worldmap data instead of throwing", "[worldmap_scene]") {
     test::DataTree fixture{ "geck_worldmap_scene_nodata_test" };
     fixture.write("data/city.txt", kCityTxt);
     fixture.write("data/worldmap.txt", kWorldmapTxt);
@@ -83,7 +83,7 @@ TEST_CASE("WorldMapScene reports missing worldmap data instead of throwing", "[w
     CHECK(scene == nullptr);
 }
 
-TEST_CASE("WorldMapScene draws what it can and lists the art it could not load", "[worldmap][scene]") {
+TEST_CASE("WorldMapScene draws what it can and lists the art it could not load", "[worldmap_scene]") {
     test::DataTree fixture{ "geck_worldmap_scene_noart_test" };
     writeArtlessWorldmapData(fixture);
 
@@ -119,7 +119,7 @@ TEST_CASE("WorldMapScene draws what it can and lists the art it could not load",
 // The engine pins it down: a new game starts the party at the hard-coded world position (173, 122)
 // (wmGenDataSetStartWorldPos), and that has to be inside Arroyo. Only the biased rectangle contains
 // it, and puts it within two pixels of the circle's centre.
-TEST_CASE("WorldMapScene places area markers WM_VIEW_X/Y before their world_pos", "[worldmap][scene]") {
+TEST_CASE("WorldMapScene places area markers WM_VIEW_X/Y before their world_pos", "[worldmap_scene]") {
     test::DataTree fixture{ "geck_worldmap_scene_bias_test" };
     writeArtlessWorldmapData(fixture);
 

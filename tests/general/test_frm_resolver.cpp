@@ -19,7 +19,7 @@ using geck::resource::GameResources;
 // The regression guard: the FID type must be the ObjectType / engine OBJ_TYPE
 // ordinal. WALL is 3, not 4 (the old frmTypeMap encoded 4/5/6/7/8, which the
 // engine reads as the next type up).
-TEST_CASE("resolveFid encodes the engine FRM type byte", "[resource][frm]") {
+TEST_CASE("resolveFid encodes the engine FRM type byte", "[frm_resolver]") {
     geck::test::ArtLstTree fx{ "geck_frmresolver_test" };
     auto& resolver = fx.mount().frmResolver();
 
@@ -49,7 +49,7 @@ TEST_CASE("resolveFid encodes the engine FRM type byte", "[resource][frm]") {
 }
 
 // resolveFid is the inverse of resolve() for non-critter types.
-TEST_CASE("resolveFid round-trips through resolve for non-critters", "[resource][frm]") {
+TEST_CASE("resolveFid round-trips through resolve for non-critters", "[frm_resolver]") {
     geck::test::ArtLstTree fx{ "geck_frmresolver_test" };
     auto& resolver = fx.mount().frmResolver();
 
@@ -70,7 +70,7 @@ TEST_CASE("resolveFid round-trips through resolve for non-critters", "[resource]
 // Leniency matches the engine LST lookup: a leading slash and backslashes are
 // normalized, and the filename is matched case-insensitively. The directory
 // prefix is matched in canonical lower case (paths in the game data are lower).
-TEST_CASE("resolveFid tolerates leading slash, backslashes, and filename case", "[resource][frm]") {
+TEST_CASE("resolveFid tolerates leading slash, backslashes, and filename case", "[frm_resolver]") {
     geck::test::ArtLstTree fx{ "geck_frmresolver_test" };
     auto& resolver = fx.mount().frmResolver();
 
@@ -78,7 +78,7 @@ TEST_CASE("resolveFid tolerates leading slash, backslashes, and filename case", 
     CHECK(resolver.resolveFid("art/walls/WALL1.FRM") == resolver.resolveFid("art/walls/wall1.frm"));
 }
 
-TEST_CASE("resolveFid returns nullopt without a heuristic fallback", "[resource][frm]") {
+TEST_CASE("resolveFid returns nullopt without a heuristic fallback", "[frm_resolver]") {
     geck::test::ArtLstTree fx{ "geck_frmresolver_test" };
     auto& resolver = fx.mount().frmResolver();
 
@@ -90,7 +90,7 @@ TEST_CASE("resolveFid returns nullopt without a heuristic fallback", "[resource]
 
 // Critters carry the engine critter type (1); their FID is animation-encoded
 // and lossy, so only the type is asserted (not a resolve() round-trip).
-TEST_CASE("resolveFid resolves critters by base name", "[resource][frm]") {
+TEST_CASE("resolveFid resolves critters by base name", "[frm_resolver]") {
     geck::test::ArtLstTree fx{ "geck_frmresolver_test" };
     auto& resolver = fx.mount().frmResolver();
 
@@ -99,7 +99,7 @@ TEST_CASE("resolveFid resolves critters by base name", "[resource][frm]") {
     CHECK(geck::FrmId(*fid).objectType() == geck::ObjectType::Critter); // 1
 }
 
-TEST_CASE("hasFrmExtension recognizes .frm and directional .fr0-.fr5", "[resource][frm]") {
+TEST_CASE("hasFrmExtension recognizes .frm and directional .fr0-.fr5", "[frm_resolver]") {
     using geck::resource::hasFrmExtension;
 
     // The standard single-file FRM and the split critter directional frames.
@@ -122,7 +122,7 @@ TEST_CASE("hasFrmExtension recognizes .frm and directional .fr0-.fr5", "[resourc
 // (wall proto 171) placed in ncr1, sftanker and a dozen other maps. resolve() used to swap it for the
 // editor's wallblock.frm, mistaking the index of wall proto 620 (itself just a wall, nec128.frm) for
 // art of a "wall blocker".
-TEST_CASE("resolve draws wall art 620 from walls.lst like any other wall", "[resource][frm]") {
+TEST_CASE("resolve draws wall art 620 from walls.lst like any other wall", "[frm_resolver]") {
     geck::test::DataTree tree{ "geck_frmresolver_wall620_test" };
     std::string walls;
     for (int i = 0; i < 622; ++i) {
@@ -135,7 +135,7 @@ TEST_CASE("resolve draws wall art 620 from walls.lst like any other wall", "[res
     CHECK(resolver.resolveFid("art/walls/rl11000.frm") == 0x0300026Cu);
 }
 
-TEST_CASE("resolve picks a critter's art from the FID's weapon and animation codes", "[resource][frm]") {
+TEST_CASE("resolve picks a critter's art from the FID's weapon and animation codes", "[frm_resolver]") {
     geck::test::ArtLstTree fixture{ "geck_frmresolver_test" };
     // Any parseable FRM stands in for the art; resolve only needs the file to be there.
     const auto art = fixture.root() / "art/critters";

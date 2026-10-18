@@ -34,7 +34,7 @@ constexpr uint16_t EMPTY = static_cast<uint16_t>(Map::EMPTY_TILE);
 
 } // namespace
 
-TEST_CASE("MapScriptApi query surface", "[scripting]") {
+TEST_CASE("MapScriptApi answers hex validity, neighbour and tile queries on an empty map", "[map_script_api][scripting]") {
     ScriptApiFixture fx;
 
     SECTION("isValidHex bounds") {
@@ -75,7 +75,7 @@ TEST_CASE("MapScriptApi query surface", "[scripting]") {
     }
 }
 
-TEST_CASE("MapScriptApi paints tiles undoably", "[scripting]") {
+TEST_CASE("MapScriptApi paints tiles undoably", "[map_script_api][scripting]") {
     ScriptApiFixture fx;
 
     REQUIRE(fx.api.getFloor(42) == EMPTY);
@@ -99,7 +99,7 @@ TEST_CASE("MapScriptApi paints tiles undoably", "[scripting]") {
     }
 }
 
-TEST_CASE("MapScriptApi (col,row) helpers convert and paint consistently", "[scripting]") {
+TEST_CASE("MapScriptApi (col,row) helpers convert and paint consistently", "[map_script_api][scripting]") {
     ScriptApiFixture fx;
 
     SECTION("index <-> (col,row) round-trips on both grids") {
@@ -136,7 +136,7 @@ TEST_CASE("MapScriptApi (col,row) helpers convert and paint consistently", "[scr
     }
 }
 
-TEST_CASE("MapScriptApi rectangle and region fills", "[scripting]") {
+TEST_CASE("MapScriptApi fills rectangles and flood-fills connected regions", "[map_script_api][scripting]") {
     ScriptApiFixture fx;
 
     SECTION("tilesInRect enumerates the inclusive rectangle, ascending") {
@@ -151,7 +151,7 @@ TEST_CASE("MapScriptApi rectangle and region fills", "[scripting]") {
         CHECK(fx.api.tilesInRect(7, 4, 5, 3) == fx.api.tilesInRect(5, 3, 7, 4));
         // A rectangle hanging off the top-left corner clamps to the on-grid part.
         const auto clamped = fx.api.tilesInRect(-2, -2, 1, 1);
-        CHECK(clamped.size() == 4);
+        REQUIRE(clamped.size() == 4);
         CHECK(clamped.front() == fx.api.tileIndex(0, 0));
         // Fully off-grid -> empty, not an error.
         CHECK(fx.api.tilesInRect(-5, -5, -1, -1).empty());
@@ -201,7 +201,7 @@ TEST_CASE("MapScriptApi rectangle and region fills", "[scripting]") {
     }
 }
 
-TEST_CASE("MapScriptApi batches a run into one undo entry", "[scripting]") {
+TEST_CASE("MapScriptApi batches a run into one undo entry", "[map_script_api][scripting]") {
     ScriptApiFixture fx;
 
     REQUIRE_FALSE(fx.undoStack.canUndo());
@@ -227,7 +227,7 @@ TEST_CASE("MapScriptApi batches a run into one undo entry", "[scripting]") {
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 
-TEST_CASE("MapScriptApi placeObject fails gracefully without loadable art", "[scripting]") {
+TEST_CASE("MapScriptApi placeObject fails gracefully without loadable art", "[map_script_api][scripting]") {
     ScriptApiFixture fx;
 
     // Headless: no game data, so the FRM can't resolve -> no visual -> not placed.
@@ -239,7 +239,7 @@ TEST_CASE("MapScriptApi placeObject fails gracefully without loadable art", "[sc
     CHECK_FALSE(fx.api.placeObject(ProtoId(ObjectType::Scenery, 769).pid(), FrmId(ObjectType::Critter, 129).fid(), -5, 0));
 }
 
-TEST_CASE("MapScriptApi headless mode records objects as map data without GL", "[scripting]") {
+TEST_CASE("MapScriptApi headless mode records objects as map data without GL", "[map_script_api][scripting]") {
     ScriptApiFixture fx{ false };
     // buildSprites = false: the data-only path used by gecko-cli / CI.
 
@@ -297,7 +297,7 @@ constexpr int ITEM_SECTION = static_cast<int>(MapScript::ScriptType::ITEM);
 // The engine's obj_new seeds a new object from its proto: the flags (the engine reads them from the
 // map, so flags = 0 made a flat proto stand and a NoBlock one block) and the script the proto names
 // (objectSetScriptFromProto), so a placed gravesite runs zigengrv. Placement used to write neither.
-TEST_CASE("MapScriptApi placement seeds a new object's flags and script from its proto", "[scripting]") {
+TEST_CASE("MapScriptApi placement seeds a new object's flags and script from its proto", "[map_script_api][scripting]") {
     const test::TempDir rootDir{ "geck_place_proto_script" };
     const fs::path& root = rootDir.path();
     writeWallProtos(root);
@@ -342,7 +342,7 @@ TEST_CASE("MapScriptApi placement seeds a new object's flags and script from its
 
 // copyObjects follows the engine's _obj_copy: a copy of a scripted object gets its proto's script
 // (never the source's instance script, which belongs to the source map), an unscripted one none.
-TEST_CASE("MapScriptApi copyObjects re-attaches the proto script only to copies of scripted objects", "[scripting]") {
+TEST_CASE("MapScriptApi copyObjects re-attaches the proto script only to copies of scripted objects", "[map_script_api][scripting]") {
     const test::TempDir rootDir{ "geck_copy_proto_script" };
     const fs::path& root = rootDir.path();
     writeWallProtos(root);
@@ -369,7 +369,7 @@ TEST_CASE("MapScriptApi copyObjects re-attaches the proto script only to copies 
     CHECK(objs[1]->map_scripts_pid == -1);
 }
 
-TEST_CASE("MapScriptApi newMap resets the bound map to empty", "[scripting]") {
+TEST_CASE("MapScriptApi newMap resets the bound map to empty", "[map_script_api][scripting]") {
     ScriptApiFixture fx{ false };
 
     // Dirty the map: a tile and an object.
@@ -391,7 +391,7 @@ TEST_CASE("MapScriptApi newMap resets the bound map to empty", "[scripting]") {
     CHECK(fx.mapFile().map_objects[ELEV].size() == 1);
 }
 
-TEST_CASE("MapScriptApi::mutated reports non-undoable header/map changes", "[scripting]") {
+TEST_CASE("MapScriptApi::mutated reports non-undoable header/map changes", "[map_script_api][scripting]") {
     // setPlayerStart / newMap change the map without pushing an undo command, so the host can't rely
     // on undoStackChanged to flag the map dirty — mutated() must report them.
     SECTION("a fresh api hasn't mutated the map") {
@@ -417,7 +417,7 @@ TEST_CASE("MapScriptApi::mutated reports non-undoable header/map changes", "[scr
     }
 }
 
-TEST_CASE("MapScriptApi setPlayerStart writes the map header", "[scripting]") {
+TEST_CASE("MapScriptApi setPlayerStart writes the map header", "[map_script_api][scripting]") {
     ScriptApiFixture fx;
 
     const int hex = fx.api.hexIndex(99, 99);
@@ -433,7 +433,7 @@ TEST_CASE("MapScriptApi setPlayerStart writes the map header", "[scripting]") {
     CHECK_THROWS(fx.api.setPlayerStart(hex, 0, Map::ELEVATION_COUNT)); // elevation out of range
 }
 
-TEST_CASE("Placed objects store a zero pixel offset, not the hex's screen position", "[scripting]") {
+TEST_CASE("Placed objects store a zero pixel offset, not the hex's screen position", "[map_script_api][scripting]") {
     ScriptApiFixture fx{ false };
 
     // A MapObject's x/y are a pixel offset FROM its hex, not a position: the engine renders at
@@ -460,7 +460,7 @@ TEST_CASE("Placed objects store a zero pixel offset, not the hex's screen positi
     CHECK(hex->get().y() > 0);
 }
 
-TEST_CASE("MapScriptApi placeExitGrid records a MISC exit-grid object", "[scripting]") {
+TEST_CASE("MapScriptApi placeExitGrid records a MISC exit-grid object", "[map_script_api][scripting]") {
     ScriptApiFixture fx{ false };
     // data-only: exit-grid art isn't mounted, but the .map fields are what matters here.
 
@@ -498,7 +498,7 @@ TEST_CASE("MapScriptApi placeExitGrid records a MISC exit-grid object", "[script
     CHECK(fx.api.placedObjects() == 2);                                     // the failed calls added nothing
 }
 
-TEST_CASE("MapScriptApi placeExitGridRect frames a rectangle of exit grids", "[scripting]") {
+TEST_CASE("MapScriptApi placeExitGridRect frames a rectangle of exit grids", "[map_script_api][scripting]") {
     ScriptApiFixture fx{ false };
     // data-only: exit-grid art isn't mounted, but the placed markers' fields are what matters.
 
@@ -530,7 +530,7 @@ TEST_CASE("MapScriptApi placeExitGridRect frames a rectangle of exit grids", "[s
     CHECK_THROWS(fx.api.placeExitGridRect(center, 600, 400, -2, 0, Map::ELEVATION_COUNT, 0)); // bad destElevation
 }
 
-TEST_CASE("MapScriptApi::proto builds a PID from a readable type name and id", "[scripting]") {
+TEST_CASE("MapScriptApi::proto builds a PID from a readable type name and id", "[map_script_api][scripting]") {
     ScriptApiFixture fx;
 
     // Pure (type << 24) | id; produces exactly the hex a script would otherwise hand-write.
@@ -550,7 +550,7 @@ TEST_CASE("MapScriptApi::proto builds a PID from a readable type name and id", "
     CHECK_THROWS(fx.api.proto("scenery", 0x1000000));
 }
 
-TEST_CASE("MapScriptApi tile<->hex bridge is exact, covering, and invertible", "[scripting]") {
+TEST_CASE("MapScriptApi tile<->hex bridge is exact, covering, and invertible", "[map_script_api][scripting]") {
     ScriptApiFixture fx;
 
     SECTION("tileHexes is exactly hexTile's preimage over the whole grid") {
@@ -596,7 +596,7 @@ TEST_CASE("MapScriptApi tile<->hex bridge is exact, covering, and invertible", "
     }
 }
 
-TEST_CASE("MapScriptApi setElevation routes edits to the chosen elevation", "[scripting]") {
+TEST_CASE("MapScriptApi setElevation routes edits to the chosen elevation", "[map_script_api][scripting]") {
     ScriptApiFixture fx;
 
     fx.api.setElevation(2);
@@ -612,7 +612,7 @@ TEST_CASE("MapScriptApi setElevation routes edits to the chosen elevation", "[sc
     CHECK_THROWS(fx.api.setElevation(Map::ELEVATION_COUNT));
 }
 
-TEST_CASE("MapScriptApi hexesOnScreenRect matches the exit-grid rectangle walk", "[scripting]") {
+TEST_CASE("MapScriptApi hexesOnScreenRect matches the exit-grid rectangle walk", "[map_script_api][scripting]") {
     ScriptApiFixture fx{ false };
 
     const int center = fx.api.hexIndex(100, 100);
@@ -634,7 +634,7 @@ TEST_CASE("MapScriptApi hexesOnScreenRect matches the exit-grid rectangle walk",
     CHECK_THROWS(fx.api.hexesOnScreenRect(center, 0, 48));
 }
 
-TEST_CASE("MapScriptApi reads a reference map's full floor and typed objects", "[scripting]") {
+TEST_CASE("MapScriptApi reads a reference map's full floor and typed objects", "[map_script_api][scripting]") {
     // Author the reference with the api itself — floor paints plus exit grids (MISC markers need
     // no proto to write or parse) — then mount it at the production layout (maps/<name>.map) and
     // read it back through the reference queries. Self-contained: no proto stubs, no shipped data.
@@ -674,7 +674,7 @@ TEST_CASE("MapScriptApi reads a reference map's full floor and typed objects", "
     CHECK_THROWS(fx.api.mapObjectsAt("no/such/map.map", 0, "wall"));
 }
 
-TEST_CASE("MapScriptApi quilts a floor learned from a reference map", "[scripting][quilt]") {
+TEST_CASE("MapScriptApi quilts a floor learned from a reference map", "[map_script_api][scripting]") {
     const test::TempDir rootDir{ "geck_scriptapi_quilt" };
     const fs::path& root = rootDir.path();
     geck::test::writeCheckerboardReference(root);
@@ -773,7 +773,7 @@ TEST_CASE("MapScriptApi quilts a floor learned from a reference map", "[scriptin
     }
 }
 
-TEST_CASE("MapScriptApi quiltExclude masks filler ids out of the reference", "[scripting][quilt]") {
+TEST_CASE("MapScriptApi quiltExclude masks filler ids out of the reference", "[map_script_api][scripting]") {
     const test::TempDir rootDir{ "geck_scriptapi_quilt_excl" };
     const fs::path& root = rootDir.path();
     geck::test::writeCheckerboardReference(root);
@@ -815,7 +815,7 @@ TEST_CASE("MapScriptApi quiltExclude masks filler ids out of the reference", "[s
     }
 }
 
-TEST_CASE("MapScriptApi quiltObjects transplants the reference objects on copied cells", "[scripting][quilt]") {
+TEST_CASE("MapScriptApi quiltObjects transplants the reference objects on copied cells", "[map_script_api][scripting]") {
     // Author the checkerboard reference PLUS misc exit-grid markers standing on it (MISC needs no
     // proto to author or transplant headlessly), then quilt and pull the markers across.
     const test::TempDir rootDir{ "geck_scriptapi_quilt_obj" };
@@ -872,7 +872,7 @@ TEST_CASE("MapScriptApi quiltObjects transplants the reference objects on copied
     }
 }
 
-TEST_CASE("MapScriptApi copyObjects copies a reference elevation's objects onto the same hexes", "[scripting]") {
+TEST_CASE("MapScriptApi copyObjects copies a reference elevation's objects onto the same hexes", "[map_script_api][scripting]") {
     // A reference with misc exit-grid markers (MISC needs no proto to author or copy headlessly).
     const test::TempDir rootDir{ "geck_scriptapi_copy_obj" };
     const fs::path& root = rootDir.path();
@@ -932,7 +932,7 @@ TEST_CASE("MapScriptApi copyObjects copies a reference elevation's objects onto 
     }
 }
 
-TEST_CASE("MapScriptApi quiltSource learns only from the reference sub-rectangle", "[scripting][quilt]") {
+TEST_CASE("MapScriptApi quiltSource learns only from the reference sub-rectangle", "[map_script_api][scripting]") {
     // Two vocabularies side by side: left half checkerboard 271/272, right half 273/274.
     const test::TempDir rootDir{ "geck_scriptapi_quilt_src" };
     const fs::path& root = rootDir.path();
@@ -964,7 +964,7 @@ TEST_CASE("MapScriptApi quiltSource learns only from the reference sub-rectangle
     REQUIRE(fx.api.quiltFloorRect("maps/ref.map", 0, 20, 20, 29, 29) == 100);
 }
 
-TEST_CASE("MapScriptApi tilesByPrefix resolves a tile family from tiles.lst", "[scripting]") {
+TEST_CASE("MapScriptApi tilesByPrefix resolves a tile family from tiles.lst", "[map_script_api][scripting]") {
     // A data tree holding just a tiles.lst, so tileId/tilesByPrefix have real entries to resolve.
     const test::TempDir data{ "geck_scriptapi_tiles" };
     test::writeFile(data.path() / "art/tiles/tiles.lst", "edg5000.frm\nedg5001.frm\ncav1000.frm\n");
@@ -981,7 +981,7 @@ TEST_CASE("MapScriptApi tilesByPrefix resolves a tile family from tiles.lst", "[
     CHECK(fx.api.tilesByPrefix("zzz").empty()); // unmatched prefix is a valid empty result
 }
 
-TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[scripting]") {
+TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[map_script_api][scripting]") {
     ScriptApiFixture fx;
 
     SECTION("data-dependent queries throw when no data is mounted (no silent empty)") {
@@ -1016,7 +1016,7 @@ TEST_CASE("MapScriptApi reports genuine failures by throwing, not silently", "[s
     }
 }
 
-TEST_CASE("MapScriptApi noise2d is pure: in [0,1] and deterministic", "[scripting]") {
+TEST_CASE("MapScriptApi noise2d is pure: in [0,1] and deterministic", "[map_script_api][scripting]") {
     ScriptApiFixture fx;
     for (int xi = 0; xi < 4; ++xi) {
         for (int yi = 0; yi < 4; ++yi) {
@@ -1031,7 +1031,7 @@ TEST_CASE("MapScriptApi noise2d is pure: in [0,1] and deterministic", "[scriptin
     CHECK(fx.api.noise2d(1.5, 2.5) != fx.api.noise2d(40.5, 80.5)); // varies across the field
 }
 
-TEST_CASE("The plan sink caps a run at a multiple of the bound area's footprint", "[scripting][cap]") {
+TEST_CASE("The plan sink caps a run at a multiple of the bound area's footprint", "[map_script_api][scripting]") {
     ScriptApiFixture fx{ false };
     // Headless (buildSprites=false): the sink records objects with a null visual, no art needed.
 
@@ -1071,7 +1071,7 @@ TEST_CASE("The plan sink caps a run at a multiple of the bound area's footprint"
     CHECK(plan.dropped == 16 + 16);
 }
 
-TEST_CASE("The plan sink cap trims a stamp's bulk append", "[scripting][cap]") {
+TEST_CASE("The plan sink cap trims a stamp's bulk append", "[map_script_api][scripting]") {
     ScriptApiFixture fx{ false };
 
     // Footprint = 1 hex -> cap = 8 entries per list.
@@ -1102,7 +1102,7 @@ TEST_CASE("The plan sink cap trims a stamp's bulk append", "[scripting][cap]") {
     CHECK(plan.dropped == 4);
 }
 
-TEST_CASE("A sink with no bound area stays uncapped", "[scripting][cap]") {
+TEST_CASE("A sink with no bound area stays uncapped", "[map_script_api][scripting]") {
     ScriptApiFixture fx{ false };
 
     // Programmatic sink use (no fill area): the cap does not apply.
@@ -1120,7 +1120,7 @@ TEST_CASE("A sink with no bound area stays uncapped", "[scripting][cap]") {
 // tile.cc tileToScreenXY): the frame hangs from the hex's point + (16, 8) + the FRM's direction shift,
 // centred on x with its bottom on y. Cave rims are laid by abutting these rects pixel-exactly, so the
 // geometry is pinned on three neighbouring hexes of one 16x120 strip with a (8, -4) shift.
-TEST_CASE("MapScriptApi artRect gives the screen rectangle the engine draws a proto's art in", "[scripting]") {
+TEST_CASE("MapScriptApi artRect gives the screen rectangle the engine draws a proto's art in", "[map_script_api][scripting]") {
     const test::TempDir rootDir{ "geck_artrect" };
     const fs::path& root = rootDir.path();
     test::writeFile(root / "proto" / "walls" / "walls.lst", "piece.pro\n");

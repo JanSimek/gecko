@@ -32,7 +32,7 @@ entrance_0=On,300,300,Den,-1,-1,2
 )";
 } // namespace
 
-TEST_CASE("parseCityTxt reads worldmap areas, positions and entrances", "[city]") {
+TEST_CASE("parseCityTxt reads worldmap areas, positions and entrances", "[city_txt]") {
     const CityTxt city = parseCityTxt(std::string{ kCityTxt });
 
     CHECK(city.areas.size() == 2);
@@ -68,6 +68,6 @@ TEST_CASE("parseCityTxt reads worldmap areas, positions and entrances", "[city]"
     CHECK(city.find(99) == nullptr);
 }
 
-TEST_CASE("parseCityTxt tolerates empty input", "[city]") {
+TEST_CASE("parseCityTxt tolerates empty input", "[city_txt]") {
     CHECK(parseCityTxt(std::string{}).areas.empty());
 }

@@ -15,7 +15,7 @@ using namespace geck;
 // Selection routes through isObjectVisible (the same rule renderObjects draws by), so a click
 // can never select an object the user can't see. Regression guard for selecting a scroll blocker
 // while its layer is hidden, which produced an invisible selection.
-TEST_CASE("isObjectVisible follows the layer toggles that decide what is drawn", "[visibility]") {
+TEST_CASE("isObjectVisible follows the layer toggles that decide what is drawn", "[object_visibility]") {
     // A plain item: neither a wall (PRO type) nor a scroll blocker (FRM base id 1).
     MapObject regular;
     regular.pro_pid = ProtoId(ObjectType::Item, 100).pid();
@@ -87,7 +87,7 @@ TEST_CASE("isObjectVisible follows the layer toggles that decide what is drawn",
     }
 }
 
-TEST_CASE("A scroll blocker is the engine's proto, not whatever uses scrblk art", "[rendering][visibility]") {
+TEST_CASE("A scroll blocker is the engine's proto, not whatever uses scrblk art", "[map_object]") {
     // The engine's rule, from _obj_scroll_blocking_at(): `obj->pid == 0x500000C`, art irrelevant.
     // Testing the FRM's low 24 bits instead made every object drawn with art index 1 a blocker -
     // art/items/ammo.frm is FID 0x00000001 - so ammo boxes vanished from the editor while loading,
@@ -142,7 +142,7 @@ std::vector<std::ptrdiff_t> drawOrder(const std::vector<MapObject>& objects) {
 
 } // namespace
 
-TEST_CASE("Flat objects draw under standing ones whatever the map-file order", "[rendering][visibility]") {
+TEST_CASE("Flat objects draw under standing ones whatever the map-file order", "[object_draw_order]") {
     // fallout2-ce _obj_render_pre_roof draws every OBJECT_FLAT object before any standing one. An
     // exit grid listed after a wall must still be covered by it, as in the shipped caves; drawing
     // in file order put a generated cave's exits on top of the rock in front of them.
@@ -158,7 +158,7 @@ TEST_CASE("Flat objects draw under standing ones whatever the map-file order", "
     CHECK(drawOrder(objects) == std::vector<std::ptrdiff_t>{ 1, 2, 3, 0 });
 }
 
-TEST_CASE("Standing objects draw by ascending hex, a hex's objects in list order", "[rendering][visibility]") {
+TEST_CASE("Standing objects draw by ascending hex, a hex's objects in list order", "[object_draw_order]") {
     // Each engine pass walks hexes in _orderTable order, sorted by tile number, and a hex's object
     // list keeps insertion order (_obj_insert). A rock a script appends after the wall in front of
     // it must still be drawn under that wall.

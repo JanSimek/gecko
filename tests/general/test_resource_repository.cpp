@@ -32,7 +32,7 @@ constexpr const char* LST_PATH = "art/tiles/tiles.lst";
 
 } // namespace
 
-TEST_CASE("ResourceRepository caches and reuses loaded resources", "[resource]") {
+TEST_CASE("ResourceRepository caches and reuses loaded resources", "[resource_repository]") {
     RepoFixture fx;
     auto& repo = fx.repo();
 
@@ -49,7 +49,7 @@ TEST_CASE("ResourceRepository caches and reuses loaded resources", "[resource]")
     CHECK(repo.find<Lst>(LST_PATH) == first);
 }
 
-TEST_CASE("ResourceRepository rejects a type-mismatched lookup", "[resource]") {
+TEST_CASE("ResourceRepository rejects a type-mismatched lookup", "[resource_repository]") {
     RepoFixture fx;
     auto& repo = fx.repo();
     REQUIRE(repo.load<Lst>(LST_PATH) != nullptr);
@@ -59,7 +59,7 @@ TEST_CASE("ResourceRepository rejects a type-mismatched lookup", "[resource]") {
     CHECK_THROWS(repo.find<Frm>(LST_PATH));
 }
 
-TEST_CASE("ResourceRepository clear() drops cached resources", "[resource]") {
+TEST_CASE("ResourceRepository clear() drops cached resources", "[resource_repository]") {
     RepoFixture fx;
     auto& repo = fx.repo();
     REQUIRE(repo.load<Lst>(LST_PATH) != nullptr);
@@ -70,12 +70,12 @@ TEST_CASE("ResourceRepository clear() drops cached resources", "[resource]") {
     CHECK(repo.load<Lst>(LST_PATH) != nullptr); // reload works after clear
 }
 
-TEST_CASE("ResourceRepository load throws on a missing file", "[resource]") {
+TEST_CASE("ResourceRepository load throws on a missing file", "[resource_repository]") {
     RepoFixture fx;
     CHECK_THROWS_AS(fx.repo().load<Lst>("art/tiles/nonexistent.lst"), geck::IOException);
 }
 
-TEST_CASE("ResourceRepository tryLoad returns null for a missing file and caches a present one", "[resource]") {
+TEST_CASE("ResourceRepository tryLoad returns null for a missing file and caches a present one", "[resource_repository]") {
     RepoFixture fx;
     CHECK(fx.repo().tryLoad<Lst>("art/tiles/nonexistent.lst") == nullptr);
     const Lst* lst = fx.repo().tryLoad<Lst>(LST_PATH);
@@ -83,7 +83,7 @@ TEST_CASE("ResourceRepository tryLoad returns null for a missing file and caches
     CHECK(fx.repo().load<Lst>(LST_PATH) == lst);
 }
 
-TEST_CASE("GameResources::tryLoadPro returns null for a PID with no proto", "[resource]") {
+TEST_CASE("GameResources::tryLoadPro returns null for a PID with no proto", "[game_resources]") {
     GameResources resources; // nothing mounted: no proto list for any type
     CHECK(resources.tryLoadPro(0x02000001) == nullptr);
     CHECK_THROWS(resources.loadPro(0x02000001));
@@ -92,7 +92,7 @@ TEST_CASE("GameResources::tryLoadPro returns null for a PID with no proto", "[re
 // Background loaders (MapLoader, DataPathLoader) call load()/find() concurrently
 // with the main thread. The cache must therefore tolerate concurrent access and
 // still deduplicate: racing loads of one key must converge on a single object.
-TEST_CASE("ResourceRepository load is thread-safe and deduplicates under contention", "[resource]") {
+TEST_CASE("ResourceRepository load is thread-safe and deduplicates under contention", "[resource_repository]") {
     test::DataTree tree{ "geck_resourcerepo_concurrency" };
     // Write every fixture file before mounting so all keys are visible.
     tree.write("art/tiles/tiles.lst", "floor.frm\ngrass.frm\n");

@@ -12,48 +12,48 @@ namespace {
 constexpr int kTileCount = static_cast<int>(Map::TILES_PER_ELEVATION);
 }
 
-TEST_CASE("Tile coordinate conversion", "[tile_utils]") {
+TEST_CASE("Tile indices and (x, y) coordinates convert both ways across the grid", "[tile_utils]") {
     SECTION("indexToCoordinates conversion") {
         // Test corner cases
         auto coords_0 = indexToCoordinates(0);
-        REQUIRE(coords_0.x == 0);
-        REQUIRE(coords_0.y == 0);
+        CHECK(coords_0.x == 0);
+        CHECK(coords_0.y == 0);
 
         auto coords_99 = indexToCoordinates(99);
-        REQUIRE(coords_99.x == 0);
-        REQUIRE(coords_99.y == 99);
+        CHECK(coords_99.x == 0);
+        CHECK(coords_99.y == 99);
 
         auto coords_100 = indexToCoordinates(100);
-        REQUIRE(coords_100.x == 1);
-        REQUIRE(coords_100.y == 0);
+        CHECK(coords_100.x == 1);
+        CHECK(coords_100.y == 0);
 
         auto coords_150 = indexToCoordinates(150);
-        REQUIRE(coords_150.x == 1);
-        REQUIRE(coords_150.y == 50);
+        CHECK(coords_150.x == 1);
+        CHECK(coords_150.y == 50);
 
         // Test middle of map
         auto coords_5050 = indexToCoordinates(5050);
-        REQUIRE(coords_5050.x == 50);
-        REQUIRE(coords_5050.y == 50);
+        CHECK(coords_5050.x == 50);
+        CHECK(coords_5050.y == 50);
 
         // Test last tile
         auto coords_last = indexToCoordinates(kTileCount - 1);
-        REQUIRE(coords_last.x == MAP_HEIGHT - 1);
-        REQUIRE(coords_last.y == MAP_WIDTH - 1);
+        CHECK(coords_last.x == MAP_HEIGHT - 1);
+        CHECK(coords_last.y == MAP_WIDTH - 1);
     }
 
     SECTION("coordinatesToIndex conversion") {
         // Test corner cases
-        REQUIRE(coordinatesToIndex(TileCoordinates(0, 0)) == 0);
-        REQUIRE(coordinatesToIndex(TileCoordinates(0, 99)) == 99);
-        REQUIRE(coordinatesToIndex(TileCoordinates(1, 0)) == 100);
-        REQUIRE(coordinatesToIndex(TileCoordinates(1, 50)) == 150);
+        CHECK(coordinatesToIndex(TileCoordinates(0, 0)) == 0);
+        CHECK(coordinatesToIndex(TileCoordinates(0, 99)) == 99);
+        CHECK(coordinatesToIndex(TileCoordinates(1, 0)) == 100);
+        CHECK(coordinatesToIndex(TileCoordinates(1, 50)) == 150);
 
         // Test middle of map
-        REQUIRE(coordinatesToIndex(TileCoordinates(50, 50)) == 5050);
+        CHECK(coordinatesToIndex(TileCoordinates(50, 50)) == 5050);
 
         // Test last tile
-        REQUIRE(coordinatesToIndex(TileCoordinates(MAP_HEIGHT - 1, MAP_WIDTH - 1)) == kTileCount - 1);
+        CHECK(coordinatesToIndex(TileCoordinates(MAP_HEIGHT - 1, MAP_WIDTH - 1)) == kTileCount - 1);
     }
 
     SECTION("Round-trip conversion consistency") {
@@ -61,7 +61,7 @@ TEST_CASE("Tile coordinate conversion", "[tile_utils]") {
         for (int index : { 0, 99, 100, 150, 5050, kTileCount - 1 }) {
             auto coords = indexToCoordinates(index);
             auto back_to_index = coordinatesToIndex(coords);
-            REQUIRE(back_to_index == index);
+            CHECK(back_to_index == index);
         }
 
         // Test that converting coords->index->coords gives same result
@@ -76,34 +76,34 @@ TEST_CASE("Tile coordinate conversion", "[tile_utils]") {
         for (const auto& coords : test_coords) {
             auto index = coordinatesToIndex(coords);
             auto back_to_coords = indexToCoordinates(index);
-            REQUIRE(back_to_coords.x == coords.x);
-            REQUIRE(back_to_coords.y == coords.y);
+            CHECK(back_to_coords.x == coords.x);
+            CHECK(back_to_coords.y == coords.y);
         }
     }
 }
 
-TEST_CASE("Screen position calculation", "[tile_utils]") {
+TEST_CASE("Tile screen positions follow the isometric layout and lift roofs by ROOF_OFFSET", "[tile_utils]") {
     SECTION("coordinatesToScreenPosition - floor tiles") {
         // Test origin (0,0) - bottom-right corner of map in isometric view
         auto screen_00 = coordinatesToScreenPosition(TileCoordinates(0, 0), false);
         unsigned int expected_x_00 = (MAP_WIDTH - 0 - 1) * TILE_X_OFFSET + TILE_Y_OFFSET_LARGE * 0;
         unsigned int expected_y_00 = 12; // Actual correct value from coordinate transformation
-        REQUIRE(screen_00.x == expected_x_00);
-        REQUIRE(screen_00.y == expected_y_00);
+        CHECK(screen_00.x == expected_x_00);
+        CHECK(screen_00.y == expected_y_00);
 
         // Test (1,1)
         auto screen_11 = coordinatesToScreenPosition(TileCoordinates(1, 1), false);
         unsigned int expected_x_11 = (MAP_WIDTH - 1 - 1) * TILE_X_OFFSET + TILE_Y_OFFSET_LARGE * 1;
         unsigned int expected_y_11 = 48; // Actual correct value from coordinate transformation
-        REQUIRE(screen_11.x == expected_x_11);
-        REQUIRE(screen_11.y == expected_y_11);
+        CHECK(screen_11.x == expected_x_11);
+        CHECK(screen_11.y == expected_y_11);
 
         // Test corner case (99, 99) - top-left corner of map in isometric view
         auto screen_9999 = coordinatesToScreenPosition(TileCoordinates(99, 99), false);
         unsigned int expected_x_9999 = (MAP_WIDTH - 99 - 1) * TILE_X_OFFSET + TILE_Y_OFFSET_LARGE * 99;
         unsigned int expected_y_9999 = 3576; // Actual correct value from coordinate transformation
-        REQUIRE(screen_9999.x == expected_x_9999);
-        REQUIRE(screen_9999.y == expected_y_9999);
+        CHECK(screen_9999.x == expected_x_9999);
+        CHECK(screen_9999.y == expected_y_9999);
     }
 
     SECTION("coordinatesToScreenPosition - roof tiles") {
@@ -111,8 +111,8 @@ TEST_CASE("Screen position calculation", "[tile_utils]") {
         auto screen_floor = coordinatesToScreenPosition(TileCoordinates(10, 10), false);
         auto screen_roof = coordinatesToScreenPosition(TileCoordinates(10, 10), true);
 
-        REQUIRE(screen_roof.x == screen_floor.x);               // X should be same
-        REQUIRE(screen_roof.y == screen_floor.y - ROOF_OFFSET); // Y should be offset by roof height
+        CHECK(screen_roof.x == screen_floor.x);               // X should be same
+        CHECK(screen_roof.y == screen_floor.y - ROOF_OFFSET); // Y should be offset by roof height
     }
 
     SECTION("indexToScreenPosition convenience function") {
@@ -123,15 +123,15 @@ TEST_CASE("Screen position calculation", "[tile_utils]") {
         auto screen_step_by_step = coordinatesToScreenPosition(coords, false);
         auto screen_direct = indexToScreenPosition(test_index, false);
 
-        REQUIRE(screen_direct.x == screen_step_by_step.x);
-        REQUIRE(screen_direct.y == screen_step_by_step.y);
+        CHECK(screen_direct.x == screen_step_by_step.x);
+        CHECK(screen_direct.y == screen_step_by_step.y);
 
         // Test with roof tiles
         auto screen_step_by_step_roof = coordinatesToScreenPosition(coords, true);
         auto screen_direct_roof = indexToScreenPosition(test_index, true);
 
-        REQUIRE(screen_direct_roof.x == screen_step_by_step_roof.x);
-        REQUIRE(screen_direct_roof.y == screen_step_by_step_roof.y);
+        CHECK(screen_direct_roof.x == screen_step_by_step_roof.x);
+        CHECK(screen_direct_roof.y == screen_step_by_step_roof.y);
     }
 }
 
@@ -197,7 +197,7 @@ TEST_CASE("screenToTileIndex resolves clicks to the tile under them", "[tile_uti
     }
 }
 
-TEST_CASE("Sprite highlight functions", "[tile_utils]") {
+TEST_CASE("The preview highlight tints a sprite and removing it restores white", "[tile_utils]") {
     GECK_SKIP_IF_HEADLESS_CI();
 
     SECTION("Apply and remove preview highlight") {
@@ -212,29 +212,29 @@ TEST_CASE("Sprite highlight functions", "[tile_utils]") {
         // Apply preview highlight
         applyPreviewHighlight(sprite);
         auto expected_preview = TileColors::previewFill();
-        REQUIRE(sprite.getColor() == expected_preview);
+        CHECK(sprite.getColor() == expected_preview);
 
         // Remove preview highlight
         removePreviewHighlight(sprite);
-        REQUIRE(sprite.getColor() == sf::Color::White);
+        CHECK(sprite.getColor() == sf::Color::White);
     }
 }
 
-TEST_CASE("Mathematical property validation", "[tile_utils]") {
+TEST_CASE("Neighbouring tiles sit a fixed isometric step apart on screen", "[tile_utils]") {
     SECTION("Isometric projection consistency") {
         // Test that coordinates that differ by 1 in x have predictable screen position differences
         auto screen_00 = coordinatesToScreenPosition(TileCoordinates(0, 0));
         auto screen_10 = coordinatesToScreenPosition(TileCoordinates(1, 0));
 
         // Moving one row down should add TILE_Y_OFFSET_LARGE to x and TILE_Y_OFFSET_SMALL to y
-        REQUIRE(screen_10.x == screen_00.x + TILE_Y_OFFSET_LARGE);
-        REQUIRE(screen_10.y == screen_00.y + TILE_Y_OFFSET_SMALL);
+        CHECK(screen_10.x == screen_00.x + TILE_Y_OFFSET_LARGE);
+        CHECK(screen_10.y == screen_00.y + TILE_Y_OFFSET_SMALL);
 
         // Test that coordinates that differ by 1 in y have predictable differences
         auto screen_01 = coordinatesToScreenPosition(TileCoordinates(0, 1));
 
         // Moving one column right should subtract TILE_X_OFFSET from x and add TILE_Y_OFFSET_TINY to y
-        REQUIRE(screen_01.x == screen_00.x - TILE_X_OFFSET);
-        REQUIRE(screen_01.y == screen_00.y + TILE_Y_OFFSET_TINY);
+        CHECK(screen_01.x == screen_00.x - TILE_X_OFFSET);
+        CHECK(screen_01.y == screen_00.y + TILE_Y_OFFSET_TINY);
     }
 }

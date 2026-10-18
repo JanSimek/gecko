@@ -37,7 +37,7 @@ struct LuaFixture : ScriptApiFixture {
 };
 } // namespace
 
-TEST_CASE("Luau script paints tiles through the host API, as one undo entry", "[scripting][lua]") {
+TEST_CASE("Luau script paints tiles through the host API, as one undo entry", "[lua][scripting]") {
     LuaFixture fx;
 
     const auto r = fx.rt.run(R"(
@@ -64,7 +64,7 @@ TEST_CASE("Luau script paints tiles through the host API, as one undo entry", "[
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 
-TEST_CASE("A runaway Luau script is aborted by the time budget", "[scripting][lua][watchdog]") {
+TEST_CASE("A runaway Luau script is aborted by the time budget", "[lua][scripting]") {
     LuaFixture fx;
 
     // An infinite loop would hang the editor's live preview without a guard. A small wall-clock
@@ -91,7 +91,7 @@ TEST_CASE("A runaway Luau script is aborted by the time budget", "[scripting][lu
 // rather than recursing. The loop after the catch is small and bounded: a healthy watchdog aborts on
 // its first back-edge, so the bound never gates the passing path, while a regression reaches the
 // print() and fails this test in milliseconds rather than hanging the suite.
-TEST_CASE("A script cannot catch its way past the time budget", "[scripting][lua][watchdog]") {
+TEST_CASE("A script cannot catch its way past the time budget", "[lua][scripting]") {
     for (const std::string& guard : { std::string("pcall(runaway)"),
              std::string("xpcall(runaway, function(e) return e end)") }) {
         INFO("guard: " << guard);
@@ -107,7 +107,7 @@ TEST_CASE("A script cannot catch its way past the time budget", "[scripting][lua
     }
 }
 
-TEST_CASE("A non-string error object is reported, not dereferenced", "[scripting][lua]") {
+TEST_CASE("A non-string error object is reported, not dereferenced", "[lua][scripting]") {
     LuaFixture fx;
 
     // lua_tostring returns nullptr for a table, so building the message from it unchecked would be
@@ -117,7 +117,7 @@ TEST_CASE("A non-string error object is reported, not dereferenced", "[scripting
     CHECK(r.error.find("non-string error object") != std::string::npos);
 }
 
-TEST_CASE("budget 0 means no limit (CLI/batch generation is untimed)", "[scripting][lua][watchdog]") {
+TEST_CASE("A time budget of 0 never aborts a script, as CLI and batch generation need", "[lua][scripting]") {
     LuaFixture fx;
 
     // The default budget (0) installs no interrupt at all, so a long-but-finite trusted run is not
@@ -131,7 +131,7 @@ TEST_CASE("budget 0 means no limit (CLI/batch generation is untimed)", "[scripti
     CHECK(r.output == "9000000\n");
 }
 
-TEST_CASE("A Luau fill paints only the selection, recorded into the plan sink", "[scripting][lua][fill]") {
+TEST_CASE("A Luau fill paints only the selection, recorded into the plan sink", "[lua][scripting]") {
     LuaFixture fx;
 
     // A small floor-tile selection (EditArea requires ascending order): two partial rows of the
@@ -189,7 +189,7 @@ TEST_CASE("A Luau fill paints only the selection, recorded into the plan sink", 
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 
-TEST_CASE("The bundled biome fills paint the selection's floor by tile id, headlessly", "[scripting][lua][fill]") {
+TEST_CASE("The bundled biome fills paint the selection's floor by tile id, headlessly", "[lua][scripting]") {
     // The biome fills paint the floor with numeric tile ids (no data needed) and try to scatter
     // scenery (placeProtoXY -> false without data, never raising). So headless they must run clean and
     // record exactly the selection's floor tiles, with no scenery.
@@ -223,7 +223,7 @@ TEST_CASE("The bundled biome fills paint the selection's floor by tile id, headl
     }
 }
 
-TEST_CASE("The bundled quilt fills synthesize the selection's floor from a reference", "[scripting][lua][fill]") {
+TEST_CASE("The bundled quilt fills synthesize the selection's floor from a reference", "[lua][scripting]") {
     // Unlike the palette fills, the quilt fills learn from a reference MAP, so mount one (the
     // shared checkerboard) and point args.ref at it. No tiles.lst is mounted: the bld2043
     // exclusion inside the scripts must degrade gracefully (pcall), not abort the fill.
@@ -263,7 +263,7 @@ TEST_CASE("The bundled quilt fills synthesize the selection's floor from a refer
     std::filesystem::remove_all(root, ec);
 }
 
-TEST_CASE("A Luau fill scatters objects into the plan sink, replayable as one undo entry", "[scripting][lua][fill]") {
+TEST_CASE("A Luau fill scatters objects into the plan sink, replayable as one undo entry", "[lua][scripting]") {
     LuaFixture fx{ false };
     // Headless/data-only: placeObject records map data with a null visual; replay commits it as data.
 
@@ -303,7 +303,7 @@ TEST_CASE("A Luau fill scatters objects into the plan sink, replayable as one un
     CHECK_FALSE(fx.undoStack.canUndo());
 }
 
-TEST_CASE("Luau reads a C++ container (hexNeighbors) back as a table", "[scripting][lua]") {
+TEST_CASE("Luau reads a C++ container (hexNeighbors) back as a table", "[lua][scripting]") {
     LuaFixture fx;
 
     // hexNeighbors returns std::vector<int>; LuaBridge converts it to a Lua array. The
@@ -319,7 +319,7 @@ TEST_CASE("Luau reads a C++ container (hexNeighbors) back as a table", "[scripti
     CHECK(fx.mapFile().tiles.at(ELEV)[0].getFloor() == 276);
 }
 
-TEST_CASE("Luau passes a Lua table into quiltFloorTiles and quilts the region", "[scripting][lua]") {
+TEST_CASE("Luau passes a Lua table into quiltFloorTiles and quilts the region", "[lua][scripting]") {
     // The inverse marshaling direction of the hexNeighbors case: quiltFloorTiles takes a
     // std::vector<int> PARAMETER, so a Lua array must convert on the way in. The reference is a
     // 12x12 checkerboard authored to disk; the quilted region must reproduce its vocabulary.
@@ -350,7 +350,7 @@ TEST_CASE("Luau passes a Lua table into quiltFloorTiles and quilts the region", 
     std::filesystem::remove_all(root, ec);
 }
 
-TEST_CASE("Luau scripts are sandboxed", "[scripting][lua]") {
+TEST_CASE("Luau scripts are sandboxed", "[lua][scripting]") {
     LuaFixture fx;
 
     // Safe-by-default: io is gone, os is trimmed, no source/bytecode loaders.
@@ -367,7 +367,7 @@ TEST_CASE("Luau scripts are sandboxed", "[scripting][lua]") {
     CHECK_FALSE(blocked.ok);
 }
 
-TEST_CASE("Luau compile and runtime errors surface as a ScriptResult", "[scripting][lua]") {
+TEST_CASE("Luau compile and runtime errors surface as a ScriptResult", "[lua][scripting]") {
     LuaFixture fx;
 
     const auto runtimeErr = fx.rt.run("error('boom')", fx.api, fx.controller);
@@ -382,7 +382,7 @@ TEST_CASE("Luau compile and runtime errors surface as a ScriptResult", "[scripti
     CHECK(fx.mapFile().tiles.at(ELEV)[0].getFloor() == EMPTY);
 }
 
-TEST_CASE("Luau-painted tiles survive a map save/reload round-trip", "[scripting][lua][roundtrip]") {
+TEST_CASE("Luau-painted tiles survive a map save/reload round-trip", "[lua][scripting][roundtrip]") {
     LuaFixture fx;
 
     const auto r = fx.rt.run(R"(
@@ -404,7 +404,7 @@ TEST_CASE("Luau-painted tiles survive a map save/reload round-trip", "[scripting
     CHECK(tiles[5].getRoof() == 480);
 }
 
-TEST_CASE("Luau surfaces genuine failures as errors, not-applicable as values", "[scripting][lua]") {
+TEST_CASE("Luau surfaces genuine failures as errors, not-applicable as values", "[lua][scripting]") {
     LuaFixture fx;
 
     // Unified error model: a genuine failure (here, no data mounted) RAISES, so a script can pcall
@@ -434,7 +434,7 @@ TEST_CASE("Luau surfaces genuine failures as errors, not-applicable as values", 
     CHECK(r.ok);
 }
 
-TEST_CASE("Luau exposes caller args as the global table", "[scripting][lua]") {
+TEST_CASE("Luau exposes caller args as the global table", "[lua][scripting]") {
     LuaFixture fx;
 
     const ScriptArgs args{ { "seed", "42" }, { "tile", "edg5000" } };
@@ -449,7 +449,7 @@ TEST_CASE("Luau exposes caller args as the global table", "[scripting][lua]") {
     CHECK(r.ok);
 }
 
-TEST_CASE("Each run is randomly seeded, but an explicit seed reproduces", "[scripting][lua]") {
+TEST_CASE("Each run is randomly seeded, but an explicit seed reproduces", "[lua][scripting]") {
     LuaFixture fx;
 
     // Eight draws make an accidental collision between two independently-seeded runs astronomically
@@ -471,7 +471,7 @@ TEST_CASE("Each run is randomly seeded, but an explicit seed reproduces", "[scri
     CHECK(c.output == d.output);
 }
 
-TEST_CASE("The run's seed also drives api:rng", "[scripting][lua]") {
+TEST_CASE("The run's seed also drives api:rng", "[lua][scripting]") {
     LuaFixture fx;
 
     const std::string draw = "for i = 1, 8 do print(api:rngInt(1, 1000000)) end";
@@ -494,7 +494,7 @@ TEST_CASE("The run's seed also drives api:rng", "[scripting][lua]") {
     CHECK(a.output != c.output);
 }
 
-TEST_CASE("The run's seed is published as args.seed", "[scripting][lua]") {
+TEST_CASE("The run's seed is published as args.seed", "[lua][scripting]") {
     LuaFixture fx;
 
     const std::string echo = "print(args.seed)";
@@ -514,7 +514,7 @@ TEST_CASE("The run's seed is published as args.seed", "[scripting][lua]") {
     CHECK(c.output == "12345\n");
 }
 
-TEST_CASE("The shipped terrain.luau fails clearly when data is missing", "[scripting][lua]") {
+TEST_CASE("The shipped terrain.luau fails clearly when data is missing", "[lua][scripting]") {
     const std::string source = geck::test::bundledScript("editor/terrain.luau");
 
     LuaFixture fx;
@@ -529,7 +529,7 @@ TEST_CASE("The shipped terrain.luau fails clearly when data is missing", "[scrip
     CHECK(fx.api.placedObjects() == 0);
 }
 
-TEST_CASE("The shipped scatter.luau requires a palette and tile", "[scripting][lua]") {
+TEST_CASE("The shipped scatter.luau requires a palette and tile", "[lua][scripting]") {
     const std::string source = geck::test::bundledScript("editor/scatter.luau");
 
     LuaFixture fx;
@@ -542,7 +542,7 @@ TEST_CASE("The shipped scatter.luau requires a palette and tile", "[scripting][l
     CHECK(fx.api.paintedTiles() == 0);
 }
 
-TEST_CASE("Luau places objects headlessly (data only) and they survive save/reload", "[scripting][lua][roundtrip]") {
+TEST_CASE("Luau places objects headlessly (data only) and they survive save/reload", "[lua][scripting][roundtrip]") {
     LuaFixture fx{ false };
     // Headless data-only mode: no GL, so placeObject records map data without a sprite.
 
@@ -569,7 +569,7 @@ TEST_CASE("Luau places objects headlessly (data only) and they survive save/relo
     CHECK(objs[1]->position == 20102);
 }
 
-TEST_CASE("Luau print() output is captured for the console", "[scripting][lua]") {
+TEST_CASE("Luau print() output is captured for the console", "[lua][scripting]") {
     LuaFixture fx;
 
     // Multiple args are tab-separated, each print() ends with a newline (Lua print semantics).
@@ -583,7 +583,7 @@ TEST_CASE("Luau print() output is captured for the console", "[scripting][lua]")
     CHECK(r.output == "hello\t42\ndone\n");
 }
 
-TEST_CASE("LuaSandboxHost refuses to run before it is initialized", "[scripting][lua]") {
+TEST_CASE("LuaSandboxHost refuses to run before it is initialized", "[lua][scripting]") {
     LuaSandboxHost host;
     std::string error;
 
@@ -593,7 +593,7 @@ TEST_CASE("LuaSandboxHost refuses to run before it is initialized", "[scripting]
     CHECK(error == "sandbox not initialized");
 }
 
-TEST_CASE("LuaSandboxHost refuses to run with no chunk loaded", "[scripting][lua]") {
+TEST_CASE("LuaSandboxHost refuses to run with no chunk loaded", "[lua][scripting]") {
     ScriptApiFixture fx;
     LuaSandboxHost host;
     std::string out;
@@ -610,7 +610,7 @@ TEST_CASE("LuaSandboxHost refuses to run with no chunk loaded", "[scripting][lua
     CHECK(out == "ok\n");
 }
 
-TEST_CASE("LuaSandboxHost discards a chunk that was loaded but never run", "[scripting][lua]") {
+TEST_CASE("LuaSandboxHost discards a chunk that was loaded but never run", "[lua][scripting]") {
     ScriptApiFixture fx;
     LuaSandboxHost host;
     std::string out;
@@ -632,7 +632,7 @@ TEST_CASE("LuaSandboxHost discards a chunk that was loaded but never run", "[scr
     CHECK(out == "latest\n");
 }
 
-TEST_CASE("LuaSandboxHost enforces its own time budget and stays usable", "[scripting][lua][watchdog]") {
+TEST_CASE("LuaSandboxHost enforces its own time budget and stays usable", "[lua][scripting]") {
     ScriptApiFixture fx;
     LuaSandboxHost host;
     std::string out;
@@ -653,7 +653,7 @@ TEST_CASE("LuaSandboxHost enforces its own time budget and stays usable", "[scri
 // the agent-facing reference can't claim a function the runtime doesn't provide. (LuaBridge hides the
 // metatable under the Luau sandbox, so we can't enumerate the reverse direction in Lua; the
 // kScriptApiEntries comment keeps additions documented, and this catches a stale/renamed entry.)
-TEST_CASE("every documented script_api function is bound", "[scripting][lua]") {
+TEST_CASE("every documented script_api function is bound", "[lua][scripting]") {
     LuaFixture fx;
 
     std::ostringstream script;
@@ -671,7 +671,7 @@ TEST_CASE("every documented script_api function is bound", "[scripting][lua]") {
     CHECK(r.output == "\n"); // print() of an empty join is just a newline — nothing missing
 }
 
-TEST_CASE("A script cannot grow the Luau heap past the host's limit", "[scripting][lua]") {
+TEST_CASE("A script cannot grow the Luau heap past the host's limit", "[lua][scripting]") {
     LuaFixture fx;
 
     // Each string is 64 MiB; keeping them alive passes the 1 GiB cap long before the OS limit.
@@ -685,7 +685,7 @@ TEST_CASE("A script cannot grow the Luau heap past the host's limit", "[scriptin
     CHECK(r.error.find("memory") != std::string::npos);
 }
 
-TEST_CASE("Captured print output is capped", "[scripting][lua]") {
+TEST_CASE("Captured print output is capped", "[lua][scripting]") {
     LuaFixture fx;
 
     const auto r = fx.rt.run(R"(
@@ -698,7 +698,7 @@ TEST_CASE("Captured print output is capped", "[scripting][lua]") {
     CHECK(r.output.find("print output truncated") != std::string::npos);
 }
 
-TEST_CASE("Script seeds parse the same for single runs and batches", "[scripting][lua]") {
+TEST_CASE("Script seeds parse the same for single runs and batches", "[lua][scripting]") {
     CHECK(parseScriptSeed("1234") == 1234u);
     // Past 32 bits (std::stol threw there on Windows, where long is 32-bit) and negative values are
     // masked to the 31 bits Luau's math.randomseed keeps.
@@ -709,7 +709,7 @@ TEST_CASE("Script seeds parse the same for single runs and batches", "[scripting
     CHECK(randomScriptSeed() <= SCRIPT_SEED_MASK);
 }
 
-TEST_CASE("scripts/README.md documents every bound script_api function", "[scripting][lua]") {
+TEST_CASE("scripts/README.md documents every bound script_api function", "[lua][scripting]") {
     // The README's API table is written by hand; this keeps it in step with the bound surface.
     const std::string readme = geck::test::bundledScript("README.md");
     for (const ScriptApiEntry& entry : scriptApiEntries()) {

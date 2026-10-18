@@ -22,7 +22,7 @@
 
 namespace test = geck::test;
 
-TEST_CASE("ScriptSelectorDialog shows index/filename/name/comment columns and returns the program index", "[qt][script]") {
+TEST_CASE("ScriptSelectorDialog shows index/filename/name/comment columns and returns the program index", "[script_selector_dialog]") {
     const std::vector<geck::ScriptSelectorDialog::Entry> entries = {
         { 0, "obj_dude.int", "The Chosen One", "Player script." },
         { 1, "obj_door.int", "", "A door" },
@@ -54,7 +54,7 @@ TEST_CASE("ScriptSelectorDialog shows index/filename/name/comment columns and re
     CHECK(dialog.selectedIndex() == 0);
 }
 
-TEST_CASE("CritterPropertiesDialog names the AI packet from ai.txt and falls back to the raw number", "[qt][critter]") {
+TEST_CASE("CritterPropertiesDialog names the AI packet from ai.txt and falls back to the raw number", "[critter_properties_dialog]") {
     geck::AiTxt aiTxt;
     aiTxt.add(geck::AiPacket{ .packetNum = 5, .name = "Coward" });
     aiTxt.add(geck::AiPacket{ .packetNum = 21, .name = "Berserker" });
@@ -88,7 +88,7 @@ TEST_CASE("CritterPropertiesDialog names the AI packet from ai.txt and falls bac
     }
 }
 
-TEST_CASE("ItemSelectorDialog lists items.lst entries by their item PID", "[qt][inventory]") {
+TEST_CASE("ItemSelectorDialog lists items.lst entries by their item PID", "[item_selector_dialog]") {
     test::DataTree data("item-selector");
     data.write("proto/items/items.lst", "aaa.pro\nbbb.pro\nccc.pro\n");
     auto& resources = data.mount();
@@ -126,7 +126,7 @@ TEST_CASE("ItemSelectorDialog lists items.lst entries by their item PID", "[qt][
     CHECK(dialog.selectedPid().value() == expected[0].pid);
 }
 
-TEST_CASE("FRM selector filters a rotated critter FID by its type nibble", "[ui][frm]") {
+TEST_CASE("FRM selector filters a rotated critter FID by its type nibble", "[frm_selector_dialog]") {
     // A critter FID carries rotation bits above the type nibble; reading the whole high byte made
     // 0x11000001 look like type 0x11 and dropped the critter filter.
     CHECK(geck::FrmSelectorDialog::filterForFid(0x11000001u) == geck::ObjectType::Critter);
@@ -136,7 +136,7 @@ TEST_CASE("FRM selector filters a rotated critter FID by its type nibble", "[ui]
 
 // The dialog edits whole percents of the engine's 65536. Truncating both ways stored 10% as 6553,
 // which read back as 9%; every percent must survive a save and reopen.
-TEST_CASE("Light dialog keeps the intensity percent it stored", "[ui][light]") {
+TEST_CASE("Light dialog keeps the intensity percent it stored", "[light_properties_dialog]") {
     for (uint32_t percent = 0; percent <= 100; ++percent) {
         const uint32_t raw = (percent * 0x10000u + 50) / 100;
         geck::LightPropertiesDialog dialog(4, raw);

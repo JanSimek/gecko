@@ -37,7 +37,7 @@ json dumpWrittenMap(const Map::MapFile& mapFile, const char* tempPrefix, cli::Du
 
 } // namespace
 
-TEST_CASE("dump-grid emits the raw floor grid, roof grid and object positions", "[cli][dump-grid]") {
+TEST_CASE("dump-grid emits the raw floor grid, roof grid and object positions", "[map_dump_grid][cli]") {
     // A WALL object: walls/critters/misc don't dereference their proto on (de)serialization, so this
     // round-trips headlessly through cli::loadMap (no data) — unlike scenery, which needs its proto.
     const uint32_t wallPid = ProtoId(ObjectType::Wall, 50).pid();
@@ -82,7 +82,7 @@ TEST_CASE("dump-grid emits the raw floor grid, roof grid and object positions", 
     REQUIRE(e["roof"].size() == Map::TILES_PER_ELEVATION);
     CHECK(e["roof"][5] == 480);
 
-    // The scenery object, with `number` == the PID's low 24 bits (the value api:proto wants).
+    // The wall object, with `number` == the PID's low 24 bits (the value api:proto wants).
     REQUIRE(e["objects"].is_array());
     REQUIRE(e["objects"].size() == 1);
     const json& obj = e["objects"][0];
@@ -95,7 +95,7 @@ TEST_CASE("dump-grid emits the raw floor grid, roof grid and object positions", 
     CHECK(obj.contains("flat"));
 }
 
-TEST_CASE("dump-grid --no-floor / --no-objects drop those sections", "[cli][dump-grid]") {
+TEST_CASE("dump-grid --no-floor / --no-objects drop those sections", "[map_dump_grid][cli]") {
     auto mapFile = Map::createEmptyMapFile();
     mapFile.tiles[0][0].setFloor(191);
 
@@ -111,7 +111,7 @@ TEST_CASE("dump-grid --no-floor / --no-objects drop those sections", "[cli][dump
 
 // The name filter exists because asking where one object sits meant reading the whole map: epax is
 // 2684 objects, nearly all scroll blockers, so three rows cost 445KB.
-TEST_CASE("dump-grid filters objects by name", "[cli][dump-grid]") {
+TEST_CASE("dump-grid filters objects by name", "[map_dump_grid][cli]") {
     auto mapFile = Map::createEmptyMapFile();
     for (int i = 0; i < 5; ++i) {
         // Critters, not scenery: scenery dereferences its Pro in both directions, so reading the

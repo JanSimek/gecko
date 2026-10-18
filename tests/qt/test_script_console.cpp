@@ -9,7 +9,7 @@
 
 namespace test = geck::test;
 
-TEST_CASE("Script console setSource loads the editor and feeds Run", "[qt][scripting]") {
+TEST_CASE("Script console setSource loads the editor and feeds Run", "[script_console][scripting]") {
     geck::ScriptConsoleWidget console;
 
     // setSource is what "Execute script" in the file browser uses to drop a .luau into the console.

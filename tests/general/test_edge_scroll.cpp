@@ -25,7 +25,7 @@ int sign(float value) {
 }
 } // namespace
 
-TEST_CASE("EdgeScroll: a cursor inside the margin band scrolls toward its edge", "[edge_scroll]") {
+TEST_CASE("EdgeScroll scrolls toward the edge whose margin band holds the cursor", "[edge_scroll]") {
     // (cursor, sign of the x velocity, sign of the y velocity)
     const auto [cursor, signX, signY] = GENERATE(table<sf::Vector2f, int, int>({
         { { 400.0f, 300.0f }, 0, 0 }, // interior
@@ -60,7 +60,7 @@ TEST_CASE("EdgeScroll: a cursor inside the margin band scrolls toward its edge",
     CHECK(sign(v.y) == signY);
 }
 
-TEST_CASE("EdgeScroll: speed ramps with depth into the margin", "[edge_scroll]") {
+TEST_CASE("EdgeScroll speeds up with the cursor's depth into the margin", "[edge_scroll]") {
     // At the very edge (distanceFromEdge == 0) the ramp is full speed.
     CHECK_THAT(vel({ 0.0f, 300.0f }).x, WithinAbs(-kSpeed, 0.001f));
 
@@ -71,7 +71,7 @@ TEST_CASE("EdgeScroll: speed ramps with depth into the margin", "[edge_scroll]")
     CHECK(std::abs(vel({ 4.0f, 300.0f }).x) > std::abs(vel({ 20.0f, 300.0f }).x));
 }
 
-TEST_CASE("EdgeScroll: degenerate inputs are inert", "[edge_scroll]") {
+TEST_CASE("EdgeScroll does not scroll for degenerate inputs", "[edge_scroll]") {
     // Zero-size viewport.
     CHECK(EdgeScroll::velocity({ 0.0f, 0.0f }, { 0.0f, 0.0f }, kMargin, kSpeed) == sf::Vector2f{});
     // Non-positive margin disables scrolling.

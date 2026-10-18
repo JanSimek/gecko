@@ -67,7 +67,7 @@ void checkSegmentProtosInRange(int dx, int dy) {
 }
 } // namespace
 
-TEST_CASE("the verified frm scheme: greenFrm = proto+1, brownFrm = proto+0x11", "[exitgrid][art]") {
+TEST_CASE("Each exit-grid direction's green art is its proto + 1 and its brown art its proto + 0x11", "[exit_grid]") {
     for (int dir = 0; dir < ExitGrid::DIR_COUNT; ++dir) {
         const uint32_t proto = ExitGrid::exitGridProto(dir);
         CHECK(proto == 0x05000010u + static_cast<uint32_t>(dir));
@@ -76,7 +76,7 @@ TEST_CASE("the verified frm scheme: greenFrm = proto+1, brownFrm = proto+0x11", 
     }
 }
 
-TEST_CASE("exitGridArtForDirection emits green for inter-map and brown for world/town", "[exitgrid][art]") {
+TEST_CASE("exitGridArtForDirection emits green for inter-map and brown for world/town", "[exit_grid]") {
     for (int dir = 0; dir < ExitGrid::DIR_COUNT; ++dir) {
         const ExitGridArt green = exitGridArtForDirection(dir, INTER);
         const ExitGridArt brown = exitGridArtForDirection(dir, WORLD);
@@ -93,7 +93,7 @@ TEST_CASE("exitGridArtForDirection emits green for inter-map and brown for world
 
 // Verified data points: a horizontal line for a world/town exit -> proto 0x05000013 (dir 3, TOP), brown
 // frm 0x05000024; a "/" diagonal -> proto 0x05000014 (dir 4), brown frm 0x05000025.
-TEST_CASE("exitGridDirectionForLine matches the user's horizontal data point", "[exitgrid][segment]") {
+TEST_CASE("A horizontal world-map exit line takes the top proto 0x05000013 and brown art 0x05000024", "[exit_grid]") {
     // A horizontal screen segment (dx dominates), hex above centre -> TOP edge, world map -> brown.
     const ExitGridArt art = artForLine(/*dx=*/200, /*dy=*/0,
         /*outwardX=*/0, /*outwardY=*/-300, WORLD);
@@ -101,7 +101,7 @@ TEST_CASE("exitGridDirectionForLine matches the user's horizontal data point", "
     CHECK(art.frmPid == 0x05000024u);
 }
 
-TEST_CASE("exitGridDirectionForLine matches the user's '/' diagonal data point", "[exitgrid][segment]") {
+TEST_CASE("A '/' world-map exit line facing down-left takes proto 0x05000014 and brown art 0x05000025", "[exit_grid]") {
     // A "/" segment runs up-right: dx > 0, dy < 0 in screen space. side B faces up-right (dir 5);
     // a hex facing down-left takes side A (dir 4). World map -> brown ext2grd5 = 0x05000025.
     const ExitGridArt art = artForLine(/*dx=*/120, /*dy=*/-120,
@@ -110,7 +110,7 @@ TEST_CASE("exitGridDirectionForLine matches the user's '/' diagonal data point",
     CHECK(art.frmPid == 0x05000025u);
 }
 
-TEST_CASE("exitGridDirectionForLine: a vertical line -> left/right (the 96x24 wide bars)", "[exitgrid][segment]") {
+TEST_CASE("exitGridDirectionForLine gives a vertical line the left or right edge it faces", "[exit_grid]") {
     // A vertical screen segment (dy dominates). A hex left of centre faces LEFT (dir 0).
     const ExitGridArt left = artForLine(0, 200, -300, 0, INTER);
     CHECK(left.proPid == ExitGrid::LEFT_PRO_PID);
@@ -121,7 +121,7 @@ TEST_CASE("exitGridDirectionForLine: a vertical line -> left/right (the 96x24 wi
     CHECK(right.proPid == 0x05000011u);
 }
 
-TEST_CASE("exitGridDirectionForLine: a horizontal line -> top/bottom (the 32x96 tall bars)", "[exitgrid][segment]") {
+TEST_CASE("exitGridDirectionForLine gives a horizontal line the top or bottom edge it faces", "[exit_grid]") {
     const ExitGridArt top = artForLine(200, 0, 0, -300, INTER);
     CHECK(top.proPid == ExitGrid::TOP_PRO_PID);
     CHECK(top.proPid == 0x05000013u);
@@ -130,7 +130,7 @@ TEST_CASE("exitGridDirectionForLine: a horizontal line -> top/bottom (the 32x96 
     CHECK(bottom.proPid == 0x05000012u);
 }
 
-TEST_CASE("exitGridDirectionForLine: a '\\' line -> the dir 6/7 diagonal pair", "[exitgrid][segment]") {
+TEST_CASE("exitGridDirectionForLine gives a '\\' line the back-slash diagonal it faces", "[exit_grid]") {
     // A "\" segment runs down-right: dx and dy same sign. Two opposite-facing hexes split the pair.
     const ExitGridArt a = artForLine(120, 120, -200, -200, INTER);
     const ExitGridArt b = artForLine(120, 120, 200, 200, INTER);
@@ -141,14 +141,14 @@ TEST_CASE("exitGridDirectionForLine: a '\\' line -> the dir 6/7 diagonal pair", 
 
 // The cardinal directions match bhrnddst.map, which uses protos 16-19 (0x05000010..13) for its
 // exit-grid rectangle border.
-TEST_CASE("the cardinal protos are bhrnddst's exit-grid protos (16-19)", "[exitgrid][bhrnddst]") {
+TEST_CASE("The cardinal exit-grid protos are the 0x05000010-13 that bhrnddst.map uses", "[exit_grid]") {
     CHECK(ExitGrid::LEFT_PRO_PID == 0x05000010u);
     CHECK(ExitGrid::RIGHT_PRO_PID == 0x05000011u);
     CHECK(ExitGrid::BOTTOM_PRO_PID == 0x05000012u);
     CHECK(ExitGrid::TOP_PRO_PID == 0x05000013u);
 }
 
-TEST_CASE("every emitted proPid is within the exit-grid range 0x05000010..17", "[exitgrid][range]") {
+TEST_CASE("Every exit-grid proto emitted for a line lies within 0x05000010-17", "[exit_grid]") {
     // Sweep a spread of segments/facings/kinds and assert the proto never escapes the valid range.
     for (int dx = -2; dx <= 2; ++dx) {
         for (int dy = -2; dy <= 2; ++dy) {
@@ -157,7 +157,7 @@ TEST_CASE("every emitted proPid is within the exit-grid range 0x05000010..17", "
     }
 }
 
-TEST_CASE("single-hex fallback (no segment) classifies by outward facing", "[exitgrid][fallback]") {
+TEST_CASE("A lone exit-grid hex takes the edge it faces outward", "[exit_grid]") {
     // Screen y grows downward: above centre -> TOP, below -> BOTTOM, left -> LEFT, right -> RIGHT.
     CHECK(exitGridArtForFacing(CX, CY - 100, CX, CY, INTER).proPid == ExitGrid::TOP_PRO_PID);
     CHECK(exitGridArtForFacing(CX, CY + 100, CX, CY, INTER).proPid == ExitGrid::BOTTOM_PRO_PID);
@@ -165,7 +165,7 @@ TEST_CASE("single-hex fallback (no segment) classifies by outward facing", "[exi
     CHECK(exitGridArtForFacing(CX + 100, CY, CX, CY, INTER).proPid == ExitGrid::RIGHT_PRO_PID);
 }
 
-TEST_CASE("single-hex fallback flips green <-> brown by destination kind", "[exitgrid][fallback]") {
+TEST_CASE("A lone exit-grid hex takes green or brown art by destination kind", "[exit_grid]") {
     const ExitGridArt green = exitGridArtForFacing(CX, CY - 100, CX, CY, INTER);
     const ExitGridArt brown = exitGridArtForFacing(CX, CY - 100, CX, CY, WORLD);
     CHECK(green.proPid == brown.proPid); // same direction
@@ -173,13 +173,13 @@ TEST_CASE("single-hex fallback flips green <-> brown by destination kind", "[exi
     CHECK(brown.frmPid == ExitGrid::brownFrm(ExitGrid::DIR_TOP));
 }
 
-TEST_CASE("a |dx| == |dy| facing tie favours the vertical (top/bottom) edge", "[exitgrid][fallback]") {
+TEST_CASE("A lone exit-grid hex facing exactly diagonally takes the top or bottom edge", "[exit_grid]") {
     // |dy| >= |dx| classifies as a horizontal line -> top/bottom edge.
     CHECK(exitGridArtForFacing(CX + 100, CY - 100, CX, CY, INTER).proPid == ExitGrid::TOP_PRO_PID);
     CHECK(exitGridArtForFacing(CX - 100, CY + 100, CX, CY, INTER).proPid == ExitGrid::BOTTOM_PRO_PID);
 }
 
-TEST_CASE("flipExitGridDirection swaps within each axis pair and is an involution", "[exitgrid][flip]") {
+TEST_CASE("flipExitGridDirection swaps within each axis pair and is an involution", "[exit_grid]") {
     // The eight directions are four adjacent pairs (0/1, 2/3, 4/5, 6/7); a flip swaps within the pair.
     CHECK(flipExitGridDirection(ExitGrid::DIR_LEFT) == ExitGrid::DIR_RIGHT);
     CHECK(flipExitGridDirection(ExitGrid::DIR_RIGHT) == ExitGrid::DIR_LEFT);
@@ -200,8 +200,7 @@ TEST_CASE("flipExitGridDirection swaps within each axis pair and is an involutio
     CHECK(flipExitGridDirection(ExitGrid::DIR_COUNT) == ExitGrid::DIR_COUNT);
 }
 
-TEST_CASE("exitGridDirectionForLine picks one side for the whole stroke and the flip inverts it",
-    "[exitgrid][line]") {
+TEST_CASE("exitGridDirectionForLine picks one side for the whole stroke and the flip inverts it", "[exit_grid]") {
     // A horizontal stroke whose midpoint is BELOW centre -> the BOTTOM (south) edge; the flip turns it
     // into the TOP (north) edge. This is the south<->north flip the F key drives.
     const int south = exitGridDirectionForLine(/*dx=*/200, /*dy=*/0,
@@ -225,7 +224,7 @@ TEST_CASE("exitGridDirectionForLine picks one side for the whole stroke and the 
     CHECK(backA / 2 == ExitGrid::DIR_BACK_A / 2); // same "\" pair
 }
 
-TEST_CASE("exitGridOutward: the per-direction outward (off-map) screen vector", "[exitgrid][outward]") {
+TEST_CASE("exitGridOutward gives each direction's off-map screen vector", "[exit_grid]") {
     // Screen y grows DOWNWARD. This vector is the side a marker's art faces; secondRowNeighbor uses it
     // to pick the diagonal band's second row (the neighbour leaning most along it). A flip (dir ^ 1)
     // reverses the sign, mirroring that facing to the OTHER side of the line. Each cardinal caps its
@@ -243,8 +242,7 @@ TEST_CASE("exitGridOutward: the per-direction outward (off-map) screen vector", 
     CHECK(exitGridOutward(ExitGrid::DIR_BACK_B) == std::pair{ 1, -2 }); // "\" side B: up-right (^1 flip)
 }
 
-TEST_CASE("exitGridOutward: every pair points opposite ways; out-of-range is {0,0}",
-    "[exitgrid][outward]") {
+TEST_CASE("exitGridOutward points flip partners opposite ways and an out-of-range direction nowhere", "[exit_grid]") {
     // The two members of each axis pair (the dir ^ 1 partners) are exact negatives, so a flip moves the
     // bar to the opposite side. This holds for BOTH the cardinals and the diagonals now.
     const std::array<std::pair<int, int>, 4> pairs{ {
@@ -284,8 +282,7 @@ bool isDiagonalDir(int dir) { return dir >= ExitGrid::DIR_FWD_A && dir <= ExitGr
 constexpr int hexPos(int col, int row) { return row * HexagonGrid::GRID_WIDTH + col; }
 } // namespace
 
-TEST_CASE("classifySegment: the MEASURED iso-diamond edge deltas are diagonal, not cardinal",
-    "[exitgrid][iso]") {
+TEST_CASE("classifySegment classes the measured iso-diamond edge deltas as diagonal, not cardinal", "[exit_grid]") {
     using geck::exitgrid_detail::classifySegment;
     using Axis = geck::exitgrid_detail::SegmentAxis;
 
@@ -300,8 +297,7 @@ TEST_CASE("classifySegment: the MEASURED iso-diamond edge deltas are diagonal, n
     CHECK(classifySegment(0, 600) == Axis::Vertical);   // pure vertical screen drag
 }
 
-TEST_CASE("exitGridDirectionForLine: the measured iso deltas yield a DIAGONAL direction",
-    "[exitgrid][iso]") {
+TEST_CASE("exitGridDirectionForLine turns the measured iso-diamond edge deltas into diagonal directions", "[exit_grid]") {
     // Shallow 4:1 edge: feed a representative outward facing; the result must be one of the "/" "\"
     // dirs (4..7), never a cardinal. (The side within the pair depends on outward facing, which we
     // only need to be diagonal here.)
@@ -319,8 +315,7 @@ TEST_CASE("exitGridDirectionForLine: the measured iso deltas yield a DIAGONAL di
     CHECK(exitGridDirectionForLine(0, 600, -300, 0, false) == ExitGrid::DIR_LEFT);
 }
 
-TEST_CASE("exitGridArtForStroke (real grid): a stroke along the iso-diamond edge commits a DIAGONAL proto",
-    "[exitgrid][iso]") {
+TEST_CASE("exitGridArtForStroke commits a diagonal proto for a stroke along the iso-diamond edge", "[exit_grid]") {
     HexagonGrid grid;
     constexpr int C = 100; // a central col/row, well inside the diamond
 
@@ -339,7 +334,7 @@ TEST_CASE("exitGridArtForStroke (real grid): a stroke along the iso-diamond edge
     CHECK(steep.frmPid == steep.proPid + 0x11);
 }
 
-TEST_CASE("exitGridArtForStroke: the flip inverts the whole stroke's side", "[exitgrid][line]") {
+TEST_CASE("exitGridArtForStroke's flip inverts the whole stroke's side", "[exit_grid]") {
     HexagonGrid grid;
     const std::vector<int> stroke = geck::hexline::hexLine(hexPos(100, 100), hexPos(100, 130));
     const ExitGridArt plain = exitGridArtForStroke(&grid, stroke, INTER, false);
@@ -347,8 +342,7 @@ TEST_CASE("exitGridArtForStroke: the flip inverts the whole stroke's side", "[ex
     CHECK(exitGridDirOfProto(flipped.proPid) == flipExitGridDirection(exitGridDirOfProto(plain.proPid)));
 }
 
-TEST_CASE("exitGridArtForStroke: a lone hex classifies by its facing and still honours the flip",
-    "[exitgrid][fallback]") {
+TEST_CASE("exitGridArtForStroke classifies a lone hex by its facing and still honours the flip", "[exit_grid]") {
     HexagonGrid grid;
     // A hex near the top row sits above the grid centre on screen -> the TOP edge.
     const std::vector<int> lone{ hexPos(100, 5) };
@@ -362,8 +356,7 @@ TEST_CASE("exitGridArtForStroke: a lone hex classifies by its facing and still h
     CHECK(flipped.frmPid == ExitGrid::brownFrm(exitGridDirOfProto(flipped.proPid)));
 }
 
-TEST_CASE("exitGridArtForStroke: no grid or an empty stroke falls back to a bottom-edge marker",
-    "[exitgrid][fallback]") {
+TEST_CASE("exitGridArtForStroke falls back to a bottom-edge marker without a grid or with an empty stroke", "[exit_grid]") {
     HexagonGrid grid;
     const ExitGridArt noGrid = exitGridArtForStroke(nullptr, { hexPos(100, 100) }, WORLD, false);
     CHECK(noGrid.proPid == ExitGrid::BOTTOM_PRO_PID);
@@ -393,7 +386,7 @@ std::vector<int> dirsOf(const std::vector<ExitGridArt>& art) {
 }
 } // namespace
 
-TEST_CASE("freeze: a captured segment's direction is INDEPENDENT of a later flip", "[exitgrid][freeze]") {
+TEST_CASE("A captured exit-grid segment keeps its direction when a later segment flips", "[exit_grid]") {
     // A horizontal segment captured with NO flip -> BOTTOM. The captured value is a snapshot: changing
     // the flip on a LATER (live) segment can never alter it.
     ExitGridSegmentRun run;
@@ -438,7 +431,7 @@ TEST_CASE("freeze: a captured segment's direction is INDEPENDENT of a later flip
     }
 }
 
-TEST_CASE("freeze: committed hexes are pixel-stable as the live segment moves", "[exitgrid][freeze]") {
+TEST_CASE("Committed exit-grid segments stay put as the live segment moves", "[exit_grid]") {
     // Two committed segments captured at different flips; as the live segment sweeps several cursor
     // positions the committed hexes/dirs must stay byte-identical. The "committed segments stay put"
     // guarantee.
@@ -502,8 +495,7 @@ double distance(double ax, double ay, double bx, double by) {
 }
 } // namespace
 
-TEST_CASE("exitGridSnapDirections: the eight clean directions are unit vectors at the measured slopes",
-    "[exitgrid][snap]") {
+TEST_CASE("exitGridSnapDirections gives eight unit vectors at the measured iso slopes", "[exit_grid]") {
     const auto& dirs = exitGridSnapDirections();
     REQUIRE(dirs.size() == 8);
     for (const auto& d : dirs) {
@@ -527,8 +519,7 @@ TEST_CASE("exitGridSnapDirections: the eight clean directions are unit vectors a
     CHECK(sawSteep);
 }
 
-TEST_CASE("snapToExitGridAngle: a cursor a few degrees off a clean angle snaps onto it, distance kept",
-    "[exitgrid][snap]") {
+TEST_CASE("snapToExitGridAngle snaps a cursor a few degrees off a clean angle onto it, keeping the distance", "[exit_grid]") {
     constexpr double last_x = 1000.0;
     constexpr double last_y = 1000.0;
     const auto& dirs = exitGridSnapDirections();
@@ -554,7 +545,7 @@ TEST_CASE("snapToExitGridAngle: a cursor a few degrees off a clean angle snaps o
     }
 }
 
-TEST_CASE("snapToExitGridAngle: a zero-length offset is returned unchanged", "[exitgrid][snap]") {
+TEST_CASE("snapToExitGridAngle returns a zero-length offset unchanged", "[exit_grid]") {
     const auto [sx, sy] = snapToExitGridAngle(500.0, 500.0, 500.0, 500.0);
     CHECK(sx == 500.0);
     CHECK(sy == 500.0);
@@ -562,7 +553,7 @@ TEST_CASE("snapToExitGridAngle: a zero-length offset is returned unchanged", "[e
 
 // --- Diagonal direction helpers --------------------------------------------------------------------
 
-TEST_CASE("isDiagonalExitGridDir / exitGridDirOfProto", "[exitgrid][diagonal]") {
+TEST_CASE("Only the four slash directions are diagonal, and every exit-grid proto maps back to its direction", "[exit_grid]") {
     CHECK_FALSE(isDiagonalExitGridDir(ExitGrid::DIR_LEFT));
     CHECK_FALSE(isDiagonalExitGridDir(ExitGrid::DIR_BOTTOM));
     CHECK(isDiagonalExitGridDir(ExitGrid::DIR_FWD_A));
@@ -574,7 +565,7 @@ TEST_CASE("isDiagonalExitGridDir / exitGridDirOfProto", "[exitgrid][diagonal]") 
 
 // --- Second-row neighbour (the 2nd parallel row of REAL diagonal markers) --------------------------
 
-TEST_CASE("secondRowNeighbor: returns -1 for every CARDINAL direction", "[exitgrid][secondrow]") {
+TEST_CASE("secondRowNeighbor finds no second row for a cardinal direction", "[exit_grid]") {
     // A spread of neighbours so a wrong "max dot" pick would surface; cardinals must still bail with -1.
     const std::vector<NeighborOffset> neighbors = {
         { 10, 1, 0 }, { 11, -1, 0 }, { 12, 0, 1 }, { 13, 0, -1 }
@@ -585,8 +576,7 @@ TEST_CASE("secondRowNeighbor: returns -1 for every CARDINAL direction", "[exitgr
     CHECK(secondRowNeighbor(ExitGrid::DIR_TOP, neighbors) == -1);
 }
 
-TEST_CASE("secondRowNeighbor: each diagonal picks the neighbour leaning most along its outward normal",
-    "[exitgrid][secondrow]") {
+TEST_CASE("secondRowNeighbor picks the neighbour leaning most along a diagonal's outward normal", "[exit_grid]") {
     // outward(FWD_A) = (1, 6): the (0, +1) downward neighbour has dot 6, the largest here.
     const std::vector<NeighborOffset> n = {
         { 20, 1, 0 },  // dot vs (1,6) = 1
@@ -604,8 +594,7 @@ TEST_CASE("secondRowNeighbor: each diagonal picks the neighbour leaning most alo
     CHECK(secondRowNeighbor(ExitGrid::DIR_BACK_B, n) == 22);
 }
 
-TEST_CASE("secondRowNeighbor: a flip mirrors the pick to the opposite-side neighbour",
-    "[exitgrid][secondrow]") {
+TEST_CASE("secondRowNeighbor mirrors its pick to the opposite side for a flipped diagonal", "[exit_grid]") {
     // Symmetric pair of neighbours straddling the band; flipping dir must swap which one is chosen.
     const std::vector<NeighborOffset> n = {
         { 30, 1, 5 },   // leans the FWD_A (down) way
@@ -618,8 +607,7 @@ TEST_CASE("secondRowNeighbor: a flip mirrors the pick to the opposite-side neigh
     CHECK(a != b);
 }
 
-TEST_CASE("secondRowNeighbor: a neighbour exactly PERPENDICULAR (dot 0) is never picked",
-    "[exitgrid][secondrow]") {
+TEST_CASE("secondRowNeighbor never picks a neighbour perpendicular to the outward normal", "[exit_grid]") {
     // outward(FWD_A) = (1, 6). The offset (6, -1) is perpendicular: dot = 6*1 + (-1)*6 = 0. With the
     // bestDot seed at 0 and a strict dot > bestDot test, a sole perpendicular neighbour yields -1.
     const std::vector<NeighborOffset> perpOnly = { { 40, 6, -1 } };
@@ -636,8 +624,7 @@ TEST_CASE("secondRowNeighbor: a neighbour exactly PERPENDICULAR (dot 0) is never
 
 // --- Placement: a diagonal segment grows a SECOND row of REAL hexes, a cardinal stays single-row -----
 
-TEST_CASE("placement: a DIAGONAL segment yields ~2x the line's hexes; a CARDINAL stays 1x",
-    "[exitgrid][secondrow][placement]") {
+TEST_CASE("A diagonal exit-grid band places about twice the line's hexes and a cardinal one just the line", "[exit_grid]") {
     HexagonGrid grid;
     constexpr int C = 100;
 
@@ -671,8 +658,7 @@ TEST_CASE("placement: a DIAGONAL segment yields ~2x the line's hexes; a CARDINAL
     CHECK(exitGridBandHexes(grid, cardLine, ExitGrid::DIR_RIGHT) == cardLine);
 }
 
-TEST_CASE("placement: a flipped diagonal grows its second row on the opposite side",
-    "[exitgrid][secondrow][placement]") {
+TEST_CASE("A flipped diagonal exit-grid band grows its second row on the opposite side", "[exit_grid]") {
     HexagonGrid grid;
     constexpr int C = 100;
     const std::vector<int> line = geck::hexline::hexLine(hexPos(C, C), hexPos(C, C + 30));
@@ -692,7 +678,7 @@ TEST_CASE("placement: a flipped diagonal grows its second row on the opposite si
     CHECK((sx - fx) * ax + (sy - fy) * ay < 0);
 }
 
-TEST_CASE("exitGridSecondRowHex: an off-grid start or a step off the grid gives -1", "[exitgrid][secondrow]") {
+TEST_CASE("exitGridSecondRowHex gives -1 for an off-grid start or a step off the grid", "[exit_grid]") {
     HexagonGrid grid;
     const int pastEnd = HexagonGrid::GRID_WIDTH * HexagonGrid::GRID_HEIGHT;
     CHECK(geck::exitGridSecondRowHex(grid, -1, ExitGrid::DIR_BACK_A, geck::EXIT_GRID_SECOND_ROW_STEPS) == -1);
@@ -706,7 +692,7 @@ TEST_CASE("exitGridSecondRowHex: an off-grid start or a step off the grid gives 
     CHECK(geck::exitGridSecondRowHex(grid, 0, ExitGrid::DIR_FWD_A, 2) >= 0);
 }
 
-TEST_CASE("placement: a diagonal band along the grid edge adds no off-grid second row", "[exitgrid][secondrow][placement]") {
+TEST_CASE("A diagonal exit-grid band along the grid edge adds no off-grid second row", "[exit_grid]") {
     HexagonGrid grid;
     // Row 0 is the grid's top edge: FWD_B's second row would lie off the grid, FWD_A's lies inside.
     const std::vector<int> edge = geck::hexline::hexLine(hexPos(40, 0), hexPos(60, 0));
@@ -719,8 +705,7 @@ TEST_CASE("placement: a diagonal band along the grid edge adds no off-grid secon
     }
 }
 
-TEST_CASE("exitGridSegmentRun takes the axis from the ends and the side from the middle hex",
-    "[exitgrid][segment]") {
+TEST_CASE("exitGridSegmentRun takes the axis from the ends and the side from the middle hex", "[exit_grid]") {
     HexagonGrid grid;
     constexpr int C = 100;
     // Four hexes eastward along one row: the "middle" of an even run is hexes[size / 2], the third.

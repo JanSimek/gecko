@@ -32,7 +32,7 @@ json run(resource::GameResources& resources, const cli::ExamplesOptions& options
 
 } // namespace
 
-TEST_CASE("find_examples reports matching objects with their script and surroundings", "[cli][examples]") {
+TEST_CASE("find_examples reports matching objects with their script and surroundings", "[find_examples][cli]") {
     test::DataTree tree{ "map_examples_data" };
     const fs::path& root = tree.root();
     test::writeMapFile(test::ShopMap::build(), root / "maps" / "shop.map");

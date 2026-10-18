@@ -46,7 +46,7 @@ struct ExitGridFixture {
 
 } // namespace
 
-TEST_CASE("ExitGridPropertiesDialog picks a destination from the mounted maps", "[qt][exitgrid]") {
+TEST_CASE("ExitGridPropertiesDialog picks a destination from the mounted maps", "[exit_grid_properties_dialog]") {
     ExitGridFixture fixture;
     geck::ExitGridPropertiesDialog dialog(nullptr, fixture.names.get());
 
@@ -97,7 +97,7 @@ TEST_CASE("ExitGridPropertiesDialog picks a destination from the mounted maps", 
     }
 }
 
-TEST_CASE("ExitGridPropertiesDialog operates with no resolver and preserves the destination id", "[qt][exitgrid]") {
+TEST_CASE("ExitGridPropertiesDialog operates with no resolver and preserves the destination id", "[exit_grid_properties_dialog]") {
     // No game data mounted (null resolver): the combo has no map entries but the dialog still works.
     geck::ExitGridPropertiesDialog dialog(nullptr, nullptr);
 
@@ -114,7 +114,7 @@ TEST_CASE("ExitGridPropertiesDialog operates with no resolver and preserves the 
 // The unified Exit-Grids tool is one checkable button plus a dropdown whose two items ("Draw edge" /
 // "Place single hex") are exclusive: triggering one ticks it, unticks the other, keeps the button
 // checked. (Driving the editor mode needs game data, so that half is covered below against EditorWidget.)
-TEST_CASE("Unified Exit-Grids tool exposes one button with an exclusive sub-mode dropdown", "[qt][exitgrids]") {
+TEST_CASE("Unified Exit-Grids tool exposes one button with an exclusive sub-mode dropdown", "[exit_grid]") {
     test::MainWindowFixture fixture;
     geck::MainWindow& window = fixture.window;
 
@@ -153,7 +153,7 @@ TEST_CASE("Unified Exit-Grids tool exposes one button with an exclusive sub-mode
 // The editor-mode half: the two sub-modes map to distinct EditorWidget modes (PlaceExitGrid vs
 // MarkExits). Constructing an EditorWidget eagerly loads art/misc/HEX.frm, which the bundled
 // resources/ ships.
-TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exitgrids]") {
+TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[exit_grid]") {
     auto resources = geck::test::editorResources();
     auto editor = std::make_unique<geck::EditorWidget>(*resources, test::mapOf("exitgrids.map"));
 
@@ -172,8 +172,7 @@ TEST_CASE("EditorWidget switches between the two exit-grid sub-modes", "[qt][exi
 // Regression: a Draw-edge stroke that only PARTIALLY overlaps existing exit grids must still place on
 // the empty hexes (a single overlapping hex used to send the whole stroke to bulk-edit, so the
 // placement vanished — "Enter + OK, nothing appears"). freshHexesForLine = line hexes minus occupied.
-TEST_CASE("Exit-grid stroke creates on the non-overlapping hexes (partial overlap doesn't swallow it)",
-    "[exitgrid][placement]") {
+TEST_CASE("An exit-grid stroke that partly overlaps existing grids still places on the free hexes", "[exit_grid]") {
     using geck::ExitGridPlacementManager;
 
     // No overlap -> every hex is fresh.

@@ -76,7 +76,7 @@ void checkRejected(const QByteArray& doc, const char* needle = nullptr) {
 
 } // namespace
 
-TEST_CASE("PatternSerializer round-trips a pattern verbatim", "[pattern]") {
+TEST_CASE("PatternSerializer round-trips a pattern verbatim", "[pattern_serializer][roundtrip]") {
     const Pattern original = makeSamplePattern();
 
     const QByteArray json = PatternSerializer::serialize(original);
@@ -119,7 +119,7 @@ TEST_CASE("PatternSerializer round-trips a pattern verbatim", "[pattern]") {
     CHECK(south.roof.empty()); // omitted section defaults to empty
 }
 
-TEST_CASE("PatternSerializer parses a hand-written document", "[pattern]") {
+TEST_CASE("PatternSerializer parses a hand-written document", "[pattern_serializer]") {
     const QByteArray doc = R"({
         "name": "two_walls",
         "version": 1,
@@ -146,7 +146,7 @@ TEST_CASE("PatternSerializer parses a hand-written document", "[pattern]") {
     CHECK(v.roof.empty()); // omitted section defaults to empty
 }
 
-TEST_CASE("PatternSerializer rejects malformed and out-of-spec input", "[pattern]") {
+TEST_CASE("PatternSerializer rejects malformed and out-of-spec input", "[pattern_serializer]") {
     SECTION("invalid JSON") {
         checkRejected(QByteArray("{ not json"));
     }
@@ -193,7 +193,7 @@ TEST_CASE("PatternSerializer rejects malformed and out-of-spec input", "[pattern
 // Qt. This proves the editor's PatternSerializer — the real reader, behind the pattern library —
 // loads that output and every field survives, so a stamp captured by gecko-mcp/gecko-cli can be used
 // in the editor unchanged.
-TEST_CASE("headless-serialized pattern round-trips through the editor's PatternSerializer", "[pattern]") {
+TEST_CASE("headless-serialized pattern round-trips through the editor's PatternSerializer", "[pattern_serializer][cli][roundtrip]") {
     Pattern source;
     source.name = "desert_tent";
     PatternVariant variant;
