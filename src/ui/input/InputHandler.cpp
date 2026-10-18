@@ -22,8 +22,6 @@ void InputHandler::handleEvent(const sf::Event& event,
         handleMouseWheelScrolled(*mouseWheelScrolled);
     } else if (const auto* keyPressed = event.getIf<sf::Event::KeyPressed>()) {
         handleKeyPressed(*keyPressed);
-    } else if (const auto* keyReleased = event.getIf<sf::Event::KeyReleased>()) {
-        handleKeyReleased(*keyReleased);
     }
 }
 
@@ -355,10 +353,6 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
     }
 }
 
-void InputHandler::handleKeyReleased(const sf::Event::KeyReleased&) {
-    // Currently no key release handling needed
-}
-
 void InputHandler::finishDragSelectRelease(sf::Vector2f worldPos) {
     if (_selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE && _callbacks.onScrollBlockerRectangle) {
         const float left = std::min(_dragStartWorldPos.x, worldPos.x);
@@ -397,10 +391,9 @@ void InputHandler::cancelExitGridLine() {
     }
 }
 
-void InputHandler::setTilePlacementMode(bool enabled, int tileIndex, bool replaceMode) {
+void InputHandler::setTilePlacementMode(bool enabled, int tileIndex) {
     setActiveMode(enabled, EditorMode::PlaceTile);
     _tilePlacementIndex = tileIndex;
-    _tilePlacementReplaceMode = replaceMode;
 }
 
 InputHandler::SelectionModifier InputHandler::getSelectionModifier() const {

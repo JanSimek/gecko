@@ -314,14 +314,4 @@ void ProArmorWidget::selectArmorFid(ObjectPreviewWidget* previewWidget, int32_t&
     Q_EMIT fieldChanged();
 }
 
-void ProArmorWidget::setArmorMaleFID(int32_t fid) {
-    _armorMaleFID = fid;
-    updateArmorPreviews();
-}
-
-void ProArmorWidget::setArmorFemaleFID(int32_t fid) {
-    _armorFemaleFID = fid;
-    updateArmorPreviews();
-}
-
 } // namespace geck

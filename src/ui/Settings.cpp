@@ -6,7 +6,6 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonParseError>
-#include <QDebug>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -27,6 +26,36 @@ namespace {
         }
     }
 
+    // Every location a Fallout 2 install is probed at, labelled for the UI. A macOS bundle is probed
+    // at its .app root; resolveGameDataRoot resolves its Contents/Resources to the same install.
+    std::vector<Settings::DetectedInstallation> installationCandidates() {
+        std::vector<Settings::DetectedInstallation> candidates;
+#ifdef _WIN32
+        const QSettings gogRegistry("HKEY_LOCAL_MACHINE\\SOFTWARE\\GOG.com\\Games\\1207659119", QSettings::NativeFormat);
+        const QString gogPath = gogRegistry.value("path").toString();
+        if (!gogPath.isEmpty()) {
+            candidates.push_back({ std::filesystem::path(gogPath.toStdString()), "GOG Installation" });
+        }
+
+        const QSettings steamRegistry("HKEY_LOCAL_MACHINE\\SOFTWARE\\Valve\\Steam", QSettings::NativeFormat);
+        const QString steamPath = steamRegistry.value("InstallPath").toString();
+        if (!steamPath.isEmpty()) {
+            candidates.push_back({ std::filesystem::path(steamPath.toStdString()) / "steamapps" / "common" / "Fallout 2", "Steam Installation" });
+        }
+#else
+        const std::filesystem::path home = QDir::homePath().toStdString();
+#ifdef __APPLE__
+        candidates.push_back({ "/Applications/Fallout 2.app", "macOS App Bundle" });
+        candidates.push_back({ home / "Applications/Fallout 2.app", "User App Bundle" });
+        candidates.push_back({ home / "Library/Application Support/Steam/steamapps/common/Fallout 2", "Steam Installation (macOS)" });
+#else
+        candidates.push_back({ home / ".local/share/Steam/steamapps/common/Fallout 2", "Steam Installation" });
+        candidates.push_back({ "/usr/local/games/fallout2", "System Installation" });
+        candidates.push_back({ "/opt/fallout2", "System Installation" });
+#endif
+#endif
+        return candidates;
+    }
 }
 
 Settings::Settings() = default;
@@ -313,20 +342,6 @@ void Settings::addDataPath(const std::filesystem::path& path) {
     spdlog::debug("Added data path: {}", normalizedPath.string());
 }
 
-void Settings::removeDataPath(const std::filesystem::path& path) {
-    const std::filesystem::path normalizedPath = normalizeDataPath(path);
-    auto it = std::remove_if(_dataPaths.begin(), _dataPaths.end(),
-        [&normalizedPath](const std::filesystem::path& existing) {
-            return util::pathsEquivalent(existing, normalizedPath);
-        });
-
-    if (it != _dataPaths.end()) {
-        _dataPaths.erase(it, _dataPaths.end());
-        spdlog::debug("Removed data path: {}", normalizedPath.string());
-    }
-    clearWritableDataPathIfUnlisted();
-}
-
 std::vector<std::filesystem::path> Settings::getDataPaths() const {
     return _dataPaths;
 }
@@ -501,134 +516,29 @@ std::filesystem::path Settings::normalizeDataPath(const std::filesystem::path& p
 }
 
 // Auto-detection methods
-std::vector<std::filesystem::path> Settings::detectFallout2Installations() {
-    std::vector<std::filesystem::path> installations;
-
-#ifdef _WIN32
-    // Windows registry detection
-
-    // Check GOG installation
-    QSettings gogRegistry("HKEY_LOCAL_MACHINE\\SOFTWARE\\GOG.com\\Games\\1207659119", QSettings::NativeFormat);
-    QString gogPath = gogRegistry.value("path").toString();
-    if (!gogPath.isEmpty()) {
-        const std::filesystem::path gamePath(gogPath.toStdString());
-        if (const auto normalized = util::resolveGameDataRoot(gamePath)) {
-            appendUnique(installations, *normalized);
-            spdlog::debug("Found GOG Fallout 2 installation: {}", normalized->string());
+std::vector<Settings::DetectedInstallation> Settings::detectFallout2InstallationsDetailed() {
+    std::vector<DetectedInstallation> installations;
+    std::vector<std::filesystem::path> roots;
+    for (auto& candidate : installationCandidates()) {
+        const auto root = util::resolveGameDataRoot(candidate.path);
+        if (!root || std::find(roots.begin(), roots.end(), *root) != roots.end()) {
+            continue;
         }
+        roots.push_back(*root);
+        spdlog::debug("Found Fallout 2 installation ({}): {}", candidate.description, candidate.path.string());
+        installations.push_back(std::move(candidate));
     }
-
-    // Check Steam installation
-    QSettings steamRegistry("HKEY_LOCAL_MACHINE\\SOFTWARE\\Valve\\Steam", QSettings::NativeFormat);
-    QString steamPath = steamRegistry.value("InstallPath").toString();
-    if (!steamPath.isEmpty()) {
-        const std::filesystem::path steamFo2Path = std::filesystem::path(steamPath.toStdString()) / "steamapps" / "common" / "Fallout 2";
-        if (const auto normalized = util::resolveGameDataRoot(steamFo2Path)) {
-            appendUnique(installations, *normalized);
-            spdlog::debug("Found Steam Fallout 2 installation: {}", normalized->string());
-        }
-    }
-
-#elif defined(__APPLE__)
-    // macOS common paths
-    std::vector<std::filesystem::path> macPaths = {
-        "/Applications/Fallout 2.app",
-        "/Applications/Fallout 2.app/Contents/Resources",
-        std::filesystem::path(QDir::homePath().toStdString()) / "Applications/Fallout 2.app/Contents/Resources"
-    };
-
-    for (const auto& path : macPaths) {
-        if (const auto normalized = util::resolveGameDataRoot(path)) {
-            appendUnique(installations, *normalized);
-            spdlog::debug("Found macOS Fallout 2 installation: {}", normalized->string());
-        }
-    }
-
-#else
-    // Linux common paths
-    std::vector<std::filesystem::path> linuxPaths = {
-        std::filesystem::path(QDir::homePath().toStdString()) / ".local/share/Steam/steamapps/common/Fallout 2",
-        "/usr/local/games/fallout2",
-        "/opt/fallout2"
-    };
-
-    for (const auto& path : linuxPaths) {
-        if (const auto normalized = util::resolveGameDataRoot(path)) {
-            appendUnique(installations, *normalized);
-            spdlog::debug("Found Linux Fallout 2 installation: {}", normalized->string());
-        }
-    }
-#endif
-
     return installations;
 }
 
-std::vector<Settings::DetectedInstallation> Settings::detectFallout2InstallationsDetailed() {
-    std::vector<DetectedInstallation> installations;
-
-#ifdef _WIN32
-    // Windows registry detection
-
-    // Check GOG installation
-    QSettings gogRegistry("HKEY_LOCAL_MACHINE\\SOFTWARE\\GOG.com\\Games\\1207659119", QSettings::NativeFormat);
-    QString gogPath = gogRegistry.value("path").toString();
-    if (!gogPath.isEmpty()) {
-        std::filesystem::path gogGamePath = std::filesystem::path(gogPath.toStdString());
-        if (util::hasFallout2DataLayout(gogGamePath)) {
-            installations.push_back({ gogGamePath, "GOG Installation" });
-            spdlog::debug("Found GOG Fallout 2 installation: {}", gogGamePath.string());
+std::vector<std::filesystem::path> Settings::detectFallout2Installations() {
+    std::vector<std::filesystem::path> roots;
+    for (const auto& installation : detectFallout2InstallationsDetailed()) {
+        if (const auto root = util::resolveGameDataRoot(installation.path)) {
+            appendUnique(roots, *root);
         }
     }
-
-    // Check Steam installation
-    QSettings steamRegistry("HKEY_LOCAL_MACHINE\\SOFTWARE\\Valve\\Steam", QSettings::NativeFormat);
-    QString steamPath = steamRegistry.value("InstallPath").toString();
-    if (!steamPath.isEmpty()) {
-        std::filesystem::path steamGamePath = std::filesystem::path(steamPath.toStdString()) / "steamapps" / "common" / "Fallout 2";
-        if (util::hasFallout2DataLayout(steamGamePath)) {
-            installations.push_back({ steamGamePath, "Steam Installation" });
-            spdlog::debug("Found Steam Fallout 2 installation: {}", steamGamePath.string());
-        }
-    }
-
-#elif defined(__APPLE__)
-    // macOS common paths
-    std::vector<std::pair<std::filesystem::path, std::string>> macPaths = {
-        { "/Applications/Fallout 2.app", "macOS App Bundle" },
-        { std::filesystem::path(QDir::homePath().toStdString()) / "Applications/Fallout 2.app", "User App Bundle" }
-    };
-
-    for (const auto& [path, description] : macPaths) {
-        if (util::resolveGameDataRoot(path).has_value()) {
-            installations.push_back({ path, description });
-            spdlog::debug("Found macOS Fallout 2 installation: {}", path.string());
-        }
-    }
-
-    // Check for Steam on macOS
-    std::filesystem::path steamMacPath = std::filesystem::path(QDir::homePath().toStdString()) / "Library/Application Support/Steam/steamapps/common/Fallout 2";
-    if (util::hasFallout2DataLayout(steamMacPath)) {
-        installations.push_back({ steamMacPath, "Steam Installation (macOS)" });
-        spdlog::debug("Found Steam Fallout 2 installation on macOS: {}", steamMacPath.string());
-    }
-
-#else
-    // Linux common paths
-    std::vector<std::pair<std::filesystem::path, std::string>> linuxPaths = {
-        { std::filesystem::path(QDir::homePath().toStdString()) / ".local/share/Steam/steamapps/common/Fallout 2", "Steam Installation" },
-        { "/usr/local/games/fallout2", "System Installation" },
-        { "/opt/fallout2", "System Installation" }
-    };
-
-    for (const auto& [path, description] : linuxPaths) {
-        if (util::hasFallout2DataLayout(path)) {
-            installations.push_back({ path, description });
-            spdlog::debug("Found Linux Fallout 2 installation: {}", path.string());
-        }
-    }
-#endif
-
-    return installations;
+    return roots;
 }
 
 // Game location configuration. The data directory is used for map copying and
@@ -678,19 +588,6 @@ bool Settings::isGameLocationValid() const {
     // "data" subdirectory is required for map copying
     std::filesystem::path dataDir = dataRoot / "data";
     return std::filesystem::exists(dataDir) && std::filesystem::is_directory(dataDir);
-}
-
-void Settings::autoDetectGameLocation() {
-    auto installations = detectFallout2Installations();
-
-    if (!installations.empty()) {
-        const std::filesystem::path& gameDir = installations[0];
-        _executableGameLocation = gameDir;
-        _gameDataDirectory = gameDir;
-        spdlog::debug("Auto-detected game location: {}", gameDir.string());
-    } else {
-        spdlog::warn("No Fallout 2 installations detected");
-    }
 }
 
 } // namespace geck

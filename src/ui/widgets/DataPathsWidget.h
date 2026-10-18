@@ -52,7 +52,6 @@ public:
 
 signals:
     void dataPathsChanged();
-    void statusChanged(const QString& message, const QString& styleClass);
 
 private slots:
     void onAddFolder(); // pick a folder; its master.dat/critter.dat are added as explicit entries too

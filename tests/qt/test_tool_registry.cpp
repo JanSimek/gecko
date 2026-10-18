@@ -70,28 +70,15 @@ TEST_CASE("ToolRegistry activates one tool at a time", "[tools]") {
     CHECK(secondPtr->deactivations() == 1);
 }
 
-TEST_CASE("ToolRegistry rejects duplicate ids and unregisters active tools", "[tools]") {
+TEST_CASE("ToolRegistry rejects duplicate ids", "[tools]") {
     ToolRegistry registry;
-    int deactivations = 0;
-    auto tool = std::make_unique<CountingTool>("tool", nullptr, &deactivations);
+    auto tool = std::make_unique<CountingTool>("tool");
+    ITool* first = tool.get();
 
     REQUIRE(registry.registerTool(std::move(tool)));
     CHECK_FALSE(registry.registerTool(std::make_unique<CountingTool>("tool")));
-
-    REQUIRE(registry.setActiveTool("tool"));
-    REQUIRE(registry.unregisterTool("tool"));
-    CHECK(deactivations == 1);
-    CHECK(registry.activeTool() == nullptr);
-    CHECK_FALSE(registry.setActiveTool("tool"));
-}
-
-TEST_CASE("ToolRegistry exposes sorted tool ids", "[tools]") {
-    ToolRegistry registry;
-    REQUIRE(registry.registerTool(std::make_unique<CountingTool>("zeta")));
-    REQUIRE(registry.registerTool(std::make_unique<CountingTool>("alpha")));
-    REQUIRE(registry.registerTool(std::make_unique<CountingTool>("middle")));
-
-    CHECK(registry.toolIds() == std::vector<std::string>{ "alpha", "middle", "zeta" });
+    CHECK(registry.tool("tool") == first);
+    CHECK_FALSE(registry.setActiveTool("missing"));
 }
 
 TEST_CASE("ToolRegistry re-activating the active tool is an idempotent no-op", "[tools]") {

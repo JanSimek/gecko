@@ -241,14 +241,6 @@ void ProCommonFieldsWidget::setItemFieldsVisible(bool isItem) {
     _itemFieldsGroup->setVisible(isItem);
 }
 
-int32_t ProCommonFieldsWidget::getPID() const {
-    return 0;
-}
-
-void ProCommonFieldsWidget::setPID([[maybe_unused]] int32_t pid) {
-    Q_UNUSED(pid);
-}
-
 void ProCommonFieldsWidget::loadObjectFlags(uint32_t flags) {
     _flatCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_FLAT));
     _noBlockCheck->setChecked(Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_BLOCK));

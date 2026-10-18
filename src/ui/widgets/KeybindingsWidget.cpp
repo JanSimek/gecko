@@ -191,21 +191,8 @@ QKeySequence KeybindingsWidget::pendingShortcut(const QString& id) const {
 }
 
 QString KeybindingsWidget::pendingConflict(const QString& id, const QKeySequence& keys) const {
-    if (keys.isEmpty()) {
-        return {}; // any number of actions may be unbound
-    }
-
-    for (const ActionSpec& candidate : actionSpecs()) {
-        const QString candidateId = QString::fromLatin1(candidate.id);
-        if (candidateId == id) {
-            continue;
-        }
-        if (pendingShortcut(candidateId) == keys) {
-            return candidateId;
-        }
-    }
-
-    return {};
+    return KeyBindingRegistry::conflictingActionId(id, keys,
+        [this](const QString& other) { return pendingShortcut(other); });
 }
 
 void KeybindingsWidget::onEditFinished(QTreeWidgetItem* item, const QKeySequence& keys) {

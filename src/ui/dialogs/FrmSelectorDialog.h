@@ -66,7 +66,6 @@ public:
 private slots:
     void onSearchTextChanged();
     void onFrmListSelectionChanged();
-    void onFrmPidChanged();
     void onAccepted();
     void onRejected();
 

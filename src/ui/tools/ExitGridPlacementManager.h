@@ -49,18 +49,11 @@ public:
     void setExitGridPlacementMode(bool enabled);
     void setMarkExitsMode(bool enabled);
 
-    // State queries
-    bool isExitGridPlacementMode() const { return _exitGridPlacementMode; }
-    bool isMarkExitsMode() const { return _markExitsMode; }
-
     // Callback interface for triggering exit grid placement from input events
     void handleExitGridPlacement(sf::Vector2f worldPos);
 
     // Reset all exit grid placement state
     void resetState();
-
-    // Check if selected objects contain exit grids and edit them
-    bool editSelectedExitGrids();
 
     // Finalize: place the FROZEN committed segments, so the placed edge matches the last preview. If
     // exit grids already cover every hex, bulk-edit their destination instead.
@@ -76,8 +69,6 @@ public:
     void commitSegment(sf::Vector2f from, sf::Vector2f to, bool flipSide);
     // resetLine: drop all committed segments (line finalized / cancelled / mode left).
     void resetLine();
-    // The number of frozen committed segments — exposed for tests.
-    [[nodiscard]] std::size_t committedSegmentCount() const { return _committedSegments.size(); }
 
     // Destination kind the live preview tints by (green inter-map vs brown world/town). Updated whenever
     // a dialog sets the destination, so the next region previews in the kind last chosen.

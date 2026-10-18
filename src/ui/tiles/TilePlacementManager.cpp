@@ -147,14 +147,6 @@ void TilePlacementManager::setTilePlacementMode(bool enabled, int tileIndex, boo
     _tilePlacementIsRoof = isRoof;
 }
 
-void TilePlacementManager::setTilePlacementAreaFill(bool enabled) {
-    _tilePlacementAreaFill = enabled;
-}
-
-void TilePlacementManager::setTilePlacementReplaceMode(bool enabled) {
-    _tilePlacementReplaceMode = enabled;
-}
-
 void TilePlacementManager::handleTilePlacement(sf::Vector2f worldPos, bool /*isRoof*/) {
     if (_tilePlacementMode && _tilePlacementIndex >= 0) {
         // If tiles are already selected, replace them instead of placing a new tile
@@ -187,8 +179,6 @@ void TilePlacementManager::handleTileAreaFill(sf::Vector2f startPos, sf::Vector2
 
 void TilePlacementManager::resetState() {
     _tilePlacementMode = false;
-    _tilePlacementAreaFill = false;
-    _tilePlacementReplaceMode = false;
     _tilePlacementIndex = -1;
     _tilePlacementIsRoof = false;
 }

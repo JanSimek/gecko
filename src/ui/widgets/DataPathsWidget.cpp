@@ -355,7 +355,6 @@ void DataPathsWidget::validatePaths() {
 void DataPathsWidget::setStatusMessage(const QString& message, const QString& styleClass) {
     // In this section: one line shared with the game location meant the later message won.
     ui::setStatusText(_statusLabel, message, styleClass);
-    Q_EMIT statusChanged(message, styleClass);
 }
 
 void DataPathsWidget::updateButtonStates() {

@@ -464,40 +464,6 @@ void ExitGridPlacementManager::resetState() {
     _markExitsMode = false;
 }
 
-bool ExitGridPlacementManager::editSelectedExitGrids() {
-    const auto* selectionManager = _context.getSelectionManager();
-    if (!selectionManager) {
-        return false;
-    }
-
-    const auto& selectionState = selectionManager->getCurrentSelection();
-    if (selectionState.isEmpty()) {
-        return false;
-    }
-
-    // Edit the first selected exit grid
-    for (const auto& item : selectionState.items) {
-        if (item.isObject()) {
-            auto selectedObject = item.getObject();
-            if (!selectedObject) {
-                continue;
-            }
-
-            const auto& mapObject = selectedObject->getMapObject();
-
-            if (mapObject.isExitGridMarker()) {
-                auto mapObjectPtr = selectedObject->getMapObjectPtr();
-                if (mapObjectPtr) {
-                    editExitGridProperties(mapObjectPtr);
-                    return true;
-                }
-            }
-        }
-    }
-
-    return false;
-}
-
 void ExitGridPlacementManager::rememberDestinationKind(uint32_t exitMap) {
     const bool isWorldmapExit = (exitMap == ExitGrid::WORLD_MAP_EXIT || exitMap == ExitGrid::TOWN_MAP_EXIT);
     _currentDestinationKind = isWorldmapExit ? DestinationKind::WorldMap : DestinationKind::InterMap;

@@ -55,7 +55,7 @@ TEST_CASE("Settings save-location marker: resolution, invariant, persistence", "
         settings.setDataPaths({ dirA, dirB });
         settings.setWritableDataPath(dirA);
 
-        settings.removeDataPath(dirA);
+        settings.setDataPaths({ dirB });
         CHECK(settings.getWritableDataPath().empty());
         REQUIRE(settings.resolveWritableDataPath().has_value());
         CHECK(*settings.resolveWritableDataPath() == dirB);

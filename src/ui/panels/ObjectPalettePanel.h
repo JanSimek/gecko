@@ -1,10 +1,14 @@
 #pragma once
 
-#include "ui/common/BasePanel.h"
 #include "ui/palette/PaletteModel.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/palette/PaletteView.h"
+#include <QGroupBox>
+#include <QLabel>
+#include <QLineEdit>
 #include <QSortFilterProxyModel>
+#include <QVBoxLayout>
+#include <QWidget>
 #include <QTabWidget>
 #include <QDrag>
 #include <QMimeData>
@@ -72,7 +76,7 @@ struct ObjectInfo {
  * - Search functionality within categories
  * - Single object placement mode
  */
-class ObjectPalettePanel : public BasePanel {
+class ObjectPalettePanel : public QWidget {
     Q_OBJECT
 
 public:
@@ -83,11 +87,6 @@ public:
     void loadObjects();
     void setMap(Map* map) { _map = map; }
 
-    // Object selection
-    int getSelectedObjectIndex() const { return _selectedObjectIndex; }
-    ObjectCategory getCurrentCategory() const { return _currentCategory; }
-    bool hasSelectedObject() const { return _selectedObjectIndex >= 0; }
-
     // Eyedropper: switch to the proto's category tab and filter to it so it is revealed and selected.
     // Returns the proto's {list index, category} — the caller uses it to arm click-to-place — or
     // std::nullopt if the PID's type is not shown here (e.g. a tile) or has no palette entry.
@@ -96,20 +95,16 @@ public:
     // Access to object info for drag and drop
     const ObjectInfo* getObjectInfo(int objectIndex, ObjectCategory category) const;
 
-signals:
-    void objectSelected(int objectIndex, ObjectCategory category);
-    void placeObjectRequested(int objectIndex, ObjectCategory category);
-
 public slots:
     void onObjectClicked(int objectIndex);
     void onCategoryChanged(int tabIndex);
-    void onSearchTextChanged(const QString& text) override;
+    void onSearchTextChanged(const QString& text);
 
 public:
     static constexpr int OBJECT_SIZE = 64; // icon size in the grid
 
 private:
-    void setupUI() override;
+    void setupUI();
     void setupCategoryTabs();
     void setupSearchControls();
     void setupObjectView();
@@ -139,6 +134,7 @@ private:
 
     // Search controls
     QGroupBox* _searchGroup = nullptr;
+    QLineEdit* _searchLineEdit = nullptr;
 
     ui::PaletteView* _objectView = nullptr;
     ui::PaletteModel* _model = nullptr;

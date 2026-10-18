@@ -27,7 +27,6 @@ public:
     QString getTabLabel() const override;
 
 private:
-    void setupUI();
     void setupContainerUI();
     void setupKeyUI();
 

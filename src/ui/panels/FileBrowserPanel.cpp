@@ -315,7 +315,6 @@ bool FileBrowserPanel::isTextFile(const QString& filePath) const {
 FileBrowserPanel::FileBrowserPanel(std::shared_ptr<resource::GameResources> resources, std::shared_ptr<Settings> settings, QWidget* parent)
     : QWidget(parent)
     , _mainLayout(nullptr)
-    , _filterLayout(nullptr)
     , _searchLineEdit(nullptr)
     , _fileTypeComboBox(nullptr)
     , _refreshButton(nullptr)
@@ -477,7 +476,6 @@ void FileBrowserPanel::setupTreeView() {
     _treeView->setContextMenuPolicy(Qt::CustomContextMenu);
     setupHeaderContextMenu();
 
-    connect(_treeView, &QTreeView::clicked, this, &FileBrowserPanel::onTreeItemClicked);
     connect(_treeView, &QTreeView::doubleClicked, this, &FileBrowserPanel::onTreeItemDoubleClicked);
     connect(_treeView, &QTreeView::customContextMenuRequested, this, &FileBrowserPanel::onCustomContextMenuRequested);
 
@@ -693,16 +691,6 @@ FileTreeItem* FileBrowserPanel::findOrCreateDirectory(QStandardItem* parent, con
     return dirItem;
 }
 
-QString FileBrowserPanel::getFileExtension(const QString& filePath) const {
-    QFileInfo fileInfo(filePath);
-    QString suffix = fileInfo.suffix().toLower();
-    return suffix.isEmpty() ? QString() : "." + suffix;
-}
-
-QString FileBrowserPanel::getFileIcon(const QString& extension) const {
-    return extension;
-}
-
 void FileBrowserPanel::updateFileCount() {
     int totalFiles = static_cast<int>(_allEntries.size());
 
@@ -749,11 +737,6 @@ void FileBrowserPanel::refreshFileList() {
     loadFiles();
 }
 
-void FileBrowserPanel::setSearchFilter(const QString& filter) {
-    _currentSearchFilter = filter;
-    updateFileDisplay();
-}
-
 void FileBrowserPanel::setFileTypeFilter(const QString& fileType) {
     _currentFileTypeFilter = fileType;
     updateFileDisplay();
@@ -789,21 +772,6 @@ void FileBrowserPanel::onFileTypeChanged(const QString& fileType) {
 
 void FileBrowserPanel::onRefreshClicked() {
     refreshFileList();
-}
-
-void FileBrowserPanel::onTreeItemClicked(const QModelIndex& index) {
-    if (!index.isValid())
-        return;
-
-    QModelIndex sourceIndex = _proxyModel->mapToSource(index);
-    QStandardItem* item = _treeModel->itemFromIndex(sourceIndex);
-    FileTreeItem* treeItem = static_cast<FileTreeItem*>(item);
-
-    if (treeItem && treeItem->getType() == FileTreeItem::File) {
-        QString filePath = treeItem->getFilePath();
-        spdlog::debug("FileBrowserPanel: File selected: {}", filePath.toStdString());
-        Q_EMIT fileSelected(filePath);
-    }
 }
 
 void FileBrowserPanel::onTreeItemDoubleClicked(const QModelIndex& index) {
@@ -1081,8 +1049,6 @@ void FileBrowserPanel::exportFile(const QString& filePath) {
         _statusLabel->setText(QString("Exported %1 (%2 bytes)").arg(fileInfo.fileName()).arg(bytesWritten));
         spdlog::debug("FileBrowserPanel: Exported {} to {} ({} bytes)",
             filePath.toStdString(), saveFilePath.toStdString(), bytesWritten);
-
-        Q_EMIT fileExportRequested(filePath);
 
     } catch (const std::exception& e) {
         QMessageBox::critical(this, "Export Error",

@@ -48,12 +48,10 @@ namespace {
 
 MapLoader::MapLoader(std::shared_ptr<resource::GameResources> resources,
     const std::filesystem::path& mapFile,
-    int elevation,
     bool forceFilesystem,
     std::function<void(std::unique_ptr<Map>)> onLoadCallback)
     : _resources(std::move(resources))
     , _mapPath(mapFile)
-    , _elevation(elevation)
     , _forceFilesystem(forceFilesystem)
     , _onLoadCallback(onLoadCallback) {
 }
@@ -172,11 +170,8 @@ void MapLoader::loadMapResources() {
     spdlog::stopwatch stopwatch_chunk;
 
     try {
-        if (_elevation == INVALID_ELEVATION) {
-            uint32_t default_elevation = _map->getMapFile().header.player_default_elevation;
-            spdlog::debug("Using default map elevation {}", default_elevation);
-            _elevation = default_elevation;
-        }
+        _elevation = static_cast<int>(_map->getMapFile().header.player_default_elevation);
+        spdlog::debug("Using default map elevation {}", _elevation);
 
         Lst* lst = nullptr;
         try {

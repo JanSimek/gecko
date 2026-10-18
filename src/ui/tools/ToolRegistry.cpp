@@ -1,7 +1,5 @@
 #include "ui/tools/ToolRegistry.h"
 
-#include <algorithm>
-
 namespace geck {
 
 bool ToolRegistry::registerTool(std::unique_ptr<ITool> tool) {
@@ -14,13 +12,6 @@ bool ToolRegistry::registerTool(std::unique_ptr<ITool> tool) {
     }
     _tools.try_emplace(id, std::move(tool));
     return true;
-}
-
-bool ToolRegistry::unregisterTool(std::string_view id) {
-    if (_activeToolId == id) {
-        clearActiveTool();
-    }
-    return _tools.erase(std::string(id)) > 0;
 }
 
 ITool* ToolRegistry::tool(std::string_view id) {
@@ -68,17 +59,6 @@ const ITool* ToolRegistry::activeTool() const {
         return nullptr;
     }
     return tool(_activeToolId);
-}
-
-std::vector<std::string> ToolRegistry::toolIds() const {
-    std::vector<std::string> ids;
-    ids.reserve(_tools.size());
-    for (const auto& [id, tool] : _tools) {
-        (void)tool;
-        ids.push_back(id);
-    }
-    std::ranges::sort(ids);
-    return ids;
 }
 
 } // namespace geck

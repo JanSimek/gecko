@@ -35,8 +35,6 @@ public:
     explicit ProEditorDialog(resource::GameResources& resources, std::shared_ptr<Pro> pro, QWidget* parent = nullptr);
     ~ProEditorDialog() = default;
 
-    std::shared_ptr<Pro> getModifiedPro() const { return _pro; }
-
     static constexpr int MAX_LIGHT_RADIUS = 8;        // Wiki: Light radius "0..8 (hexes)"
     static constexpr int MAX_LIGHT_INTENSITY = 65536; // Wiki: Light intensity "0..65536"
 

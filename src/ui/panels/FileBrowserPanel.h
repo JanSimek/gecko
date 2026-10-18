@@ -111,15 +111,12 @@ public:
     ItemType getType() const { return _type; }
     void setFilePath(const QString& path) { _filePath = path; }
     QString getFilePath() const { return _filePath; }
-    void setFileSize(qint64 size) { _fileSize = size; }
-    qint64 getFileSize() const { return _fileSize; }
 
     static QIcon getFileIcon(const QString& fileName);
 
 private:
     ItemType _type;
     QString _filePath;
-    qint64 _fileSize = 0;
 };
 
 /**
@@ -148,14 +145,11 @@ public:
     // (atomic store, Qt disconnect/quit/wait, delete) do not throw.
     void stopAndDestroyLoader() noexcept;
 
-    // Search and filtering
-    void setSearchFilter(const QString& filter);
+    // Filtering
     void setFileTypeFilter(const QString& fileType);
 
 signals:
-    void fileSelected(const QString& filePath);
     void fileDoubleClicked(const QString& filePath);
-    void fileExportRequested(const QString& filePath);
     /// Carries a Luau script's *source* (read from the VFS), to be loaded into the Script Console.
     void executeScriptRequested(const QString& source);
 
@@ -163,7 +157,6 @@ public slots:
     void onSearchTextChanged(const QString& text);
     void onFileTypeChanged(const QString& fileType);
     void onRefreshClicked();
-    void onTreeItemClicked(const QModelIndex& index);
     void onTreeItemDoubleClicked(const QModelIndex& index);
 
 private slots:
@@ -186,14 +179,11 @@ private:
     void buildFileTree(const std::vector<FileBrowserEntry>& entries);
     void buildFileTreeProgressive(const std::vector<FileBrowserEntry>& entries);
     void startProgressiveTreeBuild(std::vector<FileBrowserEntry> filteredEntries);
-    FileTreeItem* createDirectoryStructure(const QString& path);
     FileTreeItem* findOrCreateDirectory(QStandardItem* parent, const QString& dirName);
     // Builds the directory path + 5-column row for one precomputed entry and appends it
     // under rootItem. Shared by the one-shot (buildFileTree) and progressive
     // (processNextChunk) tree builders so the row layout stays in one place.
     void insertFileRow(QStandardItem* rootItem, const FileBrowserEntry& entry);
-    QString getFileExtension(const QString& filePath) const;
-    QString getFileIcon(const QString& extension) const;
     void updateFileCount();
     void updateFileTypeComboBox();
     void exportFile(const QString& filePath);
@@ -220,7 +210,6 @@ private:
     QVBoxLayout* _mainLayout = nullptr;
 
     // Filter controls
-    QHBoxLayout* _filterLayout = nullptr;
     QLineEdit* _searchLineEdit = nullptr;
     QComboBox* _fileTypeComboBox = nullptr;
     QPushButton* _refreshButton = nullptr;

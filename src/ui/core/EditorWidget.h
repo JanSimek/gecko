@@ -135,7 +135,6 @@ public:
     // Edge scrolling: when enabled, parking the cursor near a viewport edge auto-pans the view that
     // way (parity with the reference mappers). Editor UX only — touches no map data.
     void setEdgeScrollEnabled(bool enabled) { _edgeScrollEnabled = enabled; }
-    bool isEdgeScrollEnabled() const { return _edgeScrollEnabled; }
 
     // User-configured selection highlight colours (from preferences); forwarded to the renderer.
     void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
@@ -149,11 +148,9 @@ public:
 
     // Qt6 toolbar actions
     void setSelectionMode(SelectionMode mode);
-    SelectionMode getCurrentSelectionMode() const { return _currentSelectionMode; }
     // Combinable-layer selection: pick which layers a mixed (ALL-mode) selection considers
     // (floor / roof / objects). Switches to ALL mode and keeps the current selection intact.
     void setActiveSelectionLayers(SelectionLayers layers);
-    SelectionLayers getActiveSelectionLayers() const;
     void rotateSelectedObject();
     void changeElevation(int elevation);
     void toggleScrollBlockerRectangleMode();
@@ -170,11 +167,6 @@ public:
     // Bring a spatial script's marker into view: switch to its elevation and centre on its hex.
     // False when `sid` is no spatial script of this map.
     bool revealSpatialScript(uint32_t sid);
-
-    // Tile placement
-    void placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof);
-    void fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof);
-    void replaceSelectedTiles(int newTileIndex);
 
     // Object placement functionality
     void placeObjectAtPosition(sf::Vector2f worldPos) override;
@@ -220,8 +212,6 @@ public:
 
     // Tile placement mode control
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
-    void setTilePlacementAreaFill(bool enabled);
-    void setTilePlacementReplaceMode(bool enabled);
 
     // Exit grid placement mode control
     void setExitGridPlacementMode(bool enabled);
@@ -279,7 +269,6 @@ public:
 
     // Access to internal components for extracted managers
     selection::SelectionManager* getSelectionManager() const override { return _session.selectionManager(); }
-    TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
     ExitGridPlacementManager* getExitGridPlacementManager() const { return _exitGridPlacementManager.get(); }
     ViewportController* getViewportController() const override { return &_controller.viewport(); }
     int& getCurrentHoverHex() override { return _currentHoverHex; }
@@ -430,7 +419,6 @@ signals:
     void hintChanged(const QString& hint);
 
 public slots:
-    void onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
     void onObjectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath);
 
     // Sprite loading methods (public for MainWindow access)
@@ -504,16 +492,7 @@ private:
     // Object selection methods (moved to public)
     bool isDoubleClick(sf::Vector2f worldPos);
 
-    // Selection modifiers for multi-selection
-    enum class SelectionModifier {
-        NONE,   // Normal single selection (clear and select)
-        ADD,    // Alt+Click / Alt+Drag - add to selection
-        TOGGLE, // Ctrl+Click / Ctrl+Drag - remove from selection
-        RANGE   // Shift+Click - range selection for tiles
-    };
-
-    bool selectAtPosition(sf::Vector2f worldPos);
-    bool selectAtPosition(sf::Vector2f worldPos, SelectionModifier modifier);
+    bool selectAtPosition(sf::Vector2f worldPos, InputHandler::SelectionModifier modifier);
     selection::SelectionResult handleRangeSelection(sf::Vector2f worldPos);
 
     void clearDragPreview();
@@ -527,7 +506,6 @@ private:
     // the live cursor, tinted by the tool's destination kind.
     void updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide);
     void clearMarkExitsLinePreview();
-    void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
     // Commit a finished drag rectangle to the selection (replace/deselect/additive), or build
     // scroll blockers when in that mode. Extracted from the onDragSelection callback.
     void commitDragAreaSelection(sf::Vector2f startPos, sf::Vector2f endPos, bool isDeselect, bool isAdditive);
@@ -605,8 +583,6 @@ private:
     // Drag preview state (for palette drag and drop)
     bool _isDraggingFromPalette = false;
     std::shared_ptr<Object> _dragPreviewObject;     // Preview object being dragged from palette
-    int _previewObjectIndex = -1;                   // Index of object in palette
-    int _previewObjectCategory = 0;                 // Category of preview object (as int)
     const ObjectInfo* _previewObjectInfo = nullptr; // Object info from palette
 
     int _currentHoverHex = -1;

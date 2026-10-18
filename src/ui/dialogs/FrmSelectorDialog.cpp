@@ -102,7 +102,6 @@ void FrmSelectorDialog::setupUI() {
     _frmPidSpin->setRange(0, INT_MAX);
     _frmPidSpin->setReadOnly(true);
     _frmPidSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    connect(_frmPidSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &FrmSelectorDialog::onFrmPidChanged);
     _detailsLayout->addRow("FRM PID:", _frmPidSpin);
 
     _frmPathEdit = new QLineEdit();
@@ -404,11 +403,6 @@ void FrmSelectorDialog::onFrmListSelectionChanged() {
         updatePreview();
         _okButton->setEnabled(false);
     }
-}
-
-void FrmSelectorDialog::onFrmPidChanged() {
-    // PID spin box is read-only, so user input never reaches here. If made editable,
-    // implement PID-based selection here.
 }
 
 void FrmSelectorDialog::onAccepted() {

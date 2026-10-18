@@ -7,7 +7,6 @@
 #include "util/Constants.h"
 #include "util/ProHelper.h"
 #include "ui/FrmThumbnailGenerator.h"
-#include "ui/common/BaseWidget.h"
 #include "ui/dragdrop/MimeTypes.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -23,7 +22,7 @@
 namespace geck {
 
 ObjectPalettePanel::ObjectPalettePanel(resource::GameResources& resources, QWidget* parent)
-    : BasePanel("Objects", parent)
+    : QWidget(parent)
     , _resources(resources) {
     setupUI();
     spdlog::debug("ObjectPalettePanel: Created object palette panel");
@@ -393,8 +392,6 @@ void ObjectPalettePanel::onObjectClicked(int objectIndex) {
     // themselves.
     _selectedObjectIndex = objectIndex;
 
-    Q_EMIT objectSelected(objectIndex, _currentCategory);
-
     spdlog::debug("ObjectPalettePanel: Selected object {} in category {}",
         objectIndex, static_cast<int>(_currentCategory));
 }
@@ -488,7 +485,6 @@ std::optional<std::pair<int, ObjectCategory>> ObjectPalettePanel::revealProto(ui
     clearObjectSelection();
     _selectedObjectIndex = index;
     selectRowForObject(index);
-    Q_EMIT objectSelected(index, _currentCategory);
     return std::make_pair(index, category);
 }
 

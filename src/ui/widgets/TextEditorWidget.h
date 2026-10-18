@@ -33,8 +33,6 @@ public:
     void setCustomEditorPath(const QString& path);
 
 signals:
-    void editorModeChanged();
-    void customEditorPathChanged();
     void configurationChanged();
 
 private slots:

@@ -1146,10 +1146,9 @@ void MainWindow::setupToolModeActions() {
             _exitGridsAction->setChecked(true);
             applyExitGridsTool(true);
         });
-        return action;
     };
-    _exitGridDrawRegionAction = addExitGridMode("Draw edge", EditorMode::MarkExits, true);
-    _exitGridPlaceHexAction = addExitGridMode("Place single hex", EditorMode::PlaceExitGrid, false);
+    addExitGridMode("Draw edge", EditorMode::MarkExits, true);
+    addExitGridMode("Place single hex", EditorMode::PlaceExitGrid, false);
 
     // Attach the sub-mode dropdown to the button's menu-indicator arrow (MenuButtonPopup): the main
     // button is a plain on/off toggle, while the small arrow opens the dropdown to switch sub-mode.
@@ -1996,11 +1995,6 @@ void MainWindow::connectPanelSignals() {
 
     // SelectionPanel signals → MainWindow / current editor widget
     if (_selectionPanel) {
-        connect(_selectionPanel, &SelectionPanel::objectFrmChanged,
-            this, [this](std::shared_ptr<Object> object, uint32_t newFrmPid) {
-                if (_currentEditorWidget)
-                    _currentEditorWidget->onObjectFrmChanged(object, newFrmPid);
-            });
         connect(_selectionPanel, &SelectionPanel::objectFrmPathChanged,
             this, [this](std::shared_ptr<Object> object, const std::string& newFrmPath) {
                 if (_currentEditorWidget)
@@ -2102,19 +2096,6 @@ void MainWindow::connectPanelSignals() {
                     _currentEditorWidget->setTilePlacementMode(false);
                     updateModeDisplay("Mode: All", ":/icons/actions/select.svg");
                 }
-            });
-        connect(_tilePalettePanel, &TilePalettePanel::placementModeChanged,
-            this, [this]([[maybe_unused]] TilePalettePanel::PlacementMode mode) {
-                if (!_currentEditorWidget)
-                    return;
-                _currentEditorWidget->setTilePlacementAreaFill(true);
-                _currentEditorWidget->setTilePlacementReplaceMode(false);
-                spdlog::debug("Set unified tile placement mode");
-            });
-        connect(_tilePalettePanel, &TilePalettePanel::replaceSelectedTiles,
-            this, [this](int newTileIndex) {
-                if (_currentEditorWidget)
-                    _currentEditorWidget->replaceSelectedTiles(newTileIndex);
             });
     }
 
@@ -2637,7 +2618,7 @@ void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFile
     // MapLoader is Qt-free; LoadingWidget owns it once added, so the callback uses
     // a handle to read its error message and present it here on the main thread.
     auto loaderHandle = std::make_shared<MapLoader*>(nullptr);
-    auto mapLoader = std::make_unique<MapLoader>(_resourcesShared, mapPath, -1, forceFilesystem, [this, loaderHandle](auto map) {
+    auto mapLoader = std::make_unique<MapLoader>(_resourcesShared, mapPath, forceFilesystem, [this, loaderHandle](auto map) {
         if (map) {
             auto editorWidget = std::make_unique<EditorWidget>(*_resourcesShared, std::move(map));
             setEditorWidget(std::move(editorWidget));

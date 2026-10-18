@@ -40,11 +40,8 @@ set(GECK_APP_SOURCES
     util/Exceptions.h
 
     # Qt6 UI Common
-    ui/common/BaseWidget.h
-    ui/common/BaseWidget.cpp
     ui/common/BaseDialog.h
     ui/common/BaseDialog.cpp
-    ui/common/BasePanel.h
     ui/palette/PaletteModel.h
     ui/palette/PaletteView.h
     ui/palette/PaletteView.cpp

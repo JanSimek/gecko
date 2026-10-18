@@ -234,8 +234,6 @@ void DragDropManager::startDragPreview(int objectIndex, int categoryInt, sf::Vec
     cancelDragPreview();
 
     _isDraggingFromPalette = true;
-    _previewObjectIndex = objectIndex;
-    _previewObjectCategory = categoryInt;
 
     try {
         _previewObjectInfo = _lookupObjectInfo(objectIndex, static_cast<ObjectCategory>(categoryInt));
@@ -313,18 +311,8 @@ void DragDropManager::finishDragPreview(sf::Vector2f worldPos) {
 void DragDropManager::cancelDragPreview() {
     _isDraggingFromPalette = false;
     _dragPreviewObject.reset();
-    _previewObjectIndex = -1;
-    _previewObjectCategory = 0;
     _previewObjectInfo = nullptr;
     _context.getCurrentHoverHex() = -1;
-}
-
-DragDropManager::DragType DragDropManager::getCurrentDragType() const {
-    if (_isDraggingObjects)
-        return DragType::OBJECT_MOVE;
-    if (_isDraggingFromPalette)
-        return DragType::PALETTE_PREVIEW;
-    return DragType::NONE;
 }
 
 } // namespace geck

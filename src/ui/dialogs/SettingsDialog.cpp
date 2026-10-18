@@ -21,7 +21,6 @@
 namespace geck {
 
 using namespace ui::constants;
-using namespace ui::defaults;
 
 SettingsDialog::SettingsDialog(std::shared_ptr<Settings> settings, KeyBindingRegistry* registry, QWidget* parent)
     : QDialog(parent)

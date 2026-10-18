@@ -18,11 +18,6 @@ ProContainerKeyWidget::ProContainerKeyWidget(resource::GameResources& resources,
     for (int i = 0; i < NUM_CONTAINER_FLAGS; ++i) {
         _containerFlagChecks[i] = nullptr;
     }
-
-    setupUI();
-}
-
-void ProContainerKeyWidget::setupUI() {
 }
 
 void ProContainerKeyWidget::setupContainerUI() {

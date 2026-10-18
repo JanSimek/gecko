@@ -14,7 +14,6 @@ public:
     explicit ElidedLabel(Qt::TextElideMode mode = Qt::ElideRight, QWidget* parent = nullptr);
 
     void setFullText(const QString& text);
-    const QString& fullText() const { return _fullText; }
 
     QSize minimumSizeHint() const override;
     QSize sizeHint() const override;

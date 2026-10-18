@@ -1,15 +1,19 @@
 #pragma once
 
-#include "ui/common/BasePanel.h"
 #include "ui/palette/PaletteModel.h"
 #include "ui/theme/ThemeManager.h"
 
 #include "ui/palette/PaletteView.h"
 
+#include <QGroupBox>
+#include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSortFilterProxyModel>
 #include <QSpinBox>
+#include <QVBoxLayout>
+#include <QWidget>
 
 namespace geck {
 
@@ -30,15 +34,10 @@ namespace selection {
  * whole tile set is one scrollable list rather than pages, and a picked tile can always be
  * highlighted and scrolled to.
  */
-class TilePalettePanel : public BasePanel {
+class TilePalettePanel : public QWidget {
     Q_OBJECT
 
 public:
-    enum class PlacementMode {
-        UNIFIED_PLACEMENT // Single click = single tile, drag = area fill (like selection mode)
-        // Note: SINGLE_PLACEMENT and AREA_FILL merged into unified system
-    };
-
     explicit TilePalettePanel(resource::GameResources& resources, QWidget* parent = nullptr);
     ~TilePalettePanel() = default;
 
@@ -59,30 +58,21 @@ public:
     bool isRoofMode() const { return _isRoofMode; }
     void setRoofMode(bool isRoof);
 
-    // Placement modes
-    PlacementMode getPlacementMode() const { return _placementMode; }
-    void setPlacementMode(PlacementMode mode);
-
 signals:
     void tileSelected(int tileIndex, bool isRoof);
-    void placementModeChanged(PlacementMode mode);
-    void placeTileAtPosition(int tileIndex, int position, bool isRoof);
-    void fillAreaWithTile(int tileIndex, const QRect& area, bool isRoof);
-    void replaceSelectedTiles(int newTileIndex);
 
 public slots:
     void onTileClicked(int tileIndex);
-    void onPlacementModeChanged();
 
 private slots:
     void filterTiles();
-    void onSearchTextChanged(const QString& text) override;
+    void onSearchTextChanged(const QString& text);
 
 public:
     static constexpr int TILE_SIZE = 64; // icon size in the list
 
 private:
-    void setupUI() override;
+    void setupUI();
     void setupModeControls();
     void setupTileList();
     void setupFilterControls();
@@ -125,7 +115,6 @@ private:
     // State
     int _selectedTileIndex = -1;
     bool _isRoofMode = false; // Default to floor mode
-    PlacementMode _placementMode = PlacementMode::UNIFIED_PLACEMENT;
     int _filterStart = 0;
     int _filterEnd = -1; // -1 means show all
 };

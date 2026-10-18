@@ -127,7 +127,6 @@ public:
     bool isDragging() const { return _isDragging; }
     bool isInPlayerPositionMode() const { return _mode == EditorMode::SetPlayerPosition; }
     bool isInTilePlacementMode() const { return _mode == EditorMode::PlaceTile; }
-    bool isInExitGridPlacementMode() const { return _mode == EditorMode::PlaceExitGrid; }
     bool isInMarkExitsMode() const { return _mode == EditorMode::MarkExits; }
     // The "Draw edge" flip toggle: false = auto/outward side, true = opposite. Toggled by the flip key;
     // exposed for tests.
@@ -145,10 +144,9 @@ public:
     void setPlayerPositionMode(bool enabled) { setActiveMode(enabled, EditorMode::SetPlayerPosition); }
     void setExitGridPlacementMode(bool enabled) { setActiveMode(enabled, EditorMode::PlaceExitGrid); }
     void setStampPatternMode(bool enabled) { setActiveMode(enabled, EditorMode::StampPattern); }
-    bool isInStampPatternMode() const { return _mode == EditorMode::StampPattern; }
     void setMarkExitsMode(bool enabled) { setActiveMode(enabled, EditorMode::MarkExits); }
     void setPluginToolMode(bool enabled) { setActiveMode(enabled, EditorMode::PluginTool); }
-    void setTilePlacementMode(bool enabled, int tileIndex = -1, bool replaceMode = false);
+    void setTilePlacementMode(bool enabled, int tileIndex = -1);
     void setSelectionMode(SelectionMode mode) { _selectionMode = mode; }
 
 private:
@@ -163,7 +161,6 @@ private:
         sf::RenderTarget& target,
         const sf::View& view);
     void handleMouseWheelScrolled(const sf::Event::MouseWheelScrolled& event);
-    void handleKeyReleased(const sf::Event::KeyReleased& event);
 
     // Helper methods
     SelectionModifier getSelectionModifier() const;
@@ -217,7 +214,6 @@ private:
     sf::Clock _doubleClickClock;
     static constexpr float kDoubleClickSeconds = 0.4f;
     static constexpr float kDoubleClickWorldDistance = 12.0f;
-    bool _tilePlacementReplaceMode = false;
     int _tilePlacementIndex = -1;
     bool _tilePlacementIsRoof = false;
 };

@@ -72,13 +72,6 @@ signals:
     void fieldChanged();
 
     /**
-     * @brief Emitted when FID selector button is clicked
-     * @param targetField The spin box to update with selected FID
-     * @param objectType The type of object to select
-     */
-    void fidSelectorRequested(QSpinBox* targetField, ObjectType objectType);
-
-    /**
      * @brief Emitted when a FID label selector is clicked
      * @param targetLabel The label to update
      * @param fidStorage Pointer to store the selected FID
@@ -202,20 +195,6 @@ protected:
         const QString& tooltipTemplate = QString(),
         const QStringList& labels = QStringList());
 
-    /**
-     * @brief Create a spinbox array with fixed width
-     * @param array Pointer to array of QSpinBox pointers
-     * @param count Number of spinboxes to create
-     * @param min Minimum value
-     * @param max Maximum value
-     * @param fixedWidth Fixed width for each spinbox
-     * @param tooltipTemplate Template for tooltips
-     * @param labels Optional labels for tooltips
-     */
-    void createCompactSpinBoxArray(QSpinBox** array, int count,
-        int min, int max, int fixedWidth,
-        const QString& tooltipTemplate = QString(),
-        const QStringList& labels = QStringList());
 
 protected slots:
     void onFieldChanged();

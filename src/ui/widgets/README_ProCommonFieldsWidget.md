@@ -40,8 +40,6 @@ auto commonFields = new ProCommonFieldsWidget(parent);
 // Connect signals
 connect(commonFields, &ProCommonFieldsWidget::fieldChanged, 
         this, &MyDialog::onFieldChanged);
-connect(commonFields, &ProCommonFieldsWidget::fidSelectorRequested,
-        this, &MyDialog::onFidSelectorRequested);
 connect(commonFields, &ProCommonFieldsWidget::editMessageRequested,
         this, &MyDialog::onEditMessageRequested);
 

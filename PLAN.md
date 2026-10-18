@@ -378,7 +378,7 @@ the running game (day/night, critter wander/AI) is **Large** and probably not wo
 - **PRO/MAP serialization visitor** — the type-specific tails (mixed field widths, optional-on-
   read/unconditional-on-write fields, union/subtype dispatch) can't be expressed symmetrically;
   the read→write→read round-trip test net already provides the safety.
-- **`ProFieldFactory` extraction / spacing-token consolidation / `BasePanel` re-parent** — only
+- **`ProFieldFactory` extraction / spacing-token consolidation** — only
   ~15 LOC genuinely shared, a materialId index-vs-value fidelity trap, and the spacing sources
   hold *different* values (consolidation would pixel-shift layouts).
 

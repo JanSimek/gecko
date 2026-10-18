@@ -38,7 +38,6 @@ public:
 
     // Data paths management
     void addDataPath(const std::filesystem::path& path);
-    void removeDataPath(const std::filesystem::path& path);
     std::vector<std::filesystem::path> getDataPaths() const;
     void setDataPaths(const std::vector<std::filesystem::path>& paths);
 
@@ -117,7 +116,6 @@ public:
     // Game location configuration
     std::filesystem::path getGameLocation() const;
     bool isGameLocationValid() const;
-    void autoDetectGameLocation();
 
     std::filesystem::path getExecutableGameLocation() const;
     void setExecutableGameLocation(const std::filesystem::path& location);

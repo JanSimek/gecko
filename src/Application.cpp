@@ -102,7 +102,7 @@ void Application::loadMap(const std::filesystem::path& mapPath) {
     // MapLoader is Qt-free; LoadingWidget owns it once added, so the callback uses
     // a handle to read its error message and present it here on the main thread.
     auto loaderHandle = std::make_shared<MapLoader*>(nullptr);
-    auto mapLoader = std::make_unique<MapLoader>(_resources, mapPath, -1, true, [this, loaderHandle](auto map) {
+    auto mapLoader = std::make_unique<MapLoader>(_resources, mapPath, true, [this, loaderHandle](auto map) {
         if (map) {
             auto editorWidget = std::make_unique<EditorWidget>(*_resources, std::move(map));
             _mainWindow->setEditorWidget(std::move(editorWidget));

@@ -140,7 +140,6 @@ signals:
     void showMapEdgesToggled(bool enabled);
     void showUnreachableToggled(bool enabled);
     void elevationChanged(int elevation);
-    void selectionModeRequested();
     void rotateObjectRequested();
     void toggleScrollBlockerRectangleMode();
 
@@ -291,7 +290,6 @@ private:
     // Dock widget state management
     void saveDockWidgetState();
     void restoreDockWidgetState();
-    void resetDockWidgetLayout();
     void restoreDefaultLayout();
 
     void convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed);
@@ -342,8 +340,6 @@ private:
     QAction* _exitGridsAction = nullptr;
     QAction* _fillBrushAction = nullptr;
     QMenu* _exitGridsMenu = nullptr;
-    QAction* _exitGridPlaceHexAction = nullptr;   // "Place single hex" -> EditorMode::PlaceExitGrid
-    QAction* _exitGridDrawRegionAction = nullptr; // "Draw edge"       -> EditorMode::MarkExits
     QAction* _rotateAction = nullptr;
     QAction* _fillSelectionAction = nullptr;
     QAction* _undoAction = nullptr;

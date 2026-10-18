@@ -83,7 +83,6 @@ public:
     // The combinable layers an ALL-mode selection considers. A disabled layer is treated as absent;
     // the single-layer modes ignore this, and changing it leaves the current selection alone.
     void setActiveLayers(SelectionLayers layers) { _layers = layers; }
-    SelectionLayers activeLayers() const { return _layers; }
 
     // Callback mechanism for UI updates
     void setSelectionCallback(SelectionCallback callback) { _selectionCallback = callback; }

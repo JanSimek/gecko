@@ -164,9 +164,8 @@ SFML sprite wrapper and may exist without a `MapObject` (previews), so it null-c
   `ui::theme::colors::*` (`STATUS_ERROR`, not `ERROR`, which is a Windows macro),
   `ui::theme::spacing::{TIGHT,NORMAL,LOOSE}`, `ui::constants::*`, prebuilt
   `ui::theme::styles::*`. No hex colour literals in UI code.
-- **Base classes:** dialogs derive from `BaseDialog`, palette panels from `BasePanel`
-  (`createMainLayout()`, `createSearchControls()`) — both in `src/ui/common/`. Palettes are
-  model/view: `ui::PaletteModel` + `ui::PaletteView` (`src/ui/palette/`).
+- **Base classes:** dialogs derive from `BaseDialog` (`src/ui/common/`; `createButtonBox()`).
+  Palettes are model/view: `ui::PaletteModel` + `ui::PaletteView` (`src/ui/palette/`).
 - **Drag and drop** MIME types: `ui::mime::*` in `src/ui/dragdrop/MimeTypes.h`. Drag previews use
   `ui::constants::sfml::DRAG_PREVIEW_ALPHA`.
 - **Dock width:** panels must fit `ui::constants::sizes::PANEL_PREFERRED_WIDTH` (360 px) in one
