@@ -8,6 +8,13 @@ if ! git clang-format -h >/dev/null 2>&1; then
     exit 0
 fi
 
+# .clang-format uses SpaceInEmptyBraces, which clang-format 21 and older reject.
+version=$(clang-format --version 2>/dev/null | sed -n 's/.*version \([0-9][0-9]*\).*/\1/p')
+if [ -z "$version" ] || [ "$version" -lt 22 ]; then
+    echo "pre-commit: clang-format ${version:-?} is older than 22; commit left unformatted." >&2
+    exit 0
+fi
+
 patch=$(mktemp) || exit 1
 trap 'rm -f "$patch"' EXIT
 

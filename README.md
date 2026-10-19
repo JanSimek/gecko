@@ -170,7 +170,8 @@ differ between Windows, macOS and Linux (for example Redo is **Ctrl+Y** on Windo
 A pre-commit hook (`.githooks/pre-commit`) runs `git clang-format` on the lines each commit
 changes, with the repository's `.clang-format`. Configuring with CMake installs it by setting
 `core.hooksPath` to `.githooks` (opt out with `-DGECK_INSTALL_GIT_HOOKS=OFF`); it needs
-`clang-format` and `git-clang-format` on `PATH`, and skips formatting with a warning without them.
+`clang-format` 22 or newer and `git-clang-format` on `PATH`, and skips formatting with a warning
+without them.
 
 ### Testing
 ```bash
