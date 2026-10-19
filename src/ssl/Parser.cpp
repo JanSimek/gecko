@@ -1,5 +1,7 @@
 #include "ssl/Parser.h"
 
+#include "reader/TextParsing.h"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -11,9 +13,7 @@ namespace geck::ssl {
 
 namespace {
 
-    bool equalsIgnoreCase(std::string_view a, std::string_view b) {
-        return std::ranges::equal(a, b, [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
-    }
+    using text::equalsIgnoreCase;
 
     // Words sslc reserves (lex.c); none of them can name a variable or procedure.
     constexpr std::array<std::string_view, 49> KEYWORDS{ "procedure", "variable", "import", "export", "in", "when", "pure",

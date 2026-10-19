@@ -4,7 +4,6 @@
 #include "editor/Object.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
-#include "format/map/MapObjectViews.h"
 #include "resource/GameResources.h"
 #include "editing/commands/UndoBatcher.h"
 #include "rendering/MapSpriteLoader.h"
@@ -383,11 +382,10 @@ bool ObjectEditService::registerExitGridEdit(const std::vector<std::shared_ptr<M
 }
 
 void ObjectEditService::applyExitGridState(MapObject& exitGrid, const ExitGridCommandState& state) {
-    ExitGridInstance view{ exitGrid };
-    view.setDestinationMap(state.exitMap);
-    view.setDestinationPosition(state.exitPosition);
-    view.setDestinationElevation(state.exitElevation);
-    view.setOrientation(state.exitOrientation);
+    exitGrid.exit_map = state.exitMap;
+    exitGrid.exit_position = state.exitPosition;
+    exitGrid.exit_elevation = state.exitElevation;
+    exitGrid.exit_orientation = state.exitOrientation;
     // frm_pid/pro_pid are the object's art/proto, not exit-grid destination fields.
     exitGrid.frm_pid = state.frmPid;
     exitGrid.pro_pid = state.proPid;

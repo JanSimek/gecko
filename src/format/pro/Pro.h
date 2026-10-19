@@ -26,13 +26,6 @@ public:
     static constexpr int BONUS_DAMAGE_ARRAYS = 8;  // Extended arrays for critter bonuses
     static constexpr int FIELD_SIZE_BYTES = 4;     // Standard 32-bit field size
 
-    // Bits of the trailing WeaponData::weaponFlags word gecko reads and writes. The engine has no such
-    // word (see WeaponData). sfall's "Energy Weapon" flag is extended-flags bit 0x0400 instead (sfall
-    // Skills.cpp, define_extra.h WEAPON_ENERGY).
-    enum class WEAPON_FLAGS : uint32_t {
-        ENERGY_WEAPON = 0x00000001
-    };
-
     // Object Flags - from Fallout 2 CE obj_types.h
     enum class ObjectFlags : uint32_t {
         OBJECT_HIDDEN = 0x01,               // Object is hidden from view
@@ -91,6 +84,9 @@ public:
         // Weapon behavior flags
         BIG_GUN = 0x00000100,    // Forces weapon to use Big Guns skill instead of Small Guns
         TWO_HANDED = 0x00000200, // Weapon requires both hands, prevents dual-wielding
+        // sfall only (define_extra.h WEAPON_ENERGY): forces the Energy Weapons skill. fallout2-ce
+        // leaves PROTO_EXT_FLAG_ENERGY commented out and picks the skill from the damage type.
+        ENERGY = 0x00000400,
 
         // Action/interaction flags
         CAN_USE = 0x00000800,          // Item can be "used" (containers get this automatically)
@@ -214,11 +210,7 @@ public:
         uint32_t ammoType;
         int32_t ammoPID;
         uint32_t ammoCapacity;
-        uint8_t soundId;
-        // Not in the engine's record: fallout2-ce protoItemDataRead stops at the sound byte, so a weapon
-        // proto is 122 bytes, and every shipped one is exactly that. ProReader fills this only from
-        // bytes past that end (so 0 for shipped data); ProWriter always appends it.
-        uint32_t weaponFlags;
+        uint8_t soundId; // fallout2-ce protoItemDataRead stops here: a weapon proto is 122 bytes
     } weaponData;
 
     // The engine reads these four modifiers as armour-class adjust, DR adjust, damage multiplier and
@@ -357,12 +349,6 @@ public:
     /// instance overload forwards to this, so callers holding only a type (e.g. a ProtoId's
     /// objectType()) reuse the same mapping instead of duplicating it.
     static std::string typeToString(ObjectType type);
-
-    // Allow updating the file path for save operations
-    void setPath(const std::filesystem::path& newPath) {
-        _path = newPath;
-        _filename = newPath.filename().string();
-    }
 };
 
 } // namespace geck

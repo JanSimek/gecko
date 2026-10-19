@@ -32,9 +32,6 @@ public:
     /// procedures. Code in a procedure that is not live never runs.
     bool isLive(std::string_view procedure) const;
 
-    /// The live procedures, lowercased.
-    const std::set<std::string>& live() const { return _live; }
-
     /// Every expression in `procedure` that can run: its body and condition, without the dead branch
     /// of an `if` on a constant. (Whether the procedure itself runs is isLive.)
     void forEachLiveExpression(const Procedure& procedure, const ExprVisitor& visit) const;

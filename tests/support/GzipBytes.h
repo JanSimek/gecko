@@ -4,12 +4,9 @@
 
 #include <zlib.h>
 
-#include "support/TempFile.h" // readAllBytes
+#include "support/TempFile.h" // readAllBytes, writeBytes
 
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <vector>
 
 namespace geck::test {
@@ -28,12 +25,6 @@ inline std::vector<uint8_t> gzipBytes(std::vector<uint8_t> raw) {
     out.resize(zs.total_out);
     deflateEnd(&zs);
     return out;
-}
-
-inline void writeAllBytes(const std::filesystem::path& path, const std::vector<uint8_t>& bytes) {
-    std::filesystem::create_directories(path.parent_path());
-    std::ofstream out(path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
 }
 
 } // namespace geck::test

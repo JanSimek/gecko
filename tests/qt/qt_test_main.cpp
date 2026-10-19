@@ -1,4 +1,5 @@
 #include <clocale>
+#include <cstdint>
 #include <cstdio>
 
 #ifdef _WIN32
@@ -8,8 +9,12 @@
 
 #include <QByteArray>
 #include <QApplication>
+#include <QDir>
+#include <QFile>
 #include <QStandardPaths>
+#include <QStringList>
 #include <QTemporaryDir>
+#include <QTest>
 
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_case_info.hpp>
@@ -31,9 +36,45 @@ public:
     }
 };
 
+QString& testHomePath() {
+    static QString path;
+    return path;
+}
+
+// True when `path` is a test-only location: under the temporary HOME, or in Qt's own test-mode
+// directory (".qttest" / "qttest", which Windows uses instead of HOME).
+bool isTestConfigLocation(const QString& path) {
+    const QString canonical = QDir(path).canonicalPath();
+    const QString candidate = canonical.isEmpty() ? QDir::cleanPath(path) : canonical;
+    const QString home = QDir(testHomePath()).canonicalPath();
+    if (!home.isEmpty() && (candidate == home || candidate.startsWith(home + QLatin1Char('/')))) {
+        return true;
+    }
+    const QStringList parts = candidate.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    return parts.contains(QStringLiteral(".qttest")) || parts.contains(QStringLiteral("qttest"));
+}
+
+// Settings (and the pattern and fill libraries) persist under <ConfigLocation>/gecko — the test-mode
+// location main() sets up. Every run through a case, each SECTION's included, starts with none of
+// it, so nothing an earlier case saved (a key override, a data path) leaks into the next.
+class SettingsIsolation : public Catch::EventListenerBase {
+public:
+    using Catch::EventListenerBase::EventListenerBase;
+
+    void testCasePartialStarting(const Catch::TestCaseInfo&, uint64_t) override {
+        const QDir configRoot(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation));
+        if (!isTestConfigLocation(configRoot.absolutePath())) {
+            return; // main() refuses to run in that case; never delete a real user's settings
+        }
+        QDir(configRoot.filePath("gecko")).removeRecursively();
+        QFile::remove(configRoot.filePath("settings.json")); // Settings' fallback when gecko/ can't be made
+    }
+};
+
 } // namespace
 
 CATCH_REGISTER_LISTENER(TestNameTracer)
+CATCH_REGISTER_LISTENER(SettingsIsolation)
 
 int main(int argc, char** argv) {
 #ifdef _WIN32
@@ -60,7 +101,14 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    testHomePath() = testHome.path();
     qputenv("HOME", testHome.path().toUtf8());
+#if defined(Q_OS_MACOS)
+    // macOS resolves ConfigLocation (~/Library/Preferences) through Foundation, which ignores HOME
+    // and test mode; CFFIXED_USER_HOME redirects it. Without this the suite rewrote and deleted the
+    // real editor settings.
+    qputenv("CFFIXED_USER_HOME", testHome.path().toUtf8());
+#endif
     QStandardPaths::setTestModeEnabled(true);
 
 #if defined(Q_OS_MACOS)
@@ -76,10 +124,22 @@ int main(int argc, char** argv) {
 #endif
 
     QApplication app(argc, argv);
+    const QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+    if (!isTestConfigLocation(configRoot)) {
+        std::fprintf(stderr, "qt_tests: ConfigLocation %s is not a test location (temporary home %s); refusing to run\n",
+            qPrintable(configRoot), qPrintable(testHomePath()));
+        return 1;
+    }
     std::setlocale(LC_NUMERIC, "C"); // as Application does: Qt just adopted the system locale
     app.setApplicationName("gecko-qt-tests");
     app.setOrganizationName("gecko");
     Q_INIT_RESOURCE(icons);
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    // A failed QVERIFY/QCOMPARE otherwise just returns from the test function, which Catch2 counts
+    // as a pass. Throwing makes Catch2 report it; tests should still use REQUIRE/CHECK.
+    QTest::setThrowOnFail(true);
+#endif
 
     Catch::Session session;
     const int result = session.run(argc, argv);

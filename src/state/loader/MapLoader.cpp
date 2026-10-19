@@ -10,7 +10,6 @@
 #include "resource/ResourcePaths.h"
 
 #include "reader/ReaderExceptions.h"
-#include "reader/ReaderFactory.h"
 
 #include "format/pro/Pro.h"
 #include "format/map/Map.h"
@@ -49,12 +48,10 @@ namespace {
 
 MapLoader::MapLoader(std::shared_ptr<resource::GameResources> resources,
     const std::filesystem::path& mapFile,
-    int elevation,
     bool forceFilesystem,
     std::function<void(std::unique_ptr<Map>)> onLoadCallback)
     : _resources(std::move(resources))
     , _mapPath(mapFile)
-    , _elevation(elevation)
     , _forceFilesystem(forceFilesystem)
     , _onLoadCallback(onLoadCallback) {
 }
@@ -173,11 +170,8 @@ void MapLoader::loadMapResources() {
     spdlog::stopwatch stopwatch_chunk;
 
     try {
-        if (_elevation == INVALID_ELEVATION) {
-            uint32_t default_elevation = _map->getMapFile().header.player_default_elevation;
-            spdlog::debug("Using default map elevation {}", default_elevation);
-            _elevation = default_elevation;
-        }
+        _elevation = static_cast<int>(_map->getMapFile().header.player_default_elevation);
+        spdlog::debug("Using default map elevation {}", _elevation);
 
         Lst* lst = nullptr;
         try {
@@ -261,12 +255,7 @@ void MapLoader::loadMapResources() {
                 unresolvedObjectArt.size(), _elevation, joinCapped(unresolvedObjectArt, kMaxNamesInWarning));
         }
 
-        // Load essential editor textures
-        _resources->textures().preload(ResourcePaths::Frm::BLANK_TILE);
-        _resources->textures().preload(ResourcePaths::Frm::LIGHT);
-        _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK);
-        _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK_FULL);
-        _resources->textures().preload(ResourcePaths::Frm::SCROLL_BLOCKER);
+        ResourceInitializer::loadEssentialTextures(*_resources);
 
         _percentDone = 100;
         setProgress("Map loading complete");

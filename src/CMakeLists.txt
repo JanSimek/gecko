@@ -40,11 +40,8 @@ set(GECK_APP_SOURCES
     util/Exceptions.h
 
     # Qt6 UI Common
-    ui/common/BaseWidget.h
-    ui/common/BaseWidget.cpp
     ui/common/BaseDialog.h
     ui/common/BaseDialog.cpp
-    ui/common/BasePanel.h
     ui/palette/PaletteModel.h
     ui/palette/PaletteView.h
     ui/palette/PaletteView.cpp
@@ -106,8 +103,6 @@ set(GECK_APP_SOURCES
     ui/dialogs/SettingsDialog.cpp
     ui/dialogs/ProEditorDialog.h
     ui/dialogs/ProEditorDialog.cpp
-    ui/dialogs/InventoryViewerDialog.h
-    ui/dialogs/InventoryViewerDialog.cpp
     ui/dialogs/MessageSelectorDialog.h
     ui/dialogs/MessageSelectorDialog.cpp
     ui/dialogs/ExitGridPropertiesDialog.h
@@ -197,7 +192,7 @@ set(GECK_APP_SOURCES
     ui/widgets/pro/ProMiscItemWidget.h
     ui/widgets/pro/ProMiscItemWidget.cpp
 
-    # Qt6 UI Constants
+    # Engine enum labels and offscreen thumbnails
     ui/GameEnums.h
     ui/GameEnums.cpp
     ui/rendering/ThumbnailRenderer.h
@@ -205,8 +200,6 @@ set(GECK_APP_SOURCES
     ui/rendering/MapThumbnail.h
     ui/rendering/MapThumbnail.cpp
 
-    ui/input/InputHandler.h
-    ui/input/InputHandler.cpp
     ui/input/ActionSpec.h
     ui/input/ActionSpec.cpp
     ui/input/KeyBindingRegistry.h
@@ -220,12 +213,7 @@ set(GECK_APP_SOURCES
     ui/tools/ExitGridContext.h
     ui/tools/ExitGridPlacementManager.h
     ui/tools/ExitGridPlacementManager.cpp
-    ui/tools/FillBrushTool.h
-    ui/tools/ITool.h
-    ui/tools/PluginToolHost.h
-    ui/tools/ToolRegistry.h
-    ui/tools/ToolRegistry.cpp
-    # Loaders (kept from state system)
+    # Background loaders
     state/loader/Loader.h
     state/loader/MapLoader.cpp
     state/loader/MapLoader.h
@@ -235,8 +223,6 @@ set(GECK_APP_SOURCES
     # Game launch service
     state/GameLauncher.cpp
     state/GameLauncher.h
-
-    # Map save service (Qt-free MapWriter + proto-resolver core)
 
     # Qt Resource files
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
@@ -260,19 +246,19 @@ if(WIN32)
     # Add Windows resource file for icon
     target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/resources/gecko.rc)
 elseif(APPLE)
-    # Add icon to bundle
-    set(MACOSX_BUNDLE_ICON_FILE gecko.icns)
+    # gecko.icns is the Dock/Finder icon (CFBundleIconFile)
     set(APP_ICON_MACOSX ${CMAKE_SOURCE_DIR}/resources/gecko.icns)
     set_source_files_properties(${APP_ICON_MACOSX} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
     add_executable(${PROJECT_NAME} MACOSX_BUNDLE main.cpp ${APP_ICON_MACOSX})
-    
-    # Set bundle properties
+
+    # Substituted into the resources/Info.plist template
     set_target_properties(${PROJECT_NAME} PROPERTIES
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/resources/Info.plist
         MACOSX_BUNDLE_BUNDLE_NAME "Gecko"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.gecko.editor"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
-        MACOSX_BUNDLE_BUNDLE_VERSION "1"
+        MACOSX_BUNDLE_ICON_FILE gecko.icns
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     )
 else()
     add_executable(${PROJECT_NAME} main.cpp)
@@ -423,9 +409,6 @@ add_library(vault STATIC
     reader/dat/DatReader.h
     reader/dat/DatReader.cpp
 
-#    writer/dat/DatWriter.h
-#    writer/dat/DatWriter.cpp
-
     reader/frm/FrmReader.h
     reader/frm/FrmReader.cpp
 
@@ -494,8 +477,6 @@ add_library(vault STATIC
     reader/StreamBuffer.cpp
     reader/StreamBuffer.h
 
-    util/AmmoCaliberNames.h
-    util/AmmoCaliberNames.cpp
     util/MessageEnumUtils.h
     util/MessageEnumUtils.cpp
 
@@ -530,8 +511,8 @@ target_link_libraries(vault PUBLIC
 add_library(gecko_resource STATIC
     vfs/Dat2File.hpp
     vfs/Dat2FileSystem.hpp
+    vfs/UndefWindowsFileMacros.h
 
-    resource/PathUtils.h
     resource/CritterFrmResolver.h
     resource/CritterFrmResolver.cpp
 
@@ -594,7 +575,6 @@ add_library(gecko_core STATIC
     util/ProHelper.cpp
     util/Coordinates.h
     util/FileIo.h
-    util/Coordinates.cpp
     util/SpatialIndex.h
     util/SpatialIndex.cpp
 
@@ -645,7 +625,7 @@ target_link_libraries(gecko_core PUBLIC
 # Map mutation that is heavier than the core model but still Qt-free: the undoable command
 # controller, the sprite/object builders and the scripting host API (plus the optional Luau
 # runtime). Sits on gecko_core so the Qt UI (gecko_app) and headless frontends (gecko-cli,
-# a future MCP server) drive the same editing code without any of them pulling in Qt.
+# gecko-mcp) drive the same editing code without any of them pulling in Qt.
 add_library(gecko_editing STATIC
     util/SpriteFactory.h
     util/SpriteFactory.cpp
@@ -675,6 +655,15 @@ add_library(gecko_editing STATIC
     rendering/RenderingEngine.cpp
     rendering/MapRenderer.h
     rendering/MapRenderer.cpp
+    # The canvas's tool-mode state machine (InputHandler) and the pluggable-tool seam it dispatches to
+    # (ITool/ToolRegistry, FillBrushTool): SFML events in, callbacks out, no Qt.
+    editing/EditorMode.h
+    editing/input/InputHandler.h
+    editing/input/InputHandler.cpp
+    editing/tools/ITool.h
+    editing/tools/ToolRegistry.h
+    editing/tools/ToolRegistry.cpp
+    editing/tools/FillBrushTool.h
     editing/commands/CommandHost.h
     editing/commands/ObjectCommandController.h
     editing/commands/ObjectCommandController.cpp
@@ -793,6 +782,7 @@ if(GECK_BUILD_CLI)
         cli/Endings.h
         cli/Endings.cpp
         cli/GameText.h
+        cli/JsonText.h
         cli/GameText.cpp
         cli/GvarRoles.h
         cli/GvarRoles.cpp
@@ -853,11 +843,6 @@ if(APPLE)
         TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/resources
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/scripts $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/resources/scripts
-    )
-    # Also copy the main icon.png to Resources root for easy access
-    add_custom_command(
-        TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/resources/icon.png $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/icon.png
     )
 else()
     # For other platforms, stage resources next to the executable. Single-config builds share one

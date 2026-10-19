@@ -27,7 +27,7 @@
 #endif
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
-#include "ui/tools/FillBrushTool.h"
+#include "editing/tools/FillBrushTool.h"
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/dialogs/AboutDialog.h"
 #include "ui/dialogs/FillDialog.h"
@@ -1146,10 +1146,9 @@ void MainWindow::setupToolModeActions() {
             _exitGridsAction->setChecked(true);
             applyExitGridsTool(true);
         });
-        return action;
     };
-    _exitGridDrawRegionAction = addExitGridMode("Draw edge", EditorMode::MarkExits, true);
-    _exitGridPlaceHexAction = addExitGridMode("Place single hex", EditorMode::PlaceExitGrid, false);
+    addExitGridMode("Draw edge", EditorMode::MarkExits, true);
+    addExitGridMode("Place single hex", EditorMode::PlaceExitGrid, false);
 
     // Attach the sub-mode dropdown to the button's menu-indicator arrow (MenuButtonPopup): the main
     // button is a plain on/off toggle, while the small arrow opens the dropdown to switch sub-mode.
@@ -1299,129 +1298,6 @@ void MainWindow::wireScriptConsole() {
 void MainWindow::setLogModel(LogModel* model) {
     if (_logPanel) {
         _logPanel->setModel(model);
-    }
-}
-
-QMenu* MainWindow::ensurePluginMenu() {
-    if (!_pluginMenu && _menuBar) {
-        // Keep Help rightmost, per platform convention: insert Plugins before it.
-        _pluginMenu = new QMenu(tr("&Plugins"), _menuBar);
-        if (_helpMenu) {
-            _menuBar->insertMenu(_helpMenu->menuAction(), _pluginMenu);
-        } else {
-            _menuBar->addMenu(_pluginMenu);
-        }
-    }
-    return _pluginMenu;
-}
-
-QAction* MainWindow::addPluginMenuItem(const QString& id, const QString& text) {
-    // Validate before ensurePluginMenu() so a rejected registration can't leave an empty
-    // Plugins menu in the menu bar.
-    if (id.isEmpty() || text.isEmpty() || _pluginUi.contains(id)) {
-        return nullptr;
-    }
-    QMenu* menu = ensurePluginMenu();
-    if (!menu) {
-        return nullptr;
-    }
-
-    QAction* action = menu->addAction(text);
-    menu->menuAction()->setVisible(true);
-    _pluginUi.insert(id, PluginUiRegistration{
-                             .kind = PluginUiRegistration::Kind::MenuAction,
-                             .action = action,
-                             .menu = menu,
-                         });
-    return action;
-}
-
-QAction* MainWindow::addPluginToolButton(const QString& id, const QString& text, const QIcon& icon) {
-    if (id.isEmpty() || text.isEmpty() || !_mainToolBar || _pluginUi.contains(id)) {
-        return nullptr;
-    }
-
-    QAction* action = icon.isNull() ? _mainToolBar->addAction(text) : _mainToolBar->addAction(icon, text);
-    _pluginUi.insert(id, PluginUiRegistration{
-                             .kind = PluginUiRegistration::Kind::ToolBarAction,
-                             .action = action,
-                         });
-    return action;
-}
-
-QDockWidget* MainWindow::addPluginDock(const QString& id, const QString& title, QWidget* widget,
-    Qt::DockWidgetArea area) {
-    if (id.isEmpty() || title.isEmpty() || !widget || _pluginUi.contains(id)) {
-        return nullptr;
-    }
-
-    QDockWidget* dock = new QDockWidget(title, this);
-    dock->setObjectName(QStringLiteral("PluginDock_%1").arg(id));
-    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
-    dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
-    dock->setWidget(widget);
-    addDockWidget(area, dock);
-    dock->hide();
-
-    QAction* toggleAction = dock->toggleViewAction();
-    toggleAction->setText(title);
-    if (_viewMenu) {
-        _viewMenu->addAction(toggleAction);
-    }
-    connect(dock, &QDockWidget::visibilityChanged, this, [this](bool) {
-        if (!_suppressDockStateSave) {
-            saveDockWidgetState();
-        }
-    });
-
-    _pluginUi.insert(id, PluginUiRegistration{
-                             .kind = PluginUiRegistration::Kind::Dock,
-                             .action = toggleAction,
-                             .dock = dock,
-                         });
-    return dock;
-}
-
-void MainWindow::removePluginUi(const QString& id) {
-    const auto it = _pluginUi.find(id);
-    if (it == _pluginUi.end()) {
-        return;
-    }
-
-    const PluginUiRegistration registration = it.value();
-    _pluginUi.erase(it);
-
-    switch (registration.kind) {
-        case PluginUiRegistration::Kind::MenuAction:
-            if (registration.menu && registration.action) {
-                registration.menu->removeAction(registration.action);
-            }
-            if (registration.action) {
-                registration.action->deleteLater();
-            }
-            // An empty Plugins menu is just noise in the menu bar; hide it until the next
-            // registration (the QMenu itself stays alive so pointers remain stable).
-            if (_pluginMenu && _pluginMenu->isEmpty()) {
-                _pluginMenu->menuAction()->setVisible(false);
-            }
-            break;
-        case PluginUiRegistration::Kind::ToolBarAction:
-            if (_mainToolBar && registration.action) {
-                _mainToolBar->removeAction(registration.action);
-            }
-            if (registration.action) {
-                registration.action->deleteLater();
-            }
-            break;
-        case PluginUiRegistration::Kind::Dock:
-            if (_viewMenu && registration.action) {
-                _viewMenu->removeAction(registration.action);
-            }
-            if (registration.dock) {
-                removeDockWidget(registration.dock);
-                registration.dock->deleteLater();
-            }
-            break;
     }
 }
 
@@ -1996,11 +1872,6 @@ void MainWindow::connectPanelSignals() {
 
     // SelectionPanel signals → MainWindow / current editor widget
     if (_selectionPanel) {
-        connect(_selectionPanel, &SelectionPanel::objectFrmChanged,
-            this, [this](std::shared_ptr<Object> object, uint32_t newFrmPid) {
-                if (_currentEditorWidget)
-                    _currentEditorWidget->onObjectFrmChanged(object, newFrmPid);
-            });
         connect(_selectionPanel, &SelectionPanel::objectFrmPathChanged,
             this, [this](std::shared_ptr<Object> object, const std::string& newFrmPath) {
                 if (_currentEditorWidget)
@@ -2103,27 +1974,22 @@ void MainWindow::connectPanelSignals() {
                     updateModeDisplay("Mode: All", ":/icons/actions/select.svg");
                 }
             });
-        connect(_tilePalettePanel, &TilePalettePanel::placementModeChanged,
-            this, [this]([[maybe_unused]] TilePalettePanel::PlacementMode mode) {
-                if (!_currentEditorWidget)
-                    return;
-                _currentEditorWidget->setTilePlacementAreaFill(true);
-                _currentEditorWidget->setTilePlacementReplaceMode(false);
-                spdlog::debug("Set unified tile placement mode");
-            });
-        connect(_tilePalettePanel, &TilePalettePanel::replaceSelectedTiles,
-            this, [this](int newTileIndex) {
-                if (_currentEditorWidget)
-                    _currentEditorWidget->replaceSelectedTiles(newTileIndex);
-            });
     }
 
     // MapInfoPanel signals → current editor widget
     if (_mapInfoPanel) {
         connect(_mapInfoPanel, &MapInfoPanel::selectPlayerPositionRequested,
             this, [this]() {
-                if (_currentEditorWidget)
-                    _currentEditorWidget->enterPlayerPositionSelectionMode();
+                if (!_currentEditorWidget) {
+                    return;
+                }
+                _currentEditorWidget->beginHexPick(
+                    [this](std::optional<int> hex) {
+                        if (hex.has_value() && _mapInfoPanel && _currentEditorWidget) {
+                            _mapInfoPanel->setPlayerPosition(*hex, _currentEditorWidget->getCurrentElevation());
+                        }
+                    },
+                    "Click on a hex to set the player starting position (Press Escape to cancel)");
             });
         connect(_mapInfoPanel, &MapInfoPanel::centerViewOnPlayerPositionRequested,
             this, [this]() {
@@ -2340,15 +2206,6 @@ void MainWindow::connectToEditorWidget() {
     connect(_currentEditorWidget, &EditorWidget::mapEdgeChanged, this,
         [this]() { refreshMapEdgesPanel(); });
 
-    if (_mapInfoPanel) {
-        connect(_currentEditorWidget, &EditorWidget::playerPositionSelected,
-            this, [this](int hexPosition) {
-                if (_mapInfoPanel && _currentEditorWidget) {
-                    _mapInfoPanel->setPlayerPosition(hexPosition, _currentEditorWidget->getCurrentElevation());
-                }
-            });
-    }
-
     applySelectionColorsToEditor();
 
     spdlog::debug("Connected EditorWidget instance signals");
@@ -2458,7 +2315,7 @@ void MainWindow::refreshMapEdgesPanel() {
     }
 
     const bool hasMap = _currentEditorWidget->getMap() != nullptr;
-    const int elevation = _currentEditorWidget->currentElevation();
+    const int elevation = _currentEditorWidget->getCurrentElevation();
     const auto& edge = _currentEditorWidget->mapEdge();
 
     int version = 0;
@@ -2638,7 +2495,7 @@ void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFile
     // MapLoader is Qt-free; LoadingWidget owns it once added, so the callback uses
     // a handle to read its error message and present it here on the main thread.
     auto loaderHandle = std::make_shared<MapLoader*>(nullptr);
-    auto mapLoader = std::make_unique<MapLoader>(_resourcesShared, mapPath, -1, forceFilesystem, [this, loaderHandle](auto map) {
+    auto mapLoader = std::make_unique<MapLoader>(_resourcesShared, mapPath, forceFilesystem, [this, loaderHandle](auto map) {
         if (map) {
             auto editorWidget = std::make_unique<EditorWidget>(*_resourcesShared, std::move(map));
             setEditorWidget(std::move(editorWidget));
@@ -2660,7 +2517,7 @@ void MainWindow::setupPanelsMenu() {
         const char* label;
         QDockWidget* dock;
         QAction** actionRef;
-        const char* actionId; // the Alt+<digit> family; see docs/keybindings-plan.md
+        const char* actionId; // the Alt+<digit> family; see ui/input/ActionSpec.cpp
     };
 
     const std::array<PanelToggleSpec, 6> panelToggleSpecs = { {

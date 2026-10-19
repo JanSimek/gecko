@@ -2,6 +2,7 @@
 
 #include "cli/MapAnalyzer.h" // listMapPaths
 #include "cli/MapLoad.h"     // loadMap
+#include "cli/ScriptLookup.h"
 #include "editor/HexGeometry.h"
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
@@ -10,7 +11,6 @@
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
-#include "resource/ResourcePaths.h"
 #include "resource/ScriptNames.h"
 #include "util/ProHelper.h"
 
@@ -118,30 +118,21 @@ namespace {
     // 0-based scripts.lst index (see cli/ScriptIntrospect.h on the index bases).
     ordered_json scriptOf(const Map& map, std::int32_t sid, const Lst* scriptsLst,
         resource::GameResources& resources) {
-        if (sid == -1) {
+        // A SID of -1 (no script) names no section, so it finds nothing.
+        const MapScript* script = map.scriptForSid(static_cast<std::uint32_t>(sid));
+        if (script == nullptr) {
             return nullptr;
         }
-        const int section = MapScript::sidSection(static_cast<std::uint32_t>(sid));
-        if (section < 0 || section >= Map::SCRIPT_SECTIONS) {
-            return nullptr;
+        const int programIndex = static_cast<int>(script->script_id);
+        std::string name;
+        if (scriptsLst != nullptr && programIndex >= 0 && programIndex < static_cast<int>(scriptsLst->list().size())) {
+            name = scriptsLst->at(programIndex);
         }
-        for (const MapScript& script : map.getMapFile().map_scripts[section]) {
-            if (script.pid != static_cast<std::uint32_t>(sid)) {
-                continue;
-            }
-            const int programIndex = static_cast<int>(script.script_id);
-            std::string name;
-            if (scriptsLst != nullptr && programIndex >= 0
-                && programIndex < static_cast<int>(scriptsLst->list().size())) {
-                name = scriptsLst->at(programIndex);
-            }
-            ordered_json out;
-            out["programIndex"] = programIndex;
-            out["name"] = name;
-            out["description"] = resource::scriptDescription(resources, programIndex);
-            return out;
-        }
-        return nullptr;
+        ordered_json out;
+        out["programIndex"] = programIndex;
+        out["name"] = name;
+        out["description"] = resource::scriptDescription(resources, programIndex);
+        return out;
     }
 
     // Identifies one exit grid by where it leads, so the hexes making up a single doorway collapse
@@ -332,12 +323,7 @@ int exportEntities(resource::GameResources& resources, const ExportOptions& opti
         return 1;
     }
 
-    const Lst* scriptsLst = nullptr;
-    try {
-        scriptsLst = resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
-    } catch (const std::exception& e) {
-        spdlog::debug("export: no scripts.lst: {}", e.what());
-    }
+    const Lst* scriptsLst = script_lookup::loadScriptsLst(resources);
     std::optional<resource::MapNameResolver> names;
     try {
         names.emplace(resources);

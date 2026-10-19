@@ -1,5 +1,7 @@
 #include "cli/BundledResources.h"
 
+#include "resource/GameResources.h"
+
 #include <algorithm>
 #include <system_error>
 #include <vector>
@@ -26,6 +28,27 @@ std::filesystem::path findBundledResources(const std::string& argv0) {
         return std::filesystem::exists(candidate / "art" / "tiles" / "blank.frm", ec);
     });
     return hit != candidates.end() ? *hit : std::filesystem::path{};
+}
+
+void mountDataPaths(resource::GameResources& resources, const std::vector<std::string>& dataPaths,
+    const std::string& argv0, const MountErrorHandler& onError) {
+    const auto mount = [&resources, &onError](const std::filesystem::path& path) {
+        if (!onError) {
+            resources.files().addDataPath(path);
+            return;
+        }
+        try {
+            resources.files().addDataPath(path);
+        } catch (const std::exception& e) {
+            onError(path, e);
+        }
+    };
+    for (const auto& path : dataPaths) {
+        mount(path);
+    }
+    if (const auto bundled = findBundledResources(argv0); !bundled.empty()) {
+        mount(bundled);
+    }
 }
 
 } // namespace geck::cli

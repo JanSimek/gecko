@@ -17,8 +17,6 @@ namespace resource {
 /// (describe_script, find_script, lint_script, script_refs). See ScriptIntrospect.h on index bases.
 namespace cli::script_lookup {
 
-    std::string toLower(std::string s);
-
     /// Basename of a path without directory or extension ("scripts_src/newreno/ncprosti.ssl" -> "ncprosti").
     std::string stem(const std::string& path);
 

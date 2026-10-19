@@ -1,22 +1,18 @@
 #include "cli/ScriptLookup.h"
 
 #include "format/lst/Lst.h"
+#include "reader/TextParsing.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
 #include "resource/ScriptNames.h"
 
 #include <spdlog/spdlog.h>
 
-#include <algorithm>
-#include <cctype>
 #include <ostream>
 
 namespace geck::cli::script_lookup {
 
-std::string toLower(std::string s) {
-    std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return s;
-}
+using text::toLower;
 
 std::string stem(const std::string& path) {
     const auto slash = path.find_last_of("/\\");
@@ -28,9 +24,7 @@ std::string stem(const std::string& path) {
 std::unordered_map<std::string, std::string> indexSslSources(resource::GameResources& resources) {
     std::unordered_map<std::string, std::string> index;
     for (const auto& path : resources.files().list("*")) {
-        std::string ext = path.extension().string();
-        std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (ext == ".ssl") {
+        if (text::toLower(path.extension().string()) == ".ssl") {
             index.try_emplace(toLower(stem(path.generic_string())), path.generic_string());
         }
     }

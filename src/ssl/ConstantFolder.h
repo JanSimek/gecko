@@ -10,6 +10,11 @@
 
 namespace geck::ssl {
 
+/// A comparison or logical operator's result as C (and so sslc and its preprocessor) folds it: 1 or 0.
+inline std::optional<int64_t> boolean(bool value) {
+    return value ? 1 : 0;
+}
+
 /// Integer constant folding over the syntax tree, as sslc's optimizer folds before it removes dead
 /// branches. Macros are already expanded in the tree, so a name is a variable, an opcode or sslc's
 /// `true`/`false`. A variable folds when it is known: a global the script never assigns, which keeps

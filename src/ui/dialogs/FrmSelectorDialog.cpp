@@ -13,6 +13,7 @@
 #include "resource/FrmResolver.h"
 #include "resource/CritterFrmResolver.h"
 #include "format/frm/Frm.h"
+#include "reader/TextParsing.h"
 
 namespace geck {
 
@@ -102,7 +103,6 @@ void FrmSelectorDialog::setupUI() {
     _frmPidSpin->setRange(0, INT_MAX);
     _frmPidSpin->setReadOnly(true);
     _frmPidSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    connect(_frmPidSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &FrmSelectorDialog::onFrmPidChanged);
     _detailsLayout->addRow("FRM PID:", _frmPidSpin);
 
     _frmPathEdit = new QLineEdit();
@@ -406,11 +406,6 @@ void FrmSelectorDialog::onFrmListSelectionChanged() {
     }
 }
 
-void FrmSelectorDialog::onFrmPidChanged() {
-    // PID spin box is read-only, so user input never reaches here. If made editable,
-    // implement PID-based selection here.
-}
-
 void FrmSelectorDialog::onAccepted() {
     accept();
 }
@@ -556,8 +551,7 @@ std::string FrmSelectorDialog::getAnimationSortKey(const std::string& frmPath) {
     // Critters are sorted by animation-type priority (the 2-char filename suffix)
     if (frmPath.find("art/critters/") != std::string::npos) {
         if (filename.length() >= 8) {                                    // 6 char base + 2 char suffix minimum
-            std::string suffix = filename.substr(filename.length() - 2); // Last 2 characters
-            std::transform(suffix.begin(), suffix.end(), suffix.begin(), ::tolower);
+            const std::string suffix = text::toLower(filename.substr(filename.length() - 2)); // Last 2 characters
 
             static const std::map<std::string, int> animationPriority = {
                 { "aa", 1 },  // Standing (most important)

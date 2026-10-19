@@ -79,7 +79,6 @@ public:
     bool openProEditorForSelectedObject();
 
 signals:
-    void objectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
     void objectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath);
     void requestObjectHighlight(std::shared_ptr<Object> object);
     void statusMessage(const QString& message);

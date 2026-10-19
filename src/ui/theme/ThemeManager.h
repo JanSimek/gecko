@@ -20,7 +20,6 @@ namespace ui {
         namespace colors {
             // Primary colors (selection, focus, accent)
             constexpr const char* PRIMARY = "#4A90E2";
-            constexpr const char* PRIMARY_LIGHT = "#E6F2FF";
             constexpr const char* PRIMARY_DARK = "#0066CC";
 
             // Surface colors (backgrounds)
@@ -43,18 +42,13 @@ namespace ui {
             constexpr const char* INFO = "blue";
 
             // Text colors
-            constexpr const char* TEXT_PRIMARY = "black";
             constexpr const char* TEXT_SECONDARY = "gray";
             constexpr const char* TEXT_MUTED = "#666666";
 
             // QColor constants for programmatic use (tree items, overlays, etc.)
             // Status colors (RGB for non-stylesheet contexts)
             inline QColor statusWarningRgb() { return QColor(245, 124, 0); }
-            inline QColor statusSuccessRgb() { return QColor(56, 142, 60); }
             inline QColor statusInfoRgb() { return QColor(128, 128, 128); }
-
-            // Selection highlight (semi-transparent green)
-            inline QColor selectionHighlight() { return QColor(0, 255, 0, 100); }
 
             // Object category colors (for placeholder icons)
             inline QColor categoryItems() { return QColor(100, 150, 255); }
@@ -63,18 +57,12 @@ namespace ui {
             inline QColor categoryWalls() { return QColor(150, 150, 150); }
             inline QColor categoryMisc() { return QColor(255, 100, 255); }
 
-            // Quantity overlay text
-            inline QColor quantityText() { return QColor(50, 255, 50); }
-
             // Invalid/error indicator
             inline QColor invalidPath() { return Qt::red; }
 
             // Basic text colors for painting
             inline QColor textDark() { return Qt::black; }
             inline QColor textLight() { return Qt::white; }
-
-            // Primary color for selection/focus highlighting
-            inline QColor primary() { return QColor(PRIMARY); }
         }
 
         /**
@@ -91,18 +79,8 @@ namespace ui {
             inline QFont standard() { return QFont("Segoe UI", 9); }
 
             // Size-specific fonts for UI elements
-            inline QFont small() { return QFont("Segoe UI", 10); }
-            inline QFont title() { return QFont("Segoe UI", 14, QFont::Bold); }
             inline QFont largeTitle() { return QFont("Segoe UI", 16, QFont::DemiBold); }
             inline QFont statusText() { return QFont("Segoe UI", 11); }
-
-            // Monospace for code/data display
-            inline QFont monospace() { return QFont("Monaco, Consolas, 'Courier New', monospace", 10); }
-            inline QFont monospaceBold() {
-                QFont f("Monaco, Consolas, 'Courier New', monospace", 14);
-                f.setBold(true);
-                return f;
-            }
         }
 
         /**
@@ -112,12 +90,10 @@ namespace ui {
             constexpr int TIGHT = 4;    // Compact/nested layouts
             constexpr int NORMAL = 8;   // Standard widget spacing
             constexpr int LOOSE = 12;   // Dialog/group spacing
-            constexpr int SECTION = 16; // Section separation
 
             // Margins
             constexpr int MARGIN_TIGHT = 4;
             constexpr int MARGIN_NORMAL = 8;
-            constexpr int MARGIN_LOOSE = 12;
             constexpr int MARGIN_INDENT = 20;
         }
 
@@ -125,17 +101,6 @@ namespace ui {
          * @brief Pre-built stylesheet strings for common UI patterns
          */
         namespace styles {
-            // Selection states
-            inline QString selectedWidget() {
-                return QString("border: 2px solid %1; background-color: %2;")
-                    .arg(colors::PRIMARY, colors::PRIMARY_LIGHT);
-            }
-
-            inline QString normalWidget() {
-                return QString("border: 1px solid %1; background-color: %2;")
-                    .arg(colors::BORDER_DARK, colors::SURFACE);
-            }
-
             // Preview/display areas
             inline QString previewArea() {
                 return QString("border: 1px solid %1; background-color: %2;")
@@ -211,49 +176,6 @@ namespace ui {
             inline QString placeholderText() {
                 return QString("color: %1;")
                     .arg(colors::TEXT_SECONDARY);
-            }
-
-            // Error text with monospace
-            inline QString errorMonospace() {
-                return QString("color: %1; font-family: monospace;")
-                    .arg(colors::STATUS_ERROR);
-            }
-
-            inline QString warningMonospace() {
-                return QString("color: %1; font-family: monospace;")
-                    .arg(colors::WARNING);
-            }
-
-            // Normal monospace text (for script/code display)
-            inline QString monospaceText() {
-                return QString("color: %1; font-family: monospace;")
-                    .arg(colors::TEXT_PRIMARY);
-            }
-
-            // Progress bar (loading widget)
-            inline QString progressBar() {
-                return QString("background-color: %1;")
-                    .arg(colors::SUCCESS);
-            }
-
-            // Slider styling
-            inline QString compactSlider() {
-                return QString(
-                    "QSlider::groove:horizontal {"
-                    "  border: 1px solid %1;"
-                    "  height: 4px;"
-                    "  background: %2;"
-                    "}"
-                    "QSlider::handle:horizontal {"
-                    "  background: %3;"
-                    "  width: 12px;"
-                    "  margin: -4px 0;"
-                    "}"
-                    "QSlider::handle:horizontal:hover {"
-                    "  background: %4;"
-                    "}")
-                    .arg(colors::BORDER_MEDIUM, colors::SURFACE_MEDIUM,
-                        colors::SURFACE_MEDIUM, colors::SURFACE_HOVER);
             }
 
             // Overlay button (circular, semi-transparent for preview widgets)
@@ -365,18 +287,10 @@ namespace ui {
      * @brief UI styling constants and utilities
      *
      * Layout dimensions - widget sizes, dock and dialog geometry, column widths. Colours,
-     * the spacing scale and prebuilt stylesheets live in the theme namespace above; the aliases
-     * here exist so a layout can reach for a spacing value without qualifying it twice.
+     * the spacing scale and prebuilt stylesheets live in the theme namespace above.
      */
     namespace constants {
-        // Spacing aliases for clarity
-        constexpr int SPACING_TIGHT = theme::spacing::TIGHT;
-        constexpr int SPACING_NORMAL = theme::spacing::NORMAL;
-        constexpr int SPACING_LOOSE = theme::spacing::LOOSE;
-        constexpr int SPACING_SECTION = theme::spacing::SECTION;
-
         // Widget sizes
-        constexpr int LIST_MAX_HEIGHT = 100;
         constexpr int LIST_MIN_HEIGHT = 160; // tall enough to show several data-path rows before scrolling
         constexpr int BUTTON_MIN_WIDTH = 80;
 
@@ -386,7 +300,6 @@ namespace ui {
         namespace sizes {
             // Button sizes
             constexpr int ICON_BUTTON = 24;
-            constexpr int ICON_BUTTON_SMALL = 20;
             constexpr int ICON_BUTTON_HEIGHT = 22;   // Height for small icon buttons
             constexpr int NAV_BUTTON = 30;           // Navigation/pagination buttons
             constexpr int ACTION_BUTTON_HEIGHT = 30; // Min height for text+icon action buttons (no icon clipping)
@@ -400,19 +313,14 @@ namespace ui {
             constexpr int WIDTH_INPUT_MEDIUM = 60; // Medium spinbox/input width
 
             // Label sizes
-            constexpr int LABEL_MIN_WIDTH = 40;
-            constexpr int LABEL_STANDARD = 80;
             constexpr int LABEL_FRAME = 30;       // Frame number labels
-            constexpr int LABEL_FRAME_WIDE = 40;  // Wider frame labels
             constexpr int WIDTH_LABEL_SKILL = 90; // Skill name labels
             constexpr int WIDTH_TYPE_LABEL = 50;  // Damage type label width
             constexpr int HEIGHT_TYPE_LABEL = 19; // Damage type label height
 
             // Panel/widget sizes
             constexpr int WIDTH_INFO_PANEL = 288;   // Left info panel width
-            constexpr int WIDTH_PLAY_BUTTON = 30;   // Animation play button
             constexpr int HEIGHT_DESCRIPTION = 80;  // Description text area
-            constexpr int HEIGHT_PROGRESS_BAR = 16; // Progress bar height
 
             // Preview sizes
             constexpr int PREVIEW_SMALL = 80;
@@ -458,24 +366,10 @@ namespace ui {
          */
         namespace column_widths {
             constexpr int ICON = 80;         // Icon column
-            constexpr int NAME_SHORT = 150;  // Short name column
-            constexpr int NAME_MEDIUM = 180; // Medium name column
             constexpr int NAME_WIDE = 200;   // Wide name column
-            constexpr int TYPE = 100;        // Type column
             constexpr int TYPE_WIDE = 120;   // Wide type column
-            constexpr int AMOUNT = 60;       // Amount/quantity column (small)
             constexpr int AMOUNT_WIDE = 80;  // Amount column (wide)
             constexpr int PID = 80;          // PID column
-        }
-
-        /**
-         * @brief Palette panel constants (tiles, objects)
-         */
-        namespace palette {
-            constexpr int ITEMS_PER_PAGE = 200;
-            constexpr int MAX_ITEMS_PER_ROW = 20;
-            constexpr int DEFAULT_TILES_PER_ROW = 8;
-            constexpr int DEFAULT_OBJECTS_PER_ROW = 6;
         }
 
         /**
@@ -534,11 +428,6 @@ namespace ui {
             constexpr int MAIN_WINDOW_MIN_WIDTH = 1024;
             constexpr int MAIN_WINDOW_MIN_HEIGHT = 768;
         }
-    }
-
-    namespace defaults {
-        // Default values
-        constexpr const char* READY_STATUS = "Ready";
     }
 
     /**

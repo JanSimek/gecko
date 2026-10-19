@@ -2,6 +2,7 @@
 
 #include "format/ai/AiPacket.h"
 #include "reader/ai/AiTxtReader.h"
+#include "resource/ConfigLoad.h"
 #include "resource/GameResources.h"
 
 #include <string>
@@ -12,12 +13,7 @@ namespace geck::resource {
 /// path and a bare fallback for odd mounts; returns an empty AiTxt when the file isn't present, so
 /// callers fall back to the raw packet number rather than inventing labels.
 inline AiTxt loadAiTxt(GameResources& resources) {
-    for (const char* path : { "data/ai.txt", "ai.txt" }) {
-        if (const auto bytes = resources.files().readRawBytes(path); bytes.has_value()) {
-            return parseAiTxt(std::string(bytes->begin(), bytes->end()));
-        }
-    }
-    return AiTxt{};
+    return loadConfig<AiTxt>(resources, { "data/ai.txt", "ai.txt" }, [](const std::string& text) { return parseAiTxt(text); });
 }
 
 } // namespace geck::resource

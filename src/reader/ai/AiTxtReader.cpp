@@ -36,7 +36,8 @@ namespace {
 
 } // namespace
 
-AiTxt parseAiTxt(std::istream& in) {
+AiTxt parseAiTxt(const std::string& text) {
+    std::istringstream in(text);
     AiTxt out;
     AiPacket current;
     bool inSection = false;
@@ -71,11 +72,6 @@ AiTxt parseAiTxt(std::istream& in) {
     }
     flush();
     return out;
-}
-
-AiTxt parseAiTxt(const std::string& text) {
-    std::istringstream in(text);
-    return parseAiTxt(in);
 }
 
 } // namespace geck

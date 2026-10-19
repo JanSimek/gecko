@@ -28,15 +28,14 @@
 #include "rendering/RenderingEngine.h"
 #include "rendering/ToolPreview.h"
 #include "ui/tiles/TilePlacementContext.h"
-#include "ui/input/InputHandler.h"
-#include "ui/core/EditorMode.h"
+#include "editing/input/InputHandler.h"
+#include "editing/EditorMode.h"
 #include "ui/core/EditorController.h"
 #include "ui/core/EditorSession.h"
 #include "pattern/Pattern.h"
 #include "pattern/FillPlan.h"
 #include "scripting/EditArea.h"
 #include "ui/tools/ExitGridContext.h"
-#include "ui/tools/PluginToolHost.h"
 #include "ui/dragdrop/DragDropContext.h"
 #include "editor/TileChange.h"
 #include "VisibilitySettings.h"
@@ -64,7 +63,7 @@ struct ToolMouseEvent;
 struct ObjectInfo;
 enum class ObjectCategory;
 
-class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext, public ExitGridContext, public DragDropContext, public PluginToolHost {
+class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext, public ExitGridContext, public DragDropContext {
     Q_OBJECT
 
     friend class TilePlacementManager;
@@ -135,31 +134,22 @@ public:
     // Edge scrolling: when enabled, parking the cursor near a viewport edge auto-pans the view that
     // way (parity with the reference mappers). Editor UX only — touches no map data.
     void setEdgeScrollEnabled(bool enabled) { _edgeScrollEnabled = enabled; }
-    bool isEdgeScrollEnabled() const { return _edgeScrollEnabled; }
 
     // User-configured selection highlight colours (from preferences); forwarded to the renderer.
     void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
 
     Map* getMap() const override { return _session.map(); }
-    Map* map() const override { return _session.map(); }
-    const HexagonGrid& hexgrid() const override { return _session.hexgrid(); }
-    ViewportController& viewport() const override { return _controller.viewport(); }
-    selection::SelectionManager* selectionManager() const override { return _session.selectionManager(); }
-    ObjectCommandController& commandController() override { return _controller.commandController(); }
+    ViewportController& viewport() const { return _controller.viewport(); }
 
     // Qt6 toolbar actions
     void setSelectionMode(SelectionMode mode);
-    SelectionMode getCurrentSelectionMode() const { return _currentSelectionMode; }
     // Combinable-layer selection: pick which layers a mixed (ALL-mode) selection considers
     // (floor / roof / objects). Switches to ALL mode and keeps the current selection intact.
     void setActiveSelectionLayers(SelectionLayers layers);
-    SelectionLayers getActiveSelectionLayers() const;
     void rotateSelectedObject();
     void changeElevation(int elevation);
     void toggleScrollBlockerRectangleMode();
 
-    // Player position selection
-    void enterPlayerPositionSelectionMode();
     void centerViewOnPlayerPosition();
 
     // One-shot "click a hex" mode: the next left-click passes its hex to `onFinished`, Escape passes
@@ -172,11 +162,6 @@ public:
     // Bring a spatial script's marker into view: switch to its elevation and centre on its hex.
     // False when `sid` is no spatial script of this map.
     bool revealSpatialScript(uint32_t sid);
-
-    // Tile placement
-    void placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof);
-    void fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof);
-    void replaceSelectedTiles(int newTileIndex);
 
     // Object placement functionality
     void placeObjectAtPosition(sf::Vector2f worldPos) override;
@@ -213,8 +198,8 @@ public:
     void cancelDragPreview();
 
     // Efficient tile update
-    void updateTileSprite(int hexIndex, bool isRoof) override;
-    void updateTileSprite(int hexIndex, bool isRoof, int elevation) override;
+    void updateTileSprite(int tileIndex, bool isRoof) override;
+    void updateTileSprite(int tileIndex, bool isRoof, int elevation) override;
 
     // Single tool-mode entry point: activates `mode` and exits all others.
     void setMode(EditorMode mode, int tileIndex = -1, bool isRoof = false);
@@ -222,8 +207,6 @@ public:
 
     // Tile placement mode control
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
-    void setTilePlacementAreaFill(bool enabled);
-    void setTilePlacementReplaceMode(bool enabled);
 
     // Exit grid placement mode control
     void setExitGridPlacementMode(bool enabled);
@@ -281,7 +264,6 @@ public:
 
     // Access to internal components for extracted managers
     selection::SelectionManager* getSelectionManager() const override { return _session.selectionManager(); }
-    TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
     ExitGridPlacementManager* getExitGridPlacementManager() const { return _exitGridPlacementManager.get(); }
     ViewportController* getViewportController() const override { return &_controller.viewport(); }
     int& getCurrentHoverHex() override { return _currentHoverHex; }
@@ -296,7 +278,6 @@ public:
 
     // SelectionManager helpers
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos) override;
-    bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite);
 
     // Tile hit testing methods
     std::optional<int> getTileAtPosition(sf::Vector2f worldPos, bool isRoof) override;
@@ -334,11 +315,10 @@ public:
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
 
     // Exit grid undo support
-    using ExitGridState = ExitGridCommandState;
     void registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation) override;
     void registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
-        const std::vector<ExitGridState>& beforeStates,
-        const std::vector<ExitGridState>& afterStates) override;
+        const std::vector<ExitGridCommandState>& beforeStates,
+        const std::vector<ExitGridCommandState>& afterStates) override;
 
     // Per-instance property (flags / light / scenery destination / critter) undo
     // support. The before/after snapshots come from SelectionPanel's editors.
@@ -392,7 +372,6 @@ public:
     void upgradeMapEdgeToVersion2();
     void resetMapEdgeSquare();
     [[nodiscard]] int selectedEdgeZone() const { return _selectedEdgeZone; }
-    [[nodiscard]] int currentElevation() const override;
     [[nodiscard]] const std::optional<MapEdge>& mapEdge() const;
 
 signals:
@@ -411,7 +390,6 @@ signals:
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
     void hexHoverChanged(int hexIndex);
-    void playerPositionSelected(int hexPosition);
     void statusMessageRequested(const QString& message);
     void statusMessageClearRequested();
     void undoStackChanged();
@@ -435,7 +413,6 @@ signals:
     void hintChanged(const QString& hint);
 
 public slots:
-    void onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
     void onObjectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath);
 
     // Sprite loading methods (public for MainWindow access)
@@ -489,8 +466,7 @@ private:
     void updateEdgeHoverCursor(sf::Vector2f worldPos);
     void resetEdgeHoverCursor();
 
-    // Handles a click in SetPlayerPosition mode: routes to an armed beginHexPick callback (one-shot)
-    // or, failing that, emits playerPositionSelected (legacy player-start pick).
+    // Handles a click in SetPlayerPosition mode: hands its hex to the armed beginHexPick callback.
     void handlePositionPickClick(sf::Vector2f worldPos);
 
     // Object management
@@ -510,16 +486,7 @@ private:
     // Object selection methods (moved to public)
     bool isDoubleClick(sf::Vector2f worldPos);
 
-    // Selection modifiers for multi-selection
-    enum class SelectionModifier {
-        NONE,   // Normal single selection (clear and select)
-        ADD,    // Alt+Click / Alt+Drag - add to selection
-        TOGGLE, // Ctrl+Click / Ctrl+Drag - remove from selection
-        RANGE   // Shift+Click - range selection for tiles
-    };
-
-    bool selectAtPosition(sf::Vector2f worldPos);
-    bool selectAtPosition(sf::Vector2f worldPos, SelectionModifier modifier);
+    bool selectAtPosition(sf::Vector2f worldPos, InputHandler::SelectionModifier modifier);
     selection::SelectionResult handleRangeSelection(sf::Vector2f worldPos);
 
     void clearDragPreview();
@@ -533,7 +500,6 @@ private:
     // the live cursor, tinted by the tool's destination kind.
     void updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide);
     void clearMarkExitsLinePreview();
-    void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
     // Commit a finished drag rectangle to the selection (replace/deselect/additive), or build
     // scroll blockers when in that mode. Extracted from the onDragSelection callback.
     void commitDragAreaSelection(sf::Vector2f startPos, sf::Vector2f endPos, bool isDeselect, bool isAdditive);
@@ -611,8 +577,6 @@ private:
     // Drag preview state (for palette drag and drop)
     bool _isDraggingFromPalette = false;
     std::shared_ptr<Object> _dragPreviewObject;     // Preview object being dragged from palette
-    int _previewObjectIndex = -1;                   // Index of object in palette
-    int _previewObjectCategory = 0;                 // Category of preview object (as int)
     const ObjectInfo* _previewObjectInfo = nullptr; // Object info from palette
 
     int _currentHoverHex = -1;
@@ -685,11 +649,8 @@ private:
     pattern::FillPlan _fillPlan;
     void buildFillGhosts();
 
-    // Player position selection state
-    bool _playerPositionSelectionMode = false;
-
-    // When set, the SetPlayerPosition mode is being used as a generic one-shot hex picker (see
-    // beginHexPick): the next click routes here instead of emitting playerPositionSelected.
+    // The armed one-shot hex pick (see beginHexPick): the next click in SetPlayerPosition mode
+    // routes here.
     std::function<void(std::optional<int>)> _hexPickCallback;
 
     // Exit-grid "Draw edge" state: _exitGridLineActive gates the renderer, the vertices and cursor

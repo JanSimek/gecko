@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <optional>
 #include <vector>
 
@@ -10,13 +9,16 @@
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "format/map/Tile.h"
+#include "format/frm/FrmId.h"
 #include "format/pro/Pro.h"
 #include "pattern/Pattern.h"
 #include "pattern/PatternStamper.h"
 
-#include "writer/pro/ProWriter.h"
+#include "format/pro/ProtoTypes.h"
 
 #include "support/ControllerFixture.h"
+#include "support/ProBuilder.h"
+#include "support/TempFile.h"
 
 using namespace geck;
 using namespace geck::pattern;
@@ -26,29 +28,36 @@ namespace {
 
 constexpr int ANCHOR = 100 * hexgrid::WIDTH + 100; // col 100, row 100
 constexpr int TARGET = 50 * hexgrid::WIDTH + 50;   // col 50, row 50
+// Arbitrary scenery PIDs and their FIDs.
+constexpr uint32_t PID_A = ProtoId(ObjectType::Scenery, 769).pid();
+constexpr uint32_t PID_B = ProtoId(ObjectType::Scenery, 770).pid();
+constexpr uint32_t PID_C = ProtoId(ObjectType::Scenery, 771).pid();
+constexpr uint32_t FID_A = FrmId(ObjectType::Critter, 129).fid();
+constexpr uint32_t FID_B = FrmId(ObjectType::Critter, 130).fid();
+constexpr uint32_t FID_C = FrmId(ObjectType::Critter, 131).fid();
 
 PatternVariant sampleVariant() {
     PatternVariant v;
     v.label = "entrance west";
     v.anchorHex = ANCHOR;
-    v.objects.push_back(PatternObject{ 0, 0, 33555201u, 16777345u, 0u, 0u });
-    v.objects.push_back(PatternObject{ 1, 0, 33555202u, 16777346u, 2u, 0x10u });
-    v.objects.push_back(PatternObject{ 0, 1, 33555203u, 16777347u, 4u, 0u });
+    v.objects.push_back(PatternObject{ 0, 0, PID_A, FID_A, 0u, 0u });
+    v.objects.push_back(PatternObject{ 1, 0, PID_B, FID_B, 2u, 0x10u });
+    v.objects.push_back(PatternObject{ 0, 1, PID_C, FID_C, 4u, 0u });
     v.floor.push_back(PatternTile{ 0, 0, 271 });
     return v;
 }
 
 } // namespace
 
-TEST_CASE("PatternStamper::plan resolves object and tile positions", "[pattern][stamper]") {
+TEST_CASE("PatternStamper::plan resolves object and tile positions", "[pattern_stamper]") {
     const PatternVariant v = sampleVariant();
     const auto plan = PatternStamper::plan(v, TARGET);
 
     REQUIRE(plan.objects.size() == 3);
     // The (0,0) object lands exactly on the target anchor, verbatim PID/direction.
     CHECK(plan.objects[0].hex == TARGET);
-    CHECK(plan.objects[0].proPid == 33555201u);
-    CHECK(plan.objects[0].frmPid == 16777345u);
+    CHECK(plan.objects[0].proPid == PID_A);
+    CHECK(plan.objects[0].frmPid == FID_A);
     CHECK(plan.objects[0].direction == 0u);
     CHECK(plan.objects[1].direction == 2u);
     CHECK(plan.objects[1].flags == 0x10u);
@@ -66,7 +75,7 @@ TEST_CASE("PatternStamper::plan resolves object and tile positions", "[pattern][
     CHECK(plan.tiles[0].tileId == 271);
 }
 
-TEST_CASE("PatternStamper::plan keeps tiles aligned with objects at any click parity", "[pattern][stamper]") {
+TEST_CASE("PatternStamper::plan keeps tiles aligned with objects at any click parity", "[pattern_stamper]") {
     using namespace geck::hexgrid;
     PatternVariant aligned;
     aligned.anchorHex = 80 * WIDTH + 80; // col 80 (even), row 80
@@ -88,7 +97,7 @@ TEST_CASE("PatternStamper::plan keeps tiles aligned with objects at any click pa
     }
 }
 
-TEST_CASE("PatternStamper::plan drops entries that fall off the grid", "[pattern][stamper]") {
+TEST_CASE("PatternStamper::plan drops entries that fall off the grid", "[pattern_stamper]") {
     PatternVariant v;
     v.anchorHex = 0;                                              // top-left corner
     v.objects.push_back(PatternObject{ -5, -5, 1u, 1u, 0u, 0u }); // up-left of a corner anchor
@@ -101,7 +110,7 @@ TEST_CASE("PatternStamper::plan drops entries that fall off the grid", "[pattern
     CHECK(plan.tilesDropped == 1);
 }
 
-TEST_CASE("PatternStamper::stamp applies a variant as one undo entry", "[pattern][stamper]") {
+TEST_CASE("PatternStamper::stamp applies a variant as one undo entry", "[pattern_stamper]") {
     ControllerFixture fx;
     // Seed elevation 0 with a full set of empty tiles so the tile edits have somewhere
     // to land and a readable before-value.
@@ -117,7 +126,6 @@ TEST_CASE("PatternStamper::stamp applies a variant as one undo entry", "[pattern
     const int roofTile = plan.tiles[1].tileIndex;
 
     const auto result = stamper.stamp(v, TARGET, 0);
-    REQUIRE(result.success);
     // The fixture has no mounted game art, so object FRMs do not resolve and the objects
     // are skipped (their placement math is covered by PatternStamper::plan above). Tiles
     // need no art and are applied.
@@ -146,7 +154,7 @@ TEST_CASE("PatternStamper::stamp applies a variant as one undo entry", "[pattern
 // recorded as map data even when their art can't be resolved (no GL, or critter.dat absent). With
 // the default buildSprites=true and no art the same objects are skipped (the case above), so this
 // guards the regression the review flagged: generate --stamp silently dropping objects.
-TEST_CASE("PatternStamper records objects as data when buildSprites is false", "[pattern][stamper]") {
+TEST_CASE("PatternStamper records objects as data when buildSprites is false", "[pattern_stamper]") {
     ControllerFixture fx;
     fx.mapFile().tiles[0] = std::vector<Tile>(
         Map::TILES_PER_ELEVATION, Tile(static_cast<uint16_t>(Map::EMPTY_TILE), static_cast<uint16_t>(Map::EMPTY_TILE)));
@@ -155,14 +163,13 @@ TEST_CASE("PatternStamper records objects as data when buildSprites is false", "
     const PatternVariant v = sampleVariant(); // PIDs whose art the fixture can't load
 
     const auto result = stamper.stamp(v, TARGET, 0);
-    REQUIRE(result.success);
     CHECK(result.objectsPlaced == 3); // recorded as data despite no resolvable art
     CHECK(result.objectsFailed == 0);
 
     // The objects are in the map with their PID/direction/flags verbatim.
     const auto& objects = fx.mapFile().map_objects.at(0);
     REQUIRE(objects.size() == 3);
-    CHECK(objects[0]->pro_pid == 33555201u);
+    CHECK(objects[0]->pro_pid == PID_A);
     CHECK(objects[1]->flags == 0x10u);
     CHECK(objects[1]->direction == 2u);
 }
@@ -170,12 +177,11 @@ TEST_CASE("PatternStamper records objects as data when buildSprites is false", "
 // A stamp places NEW objects, so they start from their proto like any obj_new: its flags (unless the
 // stamp captured its own), its light and its script. A hand-written stamp without "flags" used to
 // land with flags 0, so a flat proto stood and a NoBlock one blocked.
-TEST_CASE("PatternStamper seeds stamped objects from their proto", "[pattern][stamper]") {
-    const auto root = std::filesystem::path{ GECK_TEST_TMP_DIR } / "geck_stamp_proto_defaults";
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root / "proto" / "walls");
-    std::ofstream(root / "proto" / "walls" / "walls.lst") << "lamp.pro\n";
-    constexpr uint32_t PRO = 0x03000001;
+TEST_CASE("PatternStamper seeds stamped objects from their proto", "[pattern_stamper]") {
+    const test::TempDir rootDir{ "geck_stamp_proto_defaults" };
+    const std::filesystem::path& root = rootDir.path();
+    test::writeFile(root / "proto" / "walls" / "walls.lst", "lamp.pro\n");
+    constexpr uint32_t PRO = ProtoId(ObjectType::Wall, 1).pid();
     constexpr auto PROTO_FLAGS = static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_FLAT)
         | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK);
     {
@@ -186,9 +192,7 @@ TEST_CASE("PatternStamper seeds stamped objects from their proto", "[pattern][st
         pro.header.light_distance = 4;
         pro.header.light_intensity = 0x8000;
         pro.commonItemData.SID = 0x03000044;
-        ProWriter writer;
-        writer.openFile(root / "proto" / "walls" / "lamp.pro");
-        REQUIRE(writer.write(pro));
+        test::writePro(root / "proto" / "walls" / "lamp.pro", pro);
     }
 
     ControllerFixture fx;
@@ -218,6 +222,4 @@ TEST_CASE("PatternStamper seeds stamped objects from their proto", "[pattern][st
     CHECK(fx.mapFile().map_objects.at(0).empty());
     CHECK(fx.mapFile().map_scripts[static_cast<int>(MapScript::ScriptType::ITEM)].empty());
     CHECK_FALSE(fx.undoStack.canUndo());
-
-    std::filesystem::remove_all(root);
 }

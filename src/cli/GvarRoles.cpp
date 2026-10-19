@@ -2,6 +2,7 @@
 
 #include "resource/ConfigLoad.h"
 #include "cli/GameText.h"
+#include "cli/JsonText.h"
 #include "format/endgame/EndDeathTxt.h"
 #include "format/endgame/EndgameTxt.h"
 #include "format/holodisk/HolodiskTxt.h"
@@ -21,10 +22,6 @@ namespace geck::cli {
 namespace {
 
     using ordered_json = nlohmann::ordered_json;
-
-    ordered_json orNull(const std::string& s) {
-        return s.empty() ? ordered_json(nullptr) : ordered_json(s);
-    }
 
     void add(std::map<int, ordered_json>& roles, int gvar, ordered_json role) {
         if (gvar < 0) {

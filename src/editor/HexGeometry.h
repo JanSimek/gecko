@@ -3,6 +3,7 @@
 #include "HexagonGrid.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <optional>
 #include <vector>
@@ -30,6 +31,15 @@ struct Cube {
 constexpr Cube operator+(const Cube& a, const Cube& b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
 constexpr Cube operator-(const Cube& a, const Cube& b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
 
+/// The six cube-coordinate neighbour directions, in the canonical order that indexes a direction
+/// 0..5: neighbors() walks them in this order and hexline::hexDirection() reports a step against it.
+inline constexpr std::array<Cube, 6> DIRECTIONS = {
+    { { 1, -1, 0 }, { 1, 0, -1 }, { 0, 1, -1 }, { -1, 1, 0 }, { -1, 0, 1 }, { 0, -1, 1 } }
+};
+
+/// On the WIDTH x HEIGHT hex grid: 0 <= position < WIDTH * HEIGHT.
+constexpr bool isValidPosition(int position) { return position >= 0 && position < WIDTH * HEIGHT; }
+
 constexpr int columnOf(int position) { return position % WIDTH; }
 constexpr int rowOf(int position) { return position / WIDTH; }
 
@@ -56,17 +66,42 @@ constexpr Cube cubeOfPosition(int position) {
     return offsetToCube(columnOf(position), rowOf(position));
 }
 
+/// The position of an offset cell, or std::nullopt if it lies off the grid.
+constexpr std::optional<int> positionOf(const ColRow& cr) {
+    if (cr.col < 0 || cr.col >= WIDTH || cr.row < 0 || cr.row >= HEIGHT) {
+        return std::nullopt;
+    }
+    return cr.row * WIDTH + cr.col;
+}
+
+/// The number of single-hex steps a cube offset spans.
+inline int length(const Cube& d) {
+    return (std::abs(d.x) + std::abs(d.y) + std::abs(d.z)) / 2;
+}
+
+/// The up-to-six on-grid neighbours of `position`, in DIRECTIONS order (parity-correct: taken in
+/// cube space). Empty if `position` is off-grid.
+inline std::vector<int> neighbors(int position) {
+    std::vector<int> result;
+    if (!isValidPosition(position)) {
+        return result;
+    }
+    const Cube c = cubeOfPosition(position);
+    for (const Cube& d : DIRECTIONS) {
+        if (const auto neighbour = positionOf(cubeToOffset(c + d))) {
+            result.push_back(*neighbour);
+        }
+    }
+    return result;
+}
+
 // Map `position` — authored relative to `fromAnchor` — to where it lands when the shape
 // is stamped at `toAnchor`. Translation happens in cube space so the shape is preserved
 // regardless of the two anchors' column parity. Returns std::nullopt if the result falls
 // outside the grid.
 inline std::optional<int> translate(int position, int fromAnchor, int toAnchor) {
     const Cube placed = cubeOfPosition(toAnchor) + (cubeOfPosition(position) - cubeOfPosition(fromAnchor));
-    const ColRow cr = cubeToOffset(placed);
-    if (cr.col < 0 || cr.col >= WIDTH || cr.row < 0 || cr.row >= HEIGHT) {
-        return std::nullopt;
-    }
-    return cr.row * WIDTH + cr.col;
+    return positionOf(cubeToOffset(placed));
 }
 
 // A hex within a disc, paired with its hex-step distance from the centre.
@@ -92,13 +127,10 @@ inline std::vector<HexAtDistance> hexDiscByDistance(int centerPosition, int radi
         const int lo = std::max(-radius, -dx - radius);
         const int hi = std::min(radius, -dx + radius);
         for (int dy = lo; dy <= hi; ++dy) {
-            const int dz = -dx - dy;
-            const ColRow cr = cubeToOffset(center + Cube{ dx, dy, dz });
-            if (cr.col < 0 || cr.col >= WIDTH || cr.row < 0 || cr.row >= HEIGHT) {
-                continue;
+            const Cube offset{ dx, dy, -dx - dy };
+            if (const auto position = positionOf(cubeToOffset(center + offset))) {
+                hexes.push_back({ *position, length(offset) });
             }
-            const int distance = (std::abs(dx) + std::abs(dy) + std::abs(dz)) / 2;
-            hexes.push_back({ cr.row * WIDTH + cr.col, distance });
         }
     }
     return hexes;
@@ -106,8 +138,7 @@ inline std::vector<HexAtDistance> hexDiscByDistance(int centerPosition, int radi
 
 // The hex-step distance between two positions, the engine's tileDistanceBetween (see hexDiscByDistance).
 inline int distance(int fromPosition, int toPosition) {
-    const Cube d = cubeOfPosition(fromPosition) - cubeOfPosition(toPosition);
-    return (std::abs(d.x) + std::abs(d.y) + std::abs(d.z)) / 2;
+    return length(cubeOfPosition(fromPosition) - cubeOfPosition(toPosition));
 }
 
 // All grid positions within hex-distance `radius` of `centerPosition` — the same filled disc as

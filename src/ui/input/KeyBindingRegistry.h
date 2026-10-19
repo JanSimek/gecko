@@ -10,6 +10,7 @@
 #include <QShortcut>
 #include <QString>
 
+#include <functional>
 #include <memory>
 
 #include "ActionSpec.h"
@@ -47,6 +48,10 @@ public:
     /// unbound. Canvas actions are checked against Application ones too: a window-scoped shortcut
     /// fires while the canvas has focus, so the two scopes share one namespace.
     QString conflictingActionId(const QString& id, const QKeySequence& seq) const;
+    /// The same check against any assignment `shortcutOf` describes — the Preferences page runs it
+    /// over its unsaved edits.
+    static QString conflictingActionId(const QString& id, const QKeySequence& seq,
+        const std::function<QKeySequence(const QString&)>& shortcutOf);
 
     /// Rebind (an empty sequence unbinds). Setting an action back to its default drops the
     /// override, so a later release changing that default still reaches this user.

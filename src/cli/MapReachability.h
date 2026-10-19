@@ -1,6 +1,9 @@
 #pragma once
 
+#include <nlohmann/json.hpp>
+
 #include <iosfwd>
+#include <optional>
 #include <string>
 
 namespace geck {
@@ -35,6 +38,10 @@ namespace cli {
     /// editor's "unreachable areas" overlay share one implementation; this function only shapes that
     /// result into JSON.
     int analyzeReachability(resource::GameResources& resources, const ReachabilityOptions& options, std::ostream& out);
+
+    /// The report analyzeReachability writes, as a value: { map, path, reachability: [per elevation] }.
+    /// nullopt when the map cannot be loaded.
+    std::optional<nlohmann::ordered_json> reachabilityJson(resource::GameResources& resources, const std::string& mapPath);
 
 } // namespace cli
 } // namespace geck

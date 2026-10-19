@@ -34,16 +34,9 @@ public:
 
     // Tile placement mode control
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
-    void setTilePlacementAreaFill(bool enabled);
-    void setTilePlacementReplaceMode(bool enabled);
 
     // State queries
     bool isTilePlacementMode() const { return _tilePlacementMode; }
-    bool isTilePlacementAreaFill() const { return _tilePlacementAreaFill; }
-    bool isTilePlacementReplaceMode() const { return _tilePlacementReplaceMode; }
-
-    int getTilePlacementIndex() const { return _tilePlacementIndex; }
-    bool getTilePlacementIsRoof() const { return _tilePlacementIsRoof; }
 
     // Callback interface for triggering tile placement from input events
     void handleTilePlacement(sf::Vector2f worldPos, bool isRoof);
@@ -57,8 +50,6 @@ private:
 
     // Tile placement state
     bool _tilePlacementMode = false;
-    bool _tilePlacementAreaFill = false;
-    bool _tilePlacementReplaceMode = false;
     int _tilePlacementIndex = -1;
     bool _tilePlacementIsRoof = false;
 };

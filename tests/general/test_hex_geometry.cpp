@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdlib>
 #include <unordered_set>
+#include <vector>
 
 #include "editor/HexGeometry.h"
 
@@ -95,18 +96,20 @@ TEST_CASE("translate preserves a shape's cube-relative layout", "[hex_geometry]"
     }
 }
 
-TEST_CASE("translate is the identity when the anchors coincide", "[hex_geometry]") {
-    const int anchor = 100 * WIDTH + 100;
-    const int pos = 103 * WIDTH + 97;
-    CHECK(translate(pos, anchor, anchor) == pos);
-}
+TEST_CASE("translate keeps a position when the anchors coincide and reports one pushed off-grid", "[hex_geometry]") {
+    SECTION("coinciding anchors are the identity") {
+        const int anchor = 100 * WIDTH + 100;
+        const int pos = 103 * WIDTH + 97;
+        CHECK(translate(pos, anchor, anchor) == pos);
+    }
 
-TEST_CASE("translate reports positions that fall off the grid", "[hex_geometry]") {
-    // A shape authored near the centre stamped at a corner pushes part of it off-grid.
-    const int fromAnchor = 100 * WIDTH + 100;
-    const int toAnchor = 0 * WIDTH + 0;   // top-left corner
-    const int authored = 98 * WIDTH + 98; // up-left of the authoring anchor
-    CHECK_FALSE(translate(authored, fromAnchor, toAnchor).has_value());
+    SECTION("a position that falls off the grid has no value") {
+        // A shape authored near the centre stamped at a corner pushes part of it off-grid.
+        const int fromAnchor = 100 * WIDTH + 100;
+        const int toAnchor = 0 * WIDTH + 0;   // top-left corner
+        const int authored = 98 * WIDTH + 98; // up-left of the authoring anchor
+        CHECK_FALSE(translate(authored, fromAnchor, toAnchor).has_value());
+    }
 }
 
 TEST_CASE("hexesWithinRadius is the centre only at radius 0", "[hex_geometry]") {
@@ -153,10 +156,6 @@ TEST_CASE("hexesWithinRadius clips at the grid edge and stays in bounds", "[hex_
     }
 }
 
-TEST_CASE("hexesWithinRadius is empty for a negative radius", "[hex_geometry]") {
-    CHECK(hexesWithinRadius(100 * WIDTH + 100, -1).empty());
-}
-
 TEST_CASE("hexDiscByDistance covers the same disc and tags each hex's hex-step distance", "[hex_geometry]") {
     const int center = 100 * WIDTH + 100; // interior so the disc isn't clipped
     for (int radius = 0; radius <= 8; ++radius) { // 8 == the engine's max light radius
@@ -183,6 +182,37 @@ TEST_CASE("hexDiscByDistance covers the same disc and tags each hex's hex-step d
     }
 }
 
-TEST_CASE("hexDiscByDistance is empty for a negative radius", "[hex_geometry]") {
-    CHECK(hexDiscByDistance(100 * WIDTH + 100, -1).empty());
+TEST_CASE("A negative radius yields an empty disc", "[hex_geometry]") {
+    SECTION("hexesWithinRadius") {
+        CHECK(hexesWithinRadius(100 * WIDTH + 100, -1).empty());
+    }
+
+    SECTION("hexDiscByDistance") {
+        CHECK(hexDiscByDistance(100 * WIDTH + 100, -1).empty());
+    }
+}
+
+TEST_CASE("neighbors yields parity-correct, symmetric neighbours", "[hex_geometry]") {
+    // An interior hex has all six neighbours.
+    const int center = 100 * WIDTH + 100;
+    const std::vector<int> around = neighbors(center);
+    CHECK(around.size() == 6);
+
+    // Neighbour-ness is symmetric: the centre is a neighbour of each of its neighbours.
+    for (const int n : around) {
+        const std::vector<int> back = neighbors(n);
+        CHECK(std::find(back.begin(), back.end(), center) != back.end());
+    }
+
+    // Off-grid positions have no neighbours.
+    CHECK(neighbors(-1).empty());
+    CHECK(neighbors(WIDTH * HEIGHT).empty());
+}
+
+TEST_CASE("distance counts hex steps", "[hex_geometry]") {
+    const int hex = 100 * WIDTH + 100;
+    CHECK(distance(hex, hex) == 0);
+    CHECK(distance(hex, hex + 1) == 1);
+    CHECK(distance(hex, hex + 4) == 4);
+    CHECK(distance(hex + 4, hex) == 4);
 }

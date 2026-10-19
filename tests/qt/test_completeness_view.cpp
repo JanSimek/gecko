@@ -1,25 +1,18 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <QLabel>
-#include <QPushButton>
+#include <QAbstractButton>
 #include <QSignalSpy>
 #include <QTreeWidget>
 
 #include "resource/MapCompleteness.h"
 #include "ui/panels/CompletenessView.h"
 
+#include "support/QtFind.h"
+
 using namespace geck;
 
 namespace {
-
-QPushButton* findButtonByText(QWidget& root, const QString& text) {
-    for (auto* button : root.findChildren<QPushButton*>()) {
-        if (button->text() == text) {
-            return button;
-        }
-    }
-    return nullptr;
-}
 
 resource::MapCompletenessReport reportWithGaps() {
     resource::MapCompletenessReport report;
@@ -36,17 +29,17 @@ resource::MapCompletenessReport reportWithGaps() {
 
 } // namespace
 
-TEST_CASE("CompletenessView starts in the no-map state", "[qt][completeness]") {
+TEST_CASE("CompletenessView starts in the no-map state", "[completeness_view]") {
     CompletenessView view;
 
     auto* tree = view.findChild<QTreeWidget*>();
     REQUIRE(tree != nullptr);
     CHECK(tree->topLevelItemCount() == 0);
-    REQUIRE(findButtonByText(view, "Refresh") != nullptr);
-    CHECK_FALSE(findButtonByText(view, "Refresh")->isEnabled());
+    REQUIRE(test::findButton(view, "Refresh") != nullptr);
+    CHECK_FALSE(test::findButton(view, "Refresh")->isEnabled());
 }
 
-TEST_CASE("CompletenessView renders a report as four grouped sections", "[qt][completeness]") {
+TEST_CASE("CompletenessView renders a report as four grouped sections", "[completeness_view]") {
     CompletenessView view;
     view.setReport(reportWithGaps(), "artemple.map");
 
@@ -78,16 +71,12 @@ TEST_CASE("CompletenessView renders a report as four grouped sections", "[qt][co
     CHECK(mounts->child(2)->text(2) == "not mounted");
 
     // The status line carries the map name and the total.
-    bool statusFound = false;
-    for (const auto* label : view.findChildren<QLabel*>()) {
-        if (label->text().contains("artemple.map") && label->text().contains("2")) {
-            statusFound = true;
-        }
-    }
-    CHECK(statusFound);
+    const QLabel* status = test::labelContaining(view, "artemple.map");
+    REQUIRE(status != nullptr);
+    CHECK(status->text().contains("2"));
 }
 
-TEST_CASE("CompletenessView reports a clean map without warning rows", "[qt][completeness]") {
+TEST_CASE("CompletenessView reports a clean map without warning rows", "[completeness_view]") {
     CompletenessView view;
     resource::MapCompletenessReport report;
     report.usedTileCount = 10;
@@ -101,16 +90,10 @@ TEST_CASE("CompletenessView reports a clean map without warning rows", "[qt][com
     CHECK(tree->topLevelItem(0)->childCount() == 0);
     CHECK_FALSE(tree->topLevelItem(0)->isExpanded());
 
-    bool statusFound = false;
-    for (const auto* label : view.findChildren<QLabel*>()) {
-        if (label->text().contains("every referenced resource resolves")) {
-            statusFound = true;
-        }
-    }
-    CHECK(statusFound);
+    CHECK(test::labelContaining(view, "every referenced resource resolves") != nullptr);
 }
 
-TEST_CASE("CompletenessView clearReport returns to the no-map state", "[qt][completeness]") {
+TEST_CASE("CompletenessView clearReport returns to the no-map state", "[completeness_view]") {
     CompletenessView view;
     view.setReport(reportWithGaps(), "artemple.map");
     view.clearReport();
@@ -118,14 +101,18 @@ TEST_CASE("CompletenessView clearReport returns to the no-map state", "[qt][comp
     auto* tree = view.findChild<QTreeWidget*>();
     REQUIRE(tree != nullptr);
     CHECK(tree->topLevelItemCount() == 0);
-    CHECK_FALSE(findButtonByText(view, "Refresh")->isEnabled());
+    const QAbstractButton* refresh = test::findButton(view, "Refresh");
+    REQUIRE(refresh != nullptr);
+    CHECK_FALSE(refresh->isEnabled());
 }
 
-TEST_CASE("CompletenessView refresh button emits refreshRequested", "[qt][completeness]") {
+TEST_CASE("CompletenessView refresh button emits refreshRequested", "[completeness_view]") {
     CompletenessView view;
     view.setReport(reportWithGaps(), "artemple.map");
 
     QSignalSpy spy(&view, &CompletenessView::refreshRequested);
-    findButtonByText(view, "Refresh")->click();
+    QAbstractButton* refresh = test::findButton(view, "Refresh");
+    REQUIRE(refresh != nullptr);
+    refresh->click();
     CHECK(spy.count() == 1);
 }

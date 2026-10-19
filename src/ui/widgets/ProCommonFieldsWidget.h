@@ -57,16 +57,6 @@ public:
     void saveToPro(std::shared_ptr<Pro>& pro);
 
     /**
-     * @brief Get current PID value
-     */
-    int32_t getPID() const;
-
-    /**
-     * @brief Set PID value
-     */
-    void setPID(int32_t pid);
-
-    /**
      * @brief Enable/disable item-specific fields based on object type
      * @param isItem True if this is an item type (armor, weapon, etc.)
      */
@@ -98,7 +88,9 @@ private:
     void loadObjectFlags(uint32_t flags);
     void loadExtendedFlags(uint32_t flagsExt);
     uint32_t saveObjectFlags() const;
-    uint32_t saveExtendedFlags() const;
+    // Replaces only the attack-mode nibbles of `flagsExt`; its other bits (big gun, two-handed,
+    // sfall energy, ...) are kept for the tabs that edit them.
+    uint32_t saveExtendedFlags(uint32_t flagsExt) const;
 
     QSpinBox* createSpinBox(int min, int max, const QString& tooltip = QString());
     QComboBox* createMaterialComboBox(const QString& tooltip = QString());

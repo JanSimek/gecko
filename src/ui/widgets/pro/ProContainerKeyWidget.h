@@ -27,7 +27,6 @@ public:
     QString getTabLabel() const override;
 
 private:
-    void setupUI();
     void setupContainerUI();
     void setupKeyUI();
 
@@ -39,8 +38,8 @@ private:
     QSpinBox* _keyIdEdit;
 
     // Data
-    ProContainerData _containerData;
-    ProKeyData _keyData;
+    Pro::ContainerData _containerData;
+    Pro::KeyData _keyData;
 
     // Type tracking
     bool _isContainer;

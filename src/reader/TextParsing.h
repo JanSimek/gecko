@@ -2,10 +2,14 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -22,9 +26,31 @@ inline std::string trim(const std::string& s) {
 }
 
 /// ASCII-lowercase a copy of the string.
-inline std::string toLower(std::string s) {
-    std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return s;
+inline std::string toLower(std::string_view text) {
+    std::string out(text);
+    std::ranges::transform(out, out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return out;
+}
+
+/// ASCII case-insensitive equality.
+inline bool equalsIgnoreCase(std::string_view a, std::string_view b) {
+    return std::ranges::equal(a, b, [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
+}
+
+/// A whole decimal or 0x/0X-prefixed hexadecimal integer, or nullopt for anything else: empty,
+/// surrounding whitespace, trailing characters, out of int64 range. Only decimal takes a '-'.
+inline std::optional<int64_t> parseInteger(std::string_view s) {
+    int base = 10;
+    if (s.size() > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+        s.remove_prefix(2);
+        base = 16;
+    }
+    int64_t value = 0;
+    const auto [end, error] = std::from_chars(s.data(), s.data() + s.size(), value, base);
+    if (s.empty() || error != std::errc() || end != s.data() + s.size()) {
+        return std::nullopt;
+    }
+    return value;
 }
 
 /// Drop an inline `;` comment (and everything after it) — Fallout's .txt configs comment any line,

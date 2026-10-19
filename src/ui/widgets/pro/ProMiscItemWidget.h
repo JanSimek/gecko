@@ -22,7 +22,7 @@ private:
     QSpinBox* _powerTypeEdit;
     QSpinBox* _chargesEdit;
 
-    ProMiscData _miscData;
+    Pro::MiscData _miscData;
 };
 
 } // namespace geck

@@ -25,10 +25,14 @@ ctest --test-dir build-claude --output-on-failure             # everything ctest
   it the Luau runtime and map-generator tests don't compile. `GECK_BUILD_CLI` /
   `GECK_BUILD_MCP` default ON.
 - Executables: `gecko` (a `gecko.app` bundle on macOS), `gecko-cli`, `gecko-mcp`, and the Catch2
-  v3 suites `general_tests` (formats, readers/writers, editor logic — **no Qt**),
-  `performance_tests`, `qt_tests` (Qt UI, headless harness in `tests/qt/qt_test_main.cpp`).
-- Tests need no game data. New test files go under `tests/{general,performance,qt}/test_<feature>.cpp`
+  v3 suites `general_tests` (formats, readers/writers, editor logic — **no Qt**) and
+  `qt_tests` (Qt UI, headless harness in `tests/qt/qt_test_main.cpp`).
+- Tests need no game data. New test files go under `tests/{general,qt}/test_<feature>.cpp`
   and must be added to `tests/CMakeLists.txt` by hand; fixtures live in `tests/data/`.
+- In `qt_tests` assert with Catch2 `REQUIRE`/`CHECK` and wait with
+  `REQUIRE(geck::test::pumpUntil(...))` (`tests/support/QtWait.h`), never `QVERIFY`/`QTRY_*` or a
+  fixed `qWait`: QTestLib failures don't reach Catch2. An `EditorWidget` needs
+  `test::editorResources()` (`tests/support/EditorResources.h`) for its bundled art.
 - Real game data for manual checks: `--data <dir-or-.dat>` (repeatable) on `gecko-cli` /
   `gecko-mcp`; the editor takes `-d/--data`, `-m/--map`, `--debug`, but ignores `--data` once a
   `settings.json` exists (data paths then come from Preferences).
@@ -49,7 +53,8 @@ newer local clang-format reformats untouched code. CI does not check formatting.
   `#include "ui/theme/ThemeManager.h"`.
 - **MSVC builds with `/W4 /WX`**; Clang/GCC warn without `-Werror`. So a warning that is silent
   locally (unused variable, `class`/`struct` forward-declaration mismatch, shadowing) fails only
-  the Windows job.
+  the Windows job. Windows headers also define macros such as `near`, `far`, `min`, `max`,
+  `ERROR` and `small`; don't use them as identifiers.
 - Linux: Release + Debug with scripting, Release without, Debug with ASan+UBSan; tests under
   `xvfb-run` with `QT_QPA_PLATFORM=offscreen`. Windows: MSVC Release on PRs. macOS: not on PRs.
 - Changes touching only `*.md` / `docs/` skip CI.
@@ -63,7 +68,7 @@ CMake targets, lowest layer first (`src/CMakeLists.txt`):
 | `vault` | `format/`, `reader/`, `writer/`, `ssl/`, parts of `util/` | Qt-free file formats and engine data parsing |
 | `gecko_resource` | `resource/`, `vfs/` | Qt-free; `GameResources`, DAT archives via vfspp. See `src/resource/README.md` |
 | `gecko_core` | `editor/`, `selection/`, `viewport/` | hex grid, `Object`, selection, coordinates |
-| `gecko_editing` | `editing/`, `rendering/`, `pattern/`, `scripting/` | undo services, SFML `RenderingEngine`, stamps/fills, Luau |
+| `gecko_editing` | `editing/`, `rendering/`, `pattern/`, `scripting/` | undo services, canvas `InputHandler` + `ToolRegistry` tools, SFML `RenderingEngine`, stamps/fills, Luau |
 | `gecko_app` | `ui/`, `state/` | Qt; linked by `gecko` and `qt_tests` |
 | `gecko_cli`, `gecko_mcp` | `cli/`, `mcp/` | headless analysis/generation; MCP stdio server over it |
 
@@ -80,7 +85,7 @@ CMake targets, lowest layer first (`src/CMakeLists.txt`):
   map script API (`scripts/README.md`); the build copies them into `resources/scripts`.
 
 Docs: `PLAN.md` is the backlog (open work only — delete shipped items, don't mark them done);
-`docs/` has format notes and `docs/feature-gap-audit.md`.
+`docs/` has format notes.
 
 ## Fallout 2 format rules
 
@@ -164,9 +169,8 @@ SFML sprite wrapper and may exist without a `MapObject` (previews), so it null-c
   `ui::theme::colors::*` (`STATUS_ERROR`, not `ERROR`, which is a Windows macro),
   `ui::theme::spacing::{TIGHT,NORMAL,LOOSE}`, `ui::constants::*`, prebuilt
   `ui::theme::styles::*`. No hex colour literals in UI code.
-- **Base classes:** dialogs derive from `BaseDialog`, palette panels from `BasePanel`
-  (`createMainLayout()`, `createSearchControls()`) — both in `src/ui/common/`. Palettes are
-  model/view: `ui::PaletteModel` + `ui::PaletteView` (`src/ui/palette/`).
+- **Base classes:** dialogs derive from `BaseDialog` (`src/ui/common/`; `createButtonBox()`).
+  Palettes are model/view: `ui::PaletteModel` + `ui::PaletteView` (`src/ui/palette/`).
 - **Drag and drop** MIME types: `ui::mime::*` in `src/ui/dragdrop/MimeTypes.h`. Drag previews use
   `ui::constants::sfml::DRAG_PREVIEW_ALPHA`.
 - **Dock width:** panels must fit `ui::constants::sizes::PANEL_PREFERRED_WIDTH` (360 px) in one

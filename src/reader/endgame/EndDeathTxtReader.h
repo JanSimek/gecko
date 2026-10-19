@@ -1,6 +1,5 @@
 #pragma once
 
-#include <istream>
 #include <string>
 #include <vector>
 
@@ -11,7 +10,6 @@ namespace geck {
 /// Parse Fallout 2's `data/enddeath.txt` — one death ending per line: `gvar, value, areaKnown,
 /// areaNotKnown, minLevel, percentage, narrator`, separated by spaces, tabs or commas, with `#` starting
 /// a comment. Lines with fewer than seven fields are skipped, as the engine does. Never throws.
-EndDeathTxt parseEndDeathTxt(std::istream& in);
 EndDeathTxt parseEndDeathTxt(const std::string& text);
 
 /// Parse an ending subtitle file (`text/<lang>/cuts/<narrator>.txt`): one subtitle per line, the text

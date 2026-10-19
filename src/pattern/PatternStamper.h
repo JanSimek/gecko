@@ -53,7 +53,6 @@ public:
         int objectsFailed = 0; ///< Resolved on-grid, but their art could not be loaded.
         int tilesPainted = 0;
         int dropped = 0; ///< Objects/tiles whose target fell off the grid.
-        bool success = false;
     };
 
     /// Resolve where each entry of `variant` lands when its anchor is stamped near

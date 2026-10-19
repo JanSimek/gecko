@@ -76,6 +76,11 @@ bool KeyBindingRegistry::isCustomized(const QString& id) const {
 }
 
 QString KeyBindingRegistry::conflictingActionId(const QString& id, const QKeySequence& seq) const {
+    return conflictingActionId(id, seq, [this](const QString& other) { return shortcut(other); });
+}
+
+QString KeyBindingRegistry::conflictingActionId(const QString& id, const QKeySequence& seq,
+    const std::function<QKeySequence(const QString&)>& shortcutOf) {
     if (seq.isEmpty()) {
         return {}; // any number of actions may be unbound
     }
@@ -85,7 +90,7 @@ QString KeyBindingRegistry::conflictingActionId(const QString& id, const QKeySeq
         if (candidateId == id) {
             continue;
         }
-        if (shortcut(candidateId) == seq) {
+        if (shortcutOf(candidateId) == seq) {
             return candidateId;
         }
     }

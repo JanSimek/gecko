@@ -3,8 +3,6 @@
 #include <array>
 #include <atomic>
 #include <filesystem>
-#include <fstream>
-#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -14,44 +12,27 @@
 #include "resource/GameResources.h"
 #include "resource/ResourceRepository.h"
 
-namespace fs = std::filesystem;
+#include "support/DataTree.h"
+
 using namespace geck;
 using geck::resource::GameResources;
 
 namespace {
 
-void writeFile(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream(path) << contents;
-}
-
 // A GameResources mounting one small LST fixture, with its ResourceRepository.
 struct RepoFixture {
-    fs::path root;
-    GameResources resources;
+    test::DataTree tree{ "geck_resourcerepo_test" };
 
-    // GECK_TEST_TMP_DIR (a build-tree dir, injected per target in tests/CMakeLists.txt)
-    // rather than the world-writable system temp, which keeps a predictable name private.
-    RepoFixture()
-        : root(fs::path(GECK_TEST_TMP_DIR) / "geck_resourcerepo_test") {
-        std::error_code ec;
-        fs::remove_all(root, ec); // non-throwing: a stale dir from a prior run is fine to ignore
-        writeFile(root / "art/tiles/tiles.lst", "floor.frm\ngrass.frm\n");
-        resources.files().addDataPath(root.string());
-    }
-    ~RepoFixture() {
-        std::error_code ec;
-        fs::remove_all(root, ec);
-    }
+    RepoFixture() { tree.write("art/tiles/tiles.lst", "floor.frm\ngrass.frm\n"); }
 
-    resource::ResourceRepository& repo() { return resources.repository(); }
+    resource::ResourceRepository& repo() { return tree.mount().repository(); }
 };
 
 constexpr const char* LST_PATH = "art/tiles/tiles.lst";
 
 } // namespace
 
-TEST_CASE("ResourceRepository caches and reuses loaded resources", "[resource]") {
+TEST_CASE("ResourceRepository caches and reuses loaded resources", "[resource_repository]") {
     RepoFixture fx;
     auto& repo = fx.repo();
 
@@ -68,7 +49,7 @@ TEST_CASE("ResourceRepository caches and reuses loaded resources", "[resource]")
     CHECK(repo.find<Lst>(LST_PATH) == first);
 }
 
-TEST_CASE("ResourceRepository rejects a type-mismatched lookup", "[resource]") {
+TEST_CASE("ResourceRepository rejects a type-mismatched lookup", "[resource_repository]") {
     RepoFixture fx;
     auto& repo = fx.repo();
     REQUIRE(repo.load<Lst>(LST_PATH) != nullptr);
@@ -78,7 +59,7 @@ TEST_CASE("ResourceRepository rejects a type-mismatched lookup", "[resource]") {
     CHECK_THROWS(repo.find<Frm>(LST_PATH));
 }
 
-TEST_CASE("ResourceRepository clear() drops cached resources", "[resource]") {
+TEST_CASE("ResourceRepository clear() drops cached resources", "[resource_repository]") {
     RepoFixture fx;
     auto& repo = fx.repo();
     REQUIRE(repo.load<Lst>(LST_PATH) != nullptr);
@@ -89,12 +70,12 @@ TEST_CASE("ResourceRepository clear() drops cached resources", "[resource]") {
     CHECK(repo.load<Lst>(LST_PATH) != nullptr); // reload works after clear
 }
 
-TEST_CASE("ResourceRepository load throws on a missing file", "[resource]") {
+TEST_CASE("ResourceRepository load throws on a missing file", "[resource_repository]") {
     RepoFixture fx;
     CHECK_THROWS_AS(fx.repo().load<Lst>("art/tiles/nonexistent.lst"), geck::IOException);
 }
 
-TEST_CASE("ResourceRepository tryLoad returns null for a missing file and caches a present one", "[resource]") {
+TEST_CASE("ResourceRepository tryLoad returns null for a missing file and caches a present one", "[resource_repository]") {
     RepoFixture fx;
     CHECK(fx.repo().tryLoad<Lst>("art/tiles/nonexistent.lst") == nullptr);
     const Lst* lst = fx.repo().tryLoad<Lst>(LST_PATH);
@@ -102,7 +83,7 @@ TEST_CASE("ResourceRepository tryLoad returns null for a missing file and caches
     CHECK(fx.repo().load<Lst>(LST_PATH) == lst);
 }
 
-TEST_CASE("GameResources::tryLoadPro returns null for a PID with no proto", "[resource]") {
+TEST_CASE("GameResources::tryLoadPro returns null for a PID with no proto", "[game_resources]") {
     GameResources resources; // nothing mounted: no proto list for any type
     CHECK(resources.tryLoadPro(0x02000001) == nullptr);
     CHECK_THROWS(resources.loadPro(0x02000001));
@@ -111,17 +92,14 @@ TEST_CASE("GameResources::tryLoadPro returns null for a PID with no proto", "[re
 // Background loaders (MapLoader, DataPathLoader) call load()/find() concurrently
 // with the main thread. The cache must therefore tolerate concurrent access and
 // still deduplicate: racing loads of one key must converge on a single object.
-TEST_CASE("ResourceRepository load is thread-safe and deduplicates under contention", "[resource]") {
-    const fs::path root = fs::path(GECK_TEST_TMP_DIR) / "geck_resourcerepo_concurrency";
-    std::error_code ec;
-    fs::remove_all(root, ec);
+TEST_CASE("ResourceRepository load is thread-safe and deduplicates under contention", "[resource_repository]") {
+    test::DataTree tree{ "geck_resourcerepo_concurrency" };
     // Write every fixture file before mounting so all keys are visible.
-    writeFile(root / "art/tiles/tiles.lst", "floor.frm\ngrass.frm\n");
-    writeFile(root / "art/tiles/a.lst", "a.frm\n");
-    writeFile(root / "art/tiles/b.lst", "b.frm\n");
+    tree.write("art/tiles/tiles.lst", "floor.frm\ngrass.frm\n");
+    tree.write("art/tiles/a.lst", "a.frm\n");
+    tree.write("art/tiles/b.lst", "b.frm\n");
 
-    GameResources resources;
-    resources.files().addDataPath(root.string());
+    auto& resources = tree.mount();
     auto& repo = resources.repository();
 
     const std::array<const char*, 3> keys{ LST_PATH, "art/tiles/a.lst", "art/tiles/b.lst" };
@@ -171,6 +149,4 @@ TEST_CASE("ResourceRepository load is thread-safe and deduplicates under content
     CHECK(a != b);
     CHECK(a != tiles);
     CHECK(repo.load<Lst>("art/tiles/a.lst") == a);
-
-    fs::remove_all(root, ec);
 }

@@ -2,7 +2,7 @@
 #include "ui/theme/ThemeManager.h"
 #include "ui/GameEnums.h"
 #include "util/Constants.h"
-#include "editor/HexagonGrid.h"
+#include "editor/HexGeometry.h"
 #include "resource/MapNameResolver.h"
 
 #include <QApplication>
@@ -14,8 +14,6 @@
 #include <vector>
 
 namespace geck {
-
-using namespace ui::constants;
 
 using MarkerArt = ExitGridPropertiesDialog::ExitGridProperties::MarkerArt;
 
@@ -48,8 +46,8 @@ ExitGridPropertiesDialog::ExitGridPropertiesDialog(const ExitGridProperties& pro
 
 void ExitGridPropertiesDialog::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    _mainLayout->setSpacing(SPACING_LOOSE);
+    _mainLayout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    _mainLayout->setSpacing(ui::theme::spacing::LOOSE);
 
     setupFormLayout();
     setupButtonBox();
@@ -67,7 +65,7 @@ void ExitGridPropertiesDialog::setupUI() {
 
 void ExitGridPropertiesDialog::setupFormLayout() {
     _formLayout = new QFormLayout();
-    _formLayout->setSpacing(SPACING_LOOSE);
+    _formLayout->setSpacing(ui::theme::spacing::LOOSE);
 
     // World map exit checkbox (-2)
     _exitToWorldmapCheckBox = new QCheckBox("Exit to world map", this);
@@ -299,7 +297,7 @@ bool ExitGridPropertiesDialog::isValidInput() const {
     }
 
     int position = _positionSpinBox->value();
-    if (position < 0 || position >= HexagonGrid::POSITION_COUNT) { // hex position 0-39999
+    if (!hexgrid::isValidPosition(position)) {
         return false;
     }
 

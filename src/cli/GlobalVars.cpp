@@ -17,12 +17,8 @@ namespace {
     using ordered_json = nlohmann::ordered_json;
 }
 
-Gam* loadGameGam(resource::GameResources& resources) {
-    return resource::loadVault13Gam(resources);
-}
-
 int buildGlobalVars(resource::GameResources& resources, std::ostream& out) {
-    Gam* gam = loadGameGam(resources);
+    Gam* gam = resource::loadVault13Gam(resources);
     if (gam == nullptr || gam->gvarCount() == 0) {
         out << "{\"gvars\":[],\"stats\":{\"count\":0}}\n";
         return 1;

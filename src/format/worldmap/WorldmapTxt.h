@@ -1,9 +1,10 @@
 #pragma once
 
 #include <array>
-#include <cctype>
 #include <string>
 #include <vector>
+
+#include "reader/TextParsing.h"
 
 /// @file
 /// @brief Model for Fallout 2's `data/worldmap.txt` — worldmap terrain types and encounter tables.
@@ -225,15 +226,9 @@ struct WorldmapTxt {
     /// The encounter table with this lookup_name, matched case-insensitively as the engine does
     /// (wmParseFindEncounterTypeMatch), or nullptr.
     const EncounterTable* findEncounterTable(const std::string& lookupName) const {
-        const auto lower = [](std::string s) {
-            for (char& c : s) {
-                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-            }
-            return s;
-        };
-        const std::string wanted = lower(lookupName);
+        const std::string wanted = text::toLower(lookupName);
         for (const auto& table : encounterTables) {
-            if (lower(table.lookupName) == wanted) {
+            if (text::toLower(table.lookupName) == wanted) {
                 return &table;
             }
         }

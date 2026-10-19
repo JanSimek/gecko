@@ -2,12 +2,10 @@
 
 #include <QAction>
 #include <QApplication>
-#include <QDir>
 #include <QKeySequence>
 #include <QShortcut>
-#include <QStandardPaths>
 #include <QLineEdit>
-#include <QPushButton>
+#include <QAbstractButton>
 #include <QTabWidget>
 #include <QTreeWidget>
 #include <QWidget>
@@ -22,27 +20,14 @@
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/widgets/KeybindingsWidget.h"
 
+#include "support/QtFind.h"
+
 using namespace geck;
-
-namespace {
-
-// Settings write to the platform config location; each case starts from a clean one so a stale
-// override from an earlier run cannot leak in.
-void removeTestSettings() {
-    const QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
-    QDir().mkpath(configRoot);
-    if (QDir geckoDir(configRoot + "/gecko"); geckoDir.exists()) {
-        geckoDir.removeRecursively();
-    }
-    QDir().mkpath(configRoot + "/gecko");
-}
-
-} // namespace
 
 // The table is what every menu, toolbar and canvas binding reads, and what settings.json points
 // at, so its invariants are worth asserting directly: a duplicate id would make one row
 // unreachable, and two actions sharing a key would make Qt fire neither.
-TEST_CASE("The shipped keybinding table is internally consistent", "[qt][keybindings]") {
+TEST_CASE("The shipped keybinding table is internally consistent", "[keybindings]") {
     std::set<std::string, std::less<>> ids;
     std::set<std::string, std::less<>> keys;
 
@@ -71,7 +56,6 @@ TEST_CASE("The shipped keybinding table is internally consistent", "[qt][keybind
     // Defaults do not collide — across both scopes, since an Application shortcut fires while the
     // canvas has focus too. A platform where a standard key resolves to nothing (Quit on Windows)
     // legitimately yields several empty sequences, so only bound ones are compared.
-    removeTestSettings();
     KeyBindingRegistry registry(std::make_shared<Settings>());
     for (const ActionSpec& spec : actionSpecs()) {
         const QKeySequence keySequence = registry.defaultShortcut(QString::fromLatin1(spec.id));
@@ -83,9 +67,7 @@ TEST_CASE("The shipped keybinding table is internally consistent", "[qt][keybind
     }
 }
 
-TEST_CASE("An override is stored, reloaded and dropped again on reset", "[qt][keybindings]") {
-    removeTestSettings();
-
+TEST_CASE("An override is stored, reloaded and dropped again on reset", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     const QKeySequence rebound("Ctrl+Alt+K");
 
@@ -121,9 +103,7 @@ TEST_CASE("An override is stored, reloaded and dropped again on reset", "[qt][ke
 
 // Unbinding is a real state, distinct from "never changed": it has to survive a round trip, or a
 // reload would hand the key back.
-TEST_CASE("An unbound action persists as unbound", "[qt][keybindings]") {
-    removeTestSettings();
-
+TEST_CASE("An unbound action persists as unbound", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     {
         KeyBindingRegistry registry(settings);
@@ -138,8 +118,7 @@ TEST_CASE("An unbound action persists as unbound", "[qt][keybindings]") {
     CHECK(reloaded.isCustomized(actions::TOOL_ROTATE));
 }
 
-TEST_CASE("Conflicts are found across scopes and ignore unbound actions", "[qt][keybindings]") {
-    removeTestSettings();
+TEST_CASE("Conflicts are found across scopes and ignore unbound actions", "[keybindings]") {
     KeyBindingRegistry registry(std::make_shared<Settings>());
 
     // Alt+2 belongs to the Selection panel.
@@ -160,8 +139,7 @@ TEST_CASE("Conflicts are found across scopes and ignore unbound actions", "[qt][
 
 // The point of the sink registration: a rebind reaches the live UI without a restart and without
 // re-walking the menu bar.
-TEST_CASE("Bound actions and shortcuts follow a rebind", "[qt][keybindings]") {
-    removeTestSettings();
+TEST_CASE("Bound actions and shortcuts follow a rebind", "[keybindings]") {
     KeyBindingRegistry registry(std::make_shared<Settings>());
 
     QWidget host;
@@ -187,8 +165,7 @@ TEST_CASE("Bound actions and shortcuts follow a rebind", "[qt][keybindings]") {
 }
 
 // A sink dies with the map view it hangs off; the registry must not touch it afterwards.
-TEST_CASE("A destroyed sink is dropped instead of dangling", "[qt][keybindings]") {
-    removeTestSettings();
+TEST_CASE("A destroyed sink is dropped instead of dangling", "[keybindings]") {
     KeyBindingRegistry registry(std::make_shared<Settings>());
 
     {
@@ -202,8 +179,7 @@ TEST_CASE("A destroyed sink is dropped instead of dangling", "[qt][keybindings]"
 
 // Canvas shortcuts are re-bound on every map load, so binding the same id again has to drop the
 // sinks that died with the previous map rather than piling nulls up for the session's lifetime.
-TEST_CASE("Re-binding an action drops sinks that have been destroyed", "[qt][keybindings]") {
-    removeTestSettings();
+TEST_CASE("Re-binding an action drops sinks that have been destroyed", "[keybindings]") {
     KeyBindingRegistry registry(std::make_shared<Settings>());
 
     for (int round = 0; round < 3; ++round) {
@@ -222,9 +198,7 @@ TEST_CASE("Re-binding an action drops sinks that have been destroyed", "[qt][key
 
 // A settings file naming an action the table no longer has (renamed, retired) must not resurrect
 // a key that nothing listens for.
-TEST_CASE("An override for an unknown action is discarded", "[qt][keybindings]") {
-    removeTestSettings();
-
+TEST_CASE("An override for an unknown action is discarded", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     settings->setKeyBindings({ { "panel.thatNeverExisted", "Ctrl+Alt+Z" } });
 
@@ -237,9 +211,7 @@ TEST_CASE("An override for an unknown action is discarded", "[qt][keybindings]")
 
 // The Preferences page: one row per table entry, a filter over them, and edits that only reach the
 // registry on apply — so Cancel really cancels.
-TEST_CASE("The keybindings page lists the table and commits only on apply", "[qt][keybindings]") {
-    removeTestSettings();
-
+TEST_CASE("The keybindings page lists the table and commits only on apply", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
     KeybindingsWidget widget(&registry);
@@ -247,11 +219,7 @@ TEST_CASE("The keybindings page lists the table and commits only on apply", "[qt
     auto* tree = widget.findChild<QTreeWidget*>();
     REQUIRE(tree != nullptr);
 
-    int rows = 0;
-    for (int group = 0; group < tree->topLevelItemCount(); ++group) {
-        rows += tree->topLevelItem(group)->childCount();
-    }
-    CHECK(rows == static_cast<int>(actionSpecs().size()));
+    CHECK(test::visibleLeafCount(*tree) == static_cast<int>(actionSpecs().size())); // nothing filtered yet
     CHECK(tree->topLevelItemCount() > 1); // grouped by category, not one flat list
 
     // Nothing edited yet.
@@ -263,14 +231,7 @@ TEST_CASE("The keybindings page lists the table and commits only on apply", "[qt
     filter->setText("Selection Panel");
     QApplication::processEvents();
 
-    int visibleRows = 0;
-    for (int group = 0; group < tree->topLevelItemCount(); ++group) {
-        const QTreeWidgetItem* category = tree->topLevelItem(group);
-        for (int row = 0; row < category->childCount(); ++row) {
-            visibleRows += category->child(row)->isHidden() ? 0 : 1;
-        }
-    }
-    CHECK(visibleRows == 1);
+    CHECK(test::visibleLeafCount(*tree) == 1);
 
     // Applying with nothing pending leaves the bindings — and the settings file — untouched.
     widget.applyChanges();
@@ -280,9 +241,7 @@ TEST_CASE("The keybindings page lists the table and commits only on apply", "[qt
 
 // Reset All is the page's escape hatch, so it has to clear an override made in an earlier sitting,
 // not just the edits typed in this one.
-TEST_CASE("Reset All on the keybindings page clears a stored override", "[qt][keybindings]") {
-    removeTestSettings();
-
+TEST_CASE("Reset All on the keybindings page clears a stored override", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
     registry.setShortcut(actions::PANEL_SELECTION, QKeySequence("Ctrl+Alt+K"));
@@ -291,12 +250,7 @@ TEST_CASE("Reset All on the keybindings page clears a stored override", "[qt][ke
     KeybindingsWidget widget(&registry);
 
     // By text rather than by order, so adding a button next to it doesn't silently move this test.
-    QPushButton* resetAllButton = nullptr;
-    for (QPushButton* button : widget.findChildren<QPushButton*>()) {
-        if (button->text() == "Reset All") {
-            resetAllButton = button;
-        }
-    }
+    QAbstractButton* resetAllButton = test::findButton(widget, "Reset All");
     REQUIRE(resetAllButton != nullptr);
 
     resetAllButton->click();
@@ -310,9 +264,7 @@ TEST_CASE("Reset All on the keybindings page clears a stored override", "[qt][ke
 
 // The tab is optional: a dialog built without a registry (the first-run one, and a bare-constructed
 // one in a test) must still build, just without the page.
-TEST_CASE("The Preferences dialog gains a shortcuts tab only with a registry", "[qt][keybindings]") {
-    removeTestSettings();
-
+TEST_CASE("The Preferences dialog gains a shortcuts tab only with a registry", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
 
@@ -337,9 +289,7 @@ TEST_CASE("The Preferences dialog gains a shortcuts tab only with a registry", "
 
 // Resolving a conflict changes two rows, not one: the row typed into and whichever was holding
 // that key before. Both have to lose the error colour.
-TEST_CASE("The keybindings page repaints both sides of a conflict", "[qt][keybindings]") {
-    removeTestSettings();
-
+TEST_CASE("The keybindings page repaints both sides of a conflict", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
     KeybindingsWidget widget(&registry);
@@ -347,49 +297,35 @@ TEST_CASE("The keybindings page repaints both sides of a conflict", "[qt][keybin
     auto* tree = widget.findChild<QTreeWidget*>();
     REQUIRE(tree != nullptr);
 
-    const auto rowFor = [tree](const QString& label) -> QTreeWidgetItem* {
-        for (int group = 0; group < tree->topLevelItemCount(); ++group) {
-            const QTreeWidgetItem* category = tree->topLevelItem(group);
-            for (int row = 0; row < category->childCount(); ++row) {
-                if (category->child(row)->text(0) == label) {
-                    return category->child(row);
-                }
-            }
-        }
-        return nullptr;
-    };
-
-    QTreeWidgetItem* mapInfo = rowFor("Map Information Panel");
-    QTreeWidgetItem* selection = rowFor("Selection Panel");
+    QTreeWidgetItem* mapInfo = test::findTreeItem(*tree, "Map Information Panel");
+    QTreeWidgetItem* selection = test::findTreeItem(*tree, "Selection Panel");
     REQUIRE(mapInfo != nullptr);
     REQUIRE(selection != nullptr);
 
     const QBrush plain = mapInfo->foreground(1);
 
     // Put Map Info on the Selection panel's key: both rows are now half of a conflict.
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
-        Q_ARG(QKeySequence, QKeySequence("Alt+2")));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
+        Q_ARG(QKeySequence, QKeySequence("Alt+2"))));
     CHECK(mapInfo->foreground(1) != plain);
     CHECK(selection->foreground(1) != plain);
 
     // Move it somewhere free: neither row is conflicting any more.
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
-        Q_ARG(QKeySequence, QKeySequence("Ctrl+Alt+J")));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
+        Q_ARG(QKeySequence, QKeySequence("Ctrl+Alt+J"))));
     CHECK(mapInfo->foreground(1) == plain);
     CHECK(selection->foreground(1) == plain);
 
     // A conflicting edit is never committed — it would leave Qt firing neither shortcut.
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
-        Q_ARG(QKeySequence, QKeySequence("Alt+2")));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
+        Q_ARG(QKeySequence, QKeySequence("Alt+2"))));
     widget.applyChanges();
     CHECK(registry.shortcut(actions::PANEL_SELECTION) == QKeySequence("Alt+2"));
     CHECK(registry.shortcut(actions::PANEL_MAP_INFO) == QKeySequence("Alt+1"));
 }
 
 // The tree is rebuilt on reload/apply, so a filter left in the box has to survive it.
-TEST_CASE("The keybindings page keeps its filter across a rebuild", "[qt][keybindings]") {
-    removeTestSettings();
-
+TEST_CASE("The keybindings page keeps its filter across a rebuild", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
     KeybindingsWidget widget(&registry);
@@ -399,32 +335,19 @@ TEST_CASE("The keybindings page keeps its filter across a rebuild", "[qt][keybin
     REQUIRE(tree != nullptr);
     REQUIRE(filter != nullptr);
 
-    const auto visibleRows = [tree]() {
-        int count = 0;
-        for (int group = 0; group < tree->topLevelItemCount(); ++group) {
-            const QTreeWidgetItem* category = tree->topLevelItem(group);
-            for (int row = 0; row < category->childCount(); ++row) {
-                count += category->child(row)->isHidden() ? 0 : 1;
-            }
-        }
-        return count;
-    };
-
     filter->setText("Selection Panel");
     QApplication::processEvents();
-    REQUIRE(visibleRows() == 1);
+    REQUIRE(test::visibleLeafCount(*tree) == 1);
 
     widget.reload(); // rebuilds the tree
     CHECK(filter->text() == "Selection Panel");
-    CHECK(visibleRows() == 1);
+    CHECK(test::visibleLeafCount(*tree) == 1);
 }
 
 // Esc, Delete, Backspace and Space belong to the map view's tool state machine, and a shortcut on
 // one would consume it before the canvas sees it; a bare letter on an Application action would
 // fire while typing in any panel.
-TEST_CASE("Reserved and canvas-only keys cannot be bound", "[qt][keybindings]") {
-    removeTestSettings();
-
+TEST_CASE("Reserved and canvas-only keys cannot be bound", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     settings->setKeyBindings({ { actions::FIT_MAP, "Del" }, { actions::PANEL_LOG, "Q" } });
     KeyBindingRegistry registry(settings);
@@ -461,38 +384,33 @@ TEST_CASE("Reserved and canvas-only keys cannot be bound", "[qt][keybindings]") 
     KeybindingsWidget widget(&registry);
     auto* tree = widget.findChild<QTreeWidget*>();
     REQUIRE(tree != nullptr);
-    QTreeWidgetItem* fitMap = tree->findItems("Fit Map in View", Qt::MatchExactly | Qt::MatchRecursive).value(0);
+    QTreeWidgetItem* fitMap = test::findTreeItem(*tree, "Fit Map in View");
     REQUIRE(fitMap != nullptr);
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, fitMap),
-        Q_ARG(QKeySequence, QKeySequence(Qt::Key_Delete)));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, fitMap),
+        Q_ARG(QKeySequence, QKeySequence(Qt::Key_Delete))));
     CHECK_FALSE(widget.hasPendingChanges());
 }
 
 // Dropping one conflicting edit puts that action back on its committed key, which can collide with
 // an edit that only looked free while the dropped one was pending.
-TEST_CASE("Applying drops edits that conflict once another edit is dropped", "[qt][keybindings]") {
-    removeTestSettings();
-
+TEST_CASE("Applying drops edits that conflict once another edit is dropped", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
     KeybindingsWidget widget(&registry);
     auto* tree = widget.findChild<QTreeWidget*>();
     REQUIRE(tree != nullptr);
 
-    const auto rowFor = [tree](const QString& label) {
-        return tree->findItems(label, Qt::MatchExactly | Qt::MatchRecursive).value(0);
-    };
-    QTreeWidgetItem* scripts = rowFor("Scripts Panel");
-    QTreeWidgetItem* mapInfo = rowFor("Map Information Panel");
+    QTreeWidgetItem* scripts = test::findTreeItem(*tree, "Scripts Panel");
+    QTreeWidgetItem* mapInfo = test::findTreeItem(*tree, "Map Information Panel");
     REQUIRE(scripts != nullptr);
     REQUIRE(mapInfo != nullptr);
 
     // Scripts onto the Tile Palette's key (a conflict, so it will be dropped), then Map Info onto
     // the key Scripts appears to be leaving.
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, scripts),
-        Q_ARG(QKeySequence, QKeySequence("Alt+4")));
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
-        Q_ARG(QKeySequence, QKeySequence("Alt+3")));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, scripts),
+        Q_ARG(QKeySequence, QKeySequence("Alt+4"))));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
+        Q_ARG(QKeySequence, QKeySequence("Alt+3"))));
     widget.applyChanges();
 
     CHECK(registry.shortcut(actions::PANEL_SCRIPTS) == QKeySequence("Alt+3"));
@@ -500,29 +418,22 @@ TEST_CASE("Applying drops edits that conflict once another edit is dropped", "[q
     CHECK(registry.shortcut(actions::PANEL_TILE_PALETTE) == QKeySequence("Alt+4"));
 }
 
-TEST_CASE("Clear unbinds the selected row and resolves its conflict", "[qt][keybindings]") {
-    removeTestSettings();
-
+TEST_CASE("Clear unbinds the selected row and resolves its conflict", "[keybindings]") {
     auto settings = std::make_shared<Settings>();
     KeyBindingRegistry registry(settings);
     KeybindingsWidget widget(&registry);
     auto* tree = widget.findChild<QTreeWidget*>();
     REQUIRE(tree != nullptr);
 
-    QTreeWidgetItem* mapInfo = tree->findItems("Map Information Panel", Qt::MatchExactly | Qt::MatchRecursive).value(0);
-    QTreeWidgetItem* selection = tree->findItems("Selection Panel", Qt::MatchExactly | Qt::MatchRecursive).value(0);
+    QTreeWidgetItem* mapInfo = test::findTreeItem(*tree, "Map Information Panel");
+    QTreeWidgetItem* selection = test::findTreeItem(*tree, "Selection Panel");
     REQUIRE(mapInfo != nullptr);
     REQUIRE(selection != nullptr);
 
-    QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
-        Q_ARG(QKeySequence, QKeySequence("Alt+2")));
+    REQUIRE(QMetaObject::invokeMethod(&widget, "onEditFinished", Q_ARG(QTreeWidgetItem*, mapInfo),
+        Q_ARG(QKeySequence, QKeySequence("Alt+2"))));
 
-    QPushButton* clear = nullptr;
-    for (QPushButton* button : widget.findChildren<QPushButton*>()) {
-        if (button->text() == "Clear") {
-            clear = button;
-        }
-    }
+    QAbstractButton* clear = test::findButton(widget, "Clear");
     REQUIRE(clear != nullptr);
 
     tree->setCurrentItem(selection);

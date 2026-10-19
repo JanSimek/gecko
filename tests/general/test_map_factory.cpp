@@ -6,7 +6,7 @@
 
 using namespace geck;
 
-TEST_CASE("Map::createEmptyElevation fills every cell with EMPTY_TILE", "[map_factory]") {
+TEST_CASE("Map::createEmptyElevation fills every cell with EMPTY_TILE", "[map]") {
     const auto tiles = Map::createEmptyElevation();
 
     REQUIRE(tiles.size() == Map::TILES_PER_ELEVATION);
@@ -16,7 +16,7 @@ TEST_CASE("Map::createEmptyElevation fills every cell with EMPTY_TILE", "[map_fa
     }
 }
 
-TEST_CASE("Map::createEmptyMapFile builds a blank Fallout 2 map", "[map_factory]") {
+TEST_CASE("Map::createEmptyMapFile builds a blank Fallout 2 map", "[map]") {
     const auto mapFile = Map::createEmptyMapFile();
 
     CHECK(mapFile.header.version == static_cast<uint32_t>(FileFormat::FALLOUT2_MAP_VERSION));
@@ -40,14 +40,4 @@ TEST_CASE("Map::createEmptyMapFile builds a blank Fallout 2 map", "[map_factory]
         CHECK(mapFile.map_scripts[section].empty());
         CHECK(mapFile.scripts_in_section[section] == 0);
     }
-}
-
-TEST_CASE("MapHeader::programIndex converts the 1-based header script id", "[map][scripts]") {
-    geck::Map::MapHeader header{};
-    header.script_id = -1;
-    CHECK_FALSE(header.programIndex().has_value());
-    header.script_id = 0;
-    CHECK_FALSE(header.programIndex().has_value());
-    header.script_id = 1414; // SCRIPT_EPAC18 in headers/scripts.h
-    CHECK(header.programIndex() == 1413);
 }

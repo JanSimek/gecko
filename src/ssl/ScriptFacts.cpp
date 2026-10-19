@@ -1,7 +1,8 @@
 #include "ssl/ScriptFacts.h"
 
+#include "reader/TextParsing.h"
+
 #include <algorithm>
-#include <cctype>
 #include <format>
 
 #include "ssl/CallGraph.h"
@@ -18,13 +19,11 @@ namespace {
     using Field = ScriptFacts::Override::Field;
 
     // SSL names are case-insensitive (sslc compares them with _stricmp).
-    bool sameName(std::string_view a, std::string_view b) {
-        return std::ranges::equal(a, b, [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
-    }
+    using text::equalsIgnoreCase;
 
     bool isName(const Expr* expr, std::string_view name) {
         const auto* node = expr ? std::get_if<Name>(&expr->node) : nullptr;
-        return node != nullptr && sameName(node->name, name);
+        return node != nullptr && equalsIgnoreCase(node->name, name);
     }
 
     class FactsReader {
@@ -59,7 +58,7 @@ namespace {
             const auto& args = call.args;
             std::optional<Field> field;
             const Expr* value = nullptr;
-            if (sameName(call.callee, "critter_add_trait") && args.size() == 4 && isName(args[0].get(), "self_obj")
+            if (equalsIgnoreCase(call.callee, "critter_add_trait") && args.size() == 4 && isName(args[0].get(), "self_obj")
                 && constant(*args[1]) == TRAIT_OBJECT) {
                 if (const auto selector = constant(*args[2]); selector == TRAIT_OBJECT_AI_PACKET) {
                     field = AiPacket;
@@ -67,12 +66,12 @@ namespace {
                     field = Team;
                 }
                 value = args[3].get();
-            } else if ((sameName(call.callee, "set_self_ai") || sameName(call.callee, "set_self_team")) && args.size() == 1) {
-                field = sameName(call.callee, "set_self_ai") ? AiPacket : Team;
+            } else if ((equalsIgnoreCase(call.callee, "set_self_ai") || equalsIgnoreCase(call.callee, "set_self_team")) && args.size() == 1) {
+                field = equalsIgnoreCase(call.callee, "set_self_ai") ? AiPacket : Team;
                 value = args[0].get();
-            } else if ((sameName(call.callee, "set_ai") || sameName(call.callee, "set_team")) && args.size() == 2
+            } else if ((equalsIgnoreCase(call.callee, "set_ai") || equalsIgnoreCase(call.callee, "set_team")) && args.size() == 2
                 && isName(args[0].get(), "self_obj")) {
-                field = sameName(call.callee, "set_ai") ? AiPacket : Team;
+                field = equalsIgnoreCase(call.callee, "set_ai") ? AiPacket : Team;
                 value = args[1].get();
             }
             if (!field.has_value() || value == nullptr) {
@@ -97,13 +96,13 @@ namespace {
                 return value;
             }
             if (const auto* name = std::get_if<Name>(&arg.node)) {
-                if (sameName(name->name, "TRAIT_OBJECT")) {
+                if (equalsIgnoreCase(name->name, "TRAIT_OBJECT")) {
                     return TRAIT_OBJECT;
                 }
-                if (sameName(name->name, "OBJECT_AI_PACKET")) {
+                if (equalsIgnoreCase(name->name, "OBJECT_AI_PACKET")) {
                     return TRAIT_OBJECT_AI_PACKET;
                 }
-                if (sameName(name->name, "OBJECT_TEAM_NUM")) {
+                if (equalsIgnoreCase(name->name, "OBJECT_TEAM_NUM")) {
                     return TRAIT_OBJECT_TEAM;
                 }
             }
@@ -149,10 +148,6 @@ ScriptFacts readFacts(const ScriptUnit& unit) {
         facts.problems.push_back(std::format("{}:{}: {}", file, d.location.line, d.message));
     }
     return facts;
-}
-
-ScriptFacts inspectScript(const SourceProvider& provider, const std::filesystem::path& path, const PreprocessOptions& options) {
-    return readFacts(ScriptUnit::load(provider, path, options));
 }
 
 } // namespace geck::ssl

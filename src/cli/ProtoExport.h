@@ -2,6 +2,9 @@
 
 #include "format/pro/Pro.h"
 
+#include <nlohmann/json.hpp>
+
+#include <cstdint>
 #include <iosfwd>
 #include <optional>
 #include <string>
@@ -42,13 +45,22 @@ namespace cli {
     ///     protoCount: N,
     ///     unreadable: [{pid,kind,file,reason}],
     ///     protos: [{pid,kind,file,name,description,fid,flags,extendedFlags,sid,script, ...}] }
-    /// An item adds itemType, attackModes, material, size, weight, cost, inventoryFid, soundId and
-    /// one object named after its type (weapon, ammo, armor, drug, container, misc, key). A critter
+    /// An item decodes extendedFlags as {raw,bigGun,twoHanded,energyWeapon,hiddenItem} (energyWeapon
+    /// is sfall's bit, ignored by fallout2-ce) and adds itemType, attackModes, material, size, weight,
+    /// cost, inventoryFid, soundId and one object named after its type (weapon, ammo, armor, drug,
+    /// container, misc, key). A critter
     /// adds headFid, aiPacket, team, critterFlags, base, bonus, skills, bodyType, xp, killType and
     /// damageType.
     ///
     /// Returns 0 on success, 1 when a requested .lst cannot be read (no data mounted).
     int exportProtos(resource::GameResources& resources, const ProtoExportOptions& options, std::ostream& out);
+
+    /// One loaded proto as exportProtos reports it in `protos` (proto_info shares it, so both tools
+    /// decode a .pro the same way and spell its keys the same). nullopt for a proto exportProtos does
+    /// not list: neither an item nor a critter, or an item of an unknown type. Throws when the PID's
+    /// .lst cannot be read.
+    std::optional<nlohmann::ordered_json> protoRow(resource::GameResources& resources, std::uint32_t pid,
+        const Pro& pro);
 
 } // namespace cli
 } // namespace geck

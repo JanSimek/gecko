@@ -20,7 +20,6 @@ public:
     static ScriptUnit load(const SourceProvider& provider, const std::filesystem::path& path, const PreprocessOptions& options = {});
 
     const Program& program() const { return _program; }
-    const std::vector<Token>& tokens() const { return _tokens; }
     /// Preprocessing diagnostics, then parse diagnostics.
     const std::vector<Diagnostic>& diagnostics() const { return _diagnostics; }
     const SourceManager& sources() const { return *_sources; }

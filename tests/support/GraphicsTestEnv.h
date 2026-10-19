@@ -2,6 +2,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <SFML/Graphics/Image.hpp>
+#include <SFML/Graphics/Texture.hpp>
+
 #include <cstdlib>
 #include <optional>
 #include <string>
@@ -32,24 +35,29 @@ inline std::optional<std::string> environmentVariable(const char* name) {
 /// DISPLAY and has Mesa GL, so it is not headless. Replaces the per-file
 /// CI-detection block that was copy-pasted across the graphics-dependent suites.
 inline bool headlessCiEnvironment() {
-#ifdef _WIN32
-    char* ci = nullptr;
-    char* githubActions = nullptr;
-    size_t len = 0;
-    _dupenv_s(&ci, &len, "CI");
-    _dupenv_s(&githubActions, &len, "GITHUB_ACTIONS");
-    const bool present = (ci != nullptr || githubActions != nullptr);
-    free(ci);
-    free(githubActions);
-    return present;
-#else
-    const bool ci = std::getenv("CI") != nullptr || std::getenv("GITHUB_ACTIONS") != nullptr;
+    const bool ci = environmentVariable("CI").has_value() || environmentVariable("GITHUB_ACTIONS").has_value();
 #if defined(__linux__)
-    return ci && std::getenv("DISPLAY") == nullptr;
+    return ci && !environmentVariable("DISPLAY").has_value();
 #else
     return ci;
 #endif
+}
+
+/// True where SFML cannot query live keyboard state: Linux with neither an X11 nor a Wayland display.
+inline bool keyboardStateUnavailable() {
+#if defined(__linux__)
+    return !environmentVariable("DISPLAY").has_value() && !environmentVariable("WAYLAND_DISPLAY").has_value();
+#else
+    return false;
 #endif
+}
+
+/// A 1x1 white texture, for sprites whose bounds matter but whose pixels don't. Needs a graphics
+/// context: call it after GECK_SKIP_IF_HEADLESS_CI().
+inline sf::Texture whiteTexture() {
+    sf::Texture texture;
+    REQUIRE(texture.loadFromImage(sf::Image{ sf::Vector2u{ 1, 1 }, sf::Color::White }));
+    return texture;
 }
 
 } // namespace geck::test
@@ -61,4 +69,13 @@ inline bool headlessCiEnvironment() {
         if (::geck::test::headlessCiEnvironment()) {          \
             SKIP("Graphics tests skipped in CI environment"); \
         }                                                     \
+    } while (false)
+
+/// Skips the current Catch2 test where SFML cannot read the keyboard state the code under test
+/// queries (headless Linux).
+#define GECK_SKIP_IF_NO_KEYBOARD_STATE()                                                           \
+    do {                                                                                           \
+        if (::geck::test::keyboardStateUnavailable()) {                                            \
+            SKIP("This path queries live keyboard state, which SFML cannot do on headless Linux"); \
+        }                                                                                          \
     } while (false)

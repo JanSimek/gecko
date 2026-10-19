@@ -190,9 +190,7 @@ public:
     static std::string generateCritterFrmName(const std::string& baseName, uint32_t frmPid);
     
     // Derive FID from filename
-    static uint32_t deriveCritterFrmPid(const std::string& baseName, 
-                                       const std::string& frmFilename, 
-                                       uint32_t baseIndex);
+    static uint32_t deriveCritterFrmPid(const std::string& frmFilename, uint32_t baseIndex);
     
     // Get human-readable animation name
     static std::string getAnimationTypeName(const std::string& frmFilename);

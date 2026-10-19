@@ -23,7 +23,6 @@
 #include "ui/FrmThumbnailGenerator.h"
 #include "ui/IconHelper.h"
 #include "ui/theme/ThemeManager.h"
-#include "reader/ReaderFactory.h"
 
 namespace geck {
 
@@ -206,13 +205,6 @@ void ObjectPreviewWidget::clear() {
     }
 }
 
-void ObjectPreviewWidget::setScaleFactor(double scaleFactor) {
-    _scaleFactor = scaleFactor;
-    if (!_currentFrmPath.isEmpty()) {
-        updatePreview();
-    }
-}
-
 void ObjectPreviewWidget::updatePreview() {
     _animationController->stop();
 
@@ -260,10 +252,6 @@ void ObjectPreviewWidget::updatePreview() {
             _rotateButton->hide();
         }
     }
-}
-
-void ObjectPreviewWidget::stopAnimation() {
-    _animationController->stop();
 }
 
 void ObjectPreviewWidget::onPlayPauseClicked() {
@@ -436,43 +424,9 @@ void ObjectPreviewWidget::resizeEvent(QResizeEvent* event) {
 }
 
 void ObjectPreviewWidget::setTitle(const QString& title) {
-    _title = title;
     if (_titleLabel) {
         _titleLabel->setText(title);
         _titleLabel->setVisible(!title.isEmpty());
-    }
-}
-
-QString ObjectPreviewWidget::getTitle() const {
-    return _title;
-}
-
-void ObjectPreviewWidget::setPreviewSize(const QSize& size) {
-    _customPreviewSize = size;
-    if (_previewLabel) {
-        _previewLabel->setMinimumSize(size);
-        _previewLabel->setMaximumSize(size);
-    }
-}
-
-void ObjectPreviewWidget::setShowAnimationControls(bool show) {
-    if (show) {
-        _options |= ShowAnimationControls;
-    } else {
-        _options &= ~ShowAnimationControls;
-    }
-
-    if (_rotateButton) {
-        _rotateButton->setVisible(show && _totalDirections > 1);
-    }
-    if (_playPauseButton) {
-        _playPauseButton->setVisible(show && _animationController->hasMultipleFrames());
-    }
-}
-
-void ObjectPreviewWidget::setShowFidField(bool show) {
-    if (_fidWidget) {
-        _fidWidget->setVisible(show);
     }
 }
 

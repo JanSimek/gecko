@@ -140,11 +140,6 @@ bool MapWriter::write(const Map::MapFile& map) {
             }
         }
 
-        // (probably not relevant anymore) FIXME: some maps (artemple.map, kladwtwn.map, all?) contain 2x extra 0x000000 at the end of the file
-        // without them kladwtnwn.map crashes Fallout 2; however F2_Dims_Mapper doesn't seem to add them (?)
-        // utils.writeBE32(0);
-        // utils.writeBE32(0);
-
         utils.flush();
         spdlog::debug("Successfully wrote map file: {} ({} bytes)", getPath().filename().string(), getBytesWritten());
         return true;
@@ -305,7 +300,7 @@ void MapWriter::writeObject(const MapObject& object) {
 
     for (const auto& invobj : object.inventory) {
         if (!invobj) {
-            throw CorruptDataException("Null inventory object", getPath(), "inventory");
+            throw CorruptDataException("Null inventory object", getPath());
         }
         utils.writeBE32(invobj->amount);
         writeObject(*invobj); // Recursive call for inventory objects

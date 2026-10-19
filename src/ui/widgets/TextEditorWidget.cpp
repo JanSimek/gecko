@@ -114,12 +114,10 @@ void TextEditorWidget::updateControlStates() {
 
 void TextEditorWidget::onEditorModeChanged() {
     updateControlStates();
-    Q_EMIT editorModeChanged();
     Q_EMIT configurationChanged();
 }
 
 void TextEditorWidget::onCustomEditorPathChanged() {
-    Q_EMIT customEditorPathChanged();
     Q_EMIT configurationChanged();
 }
 
@@ -135,7 +133,6 @@ void TextEditorWidget::onBrowseEditor() {
 
     if (!editorPath.isEmpty()) {
         _customEditorPathEdit->setText(editorPath);
-        Q_EMIT customEditorPathChanged();
         Q_EMIT configurationChanged();
     }
 }

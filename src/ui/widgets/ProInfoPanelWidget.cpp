@@ -84,7 +84,7 @@ void ProInfoPanelWidget::setupUI() {
     _mainLayout->setSpacing(0);
 
     auto* nameLayout = new QHBoxLayout();
-    nameLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    nameLayout->setSpacing(ui::theme::spacing::TIGHT);
 
     _nameLabel = new QLabel(this);
     _nameLabel->setAlignment(Qt::AlignCenter);
@@ -103,7 +103,7 @@ void ProInfoPanelWidget::setupUI() {
 
     _previewContainer = new QWidget(this);
     _previewLayout = new QVBoxLayout(_previewContainer);
-    _previewLayout->setContentsMargins(0, ui::constants::SPACING_TIGHT, 0, ui::constants::SPACING_TIGHT);
+    _previewLayout->setContentsMargins(0, ui::theme::spacing::TIGHT, 0, ui::theme::spacing::TIGHT);
     _previewLayout->setSpacing(0);
     _mainLayout->addWidget(_previewContainer);
 

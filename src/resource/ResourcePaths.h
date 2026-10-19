@@ -57,9 +57,6 @@ namespace ResourcePaths {
 
         // Blank tile texture
         constexpr std::string_view BLANK_TILE = "art/tiles/blank.frm";
-
-        // Standing animation suffix for critters
-        constexpr std::string_view STANDING_SUFFIX = "aa.frm";
     }
 
     // PAL Files - Color palettes
@@ -80,9 +77,6 @@ namespace ResourcePaths {
         // Game data messages
         constexpr std::string_view STAT = "text/english/game/stat.msg";
         constexpr std::string_view PERK = "text/english/game/perk.msg";
-
-        // Script names
-        constexpr std::string_view SCRNAME = "scrname.msg";
     }
 
     // Directory prefixes for FRM types
@@ -105,15 +99,7 @@ namespace ResourcePaths {
         constexpr std::string_view PROTO_MISC = "proto/misc/";
 
         // Other directories
-        constexpr std::string_view MAPS = "maps/";
         constexpr std::string_view SCRIPTS = "scripts/";
-        constexpr std::string_view TEXT = "text/";
-    }
-
-    // DAT Files - Archive files
-    namespace Dat {
-        constexpr std::string_view MASTER = "master.dat";
-        constexpr std::string_view CRITTER = "critter.dat";
     }
 
 } // namespace ResourcePaths

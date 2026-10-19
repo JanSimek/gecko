@@ -185,32 +185,27 @@ void MapSpriteLoader::appendObjectSprite(
 }
 
 void MapSpriteLoader::updateTileSprite(
-    int hexIndex,
+    int tileIndex,
     bool isRoof,
     int elevation,
     const std::vector<Tile>& elevationTiles,
     std::vector<sf::Sprite>& floorSprites,
     std::vector<sf::Sprite>& roofSprites) const {
-    auto tileIndex = _hexgrid.tileIndexForPosition(hexIndex);
-    if (!tileIndex.has_value()) {
+    if (tileIndex < 0 || tileIndex >= static_cast<int>(elevationTiles.size())) {
+        spdlog::warn("MapSpriteLoader::updateTileSprite: Tile index {} out of bounds", tileIndex);
         return;
     }
 
-    if (*tileIndex >= static_cast<int>(elevationTiles.size())) {
-        spdlog::warn("MapSpriteLoader::updateTileSprite: Tile index {} out of bounds (hex {})", *tileIndex, hexIndex);
-        return;
-    }
-
-    const auto& tile = elevationTiles[*tileIndex];
+    const auto& tile = elevationTiles[tileIndex];
     int tileId = isRoof ? tile.getRoof() : tile.getFloor();
     auto& sprites = isRoof ? roofSprites : floorSprites;
 
     if (tileId == Map::EMPTY_TILE) {
-        auto screenPos = indexToScreenPosition(*tileIndex, isRoof);
-        sprites[*tileIndex].setTexture(blankTexture());
-        sprites[*tileIndex].setColor(TileColors::transparent());
-        sprites[*tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
-        spdlog::trace("MapSpriteLoader::updateTileSprite: Set tile {} to empty [roof: {}]", *tileIndex, isRoof);
+        auto screenPos = indexToScreenPosition(tileIndex, isRoof);
+        sprites[tileIndex].setTexture(Object::blankTexture());
+        sprites[tileIndex].setColor(TileColors::transparent());
+        sprites[tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
+        spdlog::trace("MapSpriteLoader::updateTileSprite: Set tile {} to empty [roof: {}]", tileIndex, isRoof);
         return;
     }
 
@@ -224,14 +219,14 @@ void MapSpriteLoader::updateTileSprite(
         const std::string tilePath = "art/tiles/" + tileName;
         const auto& texture = _resources.textures().get(tilePath);
 
-        sprites[*tileIndex].setTexture(texture);
-        sprites[*tileIndex].setColor(sf::Color::White);
+        sprites[tileIndex].setTexture(texture);
+        sprites[tileIndex].setColor(sf::Color::White);
 
-        auto screenPos = indexToScreenPosition(*tileIndex, isRoof);
-        sprites[*tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
+        auto screenPos = indexToScreenPosition(tileIndex, isRoof);
+        sprites[tileIndex].setPosition({ static_cast<float>(screenPos.x), static_cast<float>(screenPos.y) });
 
-        spdlog::trace("MapSpriteLoader::updateTileSprite: Updated sprite for hex {} -> tile {} ({}) [roof: {}], elevation {}",
-            hexIndex, *tileIndex, tileName, isRoof, elevation);
+        spdlog::trace("MapSpriteLoader::updateTileSprite: Updated sprite for tile {} ({}) [roof: {}], elevation {}",
+            tileIndex, tileName, isRoof, elevation);
     } catch (const std::exception& e) {
         spdlog::warn("MapSpriteLoader::updateTileSprite: Failed to update tile sprite: {}", e.what());
     }
@@ -270,16 +265,6 @@ void MapSpriteLoader::createWallBlockerOverlay(
     } catch (const std::exception& e) {
         spdlog::warn("Failed to create wall blocker overlay for object at hex {}: {}", hexPosition, e.what());
     }
-}
-
-const sf::Texture& MapSpriteLoader::blankTexture() {
-    static sf::Texture* texture = [] {
-        auto* t = new sf::Texture();
-        sf::Image blankImage{ sf::Vector2u{ 1, 1 }, sf::Color::Transparent };
-        [[maybe_unused]] const bool loadSuccess = t->loadFromImage(blankImage);
-        return t;
-    }();
-    return *texture;
 }
 
 } // namespace geck

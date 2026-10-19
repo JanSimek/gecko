@@ -39,6 +39,8 @@ struct SelectionResult {
  * - Area selection calculations
  * - Coordinate conversions
  * - Direct callback notification for UI updates
+ *
+ * Hit-tests and area queries work on the provider's current elevation.
  */
 class SelectionManager {
 public:
@@ -48,36 +50,28 @@ public:
     ~SelectionManager() = default;
 
     // Selection operations
-    SelectionResult selectAtPosition(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
-    SelectionResult selectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation);
+    SelectionResult selectAtPosition(sf::Vector2f worldPos, SelectionMode mode);
+    SelectionResult selectArea(const sf::FloatRect& area, SelectionMode mode);
     // Alt+drag: add the covered items to the current selection (does not clear first).
-    SelectionResult addArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation);
+    SelectionResult addArea(const sf::FloatRect& area, SelectionMode mode);
     // Ctrl+drag: removes the covered items that are already selected; never adds. Hidden
     // roof tiles are kept (a layer you cannot see must not be deselected).
-    SelectionResult deselectArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation);
+    SelectionResult deselectArea(const sf::FloatRect& area, SelectionMode mode);
     // The covered items a Ctrl+drag would remove (selected and on a visible layer). Lets the
     // editor preview the deselection live without mutating the selection.
-    std::vector<SelectedItem> itemsToDeselectInArea(const sf::FloatRect& area, SelectionMode mode, int currentElevation) const;
-    SelectionResult addToSelection(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
+    std::vector<SelectedItem> itemsToDeselectInArea(const sf::FloatRect& area, SelectionMode mode) const;
+    SelectionResult addToSelection(sf::Vector2f worldPos, SelectionMode mode);
     // Ctrl+click: removes the topmost visible selected layer under the cursor; never adds.
-    SelectionResult deselectAtPosition(sf::Vector2f worldPos, SelectionMode mode, int currentElevation);
-
-    // Area selection (for tiles in FLOOR/ROOF modes, objects in OBJECTS mode)
-    bool startAreaSelection(sf::Vector2f startPos, SelectionMode mode);
-    void updateAreaSelection(sf::Vector2f currentPos);
-    SelectionResult finishAreaSelection();
-    void cancelAreaSelection();
+    SelectionResult deselectAtPosition(sf::Vector2f worldPos, SelectionMode mode);
 
     // Selection management
     void clearSelection();
     void selectAll(SelectionMode mode, int currentElevation);
-    void invertSelection(SelectionMode mode, int currentElevation);
 
     // State access
     const SelectionState& getCurrentSelection() const { return _state; }
     SelectionState& getMutableSelection() { return _state; }
     bool hasSelection() const { return !_state.isEmpty(); }
-    bool isAreaSelecting() const { return _state.isAreaSelecting(); }
 
     // True when `worldPos` lands on a selected item that is visible there, so a region stays movable
     // by any of its visible parts. Mirrors the visibility rules of Ctrl+click deselect.
@@ -89,16 +83,12 @@ public:
     // The combinable layers an ALL-mode selection considers. A disabled layer is treated as absent;
     // the single-layer modes ignore this, and changing it leaves the current selection alone.
     void setActiveLayers(SelectionLayers layers) { _layers = layers; }
-    SelectionLayers activeLayers() const { return _layers; }
 
     // Callback mechanism for UI updates
     void setSelectionCallback(SelectionCallback callback) { _selectionCallback = callback; }
 
     // Spatial index management
     void initializeSpatialIndex();
-
-    // Helper for external classes (like EditorWidget) to check collision
-    bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite) const;
 
     // The topmost pickable thing under a world position, using the same hit-testers and priority as a
     // left-click. At most one field is set; the tile fields hold a position, not a tiles.lst id.
@@ -107,12 +97,12 @@ public:
         std::optional<int> roofTile;
         std::optional<int> floorTile;
     };
-    PickResult pickAt(sf::Vector2f worldPos, int elevation) const;
+    PickResult pickAt(sf::Vector2f worldPos) const;
 
     // Area selection helpers (public for EditorWidget usage)
-    std::vector<int> getTilesInArea(const sf::FloatRect& area, bool roof, int elevation) const;
-    std::vector<int> getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof, int elevation) const;
-    std::vector<std::shared_ptr<Object>> getObjectsInArea(const sf::FloatRect& area, int elevation) const;
+    std::vector<int> getTilesInArea(const sf::FloatRect& area, bool roof) const;
+    std::vector<int> getTilesInAreaIncludingEmpty(const sf::FloatRect& area, bool roof) const;
+    std::vector<std::shared_ptr<Object>> getObjectsInArea(const sf::FloatRect& area) const;
     std::vector<int> getHexesInArea(const sf::FloatRect& area) const;
 
     // Move the selected tiles by a whole-tile delta as a set of tile edits. Empty if any tile would
@@ -136,13 +126,13 @@ private:
     SelectionCallback _selectionCallback;
 
     // Spatial index for efficient area queries
-    std::unique_ptr<TileSpatialIndex> _spatialIndex;
+    TileSpatialIndex _spatialIndex;
 
     // Tile selection helpers
-    std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos, int elevation) const;
-    std::optional<int> getRoofTileAtPosition(sf::Vector2f worldPos, int elevation) const;
-    std::optional<int> getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos, int elevation) const;
-    std::optional<int> getFloorTileAtPosition(sf::Vector2f worldPos, int elevation) const;
+    std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos) const;
+    std::optional<int> getRoofTileAtPosition(sf::Vector2f worldPos) const;
+    std::optional<int> getRoofTileAtPositionIncludingEmpty(sf::Vector2f worldPos) const;
+    std::optional<int> getFloorTileAtPosition(sf::Vector2f worldPos) const;
 
     // Tile-move helpers (see planSelectionTileMove). A selected tile used as the move reference
     // (prefer a floor tile): {tileIndex, isRoof}. Its centre round-trips through the tile hit-test.
@@ -152,27 +142,27 @@ private:
     bool appendTileLayerMove(std::vector<TileChange>& out, bool roof, int deltaRow, int deltaColumn) const;
 
     // Single item selection logic (current behavior)
-    SelectionResult selectSingleAtPosition(sf::Vector2f worldPos, SelectionMode mode, int elevation);
+    SelectionResult selectSingleAtPosition(sf::Vector2f worldPos, SelectionMode mode);
 
     // Cycling logic for ALL mode (current behavior)
-    SelectionResult cycleThroughItemsAtPosition(sf::Vector2f worldPos, int elevation);
+    SelectionResult cycleThroughItemsAtPosition(sf::Vector2f worldPos);
 
     // Collects the items a drag-area covers for the given mode (shared by selectArea/deselectArea).
-    std::vector<SelectedItem> collectItemsInArea(const sf::FloatRect& area, SelectionMode mode, int elevation) const;
+    std::vector<SelectedItem> collectItemsInArea(const sf::FloatRect& area, SelectionMode mode) const;
 
     // Per-category appenders used by collectItemsInArea (keep its branching shallow).
-    void appendTilesInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area, bool roof, int elevation, bool includeEmpty) const;
-    void appendObjectsInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area, int elevation) const;
+    void appendTilesInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area, bool roof, bool includeEmpty) const;
+    void appendObjectsInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area) const;
     void appendHexesInArea(std::vector<SelectedItem>& items, const sf::FloatRect& area) const;
 
     // Visible, selectable layers at a point in priority order. Hidden roofs are skipped so a Ctrl+click
     // leaves them selected.
-    std::vector<SelectedItem> collectDeselectableAtPosition(sf::Vector2f worldPos, SelectionMode mode, int elevation) const;
+    std::vector<SelectedItem> collectDeselectableAtPosition(sf::Vector2f worldPos, SelectionMode mode) const;
 
     // Per-category appenders used by collectDeselectableAtPosition (keep its branching shallow).
     // appendRoofCandidate is a no-op while the roof layer is hidden so hidden roofs stay selected.
     void appendRoofCandidate(std::vector<SelectedItem>& candidates, std::optional<int> tileIndex) const;
-    void appendObjectCandidates(std::vector<SelectedItem>& candidates, sf::Vector2f worldPos, int elevation) const;
+    void appendObjectCandidates(std::vector<SelectedItem>& candidates, sf::Vector2f worldPos) const;
     void appendHexCandidate(std::vector<SelectedItem>& candidates, sf::Vector2f worldPos) const;
 
     // Selection helpers

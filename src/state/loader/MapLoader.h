@@ -18,7 +18,6 @@ class MapLoader : public Loader {
 public:
     MapLoader(std::shared_ptr<resource::GameResources> resources,
         const std::filesystem::path& mapPath,
-        int elevation,
         bool forceFilesystem,
         std::function<void(std::unique_ptr<Map>)> onLoadCallback);
     ~MapLoader();
@@ -42,7 +41,7 @@ private:
     std::shared_ptr<resource::GameResources> _resources;
     std::filesystem::path _mapPath;
     std::unique_ptr<Map> _map;
-    int _elevation;
+    int _elevation = 0; // the map header's player_default_elevation, read on load
     bool _forceFilesystem;
     std::function<void(std::unique_ptr<Map>)> _onLoadCallback;
 

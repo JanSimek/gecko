@@ -8,7 +8,7 @@ using namespace geck;
 // make_straight_path starts from the pixel at a tile's centre and treats the tile found there as the
 // start tile; tile_dist reaches an adjacent tile in one tile_dir step (melee range is distance 1);
 // obj_can_see_obj sees an adjacent critter because the walk enters the target's tile before its last pixel.
-TEST_CASE("engine tile math holds the invariants the engine relies on", "[engine_tile]") {
+TEST_CASE("engine tile math holds the invariants the engine relies on", "[engine_tile][cli]") {
     const int centre = 100 * enginetile::GRID_WIDTH + 100;
     const auto camera = enginetile::cameraCenteredOn(centre);
 

@@ -21,7 +21,6 @@
 namespace geck {
 
 using namespace ui::constants;
-using namespace ui::defaults;
 
 SettingsDialog::SettingsDialog(std::shared_ptr<Settings> settings, KeyBindingRegistry* registry, QWidget* parent)
     : QDialog(parent)
@@ -69,8 +68,8 @@ QScrollArea* SettingsDialog::wrapInScrollArea(QWidget* content) {
 
 void SettingsDialog::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    _mainLayout->setSpacing(SPACING_LOOSE);
+    _mainLayout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    _mainLayout->setSpacing(ui::theme::spacing::LOOSE);
 
     setupTabs();
 
@@ -104,8 +103,8 @@ void SettingsDialog::setupTabs() {
 void SettingsDialog::setupViewportTab() {
     _viewportTab = new QWidget();
     auto* layout = new QVBoxLayout(_viewportTab);
-    layout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    layout->setSpacing(SPACING_NORMAL);
+    layout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    layout->setSpacing(ui::theme::spacing::NORMAL);
 
     _edgeScrollCheckBox = new QCheckBox("Edge scrolling");
     _edgeScrollCheckBox->setToolTip("Scroll the map when the cursor rests near a viewport edge.");
@@ -126,8 +125,8 @@ void SettingsDialog::setupViewportTab() {
 void SettingsDialog::setupColorsTab() {
     _colorsTab = new QWidget();
     auto* layout = new QVBoxLayout(_colorsTab);
-    layout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    layout->setSpacing(SPACING_NORMAL);
+    layout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    layout->setSpacing(ui::theme::spacing::NORMAL);
 
     auto* intro = new QLabel("Colours used to highlight the current selection. Click a swatch to change it.");
     intro->setWordWrap(true);
@@ -183,8 +182,8 @@ void SettingsDialog::updateColorButton(const QString& key) const {
 void SettingsDialog::setupGeneralTab() {
     _generalTab = new QWidget();
     _generalTabLayout = new QVBoxLayout(_generalTab);
-    _generalTabLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    _generalTabLayout->setSpacing(SPACING_LOOSE);
+    _generalTabLayout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    _generalTabLayout->setSpacing(ui::theme::spacing::LOOSE);
 
     _dataPathsWidget = new DataPathsWidget(_settings);
     // A heading, not a box: flat alone still paints a frame and a slightly different fill.
@@ -212,8 +211,8 @@ void SettingsDialog::setupGeneralTab() {
 void SettingsDialog::setupEditorTab() {
     _editorTab = new QWidget();
     _editorTabLayout = new QVBoxLayout(_editorTab);
-    _editorTabLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    _editorTabLayout->setSpacing(SPACING_LOOSE);
+    _editorTabLayout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    _editorTabLayout->setSpacing(ui::theme::spacing::LOOSE);
 
     _textEditorWidget = new TextEditorWidget();
     _editorTabLayout->addWidget(_textEditorWidget);
@@ -245,8 +244,8 @@ void SettingsDialog::setupKeybindingsTab() {
 
     auto* tab = new QWidget();
     auto* layout = new QVBoxLayout(tab);
-    layout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    layout->setSpacing(SPACING_LOOSE);
+    layout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    layout->setSpacing(ui::theme::spacing::LOOSE);
     layout->addWidget(_keybindingsWidget, /*stretch=*/1);
 
     _tabWidget->addTab(tab, "Keyboard Shortcuts");

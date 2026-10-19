@@ -1,7 +1,7 @@
 #include "EditorWidget.h"
 #include "ui/core/EditorHints.h"
 #include "ui/widgets/SFMLWidget.h"
-#include "ui/input/InputHandler.h"
+#include "editing/input/InputHandler.h"
 // The stamp library + MapScriptApi are used by both the (scripting-only) Console and the always-on
 // area fill, so these are included unconditionally — only runScript itself stays #ifdef'd.
 #include "Application.h"
@@ -18,6 +18,7 @@
 #include "editing/commands/EdgeEditService.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "format/map/MapScript.h"
+#include "editor/HexGeometry.h"
 #include "util/BuiltTile.h"
 #include "rendering/MapEdgeOverlayGeometry.h"
 #include "rendering/MapSpriteLoader.h"
@@ -25,9 +26,9 @@
 #include "ui/dragdrop/DragDropManager.h"
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
-#include "ui/tools/FillBrushTool.h"
-#include "ui/tools/ITool.h"
-#include "ui/tools/ToolRegistry.h"
+#include "editing/tools/FillBrushTool.h"
+#include "editing/tools/ITool.h"
+#include "editing/tools/ToolRegistry.h"
 #include "viewport/EdgeScroll.h"
 #include "viewport/ViewportController.h"
 #include "ui/panels/ObjectPalettePanel.h"
@@ -170,7 +171,7 @@ EditorWidget::EditorWidget(resource::GameResources& resources, std::unique_ptr<M
             .undoStackChanged = [this]() { Q_EMIT undoStackChanged(); },
             .ensureElevationTiles = [this](int elevation) -> std::vector<Tile>& { return ensureElevationTiles(elevation); },
             .currentElevation = [this]() { return _session.currentElevation(); },
-            .updateTileSprite = [this](int hexIndex, bool isRoof, int elevation) { updateTileSprite(hexIndex, isRoof, elevation); },
+            .updateTileSprite = [this](int tileIndex, bool isRoof, int elevation) { updateTileSprite(tileIndex, isRoof, elevation); },
             .loadTileSprites = [this]() { loadTileSprites(); },
             .mapHeaderChanged = [this]() { Q_EMIT mapHeaderChanged(); },
         });
@@ -340,8 +341,8 @@ void EditorWidget::registerExitGridCreation(const std::vector<std::shared_ptr<Ma
 }
 
 void EditorWidget::registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
-    const std::vector<ExitGridState>& beforeStates,
-    const std::vector<ExitGridState>& afterStates) {
+    const std::vector<ExitGridCommandState>& beforeStates,
+    const std::vector<ExitGridCommandState>& afterStates) {
     _controller.commandController().registerExitGridEdit(exitGrids, beforeStates, afterStates);
 }
 
@@ -405,10 +406,6 @@ void EditorWidget::deleteSpatialScript(uint32_t sid) {
         }
         Q_EMIT mapScriptsChanged();
     }
-}
-
-int EditorWidget::currentElevation() const {
-    return _session.currentElevation();
 }
 
 const std::optional<MapEdge>& EditorWidget::mapEdge() const {
@@ -1058,12 +1055,12 @@ void EditorWidget::commitDragAreaSelection(sf::Vector2f startPos, sf::Vector2f e
         createScrollBlockersFromHexes(calculateRectangleBorderHexes(selectionArea));
     } else if (isDeselect) {
         // Ctrl+drag only removes already-selected items in the area; it never adds.
-        _session.selectionManager()->deselectArea(selectionArea, _currentSelectionMode, _session.currentElevation());
+        _session.selectionManager()->deselectArea(selectionArea, _currentSelectionMode);
     } else if (isAdditive) {
         // Alt+drag adds the covered items to the selection, keeping what was already selected.
-        _session.selectionManager()->addArea(selectionArea, _currentSelectionMode, _session.currentElevation());
+        _session.selectionManager()->addArea(selectionArea, _currentSelectionMode);
     } else {
-        const auto result = _session.selectionManager()->selectArea(selectionArea, _currentSelectionMode, _session.currentElevation());
+        const auto result = _session.selectionManager()->selectArea(selectionArea, _currentSelectionMode);
         if (result.success) {
             spdlog::debug("Area selection completed: {}", result.message);
         }
@@ -1256,22 +1253,7 @@ void EditorWidget::bindSelectionCallbacks(InputHandler::Callbacks& callbacks) {
         if (modifier == InputHandler::SelectionModifier::NONE && trySelectEdgeZoneAt(worldPos)) {
             return;
         }
-        SelectionModifier selectionModifier;
-        switch (modifier) {
-            case InputHandler::SelectionModifier::ADD:
-                selectionModifier = SelectionModifier::ADD;
-                break;
-            case InputHandler::SelectionModifier::TOGGLE:
-                selectionModifier = SelectionModifier::TOGGLE;
-                break;
-            case InputHandler::SelectionModifier::RANGE:
-                selectionModifier = SelectionModifier::RANGE;
-                break;
-            default:
-                selectionModifier = SelectionModifier::NONE;
-                break;
-        }
-        selectAtPosition(worldPos, selectionModifier);
+        selectAtPosition(worldPos, modifier);
     };
 
     callbacks.onDragSelectionPreview = [this](sf::Vector2f startPos, sf::Vector2f currentPos, InputHandler::SelectionModifier modifier) {
@@ -1428,13 +1410,13 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
             setMode(EditorMode::Select);
             Q_EMIT statusMessageRequested("Tool cancelled.");
         } else if (_mode == EditorMode::SetPlayerPosition) {
-            // Cancels the player-position pick and any generic hex pick (beginHexPick); leaving the
-            // mode notifies a pending pick callback with no position (see setMode).
+            // Cancels the hex pick (beginHexPick); leaving the mode notifies the pending callback
+            // with no position (see setMode).
             setMode(EditorMode::Select);
             Q_EMIT statusMessageClearRequested();
         } else if (_tilePlacementManager->isTilePlacementMode()) {
             Q_EMIT tilePaletteDeselectRequested();
-            _tilePlacementManager->resetState(); // also clears the area-fill / replace sub-options
+            _tilePlacementManager->resetState();
             // setMode() resets both the tile manager and the input handler. Relying on deselectTile()'s
             // signal was a no-op when no palette tile was highlighted, which stranded the mode.
             setMode(EditorMode::Select);
@@ -1641,29 +1623,25 @@ void EditorWidget::render(sf::RenderTarget& target, [[maybe_unused]] const float
     _controller.renderingEngine().render(target, _controller.viewport().getView(), renderData, visibility);
 }
 
-bool EditorWidget::selectAtPosition(sf::Vector2f worldPos) {
-    return selectAtPosition(worldPos, SelectionModifier::NONE);
-}
-
-bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, SelectionModifier modifier) {
+bool EditorWidget::selectAtPosition(sf::Vector2f worldPos, InputHandler::SelectionModifier modifier) {
     selection::SelectionResult result;
 
     switch (modifier) {
-        case SelectionModifier::NONE:
-            result = _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
+        case InputHandler::SelectionModifier::NONE:
+            result = _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode);
             break;
 
-        case SelectionModifier::ADD:
-            result = _session.selectionManager()->addToSelection(worldPos, _currentSelectionMode, _session.currentElevation());
+        case InputHandler::SelectionModifier::ADD:
+            result = _session.selectionManager()->addToSelection(worldPos, _currentSelectionMode);
             spdlog::debug("Add to selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
 
-        case SelectionModifier::TOGGLE:
-            result = _session.selectionManager()->deselectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
+        case InputHandler::SelectionModifier::TOGGLE:
+            result = _session.selectionManager()->deselectAtPosition(worldPos, _currentSelectionMode);
             spdlog::debug("Deselect at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
 
-        case SelectionModifier::RANGE:
+        case InputHandler::SelectionModifier::RANGE:
             result = handleRangeSelection(worldPos);
             spdlog::debug("Range selection at ({:.1f}, {:.1f})", worldPos.x, worldPos.y);
             break;
@@ -1707,13 +1685,6 @@ void EditorWidget::setActiveSelectionLayers(SelectionLayers layers) {
     _session.selectionManager()->setActiveLayers(layers);
     spdlog::debug("Selection layers set to: floor={} roof={} objects={}",
         layers.floorTiles, layers.roofTiles, layers.objects);
-}
-
-SelectionLayers EditorWidget::getActiveSelectionLayers() const {
-    if (!_session.selectionManager()) {
-        return {}; // all layers on by default until the selection system is created
-    }
-    return _session.selectionManager()->activeLayers();
 }
 
 void EditorWidget::toggleScrollBlockerRectangleMode() {
@@ -1783,18 +1754,6 @@ void EditorWidget::changeElevation(int elevation) {
     }
 }
 
-void EditorWidget::placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof) {
-    _tilePlacementManager->placeTileAtPosition(tileIndex, worldPos, isRoof);
-}
-
-void EditorWidget::fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof) {
-    _tilePlacementManager->fillAreaWithTile(tileIndex, area, isRoof);
-}
-
-void EditorWidget::replaceSelectedTiles(int newTileIndex) {
-    _tilePlacementManager->replaceSelectedTiles(newTileIndex);
-}
-
 void EditorWidget::selectAll() {
     if (_session.selectionManager()) {
         _session.selectionManager()->selectAll(_currentSelectionMode, _session.currentElevation());
@@ -1824,7 +1783,6 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     _tilePlacementManager->setTilePlacementMode(false, -1, false);
     _exitGridPlacementManager->setExitGridPlacementMode(false);
     _exitGridPlacementManager->setMarkExitsMode(false);
-    _playerPositionSelectionMode = false;
     if (mode != EditorMode::StampPattern) {
         clearStampPreview();
     }
@@ -1844,7 +1802,7 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         _exitGridPlacementManager->resetLine();
     }
     if (_inputHandler) {
-        _inputHandler->setTilePlacementMode(false, -1, false);
+        _inputHandler->setTilePlacementMode(false, -1);
         _inputHandler->setExitGridPlacementMode(false);
         _inputHandler->setMarkExitsMode(false);
         _inputHandler->setPlayerPositionMode(false);
@@ -1858,7 +1816,7 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         case EditorMode::PlaceTile:
             _tilePlacementManager->setTilePlacementMode(true, tileIndex, isRoof);
             if (_inputHandler) {
-                _inputHandler->setTilePlacementMode(true, tileIndex, false);
+                _inputHandler->setTilePlacementMode(true, tileIndex);
             }
             break;
         case EditorMode::PlaceExitGrid:
@@ -1875,7 +1833,6 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
             }
             break;
         case EditorMode::SetPlayerPosition:
-            _playerPositionSelectionMode = true;
             if (_inputHandler) {
                 _inputHandler->setPlayerPositionMode(true);
             }
@@ -1923,14 +1880,6 @@ void EditorWidget::setTilePlacementMode(bool enabled, int tileIndex, bool isRoof
     setMode(enabled ? EditorMode::PlaceTile : EditorMode::Select, tileIndex, isRoof);
 }
 
-void EditorWidget::setTilePlacementAreaFill(bool enabled) {
-    _tilePlacementManager->setTilePlacementAreaFill(enabled);
-}
-
-void EditorWidget::setTilePlacementReplaceMode(bool enabled) {
-    _tilePlacementManager->setTilePlacementReplaceMode(enabled);
-}
-
 void EditorWidget::setExitGridPlacementMode(bool enabled) {
     setMode(enabled ? EditorMode::PlaceExitGrid : EditorMode::Select);
 }
@@ -1974,7 +1923,7 @@ void EditorWidget::stampPatternAt(sf::Vector2f worldPos) {
         return;
     }
     const int hex = _controller.viewport().worldPosToHexIndex(worldPos);
-    if (!_session.hexgrid().containsPosition(hex)) {
+    if (!hexgrid::isValidPosition(hex)) {
         return;
     }
     if (_stampVariantIndex < 0 || _stampVariantIndex >= static_cast<int>(_stampPattern->variants.size())) {
@@ -2015,7 +1964,7 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
         return;
     }
     const int hex = _controller.viewport().worldPosToHexIndex(worldPos);
-    if (!_session.hexgrid().containsPosition(hex)) {
+    if (!hexgrid::isValidPosition(hex)) {
         clearStampPreview();
         return;
     }
@@ -2256,21 +2205,17 @@ void EditorWidget::refreshObjects() {
     spdlog::debug("Refreshed objects for current elevation");
 }
 
-void EditorWidget::updateTileSprite(int hexIndex, bool isRoof) {
-    updateTileSprite(hexIndex, isRoof, _session.currentElevation());
+void EditorWidget::updateTileSprite(int tileIndex, bool isRoof) {
+    updateTileSprite(tileIndex, isRoof, _session.currentElevation());
 }
 
-void EditorWidget::updateTileSprite(int hexIndex, bool isRoof, int elevation) {
-    if (!_session.map() || !isValidHexPosition(hexIndex)) {
+void EditorWidget::updateTileSprite(int tileIndex, bool isRoof, int elevation) {
+    if (!_session.map()) {
         return;
     }
 
     const auto& elevationTiles = ensureElevationTiles(elevation);
-    _controller.spriteLoader().updateTileSprite(hexIndex, isRoof, elevation, elevationTiles, _session.floorSprites(), _session.roofSprites());
-}
-
-bool EditorWidget::isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite) {
-    return sprite.getGlobalBounds().contains(worldPos);
+    _controller.spriteLoader().updateTileSprite(tileIndex, isRoof, elevation, elevationTiles, _session.floorSprites(), _session.roofSprites());
 }
 
 std::optional<int> EditorWidget::getTileAtPosition(sf::Vector2f worldPos, bool isRoof) {
@@ -2311,7 +2256,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
     const auto& currentSelection = _session.selectionManager()->getCurrentSelection();
 
     if (currentSelection.isEmpty()) {
-        return _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
+        return _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode);
     }
 
     // First selected tile becomes the range start point
@@ -2329,7 +2274,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
     }
 
     if (!hasStartTile) {
-        return _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode, _session.currentElevation());
+        return _session.selectionManager()->selectAtPosition(worldPos, _currentSelectionMode);
     }
 
     float left = std::min(startPos.x, worldPos.x);
@@ -2347,7 +2292,7 @@ selection::SelectionResult EditorWidget::handleRangeSelection(sf::Vector2f world
         areaMode = SelectionMode::FLOOR_TILES; // ALL mode defaults to floor tiles for range selection
     }
 
-    auto result = _session.selectionManager()->selectArea(selectionArea, areaMode, _session.currentElevation());
+    auto result = _session.selectionManager()->selectArea(selectionArea, areaMode);
 
     spdlog::debug("Range selection: area ({:.1f}, {:.1f}, {:.1f}, {:.1f})",
         selectionArea.position.x, selectionArea.position.y, selectionArea.size.x, selectionArea.size.y);
@@ -2370,7 +2315,7 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
     if (isDeselect) {
         // Ctrl+drag previews with the covered items un-highlighted. The commit and the preview share the
         // same visibility rules, so the preview matches what will be deselected.
-        auto toRemove = _session.selectionManager()->itemsToDeselectInArea(selectionArea, _currentSelectionMode, _session.currentElevation());
+        auto toRemove = _session.selectionManager()->itemsToDeselectInArea(selectionArea, _currentSelectionMode);
         selection::SelectionState preview = _session.selectionManager()->getCurrentSelection();
         for (const auto& item : toRemove) {
             preview.removeItem(item);
@@ -2419,8 +2364,8 @@ void EditorWidget::updateDragSelectionPreview(sf::Vector2f startWorldPos, sf::Ve
 }
 
 void EditorWidget::previewAreaTiles(const sf::FloatRect& area, bool roof, bool includeEmpty) {
-    auto tiles = includeEmpty ? _session.selectionManager()->getTilesInAreaIncludingEmpty(area, roof, _session.currentElevation())
-                              : _session.selectionManager()->getTilesInArea(area, roof, _session.currentElevation());
+    auto tiles = includeEmpty ? _session.selectionManager()->getTilesInAreaIncludingEmpty(area, roof)
+                              : _session.selectionManager()->getTilesInArea(area, roof);
     auto& sprites = roof ? _session.roofSprites() : _session.floorSprites();
     for (int tileIndex : tiles) {
         if (isValidTileIndex(tileIndex)) {
@@ -2431,33 +2376,13 @@ void EditorWidget::previewAreaTiles(const sf::FloatRect& area, bool roof, bool i
 }
 
 void EditorWidget::previewAreaObjects(const sf::FloatRect& area) {
-    auto objects = _session.selectionManager()->getObjectsInArea(area, _session.currentElevation());
+    auto objects = _session.selectionManager()->getObjectsInArea(area);
     std::ranges::for_each(objects, [](auto& object) {
         if (object) {
             applyPreviewHighlight(object->getSprite());
         }
     });
     _previewObjects.insert(_previewObjects.end(), objects.begin(), objects.end());
-}
-
-void EditorWidget::updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos) {
-    clearDragPreview();
-
-    float left = std::min(startWorldPos.x, currentWorldPos.x);
-    float top = std::min(startWorldPos.y, currentWorldPos.y);
-    float width = std::abs(currentWorldPos.x - startWorldPos.x);
-    float height = std::abs(currentWorldPos.y - startWorldPos.y);
-    sf::FloatRect selectionArea({ left, top }, { width, height });
-
-    bool isRoof = _tilePlacementManager->getTilePlacementIsRoof();
-    _previewTiles = _session.selectionManager()->getTilesInArea(selectionArea, isRoof, _session.currentElevation());
-
-    auto& sprites = isRoof ? _session.roofSprites() : _session.floorSprites();
-    for (int tileIndex : _previewTiles) {
-        if (isValidTileIndex(tileIndex)) {
-            applyPreviewHighlight(sprites.at(tileIndex));
-        }
-    }
 }
 
 void EditorWidget::clearDragPreview() {
@@ -2550,7 +2475,7 @@ void EditorWidget::pickAtCursor(sf::Vector2f worldPos) {
         return;
     }
     const int elevation = _session.currentElevation();
-    const auto pick = selectionManager->pickAt(worldPos, elevation);
+    const auto pick = selectionManager->pickAt(worldPos);
 
     // An object under the cursor -> arm click-to-place with a live ghost.
     if (pick.object) {
@@ -2626,7 +2551,7 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     }
 
     int hexPosition = _controller.viewport().worldPosToHexIndex(worldPos);
-    if (!_session.hexgrid().containsPosition(hexPosition)) {
+    if (!hexgrid::isValidPosition(hexPosition)) {
         spdlog::warn("EditorWidget: Invalid hex position {} for object placement", hexPosition);
         return;
     }
@@ -2742,31 +2667,16 @@ void EditorWidget::cancelDragPreview() {
     }
 }
 
-void EditorWidget::enterPlayerPositionSelectionMode() {
-    setMode(EditorMode::SetPlayerPosition);
-
-    Q_EMIT statusMessageRequested("Click on a hex to set the player starting position (Press Escape to cancel)");
-
-    spdlog::debug("EditorWidget: Entered player position selection mode");
-}
-
 void EditorWidget::handlePositionPickClick(sf::Vector2f worldPos) {
     const int hexPosition = _controller.viewport().worldPosToHexIndex(worldPos);
     Q_EMIT statusMessageClearRequested();
 
-    // Generic one-shot hex pick (beginHexPick): consume the callback and return to Select before
-    // invoking it, so the callback (which may reopen a dialog) sees a settled editor state.
+    // Consume the callback and return to Select before invoking it, so the callback (which may
+    // reopen a dialog) sees a settled editor state.
     if (_hexPickCallback) {
         auto onFinished = std::exchange(_hexPickCallback, nullptr);
         setMode(EditorMode::Select);
         onFinished(hexPosition >= 0 ? std::optional<int>(hexPosition) : std::nullopt);
-        return;
-    }
-
-    // Legacy player-position pick: stays in the mode for repeated clicks until Escape.
-    if (hexPosition >= 0) {
-        Q_EMIT playerPositionSelected(hexPosition);
-        spdlog::debug("EditorWidget: Player position selected at hex {}", hexPosition);
     }
 }
 
@@ -2963,28 +2873,6 @@ void EditorWidget::clearDragSelectionPreview() {
     _controller.visualizer().refresh();
 
     spdlog::debug("EditorWidget::clearDragSelectionPreview() - cleared selection rectangle");
-}
-
-void EditorWidget::onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid) {
-    if (!object) {
-        spdlog::warn("EditorWidget::onObjectFrmChanged - null object provided");
-        return;
-    }
-
-    try {
-        std::string newFrmPath = _resources.frmResolver().resolve(newFrmPid);
-        uint32_t oldFrmPid = object->hasMapObject() ? object->getMapObject().frm_pid : 0;
-
-        if (newFrmPath.empty()) {
-            spdlog::error("EditorWidget::onObjectFrmChanged - could not resolve FRM path for PID {}", newFrmPid);
-            return;
-        }
-
-        registerObjectFrmChange(object, oldFrmPid, newFrmPid, newFrmPath);
-        spdlog::debug("EditorWidget::onObjectFrmChanged - updated object visual to FRM PID {} ({})", newFrmPid, newFrmPath);
-    } catch (const std::exception& e) {
-        spdlog::error("EditorWidget::onObjectFrmChanged - failed to update object FRM: {}", e.what());
-    }
 }
 
 void EditorWidget::onObjectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath) {

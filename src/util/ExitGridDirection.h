@@ -1,12 +1,16 @@
 #pragma once
 
 #include <array>
+#include <cassert>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <set>
 #include <utility>
 #include <vector>
 
+#include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
 #include "util/Constants.h"
 
@@ -178,16 +182,6 @@ namespace exitgrid_detail {
 
 } // namespace exitgrid_detail
 
-/// The directional exit-grid art for a hex drawn as part of a line. `dx`/`dy` are the hex's local
-/// segment direction (screen, y DOWNWARD); `outwardX`/`outwardY` its offset from the map centre; `kind`
-/// selects green vs brown. The segment axis picks the direction pair, the outward facing the side.
-inline ExitGridArt exitGridArtForSegment(int dx, int dy, int outwardX, int outwardY,
-    ExitGridDestinationKind kind) {
-    const exitgrid_detail::SegmentAxis axis = exitgrid_detail::classifySegment(dx, dy);
-    const int dir = exitgrid_detail::directionForAxis(axis, outwardX, outwardY);
-    return exitGridArtForDirection(dir, kind);
-}
-
 /// Flip a direction (0..7) to the OPPOSITE side of its axis pair (LEFT<->RIGHT, etc). The directions
 /// are four adjacent pairs (0/1, 2/3, 4/5, 6/7), so toggling the low bit swaps within the pair and
 /// keeps the axis. The two bitmaps in a pair are identical; the flip only changes the sign of
@@ -244,6 +238,127 @@ struct ExitGridSegmentRun {
     int outwardX = 0;
     int outwardY = 0;
 };
+
+/// Screen position of `hexIndex` on `grid`; {0,0} off-grid.
+inline std::pair<int, int> hexScreenPosition(const HexagonGrid& grid, int hexIndex) {
+    const auto h = grid.getHexByPosition(static_cast<uint32_t>(hexIndex));
+    return h.has_value() ? std::pair<int, int>{ h->get().x(), h->get().y() } : std::pair<int, int>{ 0, 0 };
+}
+
+/// The classification geometry of a non-empty ordered hex run: the first->last screen delta and the
+/// midpoint's offset from the grid centre.
+inline ExitGridSegmentRun exitGridSegmentRun(const HexagonGrid& grid, std::vector<int> hexes) {
+    assert(!hexes.empty());
+    const auto [centerX, centerY] = hexGridCenterScreen(grid);
+    const auto [fx, fy] = hexScreenPosition(grid, hexes.front());
+    const auto [lx, ly] = hexScreenPosition(grid, hexes.back());
+    const auto [mx, my] = hexScreenPosition(grid, hexes[hexes.size() / 2]);
+    ExitGridSegmentRun run;
+    run.hexes = std::move(hexes);
+    run.screenDx = lx - fx;
+    run.screenDy = ly - fy;
+    run.outwardX = mx - centerX;
+    run.outwardY = my - centerY;
+    return run;
+}
+
+/// The auto art for a classified segment run: its own screen axis plus its midpoint's outward side,
+/// inverted by `flipSide`. The "Draw edge" tool freezes every segment with this.
+inline ExitGridArt exitGridArtForRun(const ExitGridSegmentRun& run, ExitGridDestinationKind kind, bool flipSide) {
+    return exitGridArtForDirection(
+        exitGridDirectionForLine(run.screenDx, run.screenDy, run.outwardX, run.outwardY, flipSide), kind);
+}
+
+/// One auto art for a whole stroke: axis from the first to the last hex, side once from the midpoint's
+/// outward facing, so every hex shares one side (a clean continuous bar) instead of flipping mid-run.
+/// `flipSide` inverts the side. A lone hex has no axis and classifies by its outward facing, the flip
+/// still applied; a null grid or empty stroke yields a bottom-edge marker.
+inline ExitGridArt exitGridArtForStroke(const HexagonGrid* grid, const std::vector<int>& orderedHexes,
+    ExitGridDestinationKind kind, bool flipSide) {
+    if (grid == nullptr || orderedHexes.empty()) {
+        return exitGridArtForDirection(ExitGrid::DIR_BOTTOM, kind);
+    }
+    if (orderedHexes.size() < 2) {
+        const auto [centerX, centerY] = hexGridCenterScreen(*grid);
+        const auto [hx, hy] = hexScreenPosition(*grid, orderedHexes.front());
+        const ExitGridArt art = exitGridArtForFacing(hx, hy, centerX, centerY, kind);
+        return flipSide ? exitGridArtForDirection(flipExitGridDirection(exitGridDirOfProto(art.proPid)), kind)
+                        : art;
+    }
+    return exitGridArtForRun(exitGridSegmentRun(*grid, orderedHexes), kind, flipSide);
+}
+
+/// How many rows over a diagonal band's second row sits. A diagonal bar is ~32-38px against a ~16-19px
+/// hex step, so 2 tiles the two centred rows edge-to-edge into a clean ~2x band; 1 overlaps them ~50%.
+inline constexpr int EXIT_GRID_SECOND_ROW_STEPS = 2;
+
+/// The hex `steps` rows over from `hex`, perpendicular to a diagonal band on the side
+/// exitGridOutward(dir) faces: each step takes the neighbour secondRowNeighbor picks. -1 if a step walks
+/// off-grid or no neighbour leans outward.
+inline int exitGridSecondRowHex(const HexagonGrid& grid, int hex, int dir, int steps) {
+    int current = hex;
+    for (int i = 0; i < steps && current >= 0; ++i) {
+        const auto here = grid.getHexByPosition(static_cast<uint32_t>(current));
+        if (!here.has_value()) {
+            return -1;
+        }
+        const int hx = here->get().x();
+        const int hy = here->get().y();
+        std::vector<NeighborOffset> offsets;
+        for (const int nb : hexgrid::neighbors(current)) {
+            if (const auto nbHex = grid.getHexByPosition(static_cast<uint32_t>(nb)); nbHex.has_value()) {
+                offsets.push_back({ nb, nbHex->get().x() - hx, nbHex->get().y() - hy });
+            }
+        }
+        current = secondRowNeighbor(dir, offsets);
+    }
+    return current;
+}
+
+/// The hexes a segment of direction `dir` covers. A diagonal edge is a 2-deep band: the drawn line is
+/// the outer row and a second parallel row of real markers sits EXIT_GRID_SECOND_ROW_STEPS hexes over,
+/// appended after it and deduped. A cardinal edge stays the single drawn row.
+inline std::vector<int> exitGridBandHexes(const HexagonGrid& grid, const std::vector<int>& lineHexes, int dir) {
+    std::vector<int> hexes = lineHexes;
+    if (!isDiagonalExitGridDir(dir)) {
+        return hexes;
+    }
+    std::set<int> seen(lineHexes.begin(), lineHexes.end());
+    for (const int hex : lineHexes) {
+        const int second = exitGridSecondRowHex(grid, hex, dir, EXIT_GRID_SECOND_ROW_STEPS);
+        if (second >= 0 && seen.insert(second).second) {
+            hexes.push_back(second);
+        }
+    }
+    return hexes;
+}
+
+/// One immutably-captured polyline segment: its hexes and the parallel per-hex art it was frozen with.
+struct ExitGridSegment {
+    std::vector<int> hexes;
+    std::vector<ExitGridArt> art;
+};
+
+/// Flatten the frozen segments (in commit order) then the live one into deduped parallel vectors.
+/// First-seen wins, so committed hexes and art stay pixel-stable as the live segment moves.
+inline void flattenExitGridSegments(const std::vector<ExitGridSegment>& committed, const ExitGridSegment& live,
+    std::vector<int>& outHexes, std::vector<ExitGridArt>& outArt) {
+    outHexes.clear();
+    outArt.clear();
+    std::set<int> seen;
+    const auto append = [&](const ExitGridSegment& seg) {
+        for (std::size_t i = 0; i < seg.hexes.size(); ++i) {
+            if (seen.insert(seg.hexes[i]).second) {
+                outHexes.push_back(seg.hexes[i]);
+                outArt.push_back(seg.art[i]);
+            }
+        }
+    };
+    for (const ExitGridSegment& seg : committed) {
+        append(seg);
+    }
+    append(live);
+}
 
 // --------------------------------------------------------------------------------------------------
 // SHIFT-SNAP to clean exit-grid angles

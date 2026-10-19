@@ -1,6 +1,6 @@
 #include "cli/ScriptIntrospect.h"
 
-#include "cli/GlobalVars.h"
+#include "resource/GameVarsLoader.h"
 #include "cli/IntDisassembler.h"
 #include "cli/ScriptLint.h"
 #include "cli/ScriptLookup.h"
@@ -12,6 +12,7 @@
 #include "format/map/Map.h"
 #include "format/map/MapScript.h"
 #include "format/msg/Msg.h"
+#include "reader/TextParsing.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
 #include "resource/ResourcePaths.h"
@@ -21,7 +22,6 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
-#include <cctype>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -38,6 +38,7 @@ namespace geck::cli {
 namespace {
     using nlohmann::ordered_json;
     using namespace script_lookup;
+    using text::toLower;
 
     // Attach the .ssl source (from a mounted source tree) to `root`, or flag its absence.
     void attachSource(resource::GameResources& resources, const std::string& basename, ordered_json& root) {
@@ -69,7 +70,7 @@ namespace {
             return;
         }
         std::vector<std::string> globalVarNames;
-        if (const Gam* gam = loadGameGam(resources); gam != nullptr) {
+        if (const Gam* gam = resource::loadVault13Gam(resources); gam != nullptr) {
             for (const auto& [name, value] : gam->gameGlobalVars()) {
                 globalVarNames.push_back(name);
             }
@@ -219,15 +220,6 @@ namespace {
         return toLower(path.extension().string());
     }
 
-    std::string trimmed(const std::string& line) {
-        const auto first = line.find_first_not_of(" \t\r\n");
-        if (first == std::string::npos) {
-            return {};
-        }
-        const auto last = line.find_last_not_of(" \t\r\n");
-        return line.substr(first, last - first + 1);
-    }
-
     // Accumulates hits up to the caller's limit, so a broad pattern truncates instead of flooding.
     struct MatchSink {
         ordered_json matches = ordered_json::array();
@@ -289,7 +281,7 @@ namespace {
                 (lineEnd == std::string::npos ? text.size() : lineEnd) - lineStart);
             if (matcher.matches(line)) {
                 sink.add({ { "kind", "source" }, { "script", stem(path) }, { "file", stem(path) },
-                    { "path", path }, { "line", lineNumber }, { "text", trimmed(line) } });
+                    { "path", path }, { "line", lineNumber }, { "text", text::trim(line) } });
             }
             if (lineEnd == std::string::npos) {
                 break;

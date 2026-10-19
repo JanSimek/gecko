@@ -33,14 +33,14 @@ public:
     static constexpr unsigned ROWS = 100;
     static constexpr unsigned COLS = 100;
     static constexpr unsigned TILES_PER_ELEVATION = ROWS * COLS;
-    static constexpr unsigned TILES_TOTAL = TILES_PER_ELEVATION * 2; // roof + floor
 
     static constexpr int EMPTY_TILE = 1;
     static constexpr int SCRIPT_SECTIONS = 5;
     static constexpr int FILENAME_LENGTH = 16;
 
-    //!< Fallout 2 maps always have three elevation slots (engine ELEVATION_COUNT).
-    static constexpr int ELEVATION_COUNT = 3;
+    //!< Fallout 2 maps always have three elevation slots (engine ELEVATION_COUNT); defined once on
+    //!< MapEdge, which this header includes and which sizes its per-elevation table with it.
+    static constexpr int ELEVATION_COUNT = MapEdge::ELEVATION_COUNT;
 
     Map(std::filesystem::path path)
         : IFile(path) { }
@@ -103,8 +103,6 @@ public:
 
     const std::unordered_map<int, std::vector<std::shared_ptr<MapObject>>>& objects() const;
 
-    int elevations() const;
-
     MapFile& getMapFile();
     const MapFile& getMapFile() const;
     void setMapFile(std::unique_ptr<MapFile> newMapFile);
@@ -119,6 +117,9 @@ public:
     /// Bases") of the map script an object's SID names, or nullopt when this map has no script
     /// with that SID. The SID's section picks which of the five script lists to search.
     std::optional<int> scriptProgramIndexForSid(uint32_t sid) const;
+
+    /// The map script an object's SID names, or nullptr when this map has none with that SID.
+    const MapScript* scriptForSid(uint32_t sid) const;
 
     /// Builds a blank Fallout 2 map: default header, three empty elevations of
     /// EMPTY_TILE tiles, and no scripts or objects.

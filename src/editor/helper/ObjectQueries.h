@@ -17,9 +17,6 @@ namespace object_query {
     /// True when the object's PRO lacks the NoBlock flag (i.e. it blocks movement).
     bool blocksMovement(const MapObject& object, resource::GameResources& resources);
 
-    /// True when the object acts as a wall blocker (currently == blocksMovement).
-    bool isWallBlocker(const MapObject& object, resource::GameResources& resources);
-
     /// True when the object's PRO carries the ShootThrough flag.
     bool isShootThroughWallBlocker(const MapObject& object, resource::GameResources& resources);
 

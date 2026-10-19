@@ -4,6 +4,7 @@
 #include "ui/theme/ThemeManager.h"
 #include "editor/Object.h"
 #include "editor/HexagonGrid.h"
+#include "editor/HexGeometry.h"
 #include "resource/GameResources.h"
 #include "format/frm/Frm.h"
 #include "format/map/MapObject.h"
@@ -107,8 +108,7 @@ void DragDropManager::updateObjectDrag(sf::Vector2f currentWorldPos) {
             sf::Vector2f originalWorldPos(static_cast<float>(originalHex->get().x()), static_cast<float>(originalHex->get().y()));
 
             sf::Vector2f newWorldPos = originalWorldPos + _objectDragOffset;
-            sf::Vector2f snappedPos = _context.getViewportController()->snapToHexGrid(newWorldPos);
-            int targetHexPosition = _context.getViewportController()->worldPosToHexIndex(snappedPos);
+            int targetHexPosition = _context.getViewportController()->worldPosToHexIndex(newWorldPos);
 
             if (targetHexPosition >= 0) {
                 _context.getCurrentHoverHex() = targetHexPosition;
@@ -154,14 +154,13 @@ void DragDropManager::finishObjectDrag(sf::Vector2f finalWorldPos) {
             sf::Vector2f newWorldPos = originalWorldPos + moveTranslation;
 
             // Don't manually apply shift offsets here - setHexPosition() will handle them
-            sf::Vector2f snappedPos = _context.getViewportController()->snapToHexGrid(newWorldPos);
-            int newHexPosition = _context.getViewportController()->worldPosToHexIndex(snappedPos);
+            int newHexPosition = _context.getViewportController()->worldPosToHexIndex(newWorldPos);
 
             spdlog::debug("DragDropManager: Object {} - original({:.1f},{:.1f}) + offset({:.1f},{:.1f}) = new({:.1f},{:.1f}) -> hex {}",
                 i, originalWorldPos.x, originalWorldPos.y, dragOffset.x, dragOffset.y,
-                snappedPos.x, snappedPos.y, newHexPosition);
+                newWorldPos.x, newWorldPos.y, newHexPosition);
 
-            if (hexGrid->containsPosition(newHexPosition)) {
+            if (hexgrid::isValidPosition(newHexPosition)) {
                 movedObjects.push_back({ originalHexPosition, newHexPosition });
                 continue;
             }
@@ -236,8 +235,6 @@ void DragDropManager::startDragPreview(int objectIndex, int categoryInt, sf::Vec
     cancelDragPreview();
 
     _isDraggingFromPalette = true;
-    _previewObjectIndex = objectIndex;
-    _previewObjectCategory = categoryInt;
 
     try {
         _previewObjectInfo = _lookupObjectInfo(objectIndex, static_cast<ObjectCategory>(categoryInt));
@@ -315,18 +312,8 @@ void DragDropManager::finishDragPreview(sf::Vector2f worldPos) {
 void DragDropManager::cancelDragPreview() {
     _isDraggingFromPalette = false;
     _dragPreviewObject.reset();
-    _previewObjectIndex = -1;
-    _previewObjectCategory = 0;
     _previewObjectInfo = nullptr;
     _context.getCurrentHoverHex() = -1;
-}
-
-DragDropManager::DragType DragDropManager::getCurrentDragType() const {
-    if (_isDraggingObjects)
-        return DragType::OBJECT_MOVE;
-    if (_isDraggingFromPalette)
-        return DragType::PALETTE_PREVIEW;
-    return DragType::NONE;
 }
 
 } // namespace geck

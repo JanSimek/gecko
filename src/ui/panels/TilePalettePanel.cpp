@@ -3,8 +3,6 @@
 #include "format/lst/Lst.h"
 #include "resource/GameResources.h"
 #include "util/Constants.h"
-#include "util/ColorUtils.h"
-#include "ui/common/BaseWidget.h"
 #include "ui/theme/ThemeManager.h"
 #include "selection/SelectionManager.h"
 
@@ -18,7 +16,7 @@
 namespace geck {
 
 TilePalettePanel::TilePalettePanel(resource::GameResources& resources, QWidget* parent)
-    : BasePanel("Tiles", parent)
+    : QWidget(parent)
     , _resources(resources) {
     setupUI();
     setMinimumWidth(ui::constants::sizes::WIDTH_PANEL_MIN);
@@ -26,7 +24,7 @@ TilePalettePanel::TilePalettePanel(resource::GameResources& resources, QWidget* 
 
 void TilePalettePanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    _mainLayout->setSpacing(ui::theme::spacing::NORMAL);
     _mainLayout->setContentsMargins(ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN);
 
     setupModeControls();
@@ -178,7 +176,7 @@ QPixmap TilePalettePanel::tilePixmap(int tileIndex, const std::string& tileName)
         const sf::Vector2u size = texture.getSize();
         const sf::Image image = texture.copyToImage();
         const QImage qImage(image.getPixelsPtr(), size.x, size.y, QImage::Format_RGBA8888);
-        return BaseWidget::scalePixmapToSize(QPixmap::fromImage(qImage), TILE_SIZE);
+        return QPixmap::fromImage(qImage).scaled(TILE_SIZE, TILE_SIZE, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     } catch (const std::exception& e) {
         spdlog::debug("TilePalettePanel: Using placeholder for tile {}: {}", tileIndex, e.what());
     }
@@ -344,23 +342,6 @@ void TilePalettePanel::pickTile(int tileId, bool isRoof) {
     selectRowForTile(tileId);
 
     Q_EMIT tileSelected(tileId, isRoof);
-}
-
-void TilePalettePanel::onPlacementModeChanged() {
-    // With unified placement mode, this function is simplified
-    Q_EMIT placementModeChanged(_placementMode);
-
-    QString modeText = "Unified placement mode - click or drag to place tiles (auto-replace if tiles selected)";
-    _statusLabel->setText(modeText);
-}
-
-void TilePalettePanel::setPlacementMode(PlacementMode mode) {
-    if (_placementMode != mode) {
-        _placementMode = mode;
-
-        // With unified placement mode, no button state to update
-        Q_EMIT placementModeChanged(_placementMode);
-    }
 }
 
 } // namespace geck

@@ -23,9 +23,7 @@ struct ToolPreview;
 /**
  * @brief Handles all rendering operations for the editor
  *
- * This class encapsulates all rendering logic that was previously
- * in EditorWidget, providing a clean separation of concerns between
- * UI management and rendering operations.
+ * Keeps rendering separate from EditorWidget's UI management.
  */
 class RenderingEngine {
 public:
@@ -313,12 +311,6 @@ private:
     // null if the hex is off-grid or its directional FRM is unavailable.
     std::shared_ptr<Object> buildExitGridPreviewObject(const RenderData& renderData, int hexIndex,
         uint32_t frmPid) const;
-
-    /**
-     * @brief Check if a hex is within the visible viewport
-     */
-    bool isHexVisible(int hexWorldX, int hexWorldY,
-        const sf::View& view) const;
 
     resource::GameResources& _resources;
     HexRenderer _hexRenderer;

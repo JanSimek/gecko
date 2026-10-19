@@ -11,6 +11,7 @@
 #include "resource/ScriptSourceLocator.h"
 #include "resource/VfsSourceProvider.h"
 #include "reader/ReaderExceptions.h"
+#include "reader/TextParsing.h"
 #include "ssl/CallGraph.h"
 #include "ssl/Corpus.h"
 
@@ -530,8 +531,7 @@ void ScriptLinter::globalVariables(const ScriptReport& report, std::vector<Scrip
 
 void ScriptLinter::timers(const ScriptReport& report, std::vector<ScriptFinding>& out) const {
     if (std::ranges::any_of(report.procedures, [](const ScriptProcedure& p) {
-            return std::ranges::equal(p.name, std::string_view("timed_event_p_proc"),
-                [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); });
+            return text::equalsIgnoreCase(p.name, "timed_event_p_proc");
         })) {
         return;
     }
@@ -666,7 +666,7 @@ std::vector<ScriptFinding> placementFindings(const ScriptReport& report, ScriptP
     std::vector<ScriptFinding> out;
     const auto defines = [&report](std::string_view name) {
         return std::ranges::find_if(report.procedures, [name](const ScriptProcedure& p) {
-            return std::ranges::equal(p.name, name, [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); });
+            return text::equalsIgnoreCase(p.name, name);
         });
     };
     const ScriptLocation script{ report.script, 0 };

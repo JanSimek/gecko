@@ -1,7 +1,8 @@
 #include "ssl/ConstantFolder.h"
 
+#include "reader/TextParsing.h"
+
 #include <algorithm>
-#include <cctype>
 #include <map>
 #include <string_view>
 
@@ -13,21 +14,13 @@ namespace {
 
     using Value = std::optional<int64_t>;
 
-    std::string lower(std::string_view text) {
-        std::string out(text);
-        std::ranges::transform(out, out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return out;
-    }
-
-    Value boolean(bool value) {
-        return value ? 1 : 0;
-    }
+    using text::toLower;
 
     // The variable an assignment or loop writes, lowercased; empty when it writes an array element.
     std::string assignedName(const Stmt& stmt) {
         if (const auto* assignment = std::get_if<Assignment>(&stmt.node); assignment != nullptr && assignment->target) {
             if (const auto* name = std::get_if<Name>(&assignment->target->node)) {
-                return lower(name->name);
+                return toLower(name->name);
             }
         }
         return {};
@@ -38,9 +31,9 @@ namespace {
             if (std::string name = assignedName(stmt); !name.empty()) {
                 written.insert(std::move(name));
             } else if (const auto* loop = std::get_if<ForEach>(&stmt.node)) {
-                written.insert(lower(loop->value));
+                written.insert(toLower(loop->value));
                 if (!loop->key.empty()) {
-                    written.insert(lower(loop->key));
+                    written.insert(toLower(loop->key));
                 }
             }
         });
@@ -104,7 +97,7 @@ ConstantFolder::ConstantFolder(const Program& program) {
             continue;
         }
         for (const Variable& variable : globals.variables) {
-            const std::string name = lower(variable.name);
+            const std::string name = toLower(variable.name);
             if (written.contains(name) || variable.arraySize) {
                 continue;
             }
@@ -121,7 +114,7 @@ std::optional<int64_t> ConstantFolder::fold(const Expr& expr, const std::set<std
         return literal->value;
     }
     if (const auto* name = std::get_if<Name>(&expr.node)) {
-        const std::string lowered = lower(name->name);
+        const std::string lowered = toLower(name->name);
         if (lowered == "true" || lowered == "false") {
             return boolean(lowered == "true"); // sslc lex.c built-in constants
         }

@@ -105,7 +105,7 @@ void ProCritterWidget::setupStatsTab(QTabWidget* parentTabs) {
     auto* specialGroup = this->createStandardGroupBox("SPECIAL Stats");
     auto* specialLayout = new QGridLayout();
     specialLayout->setContentsMargins(0, 0, 0, 0);
-    specialLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    specialLayout->setSpacing(ui::theme::spacing::TIGHT);
     addLayoutToGroupBox(specialGroup, specialLayout);
     specialGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
 
@@ -121,7 +121,7 @@ void ProCritterWidget::setupStatsTab(QTabWidget* parentTabs) {
     auto* skillsGroup = this->createStandardGroupBox("Skills");
     auto* skillsLayout = new QGridLayout();
     skillsLayout->setContentsMargins(0, 0, 0, 0);
-    skillsLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    skillsLayout->setSpacing(ui::theme::spacing::TIGHT);
     addLayoutToGroupBox(skillsGroup, skillsLayout);
     skillsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
 
@@ -270,7 +270,7 @@ void ProCritterWidget::setupGeneralTab(QTabWidget* parentTabs) {
     auto* leftColumn = new QWidget();
     auto* leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    leftLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     auto* critterGroup = this->createStandardGroupBox("Critter Properties");
     critterGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
@@ -280,7 +280,7 @@ void ProCritterWidget::setupGeneralTab(QTabWidget* parentTabs) {
     auto* headFidWidget = new QWidget();
     auto* headFidLayout = new QHBoxLayout(headFidWidget);
     headFidLayout->setContentsMargins(0, 0, 0, 0);
-    headFidLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    headFidLayout->setSpacing(ui::theme::spacing::TIGHT);
 
     _headFidLabel = new QLabel("No FRM");
     _headFidLabel->setToolTip("FRM filename for critter head appearance");
@@ -321,7 +321,7 @@ void ProCritterWidget::setupGeneralTab(QTabWidget* parentTabs) {
     auto* rightColumn = new QWidget();
     auto* rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
-    rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    rightLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     auto* charGroup = this->createStandardGroupBox("Character Information");
     charGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
@@ -356,7 +356,7 @@ void ProCritterWidget::setupGeneralTab(QTabWidget* parentTabs) {
     critterFlagsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     auto* critterFlagsLayout = new QGridLayout();
     critterFlagsLayout->setContentsMargins(0, 0, 0, 0);
-    critterFlagsLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    critterFlagsLayout->setSpacing(ui::theme::spacing::TIGHT);
     addLayoutToGroupBox(critterFlagsGroup, critterFlagsLayout);
 
     auto addFlagCheck = [&](QCheckBox*& checkBox, const char* label, const char* tooltip, int row, int column) {

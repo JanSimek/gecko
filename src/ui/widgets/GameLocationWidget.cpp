@@ -14,9 +14,6 @@
 #include <QFileInfo>
 #include <spdlog/spdlog.h>
 
-#include <algorithm>
-#include <array>
-
 namespace geck {
 
 namespace {
@@ -44,15 +41,6 @@ namespace {
     const char* dataDirectoryHelp() {
         return "The game folder itself - the one that contains data/, master.dat and the executable.\n"
                "Not the data folder inside it.";
-    }
-
-    bool directoryHasFalloutExecutable(const std::filesystem::path& dir) {
-        static constexpr std::array<const char*, 8> kExecutableNames = {
-            "fallout2.exe", "Fallout2.exe", "fallout2", "Fallout2",
-            "fallout2-ce.exe", "Fallout2-ce.exe", "fallout2-ce", "Fallout2-ce"
-        };
-        return std::ranges::any_of(kExecutableNames,
-            [&dir](const char* name) { return std::filesystem::exists(dir / name); });
     }
 
 } // namespace
@@ -324,7 +312,11 @@ void GameLocationWidget::onAutoDetect() {
 
     if (!detectedInstallations.empty()) {
         const auto& installation = detectedInstallations.front();
-        _executableLocationEdit->setText(QString::fromStdString(installation.path.string()));
+        // Detection finds an installation (a folder, or a macOS .app); the field takes what to launch.
+        const std::optional<std::filesystem::path> executable = findGameExecutable(installation.path);
+        if (executable.has_value()) {
+            setExecutableLocation(*executable);
+        }
         if (const auto dataDirectory = util::resolveGameDataRoot(installation.path)) {
             // Through the setter, not the field: setting the executable may already have derived the
             // directory from a bundle and locked it, and resolveGameDataRoot answers a different
@@ -332,10 +324,18 @@ void GameLocationWidget::onAutoDetect() {
             setDataDirectory(*dataDirectory);
         }
 
-        setStatusMessage(QString("Auto-detected installation: %1").arg(QString::fromStdString(installation.description)), "success");
+        const QString description = QString::fromStdString(installation.description);
+        if (executable.has_value()) {
+            setStatusMessage(QString("Auto-detected installation: %1").arg(description), "success");
+        } else {
+            setStatusMessage(QString("Auto-detected installation: %1, but it has no Fallout 2 executable. "
+                                     "Please select the executable manually.")
+                                 .arg(description),
+                "warning");
+        }
         Q_EMIT configurationChanged();
     } else {
-        setStatusMessage("No Fallout 2 game installations detected automatically. Please select the directory manually.", "warning");
+        setStatusMessage("No Fallout 2 game installations detected automatically. Please select the executable manually.", "warning");
         onBrowseExecutable();
 
         const QString manualSelection = _executableLocationEdit->text().trimmed();
@@ -358,13 +358,11 @@ void GameLocationWidget::validateGameLocation(const QString& gamePath) {
         return;
     }
 
-    // A macOS .app is a directory, but it is an executable choice rather than an installation
-    // folder: its binary sits in Contents/MacOS, so the installation check can never pass on one
-    // and every bundle was reported as "may not be a valid Fallout 2 installation".
+    // A macOS .app is a directory, but it is an executable choice: its binary sits in Contents/MacOS.
     if (std::filesystem::is_regular_file(path) || path.extension() == ".app") {
         validateExecutableFile(path);
-    } else if (std::filesystem::is_directory(path)) {
-        validateInstallDirectory(path);
+    } else {
+        setStatusMessage("Warning: Select the Fallout 2 executable, not a folder.", "warning");
     }
 }
 
@@ -390,17 +388,6 @@ void GameLocationWidget::validateExecutableFile(const std::filesystem::path& pat
         setStatusMessage("Valid Fallout 2 executable and data directory selected.", "success");
     } else {
         setStatusMessage("Executable selected. Warning: Data directory may not contain game files.", "warning");
-    }
-}
-
-void GameLocationWidget::validateInstallDirectory(const std::filesystem::path& path) {
-    // Legacy behaviour: accept a directory that looks like a Fallout 2 install.
-    const bool hasDataDir = std::filesystem::exists(path / "data");
-    const bool hasExecutable = directoryHasFalloutExecutable(path);
-    if (hasDataDir && hasExecutable) {
-        setStatusMessage("Valid Fallout 2 installation directory selected.", "success");
-    } else {
-        setStatusMessage("Warning: Selected directory may not be a valid Fallout 2 installation.", "warning");
     }
 }
 

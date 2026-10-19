@@ -1,5 +1,6 @@
 #include "ViewportController.h"
 #include "editor/Hex.h"
+#include "editor/HexGeometry.h"
 #include "util/Constants.h"
 #include "util/TileUtils.h"
 #include <spdlog/spdlog.h>
@@ -145,7 +146,7 @@ int ViewportController::worldPosToHexIndex(sf::Vector2f worldPos) const {
     }
 
     const int hexIndex = static_cast<int>(hexPosition);
-    if (_hexGrid->containsPosition(hexIndex)) {
+    if (hexgrid::isValidPosition(hexIndex)) {
         spdlog::trace("ViewportController::worldPosToHexIndex: world({:.1f}, {:.1f}) -> hex({})",
             worldPos.x, worldPos.y, hexIndex);
         return hexIndex;
@@ -158,7 +159,6 @@ bool ViewportController::isHexVisible(int hexWorldX, int hexWorldY, const sf::Vi
     // A hex sprite spans ~2 hex-widths and sits a few px below its baseline, so pad
     // the right/bottom test by those amounts to avoid culling partially-visible hexes.
     constexpr int HEX_SPRITE_WIDTH_SPAN = Hex::HEX_WIDTH * 2;
-    constexpr int HEX_BASELINE_OFFSET = 4;
 
     const sf::Vector2f viewCenter = view.getCenter();
     const sf::Vector2f viewSize = view.getSize();
@@ -168,21 +168,7 @@ bool ViewportController::isHexVisible(int hexWorldX, int hexWorldY, const sf::Vi
     const int viewHeight = static_cast<int>(viewSize.y);
 
     return (hexWorldX + HEX_SPRITE_WIDTH_SPAN > worldX && hexWorldX < worldX + viewWidth)
-        && (hexWorldY + Hex::HEX_HEIGHT + HEX_BASELINE_OFFSET > worldY && hexWorldY < worldY + viewHeight);
-}
-
-sf::Vector2f ViewportController::snapToHexGrid(sf::Vector2f worldPos) const {
-    if (!_hexGrid) {
-        return worldPos;
-    }
-
-    // Find closest hex and return its center position
-    int hexIndex = worldPosToHexIndex(worldPos);
-    if (auto hex = _hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex)); hex.has_value()) {
-        return sf::Vector2f(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
-    }
-
-    return worldPos; // Return original position if no valid hex found
+        && (hexWorldY + Hex::HEX_HEIGHT + Hex::SPRITE_BASELINE_OFFSET > worldY && hexWorldY < worldY + viewHeight);
 }
 
 void ViewportController::updateViewForWindowSize(sf::Vector2u windowSize) {
@@ -210,15 +196,10 @@ void ViewportController::updateViewForWindowSize(sf::Vector2u windowSize) {
 
 std::optional<HexPosition> ViewportController::worldPosToHexPosition(const WorldCoords& worldPos) const {
     int hexIndex = worldPosToHexIndex(worldPos.toVector());
-    if (hexIndex >= 0 && isValidHexPosition(hexIndex)) {
+    if (hexgrid::isValidPosition(hexIndex)) {
         return HexPosition(hexIndex);
     }
     return std::nullopt;
-}
-
-WorldCoords ViewportController::snapToHexGrid(const WorldCoords& worldPos) const {
-    sf::Vector2f snapped = snapToHexGrid(worldPos.toVector());
-    return WorldCoords(snapped.x, snapped.y);
 }
 
 } // namespace geck

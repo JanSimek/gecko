@@ -1,21 +1,18 @@
 #include "ssl/CallRefs.h"
 
+#include "reader/TextParsing.h"
+
 #include <algorithm>
-#include <cctype>
 
 namespace geck::ssl {
 
 namespace {
 
-    std::string lower(std::string_view text) {
-        std::string out(text);
-        std::ranges::transform(out, out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return out;
-    }
+    using text::toLower;
 
     bool isSelf(const Expr* expr) {
         const auto* name = expr != nullptr ? std::get_if<Name>(&expr->node) : nullptr;
-        return name != nullptr && lower(name->name) == "self_obj";
+        return name != nullptr && toLower(name->name) == "self_obj";
     }
 
 } // namespace
@@ -31,7 +28,7 @@ std::vector<CallRef> callRefs(const ScriptUnit& unit, const CallGraph& graph, st
             if (call == nullptr) {
                 return;
             }
-            const std::string name = lower(call->callee);
+            const std::string name = toLower(call->callee);
             if (std::ranges::find(opcodes, std::string_view(name)) == opcodes.end()) {
                 return;
             }

@@ -20,6 +20,7 @@
 #include "cli/ScriptIntrospect.h"
 #include "cli/ScriptLint.h"
 #include "cli/ScriptRefs.h"
+#include "reader/TextParsing.h"
 #include "resource/GameResources.h"
 
 #include <spdlog/spdlog.h>
@@ -238,32 +239,17 @@ bool parseIntFlag(const std::string& flag, const std::string& value, int& out, c
     }
 }
 
-// Checked unsigned parse for `--flag <value>` (base 0: 0x.. hex, else decimal). Same rationale as
-// parseIntFlag: std::stoul throws on bad input and would terminate the CLI.
-bool parseUnsignedFlag(const std::string& flag, const std::string& value, unsigned long& out, const char* program) {
-    // Require a leading digit. This rejects a leading '+'/'-' and, crucially, leading
-    // whitespace: std::stoul skips whitespace and then accepts a sign, so " -1" would
-    // otherwise slip past a bare front()=='-' check and wrap to a huge value.
-    if (value.empty() || value.front() < '0' || value.front() > '9') {
+// Checked unsigned parse for `--flag <value>` (decimal or 0x-hex). Prints why and returns false on
+// anything else, a sign or whitespace included, rather than wrapping a negative to a huge value.
+bool parseUnsignedFlag(const std::string& flag, const std::string& value, std::uint64_t& out, const char* program) {
+    const auto parsed = geck::text::parseInteger(value);
+    if (!parsed || *parsed < 0) {
         std::cerr << "error: " << flag << " expects a non-negative integer, got: " << value << "\n";
         printUsage(program);
         return false;
     }
-    try {
-        std::size_t consumed = 0;
-        const unsigned long parsed = std::stoul(value, &consumed, 0);
-        if (consumed != value.size()) {
-            std::cerr << "error: " << flag << " expects a non-negative integer, got: " << value << "\n";
-            printUsage(program);
-            return false;
-        }
-        out = parsed;
-        return true;
-    } catch (const std::exception&) {
-        std::cerr << "error: " << flag << " expects a non-negative integer, got: " << value << "\n";
-        printUsage(program);
-        return false;
-    }
+    out = static_cast<std::uint64_t>(*parsed);
+    return true;
 }
 
 bool isKnownSubcommand(const std::vector<std::string>& args) {
@@ -295,7 +281,7 @@ bool parsePids(const std::string& csv, std::vector<std::uint32_t>& out, const ch
         const std::size_t comma = csv.find(',', start);
         const std::string token = csv.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
         if (!token.empty()) {
-            unsigned long value = 0;
+            std::uint64_t value = 0;
             if (!parseUnsignedFlag("--pids", token, value, program)) {
                 return false;
             }
@@ -478,7 +464,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         return parseIntFlag(arg, args[i + 1], out.ren.elevation, program) ? 2 : 0;
     }
     if (out.render && arg == "--max-dim") {
-        unsigned long maxDim = 0;
+        std::uint64_t maxDim = 0;
         if (!parseUnsignedFlag(arg, args[i + 1], maxDim, program)) {
             return 0;
         }
@@ -514,10 +500,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         out.ren.fullExtent = true;
         return 1;
     }
-    if (out.render && arg == "--exit-dots") {
-        out.ren.exitDots = true;
-        return 1;
-    }
+
     if (out.render && arg == "--show-unreachable") {
         out.ren.showUnreachable = true;
         return 1;
@@ -852,16 +835,6 @@ bool parseFrmArgs(const std::vector<std::string>& args, const char* program, Frm
     return true;
 }
 
-// Mount the data paths plus the bundled fallback resources the way main() does for `map`.
-void mountData(geck::resource::GameResources& resources, const std::vector<std::string>& dataPaths, const char* argv0) {
-    for (const auto& path : dataPaths) {
-        resources.files().addDataPath(path);
-    }
-    if (const auto bundled = geck::cli::findBundledResources(argv0); !bundled.empty()) {
-        resources.files().addDataPath(bundled);
-    }
-}
-
 int dispatchFrm(geck::resource::GameResources& resources, const FrmArgs& fa) {
     if (fa.action == "info") {
         return geck::cli::frmInfo(resources, fa.target, std::cout);
@@ -906,7 +879,7 @@ int runFrmCommand(const std::vector<std::string>& args, const char* program) {
 
     spdlog::set_level(spdlog::level::off);
     geck::resource::GameResources resources;
-    mountData(resources, fa.dataPaths, program);
+    geck::cli::mountDataPaths(resources, fa.dataPaths, program);
     return dispatchFrm(resources, fa);
 }
 
@@ -984,13 +957,10 @@ int runResourceCommand(const std::vector<std::string>& args, const char* program
 
     spdlog::set_level(spdlog::level::off);
     geck::resource::GameResources resources;
-    mountData(resources, ra.dataPaths, program);
+    geck::cli::mountDataPaths(resources, ra.dataPaths, program);
     return dispatchResource(resources, ra);
 }
 
-// --- proto subcommand -------------------------------------------------------------------------
-// `proto export` dumps every proto in the item and critter .lst files. Self-contained like
-// `resource`: two optional filters plus its own --data list.
 // `script lint <files> [--data <path>]... [--notes] [--json] [--locale <l>]`
 int runScriptCommand(const std::vector<std::string>& args, const char* program) {
     std::vector<std::filesystem::path> files;
@@ -1021,10 +991,13 @@ int runScriptCommand(const std::vector<std::string>& args, const char* program) 
     }
     spdlog::set_level(spdlog::level::off);
     geck::resource::GameResources resources;
-    mountData(resources, dataPaths, program);
+    geck::cli::mountDataPaths(resources, dataPaths, program);
     return geck::cli::lintFiles(resources, files, notes, locale, json, std::cout);
 }
 
+// --- proto subcommand -------------------------------------------------------------------------
+// `proto export` dumps every proto in the item and critter .lst files. Self-contained like
+// `resource`: two optional filters plus its own --data list.
 struct ProtoArgs {
     std::string kind;
     std::string itemType;
@@ -1076,7 +1049,7 @@ int runProtoCommand(const std::vector<std::string>& args, const char* program) {
 
     spdlog::set_level(spdlog::level::off);
     geck::resource::GameResources resources;
-    mountData(resources, pa.dataPaths, program);
+    geck::cli::mountDataPaths(resources, pa.dataPaths, program);
     return geck::cli::exportProtos(resources, opts, std::cout);
 }
 
@@ -1100,17 +1073,6 @@ std::optional<int> runCommandFamily(const std::vector<std::string>& args, const 
         return runScriptCommand(args, program);
     }
     return std::nullopt;
-}
-
-void mountCliData(geck::resource::GameResources& resources, const CliArgs& cli, const char* program) {
-    for (const auto& path : cli.dataPaths) {
-        resources.files().addDataPath(path);
-    }
-    // Mount the bundled resources (blank.frm, scripts, …) the way the editor does, so e.g. the
-    // natural map render finds art/tiles/blank.frm even though it isn't in master.dat.
-    if (const auto bundled = geck::cli::findBundledResources(program); !bundled.empty()) {
-        resources.files().addDataPath(bundled);
-    }
 }
 
 // The map subcommands that write files or read scripts; nullopt for the analysis ones.
@@ -1208,7 +1170,9 @@ int runCli(int argc, char** argv) {
     spdlog::set_level(spdlog::level::off);
 
     geck::resource::GameResources resources;
-    mountCliData(resources, cli, argv[0]);
+    // The bundled resources (blank.frm, scripts, …) let e.g. the natural map render find
+    // art/tiles/blank.frm, which isn't in master.dat.
+    geck::cli::mountDataPaths(resources, cli.dataPaths, argv[0]);
     if (const auto exitCode = runProducingCommand(resources, cli); exitCode.has_value()) {
         return *exitCode;
     }

@@ -13,6 +13,7 @@
 #include <vfspp/ThreadingPolicy.hpp>
 
 #include "format/dat/Dat.h"
+#include "format/dat/DatEntry.h"
 #include "reader/ReaderExceptions.h"
 #include "reader/dat/DatReader.h"
 #include "util/Inflate.h"

@@ -1,8 +1,9 @@
 #include "ssl/ObjectRefs.h"
 
+#include "reader/TextParsing.h"
+
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <string_view>
 #include <utility>
 
@@ -10,11 +11,7 @@ namespace geck::ssl {
 
 namespace {
 
-    std::string lower(std::string_view text) {
-        std::string out(text);
-        std::ranges::transform(out, out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return out;
-    }
+    using text::toLower;
 
     // The opcodes that pop a PID, and the argument it is (the engine pops it first, so it is last).
     constexpr std::array<std::pair<std::string_view, std::size_t>, 6> PID_ARGUMENT{ {
@@ -28,7 +25,7 @@ namespace {
 
     bool isObjPid(const Expr* expr) {
         const auto* call = expr != nullptr ? std::get_if<Call>(&expr->node) : nullptr;
-        return call != nullptr && lower(call->callee) == "obj_pid";
+        return call != nullptr && toLower(call->callee) == "obj_pid";
     }
 
     // Visits every live expression of `unit`, with its procedure.
@@ -47,7 +44,7 @@ namespace {
         if (call == nullptr) {
             return std::nullopt;
         }
-        std::string callee = lower(call->callee);
+        std::string callee = toLower(call->callee);
         const auto it = std::ranges::find(PID_ARGUMENT, std::string_view(callee), &std::pair<std::string_view, std::size_t>::first);
         if (it == PID_ARGUMENT.end() || it->second >= call->args.size() || !call->args[it->second]) {
             return std::nullopt;
@@ -99,7 +96,7 @@ std::vector<MapRef> mapRefs(const ScriptUnit& unit, const CallGraph& graph) {
     std::vector<MapRef> found;
     forEachLive(unit, graph, [&unit, &graph, &found](const Procedure& procedure, const Expr& expr) {
         const auto* call = std::get_if<Call>(&expr.node);
-        if (call == nullptr || lower(call->callee) != "load_map" || call->args.size() != 2 || !call->args[0]) {
+        if (call == nullptr || toLower(call->callee) != "load_map" || call->args.size() != 2 || !call->args[0]) {
             return;
         }
         MapRef ref;

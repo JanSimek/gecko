@@ -52,7 +52,6 @@ public:
 
 signals:
     void dataPathsChanged();
-    void statusChanged(const QString& message, const QString& styleClass);
 
 private slots:
     void onAddFolder(); // pick a folder; its master.dat/critter.dat are added as explicit entries too
@@ -71,7 +70,8 @@ private:
     // otherwise it is appended as the lowest. Returns false if the path is already present.
     bool addPathRow(const std::filesystem::path& path, bool atTop);
     // Add a folder AND its master.dat/critter.dat as explicit rows (util::expandDataPaths), keeping the
-    // DATs in their legacy priority order regardless of atTop. Returns how many rows were added.
+    // folder's loose files above its DATs, as the engine reads them, regardless of atTop. Returns how
+    // many rows were added.
     int addFolderExpanded(const std::filesystem::path& folder, bool atTop);
     void removeSelectedPath();
     void updateButtonStates();

@@ -6,15 +6,9 @@
 #include <memory>
 
 #include "format/pro/Pro.h"
+#include "format/pro/ProtoTypes.h"
 
 namespace geck::test {
-
-/// Builds a PID from an object type (high byte) and a per-type index, matching
-/// the engine's `(type << 24) | index` layout. The MapReader/MapWriter and the
-/// PRO suites all need this to fabricate typed objects without a .pro on disk.
-inline uint32_t pidOf(ObjectType type, uint32_t index) {
-    return ProtoId(type, index).pid();
-}
 
 /// In-memory PRO provider for MapReader/MapWriter. Only ITEM/SCENERY objects
 /// dereference their Pro during (de)serialization (for objectSubtypeId());
@@ -37,5 +31,15 @@ struct StubProvider {
         return it != pros.end() ? it->second.get() : nullptr;
     }
 };
+
+/// The protos tests/data/sfshutl2.map needs to parse: its objects use ten scenery protos (indices
+/// 1538..1547), all of the GENERIC subtype, and no items.
+inline StubProvider sfshutl2Provider() {
+    StubProvider provider;
+    for (uint32_t index = 1538; index <= 1547; ++index) {
+        provider.addScenery(ProtoId(ObjectType::Scenery, index).pid(), SceneryType::Generic);
+    }
+    return provider;
+}
 
 } // namespace geck::test

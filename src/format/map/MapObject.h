@@ -115,10 +115,6 @@ struct MapObject {
         return hasLight;
     }
 
-    bool hasSignificantLight() const {
-        return light_radius > 0 && light_intensity > 0;
-    }
-
     /// True for exit-grid markers: MISC protos FirstExitGrid..LastExitGrid (0x05000010..17), the
     /// engine's FIRST_EXIT_GRID_PID..LAST_EXIT_GRID_PID and the legacy F2 Mapper's misc nID 16..23.
     bool isExitGridMarker() const {

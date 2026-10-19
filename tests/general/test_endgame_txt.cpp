@@ -18,7 +18,7 @@ bad, line
 )";
 } // namespace
 
-TEST_CASE("parseEndgameTxt reads ending slides, skipping comments and short lines", "[endgame]") {
+TEST_CASE("parseEndgameTxt reads ending slides, skipping comments and short lines", "[endgame_txt]") {
     const EndgameTxt endgame = parseEndgameTxt(std::string{ kEndgameTxt });
 
     REQUIRE(endgame.endings.size() == 3);
@@ -33,11 +33,11 @@ TEST_CASE("parseEndgameTxt reads ending slides, skipping comments and short line
     CHECK(endgame.endings[2].direction == 1);         // optional 5th field (panning-desert art)
 }
 
-TEST_CASE("parseEndgameTxt tolerates empty input", "[endgame]") {
+TEST_CASE("parseEndgameTxt tolerates empty input", "[endgame_txt]") {
     CHECK(parseEndgameTxt(std::string{}).endings.empty());
 }
 
-TEST_CASE("parseEndDeathTxt reads death endings as the engine tokenises them", "[endgame]") {
+TEST_CASE("parseEndDeathTxt reads death endings as the engine tokenises them", "[endgame_txt]") {
     // Spaces, tabs and commas all separate fields; a '#' line is a comment; a short line is skipped.
     const EndDeathTxt endDeath = parseEndDeathTxt(std::string{ "# gvar, value, known, notKnown, level, %, narrator\n"
                                                                "-1, 0, -1, 16, 0, 40, nar_dth3\n"
@@ -57,7 +57,7 @@ TEST_CASE("parseEndDeathTxt reads death endings as the engine tokenises them", "
     CHECK(endDeath.endings[1].narrator == "nar_mo1");
 }
 
-TEST_CASE("parseEndingSubtitles keeps the text after each line's first colon", "[endgame]") {
+TEST_CASE("parseEndingSubtitles keeps the text after each line's first colon", "[endgame_txt]") {
     const auto lines = parseEndingSubtitles("1:The darkness awaits.\r\n2:Peace: at last.\nno separator\n");
 
     REQUIRE(lines.size() == 2);

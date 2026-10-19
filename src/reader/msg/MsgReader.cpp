@@ -1,6 +1,5 @@
 #include "MsgReader.h"
 
-#include "reader/ErrorMessages.h"
 #include "reader/TextParsing.h"
 
 #include <spdlog/spdlog.h>
@@ -107,8 +106,6 @@ std::unique_ptr<Msg> MsgReader::read() {
         if (pos.total == 0) {
             throw UnsupportedFormatException("Empty MSG file", _path);
         }
-
-        FormatValidator::validateMsgFile(utils, _path);
 
         const std::string content = utils.readFixedString(pos.total);
         auto msg = std::make_unique<Msg>(parseMsg(_path, content));

@@ -305,15 +305,15 @@ Open items, roughly in order:
 
 # Feature-gap audit vs the reference mappers
 
-Full parity catalogue: [`docs/feature-gap-audit.md`](docs/feature-gap-audit.md), from a read-only
-audit of the fallout2-ce built-in mapper and the legacy Dims mapper against Gecko.
+From a read-only audit of the fallout2-ce built-in mapper and the legacy Dims mapper against Gecko;
+the full catalogue is `git show a89e980:docs/feature-gap-audit.md` (partly stale: `.edg` has shipped).
 
 1. **Minimap / overview** *(medium)* — click-to-navigate + elevation switch, with a viewport rectangle
    (improving on Dims' cursor-sprite locator).
 
 Deferred (substitute exists / niche): object clipboard copy-paste (pattern-stamp covers it),
 whole-elevation hex shift, absolute-rotation setters. Intentional non-goals and the corrected
-TODO-claim table are in the audit doc.
+TODO-claim table are in that catalogue.
 
 ---
 
@@ -370,15 +370,14 @@ the running game (day/night, critter wander/AI) is **Large** and probably not wo
   ~150–180-line function; round-trip coverage (byte-for-byte on a shipped map) is already there,
   so the split is safe whenever it's wanted.
 - **Inventory edits.** `SelectionPanel` mutates `holder->inventory` itself and only records the
-  snapshot through `InventoryEditService`; `InventoryViewerDialog` mutates with no undo and is
-  used only by a test — delete it or route it through the service.
+  snapshot through `InventoryEditService`; move the mutation into the service.
 - One `const_cast` left: `SFMLWidget.cpp` `ensureRenderTexture` from a const method.
 
 **Evaluated and intentionally NOT pursued (guard — churn > value):**
 - **PRO/MAP serialization visitor** — the type-specific tails (mixed field widths, optional-on-
   read/unconditional-on-write fields, union/subtype dispatch) can't be expressed symmetrically;
   the read→write→read round-trip test net already provides the safety.
-- **`ProFieldFactory` extraction / spacing-token consolidation / `BasePanel` re-parent** — only
+- **`ProFieldFactory` extraction / spacing-token consolidation** — only
   ~15 LOC genuinely shared, a materialId index-vs-value fidelity trap, and the spacing sources
   hold *different* values (consolidation would pixel-shift layouts).
 
@@ -402,8 +401,7 @@ history (`git show edf773d:PLAN.md`, §"Feature B").
 
 **Kept on master (dual-use, pays off without plugins):** the `ITool`/`ToolRegistry` seam
 (powers the native Fill Brush), `MapScriptApi`/`ScriptApiReference` (Console + headless
-CLI/MCP), the `LuaSandboxHost` extraction, the plan-sink placement cap + Console time budget,
-and the inert `MapScriptApi::retarget`/`detach` (reverting would churn a class the Console,
-CLI, MCP and fills all share).
+CLI/MCP), the `LuaSandboxHost` extraction, and the plan-sink placement cap + Console time
+budget.
 **Scrapped:** the `PluginManager` MVP (PRs #120/#121 closed unmerged; branches remain) and the
 resident-VM substrate (`PluginVm`, heap cap, persistent env — removed in #122).

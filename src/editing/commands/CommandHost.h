@@ -15,8 +15,7 @@ class Tile;
  * *back* into its host for presentation refresh and elevation/tile access. Splitting it out
  * means the command controller depends on one narrow seam instead of six loose std::functions,
  * and lets a headless caller (gecko-cli generation) supply a trivial implementation instead of
- * wiring up rendering/UI infrastructure. Mirrors the existing TilePlacementContext /
- * ExitGridContext idiom: a narrow host interface the full editor (EditorWidget) implements.
+ * wiring up rendering/UI infrastructure. Both supply it as a CallbackCommandHost (below).
  */
 class CommandHost {
 public:
@@ -31,7 +30,7 @@ public:
     /// The elevation edits currently target.
     virtual int getCurrentElevation() const = 0;
     /// A single floor/roof tile's sprite changed and should be re-stitched.
-    virtual void updateTileSprite(int hexIndex, bool isRoof, int elevation) = 0;
+    virtual void updateTileSprite(int tileIndex, bool isRoof, int elevation) = 0;
     /// Reload every tile sprite (after a bulk tile change such as a cleared/copied elevation).
     virtual void reloadTiles() = 0;
     /// The map header changed (an edit, or its undo/redo), including which elevations are present.
@@ -67,7 +66,7 @@ public:
     void undoStackChanged() override { _undoStackChanged(); }
     std::vector<Tile>& ensureElevationTiles(int elevation) override { return _ensureElevationTiles(elevation); }
     int getCurrentElevation() const override { return _getCurrentElevation(); }
-    void updateTileSprite(int hexIndex, bool isRoof, int elevation) override { _updateTileSprite(hexIndex, isRoof, elevation); }
+    void updateTileSprite(int tileIndex, bool isRoof, int elevation) override { _updateTileSprite(tileIndex, isRoof, elevation); }
     void reloadTiles() override { _reloadTiles(); }
     void mapHeaderChanged() override {
         if (_mapHeaderChanged) {

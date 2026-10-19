@@ -4,132 +4,74 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <initializer_list>
+#include <ostream>
 #include <sstream>
 #include <string>
-#include <system_error>
 
 #include "cli/ProtoExport.h"
 #include "resource/GameResources.h"
 #include "support/ByteWriter.h"
+#include "support/CliJson.h"
+#include "support/DataTree.h"
+#include "support/EngineProtoBytes.h"
 
 using json = nlohmann::json;
 using geck::test::ByteWriter;
-namespace fs = std::filesystem;
+using geck::test::critterProto;
+using geck::test::itemProtoHeader;
+using geck::test::weaponProto;
 using namespace geck;
 
 namespace {
-
-void writeText(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream(path) << contents;
-}
-
-void writeBytes(const fs::path& path, const ByteWriter& bytes) {
-    fs::create_directories(path.parent_path());
-    std::ofstream file(path, std::ios::binary);
-    file.write(reinterpret_cast<const char*>(bytes.data().data()), static_cast<std::streamsize>(bytes.size()));
-}
-
-ByteWriter& be32s(ByteWriter& w, std::initializer_list<std::int32_t> values) {
-    for (const auto value : values) {
-        w.be32(static_cast<std::uint32_t>(value));
-    }
-    return w;
-}
-
-// The item header exactly as fallout2-ce protoRead reads it: pid, messageId, fid, lightDistance,
-// lightIntensity, flags, extendedFlags, sid, type, material, size, weight, cost, inventoryFid, then a
-// one-byte soundId. Built by hand rather than with ProWriter, so the test pins the engine's layout
-// instead of gecko agreeing with itself.
-ByteWriter itemHeader(std::int32_t pid, std::int32_t messageId, std::uint32_t extendedFlags, std::int32_t type) {
-    ByteWriter w;
-    be32s(w, { pid, messageId, 0x07000010, 0, 0, 0x00000008 });
-    w.be32(extendedFlags);
-    be32s(w, { -1, type, 1 /* Metal */, 3, 7, 250, 0x07000020 });
-    w.u8('0');
-    return w;
-}
 
 // A mounted data directory holding four readable item protos, one .lst entry whose file is missing,
 // and one critter, plus the .msg files that name them.
 class ProtoFixture {
 public:
     ProtoFixture() {
-        std::error_code ec;
-        fs::remove_all(_root, ec);
-
-        writeText(_root / "proto/items/items.lst", "weapon.pro\nmissing.pro\nammo.pro\narmor.pro\nmisc.pro\n");
-        writeText(_root / "proto/critters/critters.lst", "critter.pro\n");
-        writeText(_root / "scripts/scripts.lst", "a.int\nb.int\nc.int\nd.int\ne.int\ntest.int\n");
-        writeText(_root / "text/english/game/pro_item.msg",
+        _tree.write("proto/items/items.lst", "weapon.pro\nmissing.pro\nammo.pro\narmor.pro\nmisc.pro\n");
+        _tree.write("proto/critters/critters.lst", "critter.pro\n");
+        _tree.write("scripts/scripts.lst", "a.int\nb.int\nc.int\nd.int\ne.int\ntest.int\n");
+        _tree.write("text/english/game/pro_item.msg",
             "{100}{}{Test Rifle}\n{101}{}{A rifle.}\n{300}{}{Test Ammo}\n{400}{}{Test Armor}\n{500}{}{Test Cell}\n");
-        writeText(_root / "text/english/game/pro_crit.msg", "{200}{}{Test Critter}\n");
-        writeText(_root / "text/english/game/proto.msg",
+        _tree.write("text/english/game/pro_crit.msg", "{200}{}{Test Critter}\n");
+        _tree.write("text/english/game/proto.msg",
             "{101}{}{Metal}\n{251}{}{laser}\n{252}{}{fire}\n{308}{}{10mm}\n{401}{}{Quadruped}\n");
-        writeText(_root / "text/english/game/perk.msg", "{159}{}{Long Range}\n");
+        _tree.write("text/english/game/perk.msg", "{159}{}{Long Range}\n");
 
-        // Primary attack mode 6, secondary 7, Big Gun and Two Handed.
-        ByteWriter weapon = itemHeader(1, 100, 0x00000376, 3);
-        be32s(weapon, { 6, 10, 20, 1 /* laser */, 25, 20, -1, 4, 5, 6, 2, 58 /* Weapon Long Range */, 10, 8 /* 10mm */, 3, 30 });
-        weapon.u8('A');
+        // Primary attack mode 6, secondary 7, Big Gun, Two Handed and sfall's Energy bit.
+        const ByteWriter weapon = weaponProto(1, 100, 0x00000776);
         REQUIRE(weapon.size() == 122);
-        writeBytes(_root / "proto/items/weapon.pro", weapon);
+        _tree.writeBytes("proto/items/weapon.pro", weapon.data());
 
-        ByteWriter ammo = itemHeader(3, 300, 0, 4);
-        be32s(ammo, { 8, 24, -10, 25, 2, 1 });
+        ByteWriter ammo = itemProtoHeader(3, 300, 0, 4);
+        ammo.be32s({ 8, 24, -10, 25, 2, 1 });
         REQUIRE(ammo.size() == 81);
-        writeBytes(_root / "proto/items/ammo.pro", ammo);
+        _tree.writeBytes("proto/items/ammo.pro", ammo.data());
 
-        ByteWriter armor = itemHeader(4, 400, 0, 0);
-        be32s(armor, { 20, 30, 20, 20, 10, 30, 500, 20, 4, 0, 0, 0, 0, 0, 0, -1, 0x0100000C, 0x01000005 });
+        ByteWriter armor = itemProtoHeader(4, 400, 0, 0);
+        armor.be32s({ 20, 30, 20, 20, 10, 30, 500, 20, 4, 0, 0, 0, 0, 0, 0, -1, 0x0100000C, 0x01000005 });
         REQUIRE(armor.size() == 129);
-        writeBytes(_root / "proto/items/armor.pro", armor);
+        _tree.writeBytes("proto/items/armor.pro", armor.data());
 
-        ByteWriter misc = itemHeader(5, 500, 0, 5);
-        be32s(misc, { 38, 3, 200 });
+        ByteWriter misc = itemProtoHeader(5, 500, 0, 5);
+        misc.be32s({ 38, 3, 200 });
         REQUIRE(misc.size() == 69);
-        writeBytes(_root / "proto/items/misc.pro", misc);
+        _tree.writeBytes("proto/items/misc.pro", misc.data());
 
-        // The critter layout of fallout2-ce protoRead + protoCritterDataRead. Base stat i holds 100 + i
-        // and bonus stat i holds 200 + i, so each value names the stat slot it was read from.
-        ByteWriter critter;
-        be32s(critter, { 0x01000001, 200, 0x01000040, 0, 0, 0x20000000, 0x6000, 0x04000005, -1, 77, 1 });
-        critter.be32(0x0802); // Barter + CRITTER_FLAT
-        for (std::int32_t stat = 0; stat < 35; ++stat) {
-            critter.be32(static_cast<std::uint32_t>(100 + stat));
-        }
-        for (std::int32_t stat = 0; stat < 35; ++stat) {
-            critter.be32(static_cast<std::uint32_t>(200 + stat));
-        }
-        for (std::int32_t skill = 0; skill < 18; ++skill) {
-            critter.be32(static_cast<std::uint32_t>(skill));
-        }
-        be32s(critter, { 1 /* quadruped */, 150, 3, 2 /* fire */ });
+        // Base stat i holds 100 + i and bonus stat i holds 200 + i, so each value names the stat slot
+        // it was read from; skill i holds i.
+        const ByteWriter critter = critterProto(100, 200, 0);
         REQUIRE(critter.size() == 416);
-        writeBytes(_root / "proto/critters/critter.pro", critter);
-
-        _resources.files().addDataPath(_root.string());
+        _tree.writeBytes("proto/critters/critter.pro", critter.data());
     }
-
-    ~ProtoFixture() {
-        std::error_code ec;
-        fs::remove_all(_root, ec);
-    }
-
-    ProtoFixture(const ProtoFixture&) = delete;
-    ProtoFixture& operator=(const ProtoFixture&) = delete;
 
     json run(const cli::ProtoExportOptions& options = {}) {
-        std::ostringstream oss;
-        REQUIRE(cli::exportProtos(_resources, options, oss) == 0);
-        return json::parse(oss.str());
+        return test::runJson([&](std::ostream& out) { return cli::exportProtos(_tree.mount(), options, out); });
     }
 
 private:
-    fs::path _root = fs::path(GECK_TEST_TMP_DIR) / "geck_proto_export_test";
-    resource::GameResources _resources;
+    test::DataTree _tree{ "geck_proto_export_test" };
 };
 
 const json& protoByPid(const json& out, std::uint32_t pid) {
@@ -145,7 +87,7 @@ const json& protoByPid(const json& out, std::uint32_t pid) {
 
 } // namespace
 
-TEST_CASE("exportProtos lists every .lst entry and reports the ones that do not load", "[proto][export]") {
+TEST_CASE("exportProtos lists every .lst entry and reports the ones that do not load", "[proto_export][cli]") {
     ProtoFixture fixture;
     const json out = fixture.run();
 
@@ -159,7 +101,7 @@ TEST_CASE("exportProtos lists every .lst entry and reports the ones that do not 
     CHECK(out["unreadable"][0]["file"] == "missing.pro");
 }
 
-TEST_CASE("exportProtos decodes a weapon the way the engine reads it", "[proto][export]") {
+TEST_CASE("exportProtos decodes a weapon the way the engine reads it", "[proto_export][cli]") {
     ProtoFixture fixture;
     const json out = fixture.run();
     const json& weapon = protoByPid(out, 1);
@@ -176,9 +118,10 @@ TEST_CASE("exportProtos decodes a weapon the way the engine reads it", "[proto][
     CHECK(weapon["script"].is_null());
 
     // The attack modes come from the extended flags' low byte (item.cc), not from header.flags.
-    CHECK(weapon["extendedFlags"]["raw"] == 0x376);
+    CHECK(weapon["extendedFlags"]["raw"] == 0x776);
     CHECK(weapon["extendedFlags"]["bigGun"] == true);
     CHECK(weapon["extendedFlags"]["twoHanded"] == true);
+    CHECK(weapon["extendedFlags"]["energyWeapon"] == true);
     CHECK(weapon["extendedFlags"]["hiddenItem"] == false);
     CHECK(weapon["attackModes"]["primary"] == json({ { "index", 6 }, { "type", "ranged" }, { "animation", "fireSingle" } }));
     CHECK(weapon["attackModes"]["secondary"] == json({ { "index", 7 }, { "type", "ranged" }, { "animation", "fireBurst" } }));
@@ -197,11 +140,10 @@ TEST_CASE("exportProtos decodes a weapon the way the engine reads it", "[proto][
     CHECK(w["caliber"] == json({ { "id", 8 }, { "name", "10mm" } }));
     CHECK(w["ammoPid"] == 3);
     CHECK(w["ammoCapacity"] == 30);
-    CHECK(w["soundId"] == 65);    // 'A'
-    CHECK(w["weaponFlags"] == 0); // a 122-byte engine record has no trailing word
+    CHECK(w["soundId"] == 65); // 'A'
 }
 
-TEST_CASE("exportProtos names ammo, armour and misc fields for what the engine does with them", "[proto][export]") {
+TEST_CASE("exportProtos names ammo, armour and misc fields for what the engine does with them", "[proto_export][cli]") {
     ProtoFixture fixture;
     const json out = fixture.run();
 
@@ -224,7 +166,7 @@ TEST_CASE("exportProtos names ammo, armour and misc fields for what the engine d
     CHECK(protoByPid(out, 5)["misc"] == json({ { "powerTypePid", 38 }, { "powerType", 3 }, { "charges", 200 } }));
 }
 
-TEST_CASE("exportProtos reads a critter's stat blocks by stat id", "[proto][export]") {
+TEST_CASE("exportProtos reads a critter's stat blocks by stat id", "[proto_export][cli]") {
     ProtoFixture fixture;
     const json out = fixture.run();
     const json& critter = protoByPid(out, 0x01000001);
@@ -270,7 +212,7 @@ TEST_CASE("exportProtos reads a critter's stat blocks by stat id", "[proto][expo
     CHECK(critter["damageType"] == json({ { "id", 2 }, { "name", "fire" } }));
 }
 
-TEST_CASE("exportProtos filters by kind and item type", "[proto][export]") {
+TEST_CASE("exportProtos filters by kind and item type", "[proto_export][cli]") {
     ProtoFixture fixture;
 
     cli::ProtoExportOptions ammoOnly;
@@ -287,7 +229,7 @@ TEST_CASE("exportProtos filters by kind and item type", "[proto][export]") {
     CHECK(critters["protos"][0]["kind"] == "critter");
 }
 
-TEST_CASE("parseProtoFilter rejects what it cannot honour", "[proto][export]") {
+TEST_CASE("parseProtoFilter rejects what it cannot honour", "[proto_export][cli]") {
     cli::ProtoExportOptions options;
     CHECK(cli::parseProtoFilter("robot", "", options).has_value());
     CHECK(cli::parseProtoFilter("", "gun", options).has_value());
@@ -298,7 +240,7 @@ TEST_CASE("parseProtoFilter rejects what it cannot honour", "[proto][export]") {
     CHECK(options.itemType == ItemType::Key);
 }
 
-TEST_CASE("exportProtos without mounted data is an error", "[proto][export]") {
+TEST_CASE("exportProtos without mounted data is an error", "[proto_export][cli]") {
     resource::GameResources resources;
     std::ostringstream oss;
     CHECK(cli::exportProtos(resources, {}, oss) == 1);

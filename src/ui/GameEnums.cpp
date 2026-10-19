@@ -1,6 +1,5 @@
 #include "GameEnums.h"
 
-#include "util/AmmoCaliberNames.h"
 #include "util/FalloutEngineEnums.h"
 #include "util/MessageEnumUtils.h"
 #include "util/ProHelper.h"
@@ -61,14 +60,6 @@ namespace {
         }
 
         throw std::runtime_error(QString("Missing or incomplete %1 labels").arg(label).toStdString());
-    }
-
-    std::vector<std::string> requireAmmoCaliberNames(const Msg* protoMsg) {
-        if (auto names = ammoCaliberNamesFromProtoMsg(protoMsg)) {
-            return *names;
-        }
-
-        throw std::runtime_error("Missing or incomplete proto.msg caliber labels");
     }
 
     template <typename Enum>
@@ -133,7 +124,7 @@ QStringList materialTypes(resource::GameResources& resources) {
 }
 
 QStringList ammoCaliberTypes(resource::GameResources& resources) {
-    return toQStringList(requireAmmoCaliberNames(ProHelper::protoMsgFile(resources)));
+    return requireProtoEnumNames(resources, fallout::CaliberType::None, "proto.msg caliber");
 }
 
 QVector<EnumOption> allPerkOptions(resource::GameResources& resources) {

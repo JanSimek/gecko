@@ -1,5 +1,6 @@
 #include "GameLauncher.h"
 
+#include "reader/TextParsing.h"
 #include "resource/GameResources.h"
 #include "resource/MapFileIO.h"
 #include "ui/Settings.h"
@@ -34,11 +35,8 @@ namespace {
         return line.substr(first, line.find_last_not_of(" \t\r\n") - first + 1);
     }
 
-    /** Lower-case @p text so file names compare the way the engine treats them. */
-    std::string lowercased(std::string text) {
-        std::ranges::transform(text, text.begin(), [](unsigned char ch) { return std::tolower(ch); });
-        return text;
-    }
+    // File names compare lowercased, the way the engine treats them.
+    using text::toLower;
 
     /**
      * The key of an ini assignment, or nullopt when the line holds none. `key = value` and a
@@ -218,7 +216,7 @@ namespace {
     /** Compare one path component. Windows paths are case-insensitive, including the drive letter. */
     bool pathPartsEqual(const std::filesystem::path& left, const std::filesystem::path& right) {
 #ifdef _WIN32
-        return lowercased(left.string()) == lowercased(right.string());
+        return toLower(left.string()) == toLower(right.string());
 #else
         return left == right;
 #endif
@@ -329,7 +327,7 @@ namespace {
             if (!entry.is_regular_file(ec)) {
                 continue;
             }
-            std::string name = lowercased(entry.path().filename().string());
+            std::string name = toLower(entry.path().filename().string());
             if (std::ranges::find(fixedNames, name) != fixedNames.end() || isPatchArchiveName(name)) {
                 names.push_back(std::move(name));
             }
@@ -342,7 +340,7 @@ namespace {
         std::vector<std::string> archives;
         std::error_code ec;
         for (const auto& entry : std::filesystem::directory_iterator(modsDirectory, ec)) {
-            if (entry.is_regular_file(ec) && lowercased(entry.path().extension().string()) == ".dat") {
+            if (entry.is_regular_file(ec) && toLower(entry.path().extension().string()) == ".dat") {
                 archives.push_back(entry.path().filename().string());
             }
         }
@@ -510,7 +508,7 @@ EditorDataMountPlan planEditorDataMounts(const std::filesystem::path& gameDataDi
             continue;
         }
 
-        if (std::ranges::find(engineArchivesInGameFolder, lowercased(dataPath.filename().string()))
+        if (std::ranges::find(engineArchivesInGameFolder, toLower(dataPath.filename().string()))
             != engineArchivesInGameFolder.end()) {
             // The game opens its own copy of this archive at the bottom of the chain. Mounting the
             // editor's copy as a mod would put untouched base data above every mod the player has.
@@ -582,6 +580,23 @@ std::string applyManagedModsOrderBlock(const std::string& existingContent, const
     }
     content += std::string(kManagedBlockEnd) + lineEnding;
     return content;
+}
+
+std::optional<std::filesystem::path> findGameExecutable(const std::filesystem::path& installation) {
+    if (installation.extension() == ".app") {
+        return installation;
+    }
+    static constexpr std::array<const char*, 8> kExecutableNames = {
+        "fallout2.exe", "Fallout2.exe", "fallout2", "Fallout2",
+        "fallout2-ce.exe", "Fallout2-ce.exe", "fallout2-ce", "Fallout2-ce"
+    };
+    std::error_code ec;
+    for (const char* name : kExecutableNames) {
+        if (std::filesystem::is_regular_file(installation / name, ec)) {
+            return installation / name;
+        }
+    }
+    return std::nullopt;
 }
 
 std::optional<std::filesystem::path> macOsBundleDataRoot(const std::filesystem::path& executablePath) {

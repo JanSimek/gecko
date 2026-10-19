@@ -2,61 +2,38 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <system_error>
 
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
 #include "util/ProHelper.h"
 
+#include "support/DataTree.h"
+
 namespace fs = std::filesystem;
 using geck::ProHelper;
 using geck::resource::GameResources;
 
-namespace {
+TEST_CASE("ProHelper::basePath resolves a 1-based PID index to its LST entry", "[pro_helper]") {
+    geck::test::DataTree tree{ "geck_prohelper_test" };
+    tree.write("proto/items/items.lst", "knife.pro\nspear.pro\n");
 
-void writeFile(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream(path) << contents;
-}
-
-// ObjectType::Item == 0, so an item PID is just its (1-based) LST index.
-uint32_t itemPid(uint32_t index) {
-    return geck::ProtoId(geck::ObjectType::Item, index).pid();
-}
-
-} // namespace
-
-TEST_CASE("ProHelper::basePath resolves a 1-based PID index to its LST entry", "[prohelper][pro]") {
-    const fs::path root = fs::path(GECK_TEST_TMP_DIR) / "geck_prohelper_test";
-    std::error_code ec;
-    fs::remove_all(root, ec);
-    writeFile(root / "proto/items/items.lst", "knife.pro\nspear.pro\n");
-
-    GameResources resources;
-    resources.files().addDataPath(root.string());
+    auto& resources = tree.mount();
 
     // The PID index is 1-based: index 1 maps to the first LST line.
-    CHECK(ProHelper::basePath(resources, itemPid(1)) == "proto/items/knife.pro");
-    CHECK(ProHelper::basePath(resources, itemPid(2)) == "proto/items/spear.pro");
-
-    fs::remove_all(root, ec);
+    CHECK(ProHelper::basePath(resources, geck::ProtoId(geck::ObjectType::Item, 1).pid()) == "proto/items/knife.pro");
+    CHECK(ProHelper::basePath(resources, geck::ProtoId(geck::ObjectType::Item, 2).pid()) == "proto/items/spear.pro");
 }
 
-TEST_CASE("ProHelper::basePath rejects out-of-range PID indices", "[prohelper][pro]") {
-    const fs::path root = fs::path(GECK_TEST_TMP_DIR) / "geck_prohelper_test_oob";
-    std::error_code ec;
-    fs::remove_all(root, ec);
-    writeFile(root / "proto/items/items.lst", "knife.pro\n");
+TEST_CASE("ProHelper::basePath rejects out-of-range PID indices", "[pro_helper]") {
+    geck::test::DataTree tree{ "geck_prohelper_test_oob" };
+    tree.write("proto/items/items.lst", "knife.pro\n");
 
-    GameResources resources;
-    resources.files().addDataPath(root.string());
+    auto& resources = tree.mount();
 
     // Index 0 is invalid (PIDs are 1-based) and must be rejected rather than
     // underflowing the index - 1 LST lookup into an out-of-range access.
-    CHECK_THROWS(ProHelper::basePath(resources, itemPid(0)));
+    CHECK_THROWS(ProHelper::basePath(resources, geck::ProtoId(geck::ObjectType::Item, 0).pid()));
     // An index past the end of the LST is rejected too.
-    CHECK_THROWS(ProHelper::basePath(resources, itemPid(2)));
-
-    fs::remove_all(root, ec);
+    CHECK_THROWS(ProHelper::basePath(resources, geck::ProtoId(geck::ObjectType::Item, 2).pid()));
 }

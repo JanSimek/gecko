@@ -33,8 +33,8 @@ public:
 
     virtual Map* getMap() const = 0;
 
-    virtual void updateTileSprite(int hexIndex, bool isRoof) = 0;
-    virtual void updateTileSprite(int hexIndex, bool isRoof, int elevation) = 0;
+    virtual void updateTileSprite(int tileIndex, bool isRoof) = 0;
+    virtual void updateTileSprite(int tileIndex, bool isRoof, int elevation) = 0;
 
     virtual selection::SelectionManager* getSelectionManager() const = 0;
     virtual ViewportController* getViewportController() const = 0;

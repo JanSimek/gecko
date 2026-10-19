@@ -1,20 +1,25 @@
 name: CI
 
-# Skip CI for docs/text-only changes: a run is suppressed only when EVERY changed file
-# matches one of these patterns (a mixed code+docs change still builds).
+# Skip CI for docs/text-only changes: a run is suppressed only when EVERY changed file is
+# excluded (a mixed code+docs change still builds). Later patterns win, so the trailing
+# positive pattern re-includes scripts/README.md, which a test reads.
 on:
   push:
     branches: [ master, develop ]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - '!LICENSE'
+      - 'scripts/README.md'
   pull_request:
     branches: [ master, develop ]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - '!LICENSE'
+      - 'scripts/README.md'
   workflow_dispatch:
 
 # Cancel superseded runs for the same branch/PR so the queue doesn't pile up with stale
@@ -151,13 +156,11 @@ jobs:
         # Xvfb gives SFML a display (Mesa GL), so the render tests run instead of skipping;
         # Qt keeps the offscreen platform rather than needing the xcb plugin's libraries.
         export QT_QPA_PLATFORM=offscreen
-        # Under the sanitizers: fail on the first UB report, skip LeakSanitizer (Qt and the GL driver
-        # hold process-lifetime allocations), and leave out the timing-based performance suite.
+        # Under the sanitizers: fail on the first UB report and skip LeakSanitizer (Qt and the GL
+        # driver hold process-lifetime allocations).
         export ASAN_OPTIONS=detect_leaks=0
         export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
-        exclude=""
-        if [ "${{ matrix.sanitizers }}" = "ON" ]; then exclude="-E performance_tests"; fi
-        xvfb-run -a -s "-screen 0 1280x1024x24" ctest --test-dir build --output-on-failure --parallel --timeout 600 $exclude
+        xvfb-run -a -s "-screen 0 1280x1024x24" ctest --test-dir build --output-on-failure --parallel --timeout 600
 
   build-macos:
     name: macOS - ${{ matrix.build_type }}

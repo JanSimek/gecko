@@ -102,7 +102,7 @@ void Application::loadMap(const std::filesystem::path& mapPath) {
     // MapLoader is Qt-free; LoadingWidget owns it once added, so the callback uses
     // a handle to read its error message and present it here on the main thread.
     auto loaderHandle = std::make_shared<MapLoader*>(nullptr);
-    auto mapLoader = std::make_unique<MapLoader>(_resources, mapPath, -1, true, [this, loaderHandle](auto map) {
+    auto mapLoader = std::make_unique<MapLoader>(_resources, mapPath, true, [this, loaderHandle](auto map) {
         if (map) {
             auto editorWidget = std::make_unique<EditorWidget>(*_resources, std::move(map));
             _mainWindow->setEditorWidget(std::move(editorWidget));
@@ -158,7 +158,7 @@ std::string Application::processCommandLineArgs() {
         spdlog::info("No data paths in settings, will use command line default: {}", dataPath.toStdString());
 
         // Expand a folder into the folder + its master.dat/critter.dat so the DATs are explicit,
-        // mounted entries (DataFileSystem no longer nested-mounts them). Add to settings, don't save/load yet.
+        // mounted entries (DataFileSystem does not nested-mount them). Add to settings, don't save/load yet.
         for (const auto& entry : util::expandDataPaths({ std::filesystem::path(dataPath.toStdString()) })) {
             settings.addDataPath(entry);
         }

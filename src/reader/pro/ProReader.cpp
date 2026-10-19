@@ -14,9 +14,13 @@ namespace geck {
  */
 std::unique_ptr<Pro> ProReader::read() {
     try {
-        FormatValidator::validateProFile(getBinaryUtils(), _path);
-
         auto& utils = getBinaryUtils();
+
+        // A PRO header carries no magic or version to check, so its minimum size is the whole validation.
+        constexpr size_t MIN_PRO_SIZE = 24;
+        if (const size_t size = utils.getPosition().total; size < MIN_PRO_SIZE) {
+            throw UnsupportedFormatException(ErrorMessages::invalidFileSize(_path, size, MIN_PRO_SIZE), _path);
+        }
 
         auto pro = std::make_unique<Pro>(_path);
 
@@ -123,15 +127,6 @@ std::unique_ptr<Pro> ProReader::read() {
                         pro->weaponData.ammoPID = utils.readBE32Signed();
                         pro->weaponData.ammoCapacity = utils.readBE32();
                         pro->weaponData.soundId = utils.readU8();
-
-                        // gecko's own trailing word, past the end of the engine's weapon record (see
-                        // Pro::WeaponData::weaponFlags); shipped weapon protos never carry it.
-                        if (utils.bytesRemaining() >= Pro::FIELD_SIZE_BYTES) {
-                            pro->weaponData.weaponFlags = utils.readBE32();
-                        } else {
-                            pro->weaponData.weaponFlags = 0; // Default value for compatibility
-                            spdlog::debug("Weapon PRO has no trailing weaponFlags word (engine layout)");
-                        }
                         break;
                     }
                     case ItemType::Ammo: {

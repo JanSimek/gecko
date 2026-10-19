@@ -38,7 +38,6 @@ public:
 
     // Data paths management
     void addDataPath(const std::filesystem::path& path);
-    void removeDataPath(const std::filesystem::path& path);
     std::vector<std::filesystem::path> getDataPaths() const;
     void setDataPaths(const std::vector<std::filesystem::path>& paths);
 
@@ -117,7 +116,6 @@ public:
     // Game location configuration
     std::filesystem::path getGameLocation() const;
     bool isGameLocationValid() const;
-    void autoDetectGameLocation();
 
     std::filesystem::path getExecutableGameLocation() const;
     void setExecutableGameLocation(const std::filesystem::path& location);
@@ -158,7 +156,6 @@ private:
     bool _edgeScrollEnabled = true;      // Default: auto-scroll when the cursor rests near an edge
     QStringList _collapsedSections;      // Default: every section expanded
     QMap<QString, QByteArray> _floatingDockGeometries;
-    QString _version;
 
     // Text editor configuration
     TextEditorMode _textEditorMode = TextEditorMode::SYSTEM_DEFAULT;
@@ -173,9 +170,6 @@ private:
     std::filesystem::path _gameDataDirectory;
 
     // Constants
-    // 1.1: data paths store each DAT as an explicit entry (no silent nested-mounting). fromJson
-    // migrates older "1.0" settings by expanding folders into folder + master.dat/critter.dat.
-    static constexpr const char* SETTINGS_VERSION = "1.1";
     static constexpr const char* SETTINGS_FILENAME = "settings.json";
     static constexpr const char* ORGANIZATION_NAME = "gecko";
     static constexpr const char* APPLICATION_NAME = "editor";

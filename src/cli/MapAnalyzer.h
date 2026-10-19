@@ -1,5 +1,7 @@
 #pragma once
 
+#include <nlohmann/json.hpp>
+
 #include <iosfwd>
 #include <string>
 #include <vector>
@@ -52,6 +54,10 @@ struct AnalyzeOptions {
 // Headless: reads the DAT/VFS through GameResources without ever touching the GL-bound
 // TextureManager. Shared by the gecko-cli frontend (and, later, the MCP server).
 int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& options, std::ostream& out);
+
+// The JSON report analyzeMaps writes with `json` set, as a value: { maps: [per-map report], aggregate }.
+// A map that cannot be read is left out of `maps`.
+nlohmann::ordered_json analyzeMapsJson(resource::GameResources& resources, const std::vector<std::string>& mapPaths);
 
 struct DumpGridOptions {
     // The single map to dump (VFS path, e.g. "maps/desert6.map"), required.

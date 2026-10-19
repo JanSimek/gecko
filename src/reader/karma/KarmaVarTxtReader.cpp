@@ -13,7 +13,8 @@ namespace {
     using geck::text::trim;
 } // namespace
 
-KarmaVarTxt parseKarmaVarTxt(std::istream& in) {
+KarmaVarTxt parseKarmaVarTxt(const std::string& text) {
+    std::istringstream in(text);
     KarmaVarTxt out;
     std::string line;
     while (std::getline(in, line)) {
@@ -29,11 +30,6 @@ KarmaVarTxt parseKarmaVarTxt(std::istream& in) {
             intOr(tokens[3], -1) });
     }
     return out;
-}
-
-KarmaVarTxt parseKarmaVarTxt(const std::string& text) {
-    std::istringstream in(text);
-    return parseKarmaVarTxt(in);
 }
 
 } // namespace geck

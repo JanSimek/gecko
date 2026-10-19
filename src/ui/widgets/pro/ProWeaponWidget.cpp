@@ -39,12 +39,12 @@ void ProWeaponWidget::setupUI() {
     QWidget* leftColumn = new QWidget();
     QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    leftLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     QWidget* rightColumn = new QWidget();
     QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
-    rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    rightLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     // === LEFT COLUMN: Damage & Attack ===
 
@@ -134,8 +134,9 @@ void ProWeaponWidget::setupUI() {
     _weaponSoundIdEdit = createSpinBox(0, 255, "Sound ID for weapon");
     miscLayout->addRow("Sound ID:", _weaponSoundIdEdit);
 
-    _weaponEnergyWeaponCheck = new QCheckBox("Energy weapon flag (sfall feature)");
-    _weaponEnergyWeaponCheck->setToolTip("Forces weapon to use Energy Weapons skill");
+    _weaponEnergyWeaponCheck = new QCheckBox("Energy weapon (sfall)");
+    _weaponEnergyWeaponCheck->setToolTip("sfall only: extended flag 0x0400 forces the Energy Weapons skill. "
+                                         "fallout2-ce ignores it and picks the skill from the damage type.");
     connectCheckBox(_weaponEnergyWeaponCheck);
     miscLayout->addRow("", _weaponEnergyWeaponCheck);
 
@@ -193,10 +194,8 @@ void ProWeaponWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (_weaponSoundIdEdit)
         _weaponSoundIdEdit->setValue(static_cast<int>(_weaponData.soundId));
 
-    // weaponFlags bit 0x1 = energy weapon flag (sfall feature)
-    if (_weaponEnergyWeaponCheck && pro->weaponData.weaponFlags) {
-        _weaponEnergyWeaponCheck->setChecked((pro->weaponData.weaponFlags & 0x1) != 0);
-    }
+    if (_weaponEnergyWeaponCheck)
+        _weaponEnergyWeaponCheck->setChecked(Pro::hasFlag(pro->commonItemData.flagsExt, Pro::ExtendedItemFlags::ENERGY));
 
     updateAIPriority();
 }
@@ -237,16 +236,13 @@ void ProWeaponWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     if (_weaponSoundIdEdit)
         _weaponData.soundId = static_cast<uint8_t>(_weaponSoundIdEdit->value());
 
-    // Whole-struct copy carries weaponFlags through unchanged; the energy-weapon
-    // bit below is then applied on top of the value loaded from the PRO.
     pro->weaponData = _weaponData;
 
+    // Touch only the energy bit; the other extended-flags bits stay as the PRO holds them.
     if (_weaponEnergyWeaponCheck) {
-        if (_weaponEnergyWeaponCheck->isChecked()) {
-            pro->weaponData.weaponFlags |= 0x1;
-        } else {
-            pro->weaponData.weaponFlags &= ~0x1;
-        }
+        auto& flagsExt = pro->commonItemData.flagsExt;
+        flagsExt = _weaponEnergyWeaponCheck->isChecked() ? Pro::setFlag(flagsExt, Pro::ExtendedItemFlags::ENERGY)
+                                                         : Pro::clearFlag(flagsExt, Pro::ExtendedItemFlags::ENERGY);
     }
 }
 

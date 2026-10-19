@@ -8,7 +8,7 @@
 #include <spdlog/spdlog.h>
 
 #include "format/lst/Lst.h"
-#include "reader/ErrorMessages.h"
+#include "reader/TextParsing.h"
 
 namespace geck {
 
@@ -29,9 +29,7 @@ std::string parseLine(std::string line) {
     // normalize backslash paths to forward slashes
     std::replace(line.begin(), line.end(), '\\', '/');
 
-    std::transform(line.begin(), line.end(), line.begin(), ::tolower);
-
-    return line;
+    return text::toLower(line);
 }
 
 // The human-readable comment after ';' on an LST line (e.g. a script's description in scripts.lst), with
@@ -71,11 +69,6 @@ std::unique_ptr<Lst> LstReader::read() {
         auto pos = utils.getPosition();
         spdlog::trace("LST file size: {} bytes", pos.total);
 
-        // LST files can be empty, but validate format if non-empty
-        if (pos.total > 0) {
-            FormatValidator::validateLstFile(utils, _path);
-        }
-
         std::vector<std::string> list;
         std::vector<std::string> comments;
         std::vector<int> localVars;
@@ -85,6 +78,16 @@ std::unique_ptr<Lst> LstReader::read() {
         if (pos.total == 0) {
             spdlog::debug("Empty LST file");
         } else {
+            // LST files are text: reject one whose first bytes are not printable ASCII.
+            const size_t checkBytes = std::min(pos.total, size_t(64));
+            for (size_t i = 0; i < checkBytes; ++i) {
+                const uint8_t byte = utils.readU8();
+                if (byte != '\r' && byte != '\n' && byte != '\t' && (byte < 32 || byte > 126)) {
+                    throw UnsupportedFormatException("LST file contains non-text data", _path);
+                }
+            }
+            utils.setPosition(0);
+
             std::string contents = utils.readFixedString(pos.total);
 
             std::istringstream stream(contents);

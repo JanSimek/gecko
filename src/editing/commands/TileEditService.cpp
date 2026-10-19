@@ -32,7 +32,7 @@ namespace {
         const std::function<void(int, bool, int)>& updateTileSprite) {
         for (const auto* change : changes) {
             if (change->tileIndex >= 0 && change->tileIndex < static_cast<int>(tileCount)) {
-                updateTileSprite(tileIndexToHexIndex(change->tileIndex), change->isRoof, elevation);
+                updateTileSprite(change->tileIndex, change->isRoof, elevation);
             }
         }
     }

@@ -10,12 +10,6 @@
 
 using namespace geck;
 
-namespace {
-std::vector<uint8_t> bytesOf(std::string_view s) {
-    return std::vector<uint8_t>(s.begin(), s.end());
-}
-} // namespace
-
 TEST_CASE("LstReader trims comments, normalizes slashes, lowercases and skips blanks", "[lst]") {
     const std::string content = "ART/items/KNIFE.FRM ; a knife\r\n" // trailing comment + CRLF
                                 "art\\scenery\\TREE.frm\n"          // backslashes -> forward slashes, LF
@@ -25,7 +19,7 @@ TEST_CASE("LstReader trims comments, normalizes slashes, lowercases and skips bl
                                 "PLAIN.frm";                        // last line, no trailing newline
 
     LstReader reader;
-    auto lst = reader.openFile("synthetic.lst", bytesOf(content));
+    auto lst = reader.openFile("synthetic.lst", geck::test::bytesOf(content));
 
     REQUIRE(lst != nullptr);
     const auto& list = lst->list();
@@ -43,7 +37,7 @@ TEST_CASE("LstReader captures the ';' comment per entry, dropping '#' metadata",
                                 "spaced.int   ;   padded comment   \n"; // trimmed both ends
 
     LstReader reader;
-    auto lst = reader.openFile("synthetic.lst", bytesOf(content));
+    auto lst = reader.openFile("synthetic.lst", geck::test::bytesOf(content));
     REQUIRE(lst != nullptr);
 
     const auto& list = lst->list();
@@ -66,14 +60,14 @@ TEST_CASE("LstReader keeps each scripts.lst entry's local_vars count", "[lst]") 
                                 "odd.int         ; # local_vars=4 and more text\n";
 
     LstReader reader;
-    auto lst = reader.openFile("scripts.lst", bytesOf(content));
+    auto lst = reader.openFile("scripts.lst", geck::test::bytesOf(content));
     REQUIRE(lst != nullptr);
     CHECK(lst->localVars() == std::vector<int>{ 10, 0, 0, 4 });
 }
 
 TEST_CASE("LstReader at() indexes entries from zero", "[lst]") {
     LstReader reader;
-    auto lst = reader.openFile("x.lst", bytesOf("first.frm\nsecond.frm\n"));
+    auto lst = reader.openFile("x.lst", geck::test::bytesOf("first.frm\nsecond.frm\n"));
 
     REQUIRE(lst != nullptr);
     REQUIRE(lst->list().size() == 2);

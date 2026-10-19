@@ -13,7 +13,8 @@ namespace {
     using geck::text::trim;
 } // namespace
 
-HolodiskTxt parseHolodiskTxt(std::istream& in) {
+HolodiskTxt parseHolodiskTxt(const std::string& text) {
+    std::istringstream in(text);
     HolodiskTxt out;
     std::string line;
     while (std::getline(in, line)) {
@@ -28,11 +29,6 @@ HolodiskTxt parseHolodiskTxt(std::istream& in) {
         out.holodisks.push_back({ intOr(tokens[0], -1), intOr(tokens[1], -1), intOr(tokens[2], -1) });
     }
     return out;
-}
-
-HolodiskTxt parseHolodiskTxt(const std::string& text) {
-    std::istringstream in(text);
-    return parseHolodiskTxt(in);
 }
 
 } // namespace geck

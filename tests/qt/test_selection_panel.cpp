@@ -1,9 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <QApplication>
-#include <QDir>
-#include <QFile>
-#include <QTemporaryDir>
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
@@ -21,6 +18,10 @@
 #include "ui/theme/ThemeManager.h"
 #include "ui/widgets/CollapsibleSection.h"
 #include "ui/widgets/ElidedLabel.h"
+
+#include "support/DataTree.h"
+#include "support/MapObjectBuilder.h"
+#include "support/QtFind.h"
 
 using namespace geck;
 
@@ -41,7 +42,7 @@ int panelChrome(const SelectionPanel& panel) {
 // edits and button rows - so the default 360 px dock scrolled sideways and had to be widened by hand.
 // Show every section an object can have, fill every value with text far wider than the dock, and the
 // panel must still fit: values shorten, warnings wrap, nothing sets a minimum from its content.
-TEST_CASE("Selection panel's object view fits the default dock width whatever it shows", "[ui][selection]") {
+TEST_CASE("Selection panel's object view fits the default dock width whatever it shows", "[selection_panel]") {
     resource::GameResources resources;
     SelectionPanel panel(resources);
 
@@ -75,19 +76,15 @@ TEST_CASE("Selection panel's object view fits the default dock width whatever it
     CHECK(needed <= ui::constants::sizes::PANEL_PREFERRED_WIDTH);
 }
 
-TEST_CASE("Selection panel remembers which sections are collapsed", "[ui][selection]") {
+TEST_CASE("Selection panel remembers which sections are collapsed", "[selection_panel]") {
     resource::GameResources resources;
     auto settings = std::make_shared<Settings>();
     settings->setCollapsedSections({});
 
     {
         SelectionPanel panel(resources, settings);
-        CollapsibleSection* script = nullptr;
-        for (auto* section : panel.findChildren<CollapsibleSection*>()) {
-            if (section->key() == "selection.script") {
-                script = section;
-            }
-        }
+        CollapsibleSection* script = test::findChildWhere<CollapsibleSection>(panel,
+            [](const CollapsibleSection& section) { return section.key() == "selection.script"; });
         REQUIRE(script != nullptr);
         REQUIRE(script->isExpanded());
 
@@ -107,25 +104,19 @@ TEST_CASE("Selection panel remembers which sections are collapsed", "[ui][select
 
 // The Script section reports what the script's parsed source does wrong (resource::ScriptLinter) and
 // when the map puts the script's local variables where another script's are.
-TEST_CASE("Script section shows the script's lint findings and an overlapping local variable block", "[ui][selection]") {
-    QTemporaryDir data;
-    QDir(data.path()).mkpath("scripts");
-    QFile lst(data.filePath("scripts/scripts.lst"));
-    REQUIRE(lst.open(QIODevice::WriteOnly));
-    lst.write("one.int ; first  # local_vars=4\nother.int ; second  # local_vars=2\n");
-    lst.close();
-    resource::GameResources resources;
-    resources.files().addDataPath(data.path().toStdString());
+TEST_CASE("Script section shows the script's lint findings and an overlapping local variable block", "[selection_panel]") {
+    test::DataTree data("selection-script");
+    data.write("scripts/scripts.lst", "one.int ; first  # local_vars=4\nother.int ; second  # local_vars=2\n");
+    resource::GameResources& resources = data.mount();
 
-    Map map("testmap.map");
-    map.setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
+    auto map = test::mapOf("testmap.map");
     auto script = MapScript::makeObjectScript(MapScript::ScriptType::CRITTER, 0, 0, 42);
     script.local_var_offset = 0;
-    map.getMapFile().map_scripts[static_cast<int>(MapScript::ScriptType::CRITTER)].push_back(script);
+    map->getMapFile().map_scripts[static_cast<int>(MapScript::ScriptType::CRITTER)].push_back(script);
     auto other = MapScript::makeObjectScript(MapScript::ScriptType::ITEM, 1, 1, 43);
     other.local_var_offset = 2; // inside one.int's block 0-3
-    map.getMapFile().map_scripts[static_cast<int>(MapScript::ScriptType::ITEM)].push_back(other);
-    map.getMapFile().map_local_vars = { 0, 0, 0, 0, 0, 0 };
+    map->getMapFile().map_scripts[static_cast<int>(MapScript::ScriptType::ITEM)].push_back(other);
+    map->getMapFile().map_local_vars = { 0, 0, 0, 0, 0, 0 };
 
     auto critter = std::make_shared<MapObject>();
     critter->pro_pid = 0x01000003;
@@ -154,16 +145,14 @@ TEST_CASE("Script section shows the script's lint findings and an overlapping lo
             { "src/headers/shared.h", 30 }, "talk_p_proc" });
         return status;
     });
-    section.showObject(&map, critter);
+    section.showObject(map.get(), critter);
 
-    QString shown;
-    for (const auto* label : section.findChildren<QLabel*>()) {
-        if (label->isVisibleTo(&section)) {
-            shown += label->text() + "\n";
-        }
+    for (const QString& expected : { QStringLiteral("Sets the AI packet to AI_CALM (2) on map entry (map_enter_p_proc, line 12), replacing the map's 1"),
+             QStringLiteral("shared.h line 30: message 150 is not in dialog/one.msg"),
+             QStringLiteral("other.int") }) { // the overlap finding names the other script (exact text: test_script_lint)
+        INFO(expected.toStdString());
+        const QLabel* label = test::labelContaining(section, expected);
+        REQUIRE(label != nullptr);
+        CHECK(label->isVisibleTo(&section));
     }
-    INFO(shown.toStdString());
-    CHECK(shown.contains("Sets the AI packet to AI_CALM (2) on map entry (map_enter_p_proc, line 12), replacing the map's 1"));
-    CHECK(shown.contains("shared.h line 30: message 150 is not in dialog/one.msg"));
-    CHECK(shown.contains("Its local variables 0-3 overlap those of other.int, so they share them."));
 }

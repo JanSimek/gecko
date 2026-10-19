@@ -5,6 +5,7 @@
 #include "format/frm/Frm.h"
 #include "format/frm/FrmId.h"
 #include "format/lst/Lst.h"
+#include "reader/TextParsing.h"
 #include "util/Constants.h"
 #include "resource/CritterFrmResolver.h"
 #include "resource/ResourcePaths.h"
@@ -12,7 +13,6 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
-#include <cctype>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -45,22 +45,13 @@ namespace {
         return std::string(text.substr(first, last - first + 1));
     }
 
-    bool equalsIgnoreCase(std::string_view a, std::string_view b) {
-        return a.size() == b.size()
-            && std::equal(a.begin(), a.end(), b.begin(), [](char lhs, char rhs) {
-                   return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
-               });
-    }
-
 } // namespace
 
 bool hasFrmExtension(std::string_view filename) {
     if (filename.size() < 4) {
         return false;
     }
-    std::string ext = trimmed(filename.substr(filename.size() - 4));
-    std::transform(ext.begin(), ext.end(), ext.begin(),
-        [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+    const std::string ext = text::toLower(trimmed(filename.substr(filename.size() - 4)));
     return ext == ".frm" || ext == ".fr0" || ext == ".fr1" || ext == ".fr2"
         || ext == ".fr3" || ext == ".fr4" || ext == ".fr5";
 }
@@ -167,7 +158,7 @@ std::optional<uint32_t> FrmResolver::resolveFid(const std::string& artPath) {
                 const std::string baseName = trimmed(
                     commaPos != std::string::npos ? std::string_view(entries[i]).substr(0, commaPos) : std::string_view(entries[i]));
                 if (!baseName.empty() && CritterFrmResolver::matchesCritterBase(baseName, filename)) {
-                    const uint32_t fid = CritterFrmResolver::deriveCritterFrmPid(baseName, filename, static_cast<uint32_t>(i));
+                    const uint32_t fid = CritterFrmResolver::deriveCritterFrmPid(filename, static_cast<uint32_t>(i));
                     if (fid != 0) {
                         return fid;
                     }
@@ -176,7 +167,7 @@ std::optional<uint32_t> FrmResolver::resolveFid(const std::string& artPath) {
             }
 
             const std::string entry = trimmed(entries[i]);
-            if (!entry.empty() && equalsIgnoreCase(entry, filename)) {
+            if (!entry.empty() && text::equalsIgnoreCase(entry, filename)) {
                 // A FID holds a 12-bit frame id, so a later entry has no FID that names it.
                 if (i > FrmId::MAX_FRAME_ID) {
                     return std::nullopt;

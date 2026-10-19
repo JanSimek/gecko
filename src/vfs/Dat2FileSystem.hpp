@@ -16,24 +16,11 @@
 #include "format/dat/Dat.h"
 #include "reader/dat/DatReader.h"
 
-// vfspp's IFileSystem declares CreateFile / CopyFile. On Windows <windows.h>
-// (pulled in transitively by the headers above) rewrites those names to ...A,
-// which breaks the overrides below. Undo the macros *after* the includes so our
-// method names still match the base class.
-#ifdef _WIN32
-#ifdef CreateFile
-#undef CreateFile
-#endif
-#ifdef CopyFile
-#undef CopyFile
-#endif
-#endif
+// After the includes above, which may pull in <windows.h>, so the overrides below match the base.
+#include "vfs/UndefWindowsFileMacros.h"
 
 namespace geck {
 namespace fs = std::filesystem;
-
-using GeckDat2FileSystemPtr = std::shared_ptr<class GeckDat2FileSystem>;
-using GeckDat2FileSystemWeakPtr = std::weak_ptr<class GeckDat2FileSystem>;
 
 // Mounts a Fallout 2 DAT2 archive into the vfspp virtual filesystem. Entries are
 // keyed by their virtual path (alias + forward-slashed archive path) and served
@@ -69,9 +56,10 @@ public:
         return m_IsInitialized;
     }
 
+    // Empty: DAT entries are addressed purely by alias.
     [[nodiscard]] const std::string& BasePath() const override {
-        [[maybe_unused]] auto lock = vfspp::ThreadingPolicy::Lock(m_Mutex);
-        return m_BasePath;
+        static const std::string NO_BASE_PATH;
+        return NO_BASE_PATH;
     }
 
     [[nodiscard]] const std::string& VirtualPath() const override {
@@ -164,7 +152,7 @@ private:
             std::string name = datEntry.first;
             std::replace(name.begin(), name.end(), '\\', '/');
 
-            vfspp::FileInfo fileInfo(m_AliasPath, m_BasePath, name);
+            vfspp::FileInfo fileInfo(m_AliasPath, BasePath(), name);
             m_Files.emplace(fileInfo.VirtualPath(), FileEntry(fileInfo, datEntry.second));
         }
     }
@@ -193,7 +181,6 @@ private:
 
 private:
     std::string m_AliasPath;
-    std::string m_BasePath; // empty: DAT entries are addressed purely by alias
     std::string m_DatPath;
     std::shared_ptr<geck::Dat> m_DatArchive;
     std::shared_ptr<geck::DatReader> m_datReader;

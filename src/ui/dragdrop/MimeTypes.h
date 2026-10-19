@@ -14,12 +14,6 @@ namespace ui {
         /// MIME type for object data (from palette or object list)
         constexpr const char* GECK_OBJECT = "application/x-geck-object";
 
-        /// MIME type for tile data (from tile palette)
-        constexpr const char* GECK_TILE = "application/x-geck-tile";
-
-        /// MIME type for file paths (for file browser drag)
-        constexpr const char* GECK_FILE = "application/x-geck-file";
-
     } // namespace mime
 } // namespace ui
 } // namespace geck

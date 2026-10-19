@@ -13,7 +13,6 @@
 #include "rendering/ToolPreview.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
-#include "util/ColorUtils.h"
 #include "util/Constants.h"
 #include "util/Coordinates.h"
 #include "util/TileUtils.h"
@@ -552,11 +551,6 @@ void RenderingEngine::renderHexHighlights(sf::RenderTarget& target,
     _hexRenderer.renderHighlights(target, *renderData.hexGrid, renderData.currentHoverHex, renderData.playerPositionHex);
 }
 
-bool RenderingEngine::isHexVisible(int hexWorldX, int hexWorldY,
-    const sf::View& view) const {
-    return ViewportController::isHexVisible(hexWorldX, hexWorldY, view);
-}
-
 void RenderingEngine::applySelectionRectangleColors(sf::RectangleShape& rectangle,
     SelectionMode selectionMode) {
     if (selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
@@ -566,8 +560,8 @@ void RenderingEngine::applySelectionRectangleColors(sf::RectangleShape& rectangl
             SelectionColors::SCROLL_BLOCKER_FILL_ALPHA));
         rectangle.setOutlineColor(sf::Color(0, 200, 0, SelectionColors::SCROLL_BLOCKER_OUTLINE_ALPHA));
     } else {
-        rectangle.setFillColor(ColorUtils::createSelectionFillColor());
-        rectangle.setOutlineColor(ColorUtils::createSelectionOutlineColor());
+        rectangle.setFillColor(TileColors::selectionFill());
+        rectangle.setOutlineColor(TileColors::selectionOutline());
     }
 }
 
@@ -597,7 +591,7 @@ void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
         }
         const int cx = hex->get().x();
         const int cy = hex->get().y();
-        if (!isHexVisible(cx, cy, view)) {
+        if (!ViewportController::isHexVisible(cx, cy, view)) {
             continue;
         }
         exitGridSprite.setPosition(sf::Vector2f(static_cast<float>(cx), static_cast<float>(cy)));
@@ -666,7 +660,7 @@ void RenderingEngine::renderSpatialScripts(sf::RenderTarget& target,
         }
         const int cx = hex->get().x();
         const int cy = hex->get().y();
-        if (!isHexVisible(cx, cy, view)) {
+        if (!ViewportController::isHexVisible(cx, cy, view)) {
             continue;
         }
         if (markerSprite) {
@@ -831,7 +825,7 @@ void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const
         }
         const auto hexOptional = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
         if (!hexOptional.has_value()
-            || !isHexVisible(hexOptional.value().get().x(), hexOptional.value().get().y(), view)) {
+            || !ViewportController::isHexVisible(hexOptional.value().get().x(), hexOptional.value().get().y(), view)) {
             continue;
         }
         if (auto previewObject = buildExitGridPreviewObject(renderData, hexIndex, (*frmPids)[i])) {

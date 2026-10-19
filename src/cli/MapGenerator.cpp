@@ -2,9 +2,7 @@
 
 #include "cli/PatternJson.h"
 
-#include <fstream>
 #include <ostream>
-#include <sstream>
 
 #include "resource/GameResources.h"
 
@@ -35,22 +33,13 @@
 #include "rendering/MapSpriteLoader.h"
 #include "util/UndoStack.h"
 #include "resource/MapFileIO.h"
+#include "util/FileIo.h"
 #endif
 
 namespace geck::cli {
 
 #ifdef GECK_SCRIPTING_ENABLED
 namespace {
-
-    std::string readFile(const std::string& path) {
-        std::ifstream file(path, std::ios::binary);
-        if (!file) {
-            return {};
-        }
-        std::ostringstream buffer;
-        buffer << file.rdbuf();
-        return buffer.str();
-    }
 
     // "out/town.map", 3 -> "out/town_3.map" — the per-map output name of a batch run.
     std::string numberedOutPath(const std::string& outPath, int n) {
@@ -64,17 +53,13 @@ namespace {
     // start placed inside solid terrain). Best-effort — a check failure never fails the generate.
     void warnOnUnreachableExits(resource::GameResources& resources, const std::string& mapPath, std::ostream& out) {
         try {
-            std::ostringstream report;
-            if (analyzeReachability(resources, ReachabilityOptions{ mapPath }, report) != 0) {
+            const auto report = reachabilityJson(resources, mapPath);
+            if (!report) {
                 return;
             }
-            const auto json = nlohmann::json::parse(report.str(), nullptr, /*allow_exceptions*/ false);
-            if (!json.is_object() || !json.contains("reachability")) {
-                return;
-            }
-            for (const auto& elevation : json["reachability"]) {
+            for (const auto& elevation : report->at("reachability")) {
                 int unreachable = 0;
-                for (const auto& exit : elevation.value("exits", nlohmann::json::array())) {
+                for (const auto& exit : elevation.value("exits", nlohmann::ordered_json::array())) {
                     // null = the player starts on another elevation; only an explicit false is a finding.
                     const auto reachable = exit.find("reachableFromPlayerStart");
                     if (reachable != exit.end() && reachable->is_boolean() && !reachable->get<bool>()) {
@@ -197,7 +182,7 @@ int generateMap(resource::GameResources& resources, const GenerateOptions& optio
         out << "error: --count must be at least 1.\n";
         return 2;
     }
-    const std::string source = readFile(options.scriptPath);
+    const std::string source = io::readFile(options.scriptPath);
     if (source.empty()) {
         out << "error: cannot read script (or it is empty): " << options.scriptPath << "\n";
         return 2;

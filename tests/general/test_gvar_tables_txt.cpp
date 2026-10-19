@@ -3,8 +3,7 @@
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
-#include <fstream>
-#include <sstream>
+#include <ostream>
 #include <string>
 
 #include "cli/Endings.h"
@@ -18,32 +17,25 @@
 #include "reader/party/PartyTxtReader.h"
 #include "resource/GameResources.h"
 
-#ifndef GECK_TEST_TMP_DIR
-#error "GECK_TEST_TMP_DIR must be defined for this test target (see tests/CMakeLists.txt)"
-#endif
+#include "support/CliJson.h"
+#include "support/TempFile.h"
 
 using namespace geck;
 namespace fs = std::filesystem;
+using geck::test::writeFile;
 
 namespace {
 
-void writeFile(const fs::path& path, const std::string& contents) {
-    fs::create_directories(path.parent_path());
-    std::ofstream(path) << contents;
-}
-
 template <typename Build>
-nlohmann::json run(const fs::path& root, Build build, int& rc) {
+nlohmann::json run(const fs::path& root, Build build) {
     resource::GameResources resources;
     resources.files().addDataPath(root.string());
-    std::ostringstream oss;
-    rc = build(resources, oss);
-    return nlohmann::json::parse(oss.str());
+    return test::runJson([&](std::ostream& out) { return build(resources, out); });
 }
 
 } // namespace
 
-TEST_CASE("parseHolodiskTxt and parseKarmaVarTxt read the engine's flat gvar tables", "[gvar_tables]") {
+TEST_CASE("parseHolodiskTxt and parseKarmaVarTxt read the engine's flat gvar tables", "[gvar_tables_txt]") {
     const HolodiskTxt holodisks = parseHolodiskTxt(std::string{ "# gvar, title, text\n#214, 400, 1000\n220, 401, 2000\n221 402\n" });
     REQUIRE(holodisks.holodisks.size() == 1); // the commented row and the short row are skipped
     CHECK(holodisks.holodisks[0].gvar == 220);
@@ -58,7 +50,7 @@ TEST_CASE("parseHolodiskTxt and parseKarmaVarTxt read the engine's flat gvar tab
     CHECK(karma.entries[1].description == 1101);
 }
 
-TEST_CASE("parsePartyTxt reads members up to the first missing index", "[gvar_tables]") {
+TEST_CASE("parsePartyTxt reads members up to the first missing index", "[gvar_tables_txt]") {
     const PartyTxt party = parsePartyTxt(std::string{ "[Party Member 0]   ; Player\n"
                                                       "party_member_pid=16777216\n"
                                                       "level_pids=-1\n"
@@ -87,16 +79,16 @@ TEST_CASE("parsePartyTxt reads members up to the first missing index", "[gvar_ta
     CHECK(party.members[0].levelPids.empty());
 }
 
-TEST_CASE("Party member level fields need level_up_every", "[gvar_tables]") {
+TEST_CASE("parsePartyTxt ignores level fields without level_up_every", "[gvar_tables_txt]") {
     const PartyTxt party = parsePartyTxt(std::string{ "[Party Member 0]\nparty_member_pid=1\nlevel_minimum=3\nlevel_pids=5,6\n" });
     REQUIRE(party.members.size() == 1);
     CHECK(party.members[0].levelMinimum == 0);
     CHECK(party.members[0].levelPids.empty());
 }
 
-TEST_CASE("The endings, gvars and party tools surface the engine tables", "[gvar_tables]") {
-    const fs::path root = fs::path{ GECK_TEST_TMP_DIR } / "gvar_tables_data";
-    fs::remove_all(root);
+TEST_CASE("The endings, gvars and party tools surface the engine tables", "[gvar_tables_txt][cli]") {
+    const test::TempDir rootDir{ "gvar_tables_data" };
+    const fs::path& root = rootDir.path();
     writeFile(root / "data" / "vault13.gam", "GAME_GLOBAL_VARS:\nGVAR_REP :=0;\nGVAR_DISK :=0;\nGVAR_END :=0;\n");
     writeFile(root / "data" / "karmavar.txt", "0, 48, 1000, 1100\n");
     writeFile(root / "data" / "holodisk.txt", "1, 401, 2000\n");
@@ -110,9 +102,7 @@ TEST_CASE("The endings, gvars and party tools surface the engine tables", "[gvar
     writeFile(root / "text" / "english" / "cuts" / "nar_e.txt", "1:You fell.\n2:The end.\n");
 
     SECTION("endings adds the death endings with the engine's conditions and subtitles") {
-        int rc = -1;
-        const auto j = run(root, cli::buildEndings, rc);
-        REQUIRE(rc == 0);
+        const auto j = run(root, cli::buildEndings);
         REQUIRE(j["deathEndings"].size() == 2);
         CHECK(j["deathEndings"][0]["condition"].is_null()); // gvar -1: no gvar check
         const auto& death = j["deathEndings"][1];
@@ -125,9 +115,7 @@ TEST_CASE("The endings, gvars and party tools surface the engine tables", "[gvar
     }
 
     SECTION("gvars lists each gvar's roles from the data files") {
-        int rc = -1;
-        const auto j = run(root, cli::buildGlobalVars, rc);
-        REQUIRE(rc == 0);
+        const auto j = run(root, cli::buildGlobalVars);
         CHECK(j["gvars"][0]["roles"][0]["kind"] == "karma");
         CHECK(j["gvars"][0]["roles"][0]["title"] == "Saint");
         CHECK(j["gvars"][1]["roles"][0]["kind"] == "holodisk");
@@ -139,9 +127,7 @@ TEST_CASE("The endings, gvars and party tools surface the engine tables", "[gvar
     }
 
     SECTION("party leaves out the player and the -1 level placeholder") {
-        int rc = -1;
-        const auto j = run(root, cli::buildParty, rc);
-        REQUIRE(rc == 0);
+        const auto j = run(root, cli::buildParty);
         REQUIRE(j["members"].size() == 1);
         CHECK(j["members"][0]["pid"] == 16777376);
         CHECK(j["members"][0]["options"]["chemUse"] == nlohmann::json::array({ "clean" }));

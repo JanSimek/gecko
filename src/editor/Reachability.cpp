@@ -5,7 +5,6 @@
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
 
-#include <array>
 #include <exception>
 #include <queue>
 
@@ -38,25 +37,6 @@ bool blocksMovementByInstance(ObjectType objectType, std::uint32_t flags) {
         && !Pro::hasFlag(flags, Pro::ObjectFlags::OBJECT_NO_BLOCK);
 }
 
-std::vector<int> hexNeighbors(int hex) {
-    using namespace hexgrid;
-    static constexpr std::array<Cube, 6> kDirs = {
-        { { 1, -1, 0 }, { 1, 0, -1 }, { 0, 1, -1 }, { -1, 1, 0 }, { -1, 0, 1 }, { 0, -1, 1 } }
-    };
-    std::vector<int> result;
-    if (hex < 0 || hex >= kHexCount) {
-        return result;
-    }
-    const Cube c = cubeOfPosition(hex);
-    for (const Cube& d : kDirs) {
-        const ColRow cr = cubeToOffset(c + d);
-        if (cr.col >= 0 && cr.col < WIDTH && cr.row >= 0 && cr.row < HEIGHT) {
-            result.push_back(cr.row * WIDTH + cr.col);
-        }
-    }
-    return result;
-}
-
 std::vector<int> hexComponents(const std::vector<char>& blocked, std::vector<int>& sizes, std::vector<int>& samples) {
     std::vector<int> component(blocked.size(), -1);
     sizes.clear();
@@ -74,7 +54,7 @@ std::vector<int> hexComponents(const std::vector<char>& blocked, std::vector<int
             const int hex = frontier.front();
             frontier.pop();
             ++size;
-            for (const int neighbour : hexNeighbors(hex)) {
+            for (const int neighbour : hexgrid::neighbors(hex)) {
                 if (!blocked[neighbour] && component[neighbour] == -1) {
                     component[neighbour] = id;
                     frontier.push(neighbour);
@@ -90,7 +70,7 @@ std::vector<int> hexComponents(const std::vector<char>& blocked, std::vector<int
 std::vector<char> blockedMask(resource::GameResources& resources, const std::vector<std::shared_ptr<MapObject>>& objects) {
     std::vector<char> blocked(kHexCount, 0);
     for (const auto& object : objects) {
-        if (!object || object->position < 0 || object->position >= kHexCount) {
+        if (!object || !hexgrid::isValidPosition(object->position)) {
             continue;
         }
         if (!blocksMovementByInstance(object->objectType(), object->flags) || isDoor(resources, *object)) {
@@ -98,7 +78,7 @@ std::vector<char> blockedMask(resource::GameResources& resources, const std::vec
         }
         blocked[object->position] = 1;
         if (Pro::hasFlag(object->flags, Pro::ObjectFlags::OBJECT_MULTIHEX)) {
-            for (const int neighbour : hexNeighbors(object->position)) {
+            for (const int neighbour : hexgrid::neighbors(object->position)) {
                 blocked[neighbour] = 1;
             }
         }
@@ -113,7 +93,7 @@ std::vector<int> entryHexes(int playerDefaultElevation, int playerDefaultPositio
         seeds.push_back(playerDefaultPosition);
     }
     for (const auto& object : objects) {
-        if (object && object->isExitGridMarker() && object->position >= 0 && object->position < kHexCount) {
+        if (object && object->isExitGridMarker() && hexgrid::isValidPosition(object->position)) {
             seeds.push_back(object->position);
         }
     }
@@ -124,10 +104,10 @@ std::vector<char> seedComponentFlags(const std::vector<int>& seeds, const std::v
     const std::vector<int>& component, std::size_t componentCount) {
     std::vector<char> seedFlags(componentCount, 0);
     for (const int seed : seeds) {
-        if (seed >= 0 && seed < kHexCount && !blocked[seed]) {
+        if (hexgrid::isValidPosition(seed) && !blocked[seed]) {
             seedFlags[component[seed]] = 1;
         } else {
-            for (const int neighbour : hexNeighbors(seed)) {
+            for (const int neighbour : hexgrid::neighbors(seed)) {
                 if (!blocked[neighbour]) {
                     seedFlags[component[neighbour]] = 1;
                 }
@@ -138,13 +118,13 @@ std::vector<char> seedComponentFlags(const std::vector<int>& seeds, const std::v
 }
 
 int componentOf(int hex, const std::vector<char>& blocked, const std::vector<int>& component) {
-    if (hex < 0 || hex >= kHexCount) {
+    if (!hexgrid::isValidPosition(hex)) {
         return -1;
     }
     if (!blocked[hex]) {
         return component[hex];
     }
-    for (const int neighbour : hexNeighbors(hex)) {
+    for (const int neighbour : hexgrid::neighbors(hex)) {
         if (!blocked[neighbour]) {
             return component[neighbour];
         }
@@ -153,13 +133,13 @@ int componentOf(int hex, const std::vector<char>& blocked, const std::vector<int
 }
 
 bool reaches(int hex, const std::vector<char>& blocked, const std::vector<int>& component, const std::vector<char>& seedFlags) {
-    if (hex < 0 || hex >= kHexCount) {
+    if (!hexgrid::isValidPosition(hex)) {
         return false;
     }
     if (!blocked[hex] && seedFlags[component[hex]]) {
         return true;
     }
-    for (const int neighbour : hexNeighbors(hex)) {
+    for (const int neighbour : hexgrid::neighbors(hex)) {
         if (!blocked[neighbour] && seedFlags[component[neighbour]]) {
             return true;
         }

@@ -54,19 +54,9 @@ public:
 
     // Runtime configuration
     void setTitle(const QString& title);
-    QString getTitle() const;
-    void setPreviewSize(const QSize& size);
-    void setShowAnimationControls(bool show);
-    void setShowFidField(bool show);
-    void setScaleFactor(double scaleFactor);
 
     // Preview control
     void updatePreview();
-    void stopAnimation();
-
-    // Getters
-    int32_t getFid() const { return _currentFid; }
-    QString getFrmPath() const { return _currentFrmPath; }
 
 signals:
     void fidChangeRequested(); // User clicked FID selector button
@@ -108,7 +98,6 @@ private:
     // Configuration
     PreviewOptions _options;
     QSize _customPreviewSize;
-    QString _title;
     double _scaleFactor;
 
     // Constants

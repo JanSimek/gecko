@@ -52,27 +52,14 @@
         <file alias="filetypes/palette.svg">icons/tabler/filetypes/palette.svg</file>
         <file alias="filetypes/default.svg">icons/tabler/filetypes/file.svg</file>
         <file alias="filetypes/folder.svg">icons/tabler/filetypes/folder.svg</file>
-        <file alias="filetypes/folder-open.svg">icons/tabler/filetypes/folder-open.svg</file>
         
         <!-- UI Elements -->
         <file alias="ui/refresh.svg">icons/tabler/ui/refresh.svg</file>
-        <file alias="ui/grid.svg">icons/tabler/ui/grid-dots.svg</file>
         <file alias="ui/add.svg">icons/tabler/ui/plus.svg</file>
         <file alias="ui/remove.svg">icons/tabler/ui/minus.svg</file>
         <file alias="ui/search.svg">icons/tabler/ui/search.svg</file>
         <file alias="ui/auto-detect.svg">icons/tabler/ui/cpu.svg</file>
         <file alias="ui/warning.svg">icons/tabler/ui/alert-triangle.svg</file>
         <file alias="ui/error.svg">icons/tabler/ui/alert-circle.svg</file>
-        <file alias="ui/info.svg">icons/tabler/ui/info-circle.svg</file>
-        
-        <!-- Panel Icons -->
-        <file alias="panels/info.svg">icons/tabler/panels/info-circle.svg</file>
-        <file alias="panels/selection.svg">icons/tabler/panels/select.svg</file>
-        <file alias="panels/tiles.svg">icons/tabler/panels/layout-grid.svg</file>
-        <file alias="panels/objects.svg">icons/tabler/panels/box-multiple.svg</file>
-        <file alias="panels/files.svg">icons/tabler/panels/files.svg</file>
-        
-        <!-- Welcome Screen -->
-        <file alias="welcome/vault-boy.svg">images/vault-boy.svg</file>
     </qresource>
 </RCC>

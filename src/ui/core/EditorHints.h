@@ -4,7 +4,7 @@
 
 #include <functional>
 
-#include "ui/core/EditorMode.h"
+#include "editing/EditorMode.h"
 
 namespace geck {
 

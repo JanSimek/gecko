@@ -14,12 +14,10 @@ class MapScriptApi;
 
 /// Owns one sandboxed Luau state and the common host bindings used by generation scripts.
 ///
-/// Today LuaScriptRuntime creates one host per run. The class is intentionally stateful so the same
-/// setup can later back resident plugin VMs: print output can be repointed between dispatches, while
-/// the sandbox/API binding stays with the Lua state.
+/// LuaScriptRuntime creates one host per run.
 ///
-/// The host stores the *address* of the print-output string, so that string must outlive the
-/// runLoaded() calls it collects, or be replaced first via setPrintOutput().
+/// The host stores the *address* of the print-output string passed to initialize(), so that string
+/// must outlive the runLoaded() calls it collects.
 class LuaSandboxHost {
 public:
     /// The Luau heap a script may hold. A larger request fails with Luau's "not enough memory" error
@@ -41,10 +39,6 @@ public:
     /// Create the Luau state, bind `api`, expose `args`, sandbox globals, and seed math.random.
     /// Returns false only when the state cannot be created. Re-initializing closes the old state.
     bool initialize(MapScriptApi& api, const ScriptArgs& args, std::string& output, std::string& error);
-
-    /// Redirect subsequent print() calls to `output`, which must outlive the runLoaded() calls that
-    /// collect into it. initialize() sets the initial target, so call this only after it.
-    void setPrintOutput(std::string& output);
 
     /// Compile source and leave the loaded chunk on the stack for runLoaded(). A chunk left by an
     /// earlier loadSource() that was never run is discarded.

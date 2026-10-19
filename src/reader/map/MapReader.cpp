@@ -99,15 +99,11 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
                 case SceneryType::LadderUp:
                     object->map = read_be_u32();
                     object->elevhex = read_be_u32();
-                    // hex = elevhex & 0xFFFF;
-                    // elev = ((elevhex >> 28) & 0xf) >> 1;
                     break;
                 case SceneryType::Stairs:
                     // looks like for ladders and stairs map and elev+hex fields in the different order
                     object->elevhex = read_be_u32();
                     object->map = read_be_u32();
-                    // hex = elevhex & 0xFFFF;
-                    // elev = ((elevhex >> 28) & 0xf) >> 1;
                     break;
                 case SceneryType::Elevator:
                     object->elevtype = read_be_u32();  // elevator type - sometimes -1

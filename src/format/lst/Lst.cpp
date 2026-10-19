@@ -27,7 +27,6 @@ const std::vector<int>& Lst::localVars() const {
 }
 
 const std::string& Lst::at(int line) const {
-    // TODO: check boundaries
     return _list.at(line);
 }
 

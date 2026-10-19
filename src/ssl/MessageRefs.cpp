@@ -1,19 +1,16 @@
 #include "ssl/MessageRefs.h"
 
+#include "reader/TextParsing.h"
+
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <string_view>
 
 namespace geck::ssl {
 
 namespace {
 
-    std::string lower(std::string_view text) {
-        std::string out(text);
-        std::ranges::transform(out, out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return out;
-    }
+    using text::toLower;
 
     // The message opcodes, with where their list and message arguments sit (fallout2-ce
     // interpreter_extra.cc: opGetMessageString, opGsayReply, opGsayMessage, opGsayOption, opGiqOption).
@@ -47,7 +44,7 @@ std::vector<MessageRef> messageRefs(const ScriptUnit& unit, const CallGraph& gra
             if (call == nullptr) {
                 return;
             }
-            const std::string name = lower(call->callee);
+            const std::string name = toLower(call->callee);
             const auto opcode = std::ranges::find(OPCODES, name, &MessageOpcode::name);
             if (opcode == OPCODES.end() || call->args.size() < opcode->minArgs) {
                 return;

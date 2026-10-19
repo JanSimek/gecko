@@ -64,9 +64,12 @@ public:
     /// confident as a correct one. Nothing here means every requested path mounted.
     [[nodiscard]] std::vector<FailedMount> failedMounts() const;
 
+    /// The regex source for a shell glob ('*' any run, '?' one character, everything else literal),
+    /// anchored to the whole string. Case-sensitive, as list() matches it.
+    static std::string globToRegexPattern(const std::string& pattern);
+
 private:
     static std::filesystem::path normalizeVfsPath(const std::filesystem::path& path);
-    static std::string globToRegexPattern(const std::string& pattern);
 
     vfspp::VirtualFileSystemPtr _vfs;
     std::vector<FailedMount> _failedMounts;

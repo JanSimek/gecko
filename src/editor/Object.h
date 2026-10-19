@@ -38,7 +38,6 @@ public:
     [[nodiscard]] const sf::Sprite& getSprite() const noexcept;
     [[nodiscard]] sf::Sprite& getSprite() noexcept;
 
-    void setFrm(const Frm* frm);
     [[nodiscard]] const Frm* getFrm() const noexcept { return _frm; }
 
     void setHexPosition(const Hex& hex);
@@ -60,8 +59,8 @@ public:
     [[nodiscard]] int width() const;
     [[nodiscard]] int height() const;
 
-private:
-    static sf::Texture& createBlankTexture();
+    // A shared 1x1 transparent texture for sprites with nothing to draw yet (and empty tiles).
+    static const sf::Texture& blankTexture();
 };
 
 } // namespace geck

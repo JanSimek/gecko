@@ -8,20 +8,13 @@
 #include "ssl/Corpus.h"
 #include "ssl/VariableRefs.h"
 
+#include "support/SslParse.h"
+
 using namespace geck::ssl;
+using geck::test::parseSsl;
 
-namespace {
-
-ScriptUnit parseText(const std::string& text) {
-    MemorySourceProvider files;
-    files.add("script.ssl", text);
-    return ScriptUnit::load(files, "script.ssl");
-}
-
-} // namespace
-
-TEST_CASE("CallGraph keeps what sslc compiles: entry points and what they reach", "[ssl][analysis]") {
-    const ScriptUnit unit = parseText(R"ssl(
+TEST_CASE("CallGraph keeps what sslc compiles: entry points and what they reach", "[ssl_analysis][ssl]") {
+    const ScriptUnit unit = parseSsl(R"ssl(
 #define USE_OLD false
 variable mode;
 export procedure shared;
@@ -61,8 +54,8 @@ procedure Node003 begin end
     CHECK(graph.references("TALK_P_PROC") == std::set<std::string>{ "callback", "kept_by_or", "node001" });
 }
 
-TEST_CASE("ConstantFolder folds literals, sslc's true/false and globals nothing assigns", "[ssl][analysis]") {
-    const ScriptUnit unit = parseText(R"ssl(
+TEST_CASE("ConstantFolder folds literals, sslc's true/false and globals nothing assigns", "[ssl_analysis][ssl]") {
+    const ScriptUnit unit = parseSsl(R"ssl(
 variable fixed := 4;
 variable changed;
 import variable shared;
@@ -87,8 +80,8 @@ end
     CHECK_FALSE(valueOf(5).has_value());
 }
 
-TEST_CASE("globalVariableRefs and localVariableRefs report each access with its number and macro", "[ssl][analysis]") {
-    const ScriptUnit unit = parseText(R"ssl(
+TEST_CASE("globalVariableRefs and localVariableRefs report each access with its number and macro", "[ssl_analysis][ssl]") {
+    const ScriptUnit unit = parseSsl(R"ssl(
 #define GVAR_SEED (12)
 #define LVAR_Hostile (5)
 #define set_seed(x) set_global_var(GVAR_SEED, x)
@@ -120,7 +113,7 @@ end
     CHECK(locals[1].index == 5);
 }
 
-TEST_CASE("loadScripts reads every script once on worker threads and rethrows a failure", "[ssl][analysis]") {
+TEST_CASE("loadScripts reads every script once on worker threads and rethrows a failure", "[ssl_analysis][ssl]") {
     MemorySourceProvider files;
     std::vector<std::filesystem::path> paths;
     for (int i = 0; i < 40; ++i) {

@@ -12,8 +12,6 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <cctype>
-#include <charconv>
 #include <filesystem>
 #include <format>
 #include <functional>
@@ -34,35 +32,13 @@ namespace {
 
     constexpr std::size_t kMaxRefs = 400; // cap output so a common name can't flood the response
 
-    bool sameName(std::string_view a, std::string_view b) {
-        return std::ranges::equal(a, b, [](unsigned char x, unsigned char y) { return std::tolower(x) == std::tolower(y); });
-    }
-
-    std::string lower(std::string text) {
-        std::ranges::transform(text, text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return text;
-    }
+    using text::equalsIgnoreCase;
 
     // A map name as the engine matches it (worldmap.cc wmMapMatchNameToIdx): lowercase, up to the first
     // '.', here also without a directory.
     std::string mapStem(const std::string& name) {
-        const std::string file = lower(std::filesystem::path(name).filename().string());
+        const std::string file = text::toLower(std::filesystem::path(name).filename().string());
         return file.substr(0, file.find('.'));
-    }
-
-    // A whole decimal or 0x-prefixed hexadecimal number, or nullopt.
-    std::optional<int64_t> parseNumber(std::string_view text) {
-        int base = 10;
-        if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) {
-            text.remove_prefix(2);
-            base = 16;
-        }
-        int64_t value = 0;
-        const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value, base);
-        if (error != std::errc() || end != text.data() + text.size() || text.empty()) {
-            return std::nullopt;
-        }
-        return value;
     }
 
     // What a "map" search looks for, and the maps.txt index -> file name table, both read up front so
@@ -75,9 +51,7 @@ namespace {
     };
 
     bool isScript(const std::filesystem::path& path) {
-        std::string ext = path.extension().string();
-        std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return ext == ".ssl";
+        return text::toLower(path.extension().string()) == ".ssl";
     }
 
     // What one script contributes: refs as JSON, in source order.
@@ -118,25 +92,25 @@ namespace {
         bool matches(const ScriptRefsOptions& options, const ssl::Expr& expr) const {
             if (options.kind == "call") {
                 const auto* call = std::get_if<ssl::Call>(&expr.node);
-                return call != nullptr && sameName(call->callee, options.name);
+                return call != nullptr && equalsIgnoreCase(call->callee, options.name);
             }
             if (options.kind == "procedure") {
                 return namesProcedure(expr, options.name);
             }
             // "macro": the outermost expression the macro produced, once per place the macro was used.
             const auto chain = _unit.macroChain(expr.range);
-            return std::ranges::any_of(chain, [&options](const ssl::Macro* macro) { return sameName(macro->name, options.name); });
+            return std::ranges::any_of(chain, [&options](const ssl::Macro* macro) { return equalsIgnoreCase(macro->name, options.name); });
         }
 
         static bool namesProcedure(const ssl::Expr& expr, std::string_view name) {
             if (const auto* call = std::get_if<ssl::Call>(&expr.node)) {
-                return sameName(call->callee, name);
+                return equalsIgnoreCase(call->callee, name);
             }
             if (const auto* bare = std::get_if<ssl::Name>(&expr.node)) {
-                return sameName(bare->name, name);
+                return equalsIgnoreCase(bare->name, name);
             }
             if (const auto* ref = std::get_if<ssl::ProcedureRef>(&expr.node)) {
-                return sameName(ref->name, name);
+                return equalsIgnoreCase(ref->name, name);
             }
             return false;
         }
@@ -144,7 +118,7 @@ namespace {
         void globalVariable(const std::string& gvarName) {
             const auto target = targetIndex(gvarName);
             for (const ssl::VariableRef& ref : ssl::globalVariableRefs(_unit, _graph)) {
-                const bool matches = target.has_value() && ref.index.has_value() ? *ref.index == *target : sameName(ref.name, gvarName);
+                const bool matches = target.has_value() && ref.index.has_value() ? *ref.index == *target : equalsIgnoreCase(ref.name, gvarName);
                 if (!matches) {
                     continue;
                 }
@@ -179,7 +153,7 @@ namespace {
             const bool any = pid == "*";
             std::optional<int64_t> target;
             if (!any) {
-                target = parseNumber(pid);
+                target = text::parseInteger(pid);
                 if (!target.has_value()) {
                     target = macroValue(pid);
                 }
@@ -300,7 +274,7 @@ namespace {
             maps.fileNames.try_emplace(map.index, map.fileName);
         }
         maps.any = name == "*";
-        if (const auto number = parseNumber(name); number.has_value()) {
+        if (const auto number = text::parseInteger(name); number.has_value()) {
             maps.index = static_cast<int>(*number);
             maps.stem = mapStem(resolver.fileNameOf(*maps.index));
         } else if (!maps.any) {

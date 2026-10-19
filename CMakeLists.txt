@@ -36,8 +36,8 @@ if(NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-    # Single owner of the build-tree resource staging. The editor and qt_tests both run from
-    # this shared CMAKE_RUNTIME_OUTPUT_DIRECTORY, and each used to POST_BUILD-copy
+    # Single owner of the build-tree resource staging. The editor runs from this shared
+    # CMAKE_RUNTIME_OUTPUT_DIRECTORY, and it and qt_tests each used to POST_BUILD-copy
     # ${CMAKE_SOURCE_DIR}/resources into the same ${CMAKE_BINARY_DIR}/resources — which raced under
     # parallel builds (intermittent "Error copying directory ..." on Windows CI). One ALL target now
     # owns the copy and consumers depend on it instead of duplicating it. (Single-config only;
@@ -95,30 +95,15 @@ function(geck_disable_target_warnings)
             continue()
         endif()
 
-        get_property(_is_alias TARGET ${_target} PROPERTY ALIASED_TARGET SET)
-        if(_is_alias)
-            get_property(_resolved TARGET ${_target} PROPERTY ALIASED_TARGET)
-        else()
-            set(_resolved ${_target})
-        endif()
-
-        if(NOT _resolved)
-            continue()
-        endif()
-
-        get_target_property(_target_type ${_resolved} TYPE)
-        if(NOT _target_type)
-            continue()
-        endif()
-
-        if(_target_type MATCHES "INTERFACE")
+        get_target_property(_target_type ${_target} TYPE)
+        if(_target_type STREQUAL "INTERFACE_LIBRARY")
             continue()
         endif()
 
         if(MSVC)
-            target_compile_options(${_resolved} PRIVATE /w)
+            target_compile_options(${_target} PRIVATE /w)
         else()
-            target_compile_options(${_resolved} PRIVATE -w)
+            target_compile_options(${_target} PRIVATE -w)
         endif()
     endforeach()
 endfunction()
@@ -148,16 +133,15 @@ endif()
 
 if(MSVC)
     add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
-    # Suppress deprecation warning for stdext::checked_array_iterator in debug builds
-    add_compile_definitions(_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING)
 endif()
 
 # Targets
 add_subdirectory(src)
 
 if(GECK_BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
-    add_subdirectory(tests)
+    # Before add_subdirectory: tests/ inherits the enabled state its add_test() calls need.
     enable_testing()
+    add_subdirectory(tests)
 endif()
 
 # Windows: one target stages the runtime DLLs into the shared output dir. Each executable used to
@@ -168,7 +152,7 @@ endif()
 if(WIN32)
     set(_runtime_dll_targets ${PROJECT_NAME})
     if(GECK_BUILD_TESTS AND TARGET general_tests)
-        list(APPEND _runtime_dll_targets general_tests performance_tests qt_tests)
+        list(APPEND _runtime_dll_targets general_tests qt_tests)
     endif()
     set(_runtime_dll_genexprs "")
     foreach(_t IN LISTS _runtime_dll_targets)

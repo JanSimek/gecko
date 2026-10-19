@@ -1,9 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <thread>
 
 #include <QCoreApplication>
-#include <QElapsedTimer>
 #include <QHeaderView>
 #include <QTreeView>
 
@@ -13,6 +13,7 @@
 #include "ui/logging/LogModel.h"
 #include "ui/logging/LogModelSink.h"
 #include "ui/panels/LogPanel.h"
+#include "support/QtWait.h"
 
 using namespace geck;
 
@@ -25,7 +26,7 @@ void drainLog() {
 
 } // namespace
 
-TEST_CASE("LogPanel configures its header only once a model provides columns", "[qt][log]") {
+TEST_CASE("LogPanel configures its header only once a model provides columns", "[log_panel]") {
     // Before a source model attaches, the view's header has zero sections — per-index header
     // configuration then violates QHeaderView's precondition, which is a live Q_ASSERT in debug
     // Qt builds (it hung qt_tests on Windows Debug CI as a modal abort dialog).
@@ -41,7 +42,7 @@ TEST_CASE("LogPanel configures its header only once a model provides columns", "
     CHECK(view->header()->sectionResizeMode(LogModel::MessageColumn) == QHeaderView::Stretch);
 }
 
-TEST_CASE("LogModel stores records with level, message, and time", "[qt][log]") {
+TEST_CASE("LogModel stores records with level, message, and time", "[log_panel]") {
     LogModel model;
     REQUIRE(model.rowCount() == 0);
 
@@ -59,7 +60,7 @@ TEST_CASE("LogModel stores records with level, message, and time", "[qt][log]") 
     CHECK(!model.index(0, LogModel::TimeColumn).data().toString().isEmpty());
 }
 
-TEST_CASE("LogModel evicts the oldest records beyond the cap", "[qt][log]") {
+TEST_CASE("LogModel evicts the oldest records beyond the cap", "[log_panel]") {
     // Cross-thread so the records arrive as coalesced batches: 50k single-row same-thread
     // inserts take minutes under a debug heap, and the eviction arithmetic being tested is
     // shared by both paths.
@@ -71,19 +72,15 @@ TEST_CASE("LogModel evicts the oldest records beyond the cap", "[qt][log]") {
     });
     producer.join();
 
-    QElapsedTimer timer;
-    timer.start();
-    while (model.rowCount() < LogModel::MAX_RECORDS && timer.elapsed() < 60000) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-    }
-
+    REQUIRE(geck::test::pumpUntil([&model]() { return model.rowCount() >= LogModel::MAX_RECORDS; },
+        std::chrono::seconds(60)));
     REQUIRE(model.rowCount() == LogModel::MAX_RECORDS);
     CHECK(model.index(0, LogModel::MessageColumn).data().toString() == "10");
     CHECK(model.index(model.rowCount() - 1, LogModel::MessageColumn).data().toString()
         == QString::number(LogModel::MAX_RECORDS + 9));
 }
 
-TEST_CASE("LogModel clear empties the store, including records not yet drained", "[qt][log]") {
+TEST_CASE("LogModel clear empties the store, including records not yet drained", "[log_panel]") {
     LogModel model;
     model.appendRecord(LogModel::Level::Error, "boom");
     drainLog();
@@ -93,7 +90,7 @@ TEST_CASE("LogModel clear empties the store, including records not yet drained",
     REQUIRE(model.rowCount() == 0);
 }
 
-TEST_CASE("LogModel delivers records appended from another thread", "[qt][log]") {
+TEST_CASE("LogModel delivers records appended from another thread", "[log_panel]") {
     LogModel model;
 
     std::thread worker([&model]() {
@@ -102,17 +99,12 @@ TEST_CASE("LogModel delivers records appended from another thread", "[qt][log]")
     worker.join();
 
     // The append was queued to this (the model's) thread; run the event loop until it lands.
-    QElapsedTimer timer;
-    timer.start();
-    while (model.rowCount() == 0 && timer.elapsed() < 5000) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-    }
-
+    REQUIRE(geck::test::pumpUntil([&model]() { return model.rowCount() != 0; }));
     REQUIRE(model.rowCount() == 1);
     CHECK(model.index(0, LogModel::MessageColumn).data().toString() == "from worker thread");
 }
 
-TEST_CASE("LogModelSink forwards spdlog records with mapped levels", "[qt][log]") {
+TEST_CASE("LogModelSink forwards spdlog records with mapped levels", "[log_panel]") {
     LogModel model;
     auto sink = std::make_shared<LogModelSink>(&model);
     spdlog::logger logger("log-panel-test", sink);
@@ -140,7 +132,7 @@ TEST_CASE("LogModelSink forwards spdlog records with mapped levels", "[qt][log]"
     CHECK(model.index(3, LogModel::MessageColumn).data().toString() == "w");
 }
 
-TEST_CASE("LogModelSink drops records after detach", "[qt][log]") {
+TEST_CASE("LogModelSink drops records after detach", "[log_panel]") {
     LogModel model;
     auto sink = std::make_shared<LogModelSink>(&model);
     spdlog::logger logger("log-panel-detach-test", sink);
@@ -154,7 +146,7 @@ TEST_CASE("LogModelSink drops records after detach", "[qt][log]") {
     CHECK(model.index(0, LogModel::MessageColumn).data().toString() == "before");
 }
 
-TEST_CASE("LogFilterProxy filters by minimum level and message text", "[qt][log]") {
+TEST_CASE("LogFilterProxy filters by minimum level and message text", "[log_panel]") {
     LogModel model;
     model.appendRecord(LogModel::Level::Debug, "loading tiles");
     model.appendRecord(LogModel::Level::Info, "map opened");

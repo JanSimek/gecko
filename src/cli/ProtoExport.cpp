@@ -1,5 +1,6 @@
 #include "cli/ProtoExport.h"
 
+#include "cli/ScriptLookup.h"
 #include "format/lst/Lst.h"
 #include "format/map/MapScript.h"
 #include "format/msg/Msg.h"
@@ -161,7 +162,8 @@ namespace {
     ordered_json extendedItemFlags(std::uint32_t flags) {
         using enum Pro::ExtendedItemFlags;
         return { { "raw", flags }, { "bigGun", Pro::hasFlag(flags, BIG_GUN) },
-            { "twoHanded", Pro::hasFlag(flags, TWO_HANDED) }, { "hiddenItem", Pro::hasFlag(flags, ITEM_HIDDEN) } };
+            { "twoHanded", Pro::hasFlag(flags, TWO_HANDED) }, { "energyWeapon", Pro::hasFlag(flags, ENERGY) },
+            { "hiddenItem", Pro::hasFlag(flags, ITEM_HIDDEN) } };
     }
 
     ordered_json weaponData(const Pro::WeaponData& w, const Labels& labels) {
@@ -180,12 +182,6 @@ namespace {
         out["ammoPid"] = w.ammoPID;
         out["ammoCapacity"] = s32(w.ammoCapacity);
         out["soundId"] = w.soundId;
-        // Not part of the engine's weapon record. fallout2-ce protoItemDataRead stops at the soundCode
-        // byte (a 122-byte file), and every shipped weapon proto is exactly that long, so ProReader only
-        // ever fills this with its 0 default. sfall's "Energy Weapon" flag is extendedFlags 0x0400
-        // (sfall Skills.cpp), not a trailing field. Exported because gecko reads it, and it is 0 for any
-        // proto the engine can load.
-        out["weaponFlags"] = w.weaponFlags;
         return out;
     }
 
@@ -399,6 +395,32 @@ namespace {
         return kind == ObjectType::Item ? "item" : "critter";
     }
 
+    // An item whose subtype has no kItemTypeKeys entry cannot be described; the engine has no such type.
+    bool knownItemType(const Pro& pro) {
+        return pro.objectSubtypeId() < kItemTypeKeys.size();
+    }
+
+    ordered_json protoRecord(ObjectType kind, std::uint32_t pid, const std::string& file, const Pro& pro,
+        const Labels& labels, const Lst* scriptsLst) {
+        ordered_json row;
+        row["pid"] = pid;
+        row["kind"] = kindName(kind);
+        row["file"] = file;
+        row["name"] = labels.protoText(kind, pro.header.message_id);
+        row["description"] = labels.protoText(kind, pro.header.message_id + 1);
+        row["fid"] = pro.header.FID;
+        row["flags"] = pro.header.flags;
+        const auto sid = s32(pro.commonItemData.SID);
+        row["sid"] = sid;
+        row["script"] = scriptOf(sid, scriptsLst);
+        if (kind == ObjectType::Item) {
+            addItemFields(row, pro, labels);
+        } else {
+            addCritterFields(row, pro, labels);
+        }
+        return row;
+    }
+
     struct ListSource {
         ObjectType kind;
         std::string_view path;
@@ -409,12 +431,8 @@ namespace {
         Exporter(resource::GameResources& resources, const ProtoExportOptions& options)
             : _resources(resources)
             , _options(options)
-            , _labels(resources) {
-            try {
-                _scriptsLst = resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
-            } catch (const std::exception&) {
-                _scriptsLst = nullptr; // no script names; the sid is still reported
-            }
+            , _labels(resources)
+            , _scriptsLst(script_lookup::loadScriptsLst(resources)) { // null: no script names, the sid still reported
         }
 
         // Returns false (with `error` set) when the list itself cannot be read.
@@ -460,7 +478,7 @@ namespace {
                     { "reason", "not loaded" } });
                 return;
             }
-            if (kind == ObjectType::Item && pro->objectSubtypeId() >= kItemTypeKeys.size()) {
+            if (kind == ObjectType::Item && !knownItemType(*pro)) {
                 _unreadable.push_back({ { "pid", pid }, { "kind", kindName(kind) }, { "file", file },
                     { "reason", "unknown item type " + std::to_string(pro->objectSubtypeId()) } });
                 return;
@@ -468,37 +486,17 @@ namespace {
             if (kind == ObjectType::Item && !matchesItemType(*pro)) {
                 return;
             }
-            _protos.push_back(row(kind, pid, file, *pro));
+            _protos.push_back(protoRecord(kind, pid, file, *pro, _labels, _scriptsLst));
         }
 
         bool matchesItemType(const Pro& pro) const {
             return !_options.itemType.has_value() || pro.itemType() == *_options.itemType;
         }
 
-        ordered_json row(ObjectType kind, std::uint32_t pid, const std::string& file, const Pro& pro) const {
-            ordered_json row;
-            row["pid"] = pid;
-            row["kind"] = kindName(kind);
-            row["file"] = file;
-            row["name"] = _labels.protoText(kind, pro.header.message_id);
-            row["description"] = _labels.protoText(kind, pro.header.message_id + 1);
-            row["fid"] = pro.header.FID;
-            row["flags"] = pro.header.flags;
-            const auto sid = s32(pro.commonItemData.SID);
-            row["sid"] = sid;
-            row["script"] = scriptOf(sid, _scriptsLst);
-            if (kind == ObjectType::Item) {
-                addItemFields(row, pro, _labels);
-            } else {
-                addCritterFields(row, pro, _labels);
-            }
-            return row;
-        }
-
         resource::GameResources& _resources;
         const ProtoExportOptions& _options;
         Labels _labels;
-        const Lst* _scriptsLst = nullptr;
+        const Lst* _scriptsLst;
         ordered_json _lists = ordered_json::array();
         ordered_json _unreadable = ordered_json::array();
         ordered_json _protos = ordered_json::array();
@@ -551,6 +549,16 @@ int exportProtos(resource::GameResources& resources, const ProtoExportOptions& o
     // Fallout 2 text is CP-1252; `replace` keeps dump() from throwing on stray bytes.
     out << exporter.result().dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     return 0;
+}
+
+std::optional<ordered_json> protoRow(resource::GameResources& resources, std::uint32_t pid, const Pro& pro) {
+    const ObjectType kind = ProtoId(pid).objectType();
+    if ((kind != ObjectType::Item && kind != ObjectType::Critter) || (kind == ObjectType::Item && !knownItemType(pro))) {
+        return std::nullopt;
+    }
+    // The row's file is the PID's .lst entry, as exportProtos walks it (PIDs are 1-based lines).
+    const std::string& file = ProHelper::lstFile(resources, pid)->list().at(ProtoId(pid).protoId() - 1);
+    return protoRecord(kind, pid, file, pro, Labels(resources), script_lookup::loadScriptsLst(resources));
 }
 
 } // namespace geck::cli

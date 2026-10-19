@@ -25,15 +25,6 @@ enum class ObjectCategory;
  */
 class DragDropManager {
 public:
-    /**
-     * @brief Types of drag operations
-     */
-    enum class DragType {
-        NONE,
-        OBJECT_MOVE,    // Moving existing objects
-        PALETTE_PREVIEW // Previewing object from palette
-    };
-
     DragDropManager(DragDropContext& context,
         std::function<const ObjectInfo*(int objectIndex, ObjectCategory category)> lookupObjectInfo);
     ~DragDropManager() = default;
@@ -52,14 +43,10 @@ public:
     void cancelDragPreview();
 
     // State queries
-    bool isDraggingObjects() const { return _isDraggingObjects; }
     bool isDraggingFromPalette() const { return _isDraggingFromPalette; }
-    DragType getCurrentDragType() const;
 
     // Access to drag state for rendering
-    const std::vector<std::shared_ptr<Object>>& getDraggedObjects() const { return _draggedObjects; }
     const std::shared_ptr<Object>& getDragPreviewObject() const { return _dragPreviewObject; }
-    sf::Vector2f getObjectDragOffset() const { return _objectDragOffset; }
 
 private:
     DragDropContext& _context;
@@ -76,8 +63,6 @@ private:
     // Palette drag preview state
     bool _isDraggingFromPalette = false;
     std::shared_ptr<Object> _dragPreviewObject;
-    int _previewObjectIndex = -1;
-    int _previewObjectCategory = 0;
     const ObjectInfo* _previewObjectInfo = nullptr;
 };
 

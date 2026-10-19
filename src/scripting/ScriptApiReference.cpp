@@ -5,7 +5,7 @@
 namespace geck {
 
 const std::vector<ScriptApiEntry>& scriptApiEntries() {
-    // Built from the single GECK_SCRIPT_API list that LuaScriptRuntime also binds from.
+    // Built from the single GECK_SCRIPT_API list that LuaSandboxHost also binds from.
 #define GECK_SCRIPT_API_ENTRY(name, sig, doc) { #name, sig, doc },
     static const std::vector<ScriptApiEntry> entries = { GECK_SCRIPT_API(GECK_SCRIPT_API_ENTRY) };
 #undef GECK_SCRIPT_API_ENTRY
@@ -25,8 +25,8 @@ std::string scriptApiReference() {
         << "- **Auto-seeded.** Each run seeds `math.random` from `--arg seed=N`, or a fresh random seed\n"
         << "  when none is given (so a run is random unless you pin the seed). The resolved seed is in\n"
         << "  `args.seed` — print it to let a good layout be reproduced.\n"
-        << "- **Auto-batched.** The whole run is collapsed into one undo entry; do **not** call\n"
-        << "  begin/endBatch yourself.\n"
+        << "- **Auto-batched.** Every `api:` mutation a run makes lands in one undo entry, kept even\n"
+        << "  when the script errors part-way. `setPlayerStart` edits map-header state and is not undone.\n"
         << "- **Errors raise.** A genuine failure (no data mounted, a bad map path, an unknown proto\n"
         << "  type) raises a Lua error that stops the run; \"not applicable\" stays a value (e.g.\n"
         << "  `placeProto` -> false, `tileId` -> -1).\n"

@@ -404,33 +404,6 @@ namespace {
             fillSemanticLegend(*legend, roles, scriptedCount);
         }
     }
-
-    // Overlay a small magenta dot on each exit-grid marker's TRIGGER hex (its saved hex position), so a
-    // natural render of the diagonal band shows the hex sitting on the band's outer edge.
-    void drawExitGridTriggerDots(sf::RenderTarget& target,
-        const std::vector<std::shared_ptr<Object>>& objects, const HexagonGrid& hexgrid) {
-        for (const auto& object : objects) {
-            if (!object || !object->hasMapObject()) {
-                continue;
-            }
-            const auto mo = object->getMapObjectPtr();
-            if (!mo->isExitGridMarker()) {
-                continue;
-            }
-            const auto h = hexgrid.getHexByPosition(static_cast<uint32_t>(mo->position));
-            if (!h.has_value()) {
-                continue;
-            }
-            constexpr float radius = 3.0f;
-            sf::CircleShape dot(radius);
-            dot.setOrigin({ radius, radius });
-            dot.setPosition({ static_cast<float>(h->get().x()), static_cast<float>(h->get().y()) });
-            dot.setFillColor(sf::Color(255, 0, 255));
-            dot.setOutlineColor(sf::Color(20, 20, 20, 220));
-            dot.setOutlineThickness(1.0f);
-            target.draw(dot);
-        }
-    }
 } // namespace
 
 MapRenderer::MapRenderer(resource::GameResources& resources)
@@ -475,11 +448,9 @@ sf::Image MapRenderer::renderNatural(Map& map, const Options& options, Projectio
                 addTileContentBounds(bounds, it->second, true);
             }
         }
-        if (options.showObjects) {
-            for (const auto& object : objects) {
-                if (object) {
-                    bounds.add(object->getSprite());
-                }
+        for (const auto& object : objects) {
+            if (object) {
+                bounds.add(object->getSprite());
             }
         }
         if (bounds.empty()) {
@@ -504,7 +475,7 @@ sf::Image MapRenderer::renderNatural(Map& map, const Options& options, Projectio
 
     // A clean render of the map's artwork: no selection, no debug overlays, no grid.
     RenderingEngine::VisibilitySettings visibility;
-    visibility.showObjects = options.showObjects;
+
     visibility.showRoof = options.showRoof;
     visibility.showScrollBlockers = false;
     visibility.showWallBlockers = false;
@@ -529,9 +500,6 @@ sf::Image MapRenderer::renderNatural(Map& map, const Options& options, Projectio
     }
 
     engine.render(*target, target->getView(), data, visibility);
-    if (options.exitDots) {
-        drawExitGridTriggerDots(*target, objects, hexgrid);
-    }
     target->display();
     return target->getTexture().copyToImage();
 }
@@ -552,10 +520,8 @@ sf::Image MapRenderer::renderSchematic(Map& map, const Options& options, Legend*
     HexagonGrid hexgrid;
     MapSpriteLoader loader(_resources, hexgrid);
     std::vector<std::shared_ptr<Object>> objects;
-    if (options.showObjects) {
-        std::vector<sf::Sprite> wallBlockerOverlays; // unused for the schematic, but the loader fills it
-        loader.loadObjectSprites(map, options.elevation, objects, wallBlockerOverlays);
-    }
+    std::vector<sf::Sprite> wallBlockerOverlays; // unused for the schematic, but the loader fills it
+    loader.loadObjectSprites(map, options.elevation, objects, wallBlockerOverlays);
 
     // Flat-coloured floor mesh, plus the content bounds (floor cells and object sprites). With
     // fullExtent, seed the bounds with the whole floor-tile grid so even an empty map shows it all.

@@ -11,14 +11,19 @@ namespace geck {
 
 std::unique_ptr<geck::Frm> geck::FrmReader::read() {
     try {
-        FormatValidator::validateFrmFile(getBinaryUtils(), _path);
-
         auto& utils = getBinaryUtils();
         spdlog::debug("Reading FRM file: {}", _path.string());
 
-        auto frm = std::make_unique<Frm>(_path);
+        if (utils.getPosition().total < 62) { // Minimum FRM header size
+            throw UnsupportedFormatException("File too small to be a valid FRM file", _path);
+        }
 
         uint32_t version = utils.readBE32();
+        if (version != 4) {
+            throw UnsupportedFormatException("Unsupported FRM version: " + std::to_string(version), _path);
+        }
+
+        auto frm = std::make_unique<Frm>(_path);
         frm->setVersion(version);
 
         uint16_t fps = utils.readBE16();

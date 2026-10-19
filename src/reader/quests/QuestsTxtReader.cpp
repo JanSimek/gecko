@@ -15,7 +15,8 @@ namespace {
 
 } // namespace
 
-QuestsTxt parseQuestsTxt(std::istream& in) {
+QuestsTxt parseQuestsTxt(const std::string& text) {
+    std::istringstream in(text);
     QuestsTxt out;
     std::string line;
     while (std::getline(in, line)) {
@@ -36,11 +37,6 @@ QuestsTxt parseQuestsTxt(std::istream& in) {
         out.quests.push_back(quest);
     }
     return out;
-}
-
-QuestsTxt parseQuestsTxt(const std::string& text) {
-    std::istringstream in(text);
-    return parseQuestsTxt(in);
 }
 
 } // namespace geck

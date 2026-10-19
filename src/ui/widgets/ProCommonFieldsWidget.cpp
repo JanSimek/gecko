@@ -22,11 +22,11 @@ ProCommonFieldsWidget::ProCommonFieldsWidget(resource::GameResources& resources,
 
 void ProCommonFieldsWidget::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    _mainLayout->setSpacing(ui::theme::spacing::NORMAL);
     _mainLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
 
     QHBoxLayout* columnsLayout = new QHBoxLayout();
-    columnsLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    columnsLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     // === LEFT COLUMN ===
     QVBoxLayout* leftColumn = new QVBoxLayout();
@@ -233,20 +233,12 @@ void ProCommonFieldsWidget::saveToPro(std::shared_ptr<Pro>& pro) {
         pro->commonItemData.weight = _weightEdit->value();
         pro->commonItemData.basePrice = _basePriceEdit->value();
         pro->commonItemData.soundId = static_cast<uint8_t>(_soundIdEdit->value());
-        pro->commonItemData.flagsExt = saveExtendedFlags();
+        pro->commonItemData.flagsExt = saveExtendedFlags(pro->commonItemData.flagsExt);
     }
 }
 
 void ProCommonFieldsWidget::setItemFieldsVisible(bool isItem) {
     _itemFieldsGroup->setVisible(isItem);
-}
-
-int32_t ProCommonFieldsWidget::getPID() const {
-    return 0;
-}
-
-void ProCommonFieldsWidget::setPID([[maybe_unused]] int32_t pid) {
-    Q_UNUSED(pid);
 }
 
 void ProCommonFieldsWidget::loadObjectFlags(uint32_t flags) {
@@ -303,11 +295,9 @@ uint32_t ProCommonFieldsWidget::saveObjectFlags() const {
     return flags;
 }
 
-uint32_t ProCommonFieldsWidget::saveExtendedFlags() const {
-    uint32_t flags = 0;
-    flags = Pro::setAnimationPrimary(flags, _animationPrimaryEdit->value());
-    flags = Pro::setAnimationSecondary(flags, _animationSecondaryEdit->value());
-    return flags;
+uint32_t ProCommonFieldsWidget::saveExtendedFlags(uint32_t flagsExt) const {
+    uint32_t flags = Pro::setAnimationPrimary(flagsExt, _animationPrimaryEdit->value());
+    return Pro::setAnimationSecondary(flags, _animationSecondaryEdit->value());
 }
 
 QSpinBox* ProCommonFieldsWidget::createSpinBox(int min, int max, const QString& tooltip) {
