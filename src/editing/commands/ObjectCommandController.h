@@ -91,6 +91,11 @@ public:
     bool registerObjectDeletion(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& removedObjects);
     bool registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
     bool registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
+    /// Undoable change of where objects stand: hex, pixel offset and flags ("Put on Top").
+    bool registerObjectSpotEdit(const std::vector<std::shared_ptr<Object>>& objects,
+        const std::vector<ObjectSpotState>& before,
+        const std::vector<ObjectSpotState>& after,
+        const std::string& description);
     /// Undoable change of an elevation's object order, which is gecko's draw order (see
     /// object_order in editor/helper/ObjectOrder.h). `after` must hold the same objects as `before`.
     bool registerObjectReorder(int elevation,

@@ -231,6 +231,42 @@ bool ObjectEditService::registerObjectMove(const std::vector<std::shared_ptr<Obj
     return _batcher.push(std::move(cmd));
 }
 
+void ObjectEditService::applyObjectSpots(const std::vector<std::shared_ptr<Object>>& objects,
+    const std::vector<ObjectSpotState>& spots) {
+    for (size_t i = 0; i < objects.size() && i < spots.size(); ++i) {
+        const auto& object = objects[i];
+        if (!object || !object->hasMapObject()) {
+            continue;
+        }
+        auto& mapObject = object->getMapObject();
+        mapObject.x = spots[i].x;
+        mapObject.y = spots[i].y;
+        mapObject.flags = spots[i].flags;
+        mapObject.position = spots[i].position;
+        if (auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(spots[i].position)); hex.has_value()) {
+            object->setHexPosition(hex->get());
+        }
+    }
+    _refreshObjects();
+}
+
+bool ObjectEditService::registerObjectSpotEdit(const std::vector<std::shared_ptr<Object>>& objects,
+    const std::vector<ObjectSpotState>& before,
+    const std::vector<ObjectSpotState>& after,
+    const std::string& description) {
+    if (objects.empty() || before.size() != objects.size() || after.size() != objects.size()) {
+        spdlog::warn("registerObjectSpotEdit: Invalid input sizes - objects:{} before:{} after:{}",
+            objects.size(), before.size(), after.size());
+        return false;
+    }
+    UndoCommand cmd;
+    cmd.description = description;
+    cmd.undo = [this, objects, before]() { applyObjectSpots(objects, before); };
+    cmd.redo = [this, objects, after]() { applyObjectSpots(objects, after); };
+    cmd.redo();
+    return _batcher.push(std::move(cmd));
+}
+
 bool ObjectEditService::registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects,
     const std::vector<int>& beforeDirs,
     const std::vector<int>& afterDirs) {

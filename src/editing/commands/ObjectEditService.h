@@ -31,6 +31,15 @@ struct ExitGridCommandState {
     uint32_t proPid;
 };
 
+/// Where an object stands: its hex, its own pixel offset (the engine's obj->x/y) and its flags.
+/// "Put on Top" changes all three at once (see EditorWidget::putSelectedOnTop).
+struct ObjectSpotState {
+    int position = 0;
+    uint32_t x = 0;
+    uint32_t y = 0;
+    uint32_t flags = 0;
+};
+
 /// Snapshot of a MapObject's UI-editable per-instance fields, shared by the
 /// flag/light/destination/interaction/critter editors via registerInstanceEdit.
 struct MapObjectInstanceState {
@@ -79,6 +88,11 @@ public:
     bool registerObjectDeletion(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& removedObjects);
     bool registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
     bool registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
+    /// Applies `after` (hex, pixel offset, flags per object) and records it for undo.
+    bool registerObjectSpotEdit(const std::vector<std::shared_ptr<Object>>& objects,
+        const std::vector<ObjectSpotState>& before,
+        const std::vector<ObjectSpotState>& after,
+        const std::string& description);
     /// Applies `after` as the elevation's object order (its draw order) and records it for undo.
     /// Returns false, recording nothing, when the order is unchanged.
     bool registerObjectReorder(int elevation,
@@ -107,6 +121,7 @@ private:
     // undo and redo halves of registerObjectMove / registerObjectRotation.
     void applyObjectPositions(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& positions);
     static void applyObjectDirections(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& directions);
+    void applyObjectSpots(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<ObjectSpotState>& spots);
     // Sets an elevation's object order and re-sorts the drawn objects to match, keeping the same
     // Object instances so the selection survives (a full refreshObjects() would rebuild them).
     void applyObjectOrder(int elevation, const std::vector<std::shared_ptr<MapObject>>& order);

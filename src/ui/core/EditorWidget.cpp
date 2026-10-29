@@ -45,6 +45,7 @@
 #include <spdlog/stopwatch.h>
 #include <cmath>
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <cstdlib>
 #include <set>
@@ -2038,6 +2039,175 @@ void EditorWidget::reorderSelectedObjects(object_order::Step step) {
     Q_EMIT statusMessageRequested(QString("%1: %2 object(s)").arg(description).arg(selected.size()));
 }
 
+// "Put on Top". The engine draws an elevation's objects hex by hex in ascending hex number
+// (fallout2-ce object.cc _obj_render_pre_roof), while gecko draws them in file order, so a
+// stack of books gecko shows on a table is drawn under it in the game whenever the table's hex
+// comes later. This keeps the piece where it is drawn and moves its hex: it goes to the nearest
+// hex drawn after everything it sits on, and its own pixel offset (MapObject x/y, the engine's
+// obj->x/y, added wherever the engine draws or hit-tests the object and kept on load) takes it
+// back to the same spot. A piece that blocks goes to a hex that is blocked already (or has no
+// floor) within kReach px; failing that it keeps the nearest hex and stops blocking, as the
+// furniture under it blocks. An item keeps an open hex beside it to be picked up from. A piece
+// sits on another when it is less than half its size and its foot (the bottom middle of its
+// picture) is on the other's opaque pixels, above the other's own foot. The same rule as
+// FOCMod's tools/stand_on.py, which fixes maps outside the editor.
+void EditorWidget::putSelectedOnTop() {
+    auto* selectionManager = _session.selectionManager();
+    if (!_session.map() || !selectionManager) {
+        return;
+    }
+    constexpr uint32_t kFlat = 0x08;
+    constexpr uint32_t kNoBlock = 0x10;
+    constexpr int kReach = 96;
+    constexpr int kSearch = 12;
+    constexpr int kWidth = 200;
+    const int elevation = _session.currentElevation();
+    auto& mapFile = getMapFile();
+    const auto typeOf = [](const MapObject& o) { return static_cast<int>(o.pro_pid >> 24); };
+
+    // what blocks a hex, and which hexes have floor
+    std::set<int> blocked;
+    for (const auto& o : mapFile.map_objects[elevation]) {
+        const int type = typeOf(*o);
+        if ((type == 1 || type == 2 || type == 3) && !(o->flags & kNoBlock)) {
+            blocked.insert(o->position);
+        }
+    }
+    const auto tilesIt = mapFile.tiles.find(elevation);
+    const auto floored = [&](int hex) {
+        if (hex < 0 || hex >= kWidth * kWidth || tilesIt == mapFile.tiles.end()) {
+            return false;
+        }
+        const size_t square = static_cast<size_t>((hex / kWidth / 2) * 100 + (hex % kWidth) / 2);
+        return square < tilesIt->second.size() && tilesIt->second[square].getFloor() > 1;
+    };
+    const auto open = [&](int hex) { return floored(hex) && !blocked.contains(hex); };
+
+    std::vector<std::shared_ptr<Object>> drawn;
+    for (const auto& object : _session.objects()) {
+        if (object && object->hasMapObject() && isObjectVisible(object->getMapObject(), _session.visibility())) {
+            const auto& o = object->getMapObject();
+            if (static_cast<int>(o.elevation) == elevation && (typeOf(o) == 0 || typeOf(o) == 2) && !(o.flags & kFlat)) {
+                drawn.push_back(object);
+            }
+        }
+    }
+    std::unordered_map<const sf::Texture*, sf::Image> images;
+    const auto imageOf = [&images](const sf::Sprite& sprite) -> const sf::Image& {
+        const sf::Texture* texture = &sprite.getTexture();
+        auto it = images.find(texture);
+        if (it == images.end()) {
+            it = images.emplace(texture, texture->copyToImage()).first;
+        }
+        return it->second;
+    };
+    const auto sitsOn = [&](const Object& a, const Object& b) {
+        const auto ba = a.getSprite().getGlobalBounds();
+        const auto bb = b.getSprite().getGlobalBounds();
+        const sf::Vector2f foot{ ba.position.x + ba.size.x / 2.f, ba.position.y + ba.size.y - 0.5f };
+        return ba.size.x * ba.size.y * 2.f < bb.size.x * bb.size.y
+            && foot.y < bb.position.y + bb.size.y - 1.f
+            && spriteOpaqueAt(b.getSprite(), imageOf(b.getSprite()), foot);
+    };
+
+    std::vector<std::shared_ptr<Object>> moved;
+    std::vector<ObjectSpotState> before;
+    std::vector<ObjectSpotState> after;
+    int nothingUnder = 0;
+    for (const auto& object : selectionManager->getCurrentSelection().getObjects()) {
+        if (!object || !object->hasMapObject()) {
+            continue;
+        }
+        auto& o = object->getMapObject();
+        int last = -1; // the last hex drawn under it that it sits on
+        for (const auto& other : drawn) {
+            if (other != object && static_cast<int>(other->getMapObject().position) > o.position && sitsOn(*object, *other)) {
+                last = std::max(last, static_cast<int>(other->getMapObject().position));
+            }
+        }
+        const auto here = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(o.position));
+        if (last < 0 || !here.has_value()) {
+            ++nothingUnder;
+            continue;
+        }
+        const int hx = here->get().x();
+        const int hy = here->get().y();
+        std::vector<std::pair<int, int>> candidates; // (distance in px, hex)
+        const int ax = o.position % kWidth;
+        const int ay = o.position / kWidth;
+        for (int y = ay - kSearch; y <= ay + kSearch; ++y) {
+            for (int x = ax - kSearch; x <= ax + kSearch; ++x) {
+                const int hex = y * kWidth + x;
+                if (x < 0 || y < 0 || x >= kWidth || y >= kWidth || hex <= last) {
+                    continue;
+                }
+                if (auto h = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hex)); h.has_value()) {
+                    candidates.emplace_back(std::abs(h->get().x() - hx) + std::abs(h->get().y() - hy), hex);
+                }
+            }
+        }
+        if (candidates.empty()) {
+            ++nothingUnder;
+            continue;
+        }
+        std::ranges::sort(candidates);
+        const bool item = typeOf(o) == 0;
+        const bool blocks = !item && !(o.flags & kNoBlock);
+        // the six hexes round a hex (tools/stand_on.py DIRS): an even column's diagonals are a row down
+        const auto neighbours = [](int hex) {
+            const int d = (hex % kWidth) % 2 == 0 ? kWidth : -kWidth;
+            return std::array<int, 6>{ hex - 1, hex + 1, hex - kWidth, hex + kWidth, hex + d - 1, hex + d + 1 };
+        };
+        int pick = -1;
+        bool stopBlocking = false;
+        if (blocks) {
+            for (const auto& [distance, hex] : candidates) {
+                if (distance <= kReach && !open(hex)) {
+                    pick = hex;
+                    break;
+                }
+            }
+            if (pick < 0) {
+                pick = candidates.front().second;
+                stopBlocking = true;
+            }
+        } else {
+            for (const auto& [distance, hex] : candidates) {
+                bool reachable = !item || open(hex);
+                for (int n : neighbours(hex)) {
+                    reachable = reachable || open(n);
+                }
+                if (reachable) {
+                    pick = hex;
+                    break;
+                }
+            }
+            if (pick < 0) {
+                pick = candidates.front().second;
+            }
+        }
+        const auto target = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(pick));
+        ObjectSpotState from{ static_cast<int>(o.position), o.x, o.y, o.flags };
+        ObjectSpotState to = from;
+        to.position = pick;
+        to.x = static_cast<uint32_t>(static_cast<int32_t>(o.x) + hx - target->get().x());
+        to.y = static_cast<uint32_t>(static_cast<int32_t>(o.y) + hy - target->get().y());
+        if (stopBlocking) {
+            to.flags |= kNoBlock;
+        }
+        moved.push_back(object);
+        before.push_back(from);
+        after.push_back(to);
+    }
+    if (moved.empty()) {
+        Q_EMIT statusMessageRequested("Put on Top: nothing it sits on is drawn over it in the game");
+        return;
+    }
+    _controller.commandController().registerObjectSpotEdit(moved, before, after, "Put on Top");
+    Q_EMIT statusMessageRequested(QString("Put on Top: %1 object(s)%2").arg(moved.size())
+            .arg(nothingUnder ? QString(", %1 already on top").arg(nothingUnder) : QString()));
+}
+
 void EditorWidget::showObjectContextMenu(sf::Vector2f worldPos, sf::Vector2i screenPos) {
     auto* selectionManager = _session.selectionManager();
     if (!_session.map() || !selectionManager || !_sfmlWidget) {
@@ -2089,6 +2259,8 @@ void EditorWidget::showObjectContextMenu(sf::Vector2f worldPos, sf::Vector2i scr
         addStep("Bring F&orward\tPgUp", object_order::Step::BringForward);
         addStep("Send &Backward\tPgDown", object_order::Step::SendBackward);
         addStep("Send to Bac&k\tEnd", object_order::Step::SendToBack);
+        menu.addSeparator();
+        connect(menu.addAction("Put on &Top"), &QAction::triggered, this, &EditorWidget::putSelectedOnTop);
     }
     menu.exec(_sfmlWidget->mapToGlobal(QPoint(screenPos.x, screenPos.y)));
 }

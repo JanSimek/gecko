@@ -82,6 +82,13 @@ bool ObjectCommandController::registerObjectMove(const std::vector<std::shared_p
     return _objectService.registerObjectMove(objects, moves);
 }
 
+bool ObjectCommandController::registerObjectSpotEdit(const std::vector<std::shared_ptr<Object>>& objects,
+    const std::vector<ObjectSpotState>& before,
+    const std::vector<ObjectSpotState>& after,
+    const std::string& description) {
+    return _objectService.registerObjectSpotEdit(objects, before, after, description);
+}
+
 bool ObjectCommandController::registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects,
     const std::vector<int>& beforeDirs,
     const std::vector<int>& afterDirs) {

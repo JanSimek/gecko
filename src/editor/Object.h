@@ -37,6 +37,11 @@ private:
     int _direction;
     bool _selected;
 
+    // the hex the sprite is seated on, in world px (kept so a new MapObject's offset can be applied)
+    int _hexX = 0;
+    int _hexY = 0;
+    bool _hasHex = false;
+
 public:
     Object(const Frm* frm);
 
@@ -53,6 +58,11 @@ public:
     [[nodiscard]] const Frm* getFrm() const noexcept { return _frm; }
 
     void setHexPosition(const Hex& hex);
+    /// Re-seats the sprite on its hex, e.g. after the MapObject's pixel offset changed.
+    void refreshPosition();
+    /// The MapObject's own pixel offset (x/y), drawn as the engine draws it.
+    [[nodiscard]] int offsetX() const;
+    [[nodiscard]] int offsetY() const;
     void setDirection(ObjectDirection direction);
     [[nodiscard]] int getDirection() const noexcept { return _direction; }
     void rotate();
@@ -73,6 +83,7 @@ public:
 
 private:
     static sf::Texture& createBlankTexture();
+    void placeSprite();
 };
 
 } // namespace geck

@@ -159,6 +159,9 @@ public:
     // Bring the selected objects forward/backward in gecko's draw order (undoable). In game the
     // order only matters between objects on the same hex; see editor/helper/ObjectOrder.h.
     void reorderSelectedObjects(object_order::Step step);
+    /// Makes each selected piece show on top of the table or shelf it sits on in the game, the
+    /// way gecko shows it (see the comment on the definition).
+    void putSelectedOnTop();
     void changeElevation(int elevation);
     void toggleScrollBlockerRectangleMode();
 
