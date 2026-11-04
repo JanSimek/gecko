@@ -218,8 +218,17 @@ void MapWriter::writeObject(const MapObject& object) {
 
     // Write the common-field block (layout shared with MapReader via the visitor).
     // Every field is emitted as a big-endian 32-bit word.
-    visitMapObjectCommonFields(object, [&utils](const auto& field) {
-        utils.writeBE32(static_cast<uint32_t>(field));
+    // A container's capacity is written as at least what it holds: the engine allocates
+    // max_inventory_size slots and then reads objects_in_inventory items into them (fallout2-ce
+    // object.cc objectLoadAllInternal), so a container filled in the inventory editor, which only
+    // counts its items, corrupted the heap and crashed the game on entering the map.
+    visitMapObjectCommonFields(object, [&utils, &object](const auto& field) {
+        uint32_t value = static_cast<uint32_t>(field);
+        if (static_cast<const void*>(&field) == static_cast<const void*>(&object.max_inventory_size)
+            && value < object.objects_in_inventory) {
+            value = object.objects_in_inventory;
+        }
+        utils.writeBE32(value);
     });
 
     uint32_t objectTypeId = object.objectType();

@@ -1,6 +1,7 @@
 #include "InventoryItemUiHelper.h"
 
 #include "format/frm/Frm.h"
+#include "format/map/ItemDefaults.h"
 #include "format/map/MapObject.h"
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
@@ -212,7 +213,8 @@ std::unique_ptr<MapObject> createMapInventoryItem(resource::GameResources& resou
         throw std::invalid_argument("Inventory item amount must be positive");
     }
 
-    if (!loadPro(resources, pid)) {
+    Pro* pro = loadPro(resources, pid);
+    if (!pro) {
         throw std::runtime_error("Inventory item PRO does not exist");
     }
 
@@ -226,6 +228,7 @@ std::unique_ptr<MapObject> createMapInventoryItem(resource::GameResources& resou
     item->objects_in_inventory = 0;
     item->max_inventory_size = 0;
     item->inventory.clear();
+    applyItemDefaults(*item, *pro);
 
     return item;
 }

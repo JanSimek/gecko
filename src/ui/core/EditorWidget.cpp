@@ -71,6 +71,7 @@
 #include "format/frm/Frm.h"
 #include "format/map/Tile.h"
 #include "format/pro/Pro.h"
+#include "format/map/ItemDefaults.h"
 #include "format/map/MapObject.h"
 #include "resource/GameResources.h"
 
@@ -3322,6 +3323,7 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
 
     mapObject->pro_pid = _previewObjectInfo->pro->header.PID;
     mapObject->frm_pid = _previewObjectInfo->pro->header.FID;
+    applyItemDefaults(*mapObject, *_previewObjectInfo->pro);
 
     mapObject->sx = 0;
     mapObject->sy = 0;
@@ -3906,6 +3908,7 @@ bool EditorWidget::placeProtoAtHex(int hexIndex, uint32_t proPid) {
     mapObject->frame_number = 0;
     mapObject->pro_pid = proPid;
     mapObject->frm_pid = static_cast<uint32_t>(pro->header.FID);
+    applyItemDefaults(*mapObject, *pro);
     mapObject->x = 0;
     mapObject->y = 0;
     mapObject->sx = 0;
