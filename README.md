@@ -21,6 +21,7 @@ On top of upstream gecko, this fork adds:
 - **Stamps** in [`resources/stamps`](resources/stamps): buildings, graveyards, junkyards and ruins cut from Fallout 1, Fallout 2, Sonora, Nevada, Resurrection and Olympus, with credits.
 - **Copy, cut and paste of map areas** (Ctrl+C / Ctrl+X / Ctrl+V): tiles and objects, onto another elevation or into another map. Paste shows a ghost; each click drops a copy.
 - **Right-click menu**: Cut / Copy / Paste and the draw order (Bring to Front, Forward, Backward, Send to Back; also Home / PgUp / PgDn / End).
+- A **Tools menu for a mod's own art**, for a mod folder that has `tools/gecko_assets.py` (set it in File > Preferences > Mod Tools). *Add Scenery from Picture* turns a render or photo into a new scenery piece, previewed beside the player for scale. The map's right-click menu makes mirrored and resized copies and edits an object's name and examine text. *Apply New Art* saves the map, closes gecko, deploys the mod in a console window and opens gecko again on the map.
 - A **Black Edge** tool and a **custom stamps folder**.
 - Add/Remove Blocker tools, `gecko-cli map strip-exit-grids`, no crash on missing art, single instance, sturdier settings.
 

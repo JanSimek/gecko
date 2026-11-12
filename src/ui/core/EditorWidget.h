@@ -138,6 +138,10 @@ public:
     void setEdgeScrollEnabled(bool enabled) { _edgeScrollEnabled = enabled; }
     bool isEdgeScrollEnabled() const { return _edgeScrollEnabled; }
 
+    // Whether the mod tools are set up (Preferences > Mod Tools): only then does the right-click
+    // menu offer copies and names for the selected object (modAssetActionRequested).
+    void setModToolsAvailable(bool available) { _modToolsAvailable = available; }
+
     // User-configured selection highlight colours (from preferences); forwarded to the renderer.
     void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
 
@@ -430,6 +434,9 @@ signals:
     /// The contextual status-bar key-hint changed because the mode or the selection changed.
     /// MainWindow shows it on a permanent status-bar label (separate from transient messages).
     void hintChanged(const QString& hint);
+    /// Right-click asked the mod tools for something about the one selected object's proto: a
+    /// ModAssetAction (as int) and the PID. MainWindow runs it through ModToolsRunner.
+    void modAssetActionRequested(int action, quint32 pid);
 
 public slots:
     void onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
@@ -650,6 +657,7 @@ private:
     // Edge scrolling: auto-pan when the cursor rests near a viewport edge (see setEdgeScrollEnabled).
     // Default on to match both reference mappers; the View menu / Settings persist the user's choice.
     bool _edgeScrollEnabled = true;
+    bool _modToolsAvailable = false;
 
     // Map-edge (.edg) overlay editing state. _selectedEdgeZone indexes the current elevation's zones
     // (-1 = none); _activeEdgeSide is the side being dragged (0=left,1=top,2=right,3=bottom; -1 = none).

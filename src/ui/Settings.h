@@ -103,6 +103,13 @@ public:
     QColor getSelectionColor(const QString& key, const QColor& fallback) const;
     void setSelectionColor(const QString& key, const QColor& color);
 
+    // Mod tools (Tools menu): the mod folder whose tools/gecko_assets.py makes new art, and the
+    // Python that runs it. An empty root means the Tools menu only explains how to set it up.
+    std::filesystem::path getModToolsRoot() const;
+    void setModToolsRoot(const std::filesystem::path& root);
+    QString getPythonExecutable() const; // "python" (from PATH) when unset
+    void setPythonExecutable(const QString& python);
+
     // Game location configuration
     std::filesystem::path getGameLocation() const;
     bool isGameLocationValid() const;
@@ -154,6 +161,10 @@ private:
 
     // Selection highlight colour overrides (empty = use the renderer defaults).
     QMap<QString, QColor> _selectionColors;
+
+    // Mod tools (empty = not set up)
+    std::filesystem::path _modToolsRoot;
+    QString _pythonExecutable;
 
     // Game location configuration
     std::filesystem::path _executableGameLocation;

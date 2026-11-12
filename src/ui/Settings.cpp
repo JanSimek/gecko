@@ -240,6 +240,16 @@ QJsonObject Settings::toJson() const {
     }
     json["selectionColors"] = selectionColors;
 
+    // UTF-16 both ways: a path's narrow string() is the ANSI code page on Windows.
+    QJsonObject modTools;
+    if (!_modToolsRoot.empty()) {
+        modTools["root"] = QString::fromStdU16String(_modToolsRoot.u16string());
+    }
+    if (!_pythonExecutable.isEmpty()) {
+        modTools["python"] = _pythonExecutable;
+    }
+    json["modTools"] = modTools;
+
     return json;
 }
 
@@ -355,6 +365,14 @@ void Settings::fromJson(const QJsonObject& json) {
                 _selectionColors[it.key()] = color;
             }
         }
+    }
+
+    _modToolsRoot.clear();
+    _pythonExecutable.clear();
+    if (json.contains("modTools") && json["modTools"].isObject()) {
+        const QJsonObject modTools = json["modTools"].toObject();
+        _modToolsRoot = std::filesystem::path(modTools["root"].toString().toStdU16String());
+        _pythonExecutable = modTools["python"].toString().trimmed();
     }
 }
 
@@ -530,6 +548,22 @@ QString Settings::getCustomEditorPath() const {
 
 void Settings::setCustomEditorPath(const QString& path) {
     _customEditorPath = path;
+}
+
+std::filesystem::path Settings::getModToolsRoot() const {
+    return _modToolsRoot;
+}
+
+void Settings::setModToolsRoot(const std::filesystem::path& root) {
+    _modToolsRoot = root;
+}
+
+QString Settings::getPythonExecutable() const {
+    return _pythonExecutable.isEmpty() ? QStringLiteral("python") : _pythonExecutable;
+}
+
+void Settings::setPythonExecutable(const QString& python) {
+    _pythonExecutable = python.trimmed();
 }
 
 QColor Settings::getSelectionColor(const QString& key, const QColor& fallback) const {

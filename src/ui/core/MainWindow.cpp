@@ -34,6 +34,9 @@
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/dialogs/MapBrowserDialog.h"
 #include "ui/dialogs/PatternBrowserDialog.h"
+#include "ui/dialogs/AddSceneryDialog.h"
+#include "ui/assets/ModAssetAction.h"
+#include "ui/assets/ModToolsRunner.h"
 #include "ui/theme/ThemeManager.h"
 #include "resource/GameResources.h"
 #include "state/loader/MapLoader.h"
@@ -79,6 +82,16 @@
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
+#include <QCheckBox>
+#include <QCoreApplication>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QLineEdit>
+#include <QPlainTextEdit>
+#include <QSpinBox>
 #include <SFML/Window/Event.hpp>
 #include <spdlog/spdlog.h>
 
@@ -755,6 +768,16 @@ void MainWindow::setupMenuBar() {
         connect(action, &QAction::triggered, this, [this, elevation = spec.elevation]() { elevationChanged(elevation); });
         *spec.actionRef = action;
     }
+
+    // New art through the mod's own tools (Preferences > Mod Tools); see ui/assets/ModToolsRunner.h.
+    _toolsMenu = _menuBar->addMenu("&Tools");
+    addMenuAction(_toolsMenu, QString(), "Add &Scenery from Picture...", &MainWindow::showAddSceneryDialog,
+        QKeySequence(), "Turn a render or photo into a new scenery piece");
+    addMenuAction(_toolsMenu, QString(), "&Apply New Art...", &MainWindow::applyNewArt, QKeySequence(),
+        "Save the map, close gecko, deploy the mod with the new art, and open gecko again on this map");
+    _toolsMenu->addSeparator();
+    addMenuAction(_toolsMenu, ":/icons/actions/settings.svg", "Mod Tools &Setup...", &MainWindow::showPreferences,
+        QKeySequence(), "Where the mod's tools are (Preferences > Mod Tools)");
 
     _helpMenu = _menuBar->addMenu("&Help");
     QAction* aboutAction = _helpMenu->addAction("&About Gecko...");
@@ -2181,6 +2204,8 @@ void MainWindow::connectToEditorWidget() {
 
     connect(_currentEditorWidget, &EditorWidget::statusMessageRequested, this, &MainWindow::showStatusMessage);
     connect(_currentEditorWidget, &EditorWidget::statusMessageClearRequested, this, &MainWindow::clearStatusMessage);
+    _currentEditorWidget->setModToolsAvailable(modToolsConfigured());
+    connect(_currentEditorWidget, &EditorWidget::modAssetActionRequested, this, &MainWindow::onModAssetAction);
     // Keep the checkable tool-mode toolbar actions in sync with the active mode
     // (entering any mode exits the others via EditorWidget::setMode).
     connect(_currentEditorWidget, &EditorWidget::editorModeChanged, this, [this](EditorMode mode) {
@@ -2777,6 +2802,7 @@ void MainWindow::showPreferences() {
         }
         if (_currentEditorWidget && _settings) {
             _currentEditorWidget->setEdgeScrollEnabled(_settings->getEdgeScrollEnabled());
+            _currentEditorWidget->setModToolsAvailable(modToolsConfigured());
         }
     });
 
@@ -2794,6 +2820,248 @@ void MainWindow::showPreferences() {
 void MainWindow::showAbout() {
     AboutDialog dialog(this);
     dialog.exec();
+}
+
+// ------------------------------------------------------------------------------ mod tools
+
+namespace {
+
+    QString pidText(quint32 pid) {
+        return "0x" + QString::number(pid, 16).toUpper().rightJustified(8, u'0');
+    }
+
+    /// A mod-tools command, waited for under a wait cursor.
+    ModToolResult runWithWaitCursor(ModToolsRunner& runner, const QStringList& args) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        ModToolResult result = runner.runAndWait(args);
+        QApplication::restoreOverrideCursor();
+        return result;
+    }
+
+    const QString AFTER_APPLY = "Tools > Apply New Art puts it in the palette and the game.";
+
+} // namespace
+
+bool MainWindow::modToolsConfigured() const {
+    return _settings && ModToolsRunner::isModToolsRoot(_settings->getModToolsRoot());
+}
+
+std::unique_ptr<ModToolsRunner> MainWindow::makeModToolsRunner() {
+    if (!modToolsConfigured()) {
+        const bool openPreferences = QtDialogs::showQuestion(this, "Mod Tools",
+            "The Tools menu runs your mod's own tools: tools/gecko_assets.py in the mod folder, "
+            "with Python.\n\nSet the mod folder in File > Preferences > Mod Tools. Open Preferences now?");
+        if (openPreferences) {
+            showPreferences();
+        }
+        if (!modToolsConfigured()) {
+            return nullptr;
+        }
+    }
+    return std::make_unique<ModToolsRunner>(_settings->getModToolsRoot(), _settings->getPythonExecutable());
+}
+
+void MainWindow::showAddSceneryDialog() {
+    auto runner = makeModToolsRunner();
+    if (!runner) {
+        return;
+    }
+    AddSceneryDialog dialog(runner.get(), this);
+    dialog.exec();
+    if (dialog.piecesMade() > 0) {
+        showStatusMessage(QString("%1 new piece(s) made. %2").arg(dialog.piecesMade()).arg(AFTER_APPLY));
+    }
+}
+
+void MainWindow::applyNewArt() {
+    auto runner = makeModToolsRunner();
+    if (!runner) {
+        return;
+    }
+    const ModToolResult info = runWithWaitCursor(*runner, { "info" });
+    if (!info.ok) {
+        QtDialogs::showWarning(this, "Apply New Art", "The mod tools didn't answer:\n\n" + info.error);
+        return;
+    }
+    if (info.json.value("browse_session").toBool()) {
+        QtDialogs::showWarning(this, "Apply New Art",
+            "This gecko is open on another game (a gecko_browse launcher). Close it so your mod's "
+            "settings come back, then use Apply New Art from the gecko for your mod.");
+        return;
+    }
+    const QJsonArray running = info.json.value("games_running").toArray();
+    if (!running.isEmpty()) {
+        QStringList names;
+        for (const auto& name : running) {
+            names << name.toString();
+        }
+        QtDialogs::showWarning(this, "Apply New Art",
+            QString("The game is running (%1). Close it first: a deploy replaces the files it is reading.")
+                .arg(names.join(", ")));
+        return;
+    }
+
+    const int pending = info.json.value("pending").toInt();
+    const bool haveMap = hasActiveMap() && _currentEditorWidget->getMap();
+    QString question = pending > 0
+        ? QString("%1 new piece(s) or name change(s) are waiting to go in.").arg(pending)
+        : QString("Nothing new was made since the last Apply; this deploys the mod as it is.");
+    question += "\n\nGecko will " + QString(haveMap ? "save this map, " : "")
+        + "close, and deploy the mod in a console window (gen_ids, deploy, scenery_text, deploy, "
+          "repack_art, validate). Then it opens again"
+        + (haveMap ? QString(" on %1").arg(QString::fromStdString(_currentEditorWidget->getMap()->filename())) : QString())
+        + ".\n\nGo ahead?";
+    if (!QtDialogs::showQuestion(this, "Apply New Art", question)) {
+        return;
+    }
+
+    QString mapPath;
+    if (haveMap) {
+        if (_mapModified) {
+            if (!_currentEditorWidget->saveMap(writableMapsDir())) {
+                return; // save cancelled or failed: stay open, nothing started
+            }
+            handleMapSaved();
+        }
+        const std::filesystem::path path = _currentEditorWidget->getMap()->path();
+        std::error_code ec;
+        if (path.is_absolute() && std::filesystem::exists(path, ec)) {
+            mapPath = QString::fromStdU16String(path.u16string());
+        }
+    }
+
+    QString error;
+    if (!runner->startApply(QCoreApplication::applicationPid(), QCoreApplication::applicationFilePath(), mapPath, &error)) {
+        QtDialogs::showError(this, "Apply New Art", error);
+        return;
+    }
+    spdlog::info("Apply New Art started; closing so the deploy can run");
+    close();
+}
+
+void MainWindow::onModAssetAction(int action, quint32 pid) {
+    auto runner = makeModToolsRunner();
+    if (!runner) {
+        return;
+    }
+    switch (static_cast<ModAssetAction>(action)) {
+        case ModAssetAction::MirroredCopy:
+            makeMirroredCopy(*runner, pid);
+            break;
+        case ModAssetAction::ResizedCopy:
+            makeResizedCopy(*runner, pid);
+            break;
+        case ModAssetAction::NameAndText:
+            editNameAndText(*runner, pid);
+            break;
+    }
+}
+
+void MainWindow::makeMirroredCopy(ModToolsRunner& runner, quint32 pid) {
+    const ModToolResult suggestion = runWithWaitCursor(runner, { "suggest-name", "--pid", pidText(pid), "--suffix", "m" });
+    bool accepted = false;
+    const QString name = QInputDialog::getText(this, "Mirrored Copy",
+        "A left-right mirrored copy of this piece becomes a new piece; the original stays as it is.\n\n"
+        "File name for the copy (up to 8 letters):",
+        QLineEdit::Normal, suggestion.json.value("name").toString(), &accepted)
+                             .trimmed()
+                             .toLower();
+    if (!accepted || name.isEmpty()) {
+        return;
+    }
+    const ModToolResult result = runWithWaitCursor(runner, { "mirror", pidText(pid), "--name", name });
+    if (!result.ok) {
+        QtDialogs::showWarning(this, "Mirrored Copy", result.error);
+        return;
+    }
+    QtDialogs::showInfo(this, "Mirrored Copy",
+        QString("Made %1 (%2), mirrored from %3.\n\n%4").arg(name, result.json.value("pid").toString(), pidText(pid), AFTER_APPLY));
+}
+
+void MainWindow::makeResizedCopy(ModToolsRunner& runner, quint32 pid) {
+    const ModToolResult suggestion = runWithWaitCursor(runner, { "suggest-name", "--pid", pidText(pid), "--suffix", "x" });
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Bigger or Smaller Copy");
+    auto* form = new QFormLayout(&dialog);
+    auto* intro = new QLabel("A bigger or smaller copy of this piece becomes a new piece; the original stays as it is.");
+    intro->setWordWrap(true);
+    form->addRow(intro);
+    auto* size = new QSpinBox();
+    size->setRange(10, 800);
+    size->setSingleStep(10);
+    size->setValue(200);
+    size->setSuffix(" %");
+    form->addRow("Size:", size);
+    auto* nameEdit = new QLineEdit(suggestion.json.value("name").toString());
+    nameEdit->setMaxLength(8);
+    form->addRow("File name:", nameEdit);
+    auto* pixel = new QCheckBox("Keep hard pixels (no smoothing)");
+    form->addRow(pixel);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QString name = nameEdit->text().trimmed().toLower();
+    if (name.isEmpty()) {
+        return;
+    }
+    QStringList args{ "resize", pidText(pid), "--name", name, "--scale", QString::number(size->value() / 100.0, 'g', 4) };
+    if (pixel->isChecked()) {
+        args << "--pixel";
+    }
+    const ModToolResult result = runWithWaitCursor(runner, args);
+    if (!result.ok) {
+        QtDialogs::showWarning(this, "Bigger or Smaller Copy", result.error);
+        return;
+    }
+    QtDialogs::showInfo(this, "Bigger or Smaller Copy",
+        QString("Made %1 (%2), %3% of %4.\n\n%5")
+            .arg(name, result.json.value("pid").toString())
+            .arg(size->value())
+            .arg(pidText(pid), AFTER_APPLY));
+}
+
+void MainWindow::editNameAndText(ModToolsRunner& runner, quint32 pid) {
+    const ModToolResult current = runWithWaitCursor(runner, { "text", pidText(pid) });
+    if (!current.ok) {
+        QtDialogs::showWarning(this, "Name and Examine Text", current.error);
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Name and Examine Text");
+    dialog.setMinimumWidth(460);
+    auto* form = new QFormLayout(&dialog);
+    auto* intro = new QLabel(QString("What the game shows for every object made from proto %1. "
+                                     "Objects with the same name share one examine text.")
+                                 .arg(pidText(pid)));
+    intro->setWordWrap(true);
+    form->addRow(intro);
+    auto* titleEdit = new QLineEdit(current.json.value("title").toString());
+    form->addRow("Name:", titleEdit);
+    auto* textEdit = new QPlainTextEdit(current.json.value("text").toString());
+    textEdit->setFixedHeight(90);
+    form->addRow("Examine text:", textEdit);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const ModToolResult result = runWithWaitCursor(runner,
+        { "text", pidText(pid), "--title", titleEdit->text(), "--text", textEdit->toPlainText() });
+    if (!result.ok) {
+        QtDialogs::showWarning(this, "Name and Examine Text", result.error);
+        return;
+    }
+    showStatusMessage(QString("Saved the name and examine text for %1. %2").arg(pidText(pid), AFTER_APPLY));
 }
 
 void MainWindow::onPlayGame() {

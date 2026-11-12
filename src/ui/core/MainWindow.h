@@ -60,6 +60,7 @@ class LogModel;
 class CompletenessView;
 class ThumbnailPrewarmer;
 class Map;
+class ModToolsRunner;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -163,6 +164,19 @@ private slots:
     void updateModeDisplay(const QString& modeText, const QString& iconPath);
     void showPreferences();
     void showAbout();
+
+    // Tools menu: new art through the mod's tools/gecko_assets.py (ui/assets/ModToolsRunner.h).
+    [[nodiscard]] bool modToolsConfigured() const;
+    /// A runner for the configured mod folder, or nullptr after explaining how to set one up.
+    std::unique_ptr<ModToolsRunner> makeModToolsRunner();
+    void showAddSceneryDialog();
+    /// Save the map, start the deploy in its own console (it waits for gecko to exit and opens
+    /// gecko again on the map), and close gecko.
+    void applyNewArt();
+    void onModAssetAction(int action, quint32 pid);
+    void makeMirroredCopy(ModToolsRunner& runner, quint32 pid);
+    void makeResizedCopy(ModToolsRunner& runner, quint32 pid);
+    void editNameAndText(ModToolsRunner& runner, quint32 pid);
     void onPlayGame();
     void showSavePatternDialog();
     void showStampPatternDialog();
@@ -314,6 +328,7 @@ private:
     QMenu* _panelsMenu;
     QMenu* _elevationMenu;
     QMenu* _pluginMenu = nullptr;
+    QMenu* _toolsMenu = nullptr;
     QMenu* _helpMenu;
 
     // Toolbar

@@ -1,5 +1,6 @@
 #include "EditorWidget.h"
 #include "ui/core/EditorHints.h"
+#include "ui/assets/ModAssetAction.h"
 #include "ui/widgets/SFMLWidget.h"
 #include "ui/input/InputHandler.h"
 // The stamp library + MapScriptApi are used by both the (scripting-only) Console and the always-on
@@ -2262,6 +2263,25 @@ void EditorWidget::showObjectContextMenu(sf::Vector2f worldPos, sf::Vector2i scr
         addStep("Send to Bac&k\tEnd", object_order::Step::SendToBack);
         menu.addSeparator();
         connect(menu.addAction("Put on &Top"), &QAction::triggered, this, &EditorWidget::putSelectedOnTop);
+    }
+    // Mod tools: new pieces made from the one selected object's proto (scenery), and the name and
+    // examine text of an item, critter or scenery proto. The PID is read now, not when clicked.
+    if (_modToolsAvailable && current.getObjects().size() == 1) {
+        const auto mapObject = current.getObjects().front()->getMapObjectPtr();
+        const uint32_t pid = mapObject ? mapObject->pro_pid : 0;
+        const uint32_t type = pid >> 24;
+        if (mapObject && type <= 2) {
+            menu.addSeparator();
+            const auto addModAction = [this, &menu, pid](const QString& text, ModAssetAction action) {
+                connect(menu.addAction(text), &QAction::triggered, this,
+                    [this, pid, action]() { Q_EMIT modAssetActionRequested(static_cast<int>(action), pid); });
+            };
+            if (type == 2) {
+                addModAction("&Mirrored Copy...", ModAssetAction::MirroredCopy);
+                addModAction("Bigger or &Smaller Copy...", ModAssetAction::ResizedCopy);
+            }
+            addModAction("&Name and Examine Text...", ModAssetAction::NameAndText);
+        }
     }
     menu.exec(_sfmlWidget->mapToGlobal(QPoint(screenPos.x, screenPos.y)));
 }
