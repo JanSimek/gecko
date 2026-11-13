@@ -169,6 +169,15 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
     _gameLauncher = std::make_unique<GameLauncher>(*_resourcesShared, _settings, this, [this](const QString& message) { showStatusMessage(message); }, nullptr);
 
     _externalEditorLauncher = std::make_unique<ExternalEditorLauncher>(*_resourcesShared, _settings, this);
+
+    if (_settings) {
+        const std::filesystem::path configured = _settings->getModToolsRoot();
+        const std::filesystem::path modTools = ModToolsRunner::resolveRoot(configured);
+        const std::u8string shown = modTools.u8string();
+        spdlog::info("Mod tools: {}", modTools.empty() ? std::string("not set up (Tools menu explains)")
+                                                      : std::string(reinterpret_cast<const char*>(shown.data()), shown.size())
+                    + (ModToolsRunner::isModToolsRoot(configured) ? " (Preferences)" : " (found above gecko.exe)"));
+    }
     _scriptSourceService = std::make_unique<ScriptSourceService>(*_resourcesShared, _settings, *_externalEditorLauncher, this);
 
     restoreDockWidgetState();
@@ -2843,7 +2852,7 @@ namespace {
 } // namespace
 
 bool MainWindow::modToolsConfigured() const {
-    return _settings && ModToolsRunner::isModToolsRoot(_settings->getModToolsRoot());
+    return _settings && !ModToolsRunner::resolveRoot(_settings->getModToolsRoot()).empty();
 }
 
 std::unique_ptr<ModToolsRunner> MainWindow::makeModToolsRunner() {
@@ -2858,7 +2867,8 @@ std::unique_ptr<ModToolsRunner> MainWindow::makeModToolsRunner() {
             return nullptr;
         }
     }
-    return std::make_unique<ModToolsRunner>(_settings->getModToolsRoot(), _settings->getPythonExecutable());
+    return std::make_unique<ModToolsRunner>(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()),
+        _settings->getPythonExecutable());
 }
 
 void MainWindow::showAddSceneryDialog() {

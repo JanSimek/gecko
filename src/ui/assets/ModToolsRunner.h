@@ -38,6 +38,12 @@ public:
     static std::filesystem::path scriptFor(const std::filesystem::path& root);
     /// Whether @p root holds the script, i.e. the Tools menu can work.
     static bool isModToolsRoot(const std::filesystem::path& root);
+    /// The nearest folder above gecko.exe that holds the script, or empty. FOC builds gecko inside
+    /// its own project (reference/gecko/build), so it needs no setting there.
+    static std::filesystem::path detectRootAboveApplication();
+    /// The mod folder the Tools menu uses: @p configured (Preferences > Mod Tools) when it holds
+    /// the script, else the one found above gecko.exe, else empty.
+    static std::filesystem::path resolveRoot(const std::filesystem::path& configured);
 
     [[nodiscard]] const std::filesystem::path& root() const { return _root; }
     [[nodiscard]] const QString& python() const { return _python; }

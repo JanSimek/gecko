@@ -3,10 +3,12 @@
 #include "Application.h"
 #include "resource/WritableDataRoot.h"
 #include "ui/IconHelper.h"
+#include "ui/assets/ModToolsRunner.h"
 #include "ui/theme/ThemeManager.h"
 #include "util/GameDataPathResolver.h"
 
 #include <QApplication>
+#include <QDir>
 #include <QStandardPaths>
 #include <QFileDialog>
 #include <QMenu>
@@ -559,6 +561,27 @@ void DataPathsWidget::removeSelectedPath() {
     }
 }
 
+namespace {
+
+    /// A mod's project folder (it holds tools/gecko_assets.py, the Tools menu's helper) is not game
+    /// data. Mounted, it puts the whole project into the game's file system above the real mod
+    /// layer, and FOC's holds file names the ANSI code page cannot map, so it fails to mount.
+    /// Says so and returns true when @p picked is one.
+    bool refuseModProjectFolder(QWidget* parent, const QString& picked) {
+        if (!ModToolsRunner::isModToolsRoot(std::filesystem::path(picked.toStdU16String()))) {
+            return false;
+        }
+        QMessageBox::warning(parent, "Not a Data Folder",
+            QString("%1 is your mod's project folder (it has tools\\gecko_assets.py), not game data, so it "
+                    "can't be a data path.\n\n"
+                    "The Tools menu finds this folder by itself (File > Preferences > Mod Tools).\n\n"
+                    "For your mod's game data, use the deployed mod inside it: for FOC, base\\mods\\foc.")
+                .arg(QDir::toNativeSeparators(picked)));
+        return true;
+    }
+
+} // namespace
+
 int DataPathsWidget::addFolderExpanded(const std::filesystem::path& folder, bool atTop) {
     // expandDataPaths returns a folder's DATs before the folder itself, so the folder's loose files
     // win. The table shows the stored order reversed (highest priority first), so inserting each row
@@ -580,7 +603,7 @@ void DataPathsWidget::onAddFolder() {
     const QString path = QFileDialog::getExistingDirectory(this,
         "Select Fallout 2 Data Folder",
         QStandardPaths::writableLocation(QStandardPaths::HomeLocation));
-    if (path.isEmpty()) {
+    if (path.isEmpty() || refuseModProjectFolder(this, path)) {
         return;
     }
 
@@ -701,6 +724,9 @@ void DataPathsWidget::onCellDoubleClicked(int row, int /*column*/) {
             currentPath, "Fallout 2 data (*.dat);;All files (*)");
     } else {
         newPath = QFileDialog::getExistingDirectory(this, "Select Fallout 2 Data Directory", currentPath);
+        if (!newPath.isEmpty() && refuseModProjectFolder(this, newPath)) {
+            return; // the entry keeps its old path
+        }
     }
     if (!newPath.isEmpty() && newPath != currentPath) {
         // Re-picking a marked folder keeps it the save location under its new path.

@@ -17,6 +17,24 @@
 
 namespace geck {
 
+namespace {
+
+    /// Mounts one data path on a worker's private resource stack, or logs and skips it. These
+    /// threads mount the same paths the app's DataPathLoader does, which catches a path that will
+    /// not mount (a folder with a file name the ANSI code page cannot hold, say) and carries on;
+    /// an exception escaping QThread::run instead ends the whole process (std::terminate).
+    void mountOrSkip(resource::GameResources& resources, const std::filesystem::path& path, const char* who) {
+        try {
+            resources.files().addDataPath(path);
+        } catch (const std::exception& e) {
+            const std::u8string utf8 = path.u8string();
+            spdlog::warn("{}: skipping data path {}: {}", who,
+                std::string(reinterpret_cast<const char*>(utf8.data()), utf8.size()), e.what());
+        }
+    }
+
+} // namespace
+
 MapRenderWorker::MapRenderWorker(std::vector<std::filesystem::path> dataPaths)
     : _dataPaths(std::move(dataPaths)) {
 }
@@ -32,7 +50,7 @@ bool MapRenderWorker::ensureResources() {
 
     auto resources = std::make_unique<resource::GameResources>();
     for (const auto& path : _dataPaths) {
-        resources->files().addDataPath(path);
+        mountOrSkip(*resources, path, "MapRenderWorker");
     }
     try {
         ResourceInitializer::loadEssentialLstFiles(*resources);
@@ -93,7 +111,7 @@ void ThumbnailPrewarmer::run() {
         if (_stop.load()) {
             return;
         }
-        resources.files().addDataPath(path);
+        mountOrSkip(resources, path, "ThumbnailPrewarmer");
     }
 
     // The sprite builders read tiles.lst (and friends) with repository().find() — present

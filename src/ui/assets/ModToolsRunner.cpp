@@ -1,5 +1,6 @@
 #include "ModToolsRunner.h"
 
+#include <QCoreApplication>
 #include <QEventLoop>
 #include <QJsonDocument>
 #include <QJsonParseError>
@@ -87,6 +88,28 @@ std::filesystem::path ModToolsRunner::scriptFor(const std::filesystem::path& roo
 bool ModToolsRunner::isModToolsRoot(const std::filesystem::path& root) {
     std::error_code ec;
     return !root.empty() && std::filesystem::is_regular_file(scriptFor(root), ec);
+}
+
+std::filesystem::path ModToolsRunner::detectRootAboveApplication() {
+    std::filesystem::path dir(QCoreApplication::applicationDirPath().toStdU16String());
+    for (int level = 0; level < 8 && !dir.empty(); ++level) {
+        if (isModToolsRoot(dir)) {
+            return dir.lexically_normal();
+        }
+        const std::filesystem::path parent = dir.parent_path();
+        if (parent == dir) {
+            break;
+        }
+        dir = parent;
+    }
+    return {};
+}
+
+std::filesystem::path ModToolsRunner::resolveRoot(const std::filesystem::path& configured) {
+    if (isModToolsRoot(configured)) {
+        return configured;
+    }
+    return detectRootAboveApplication();
 }
 
 QStringList ModToolsRunner::scriptArguments(const QStringList& args) const {
