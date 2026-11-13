@@ -4,6 +4,7 @@
 #include "ui/assets/ModToolsRunner.h"
 #include "ui/theme/ThemeManager.h"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDialogButtonBox>
@@ -24,11 +25,13 @@
 #include <QPushButton>
 #include <QRegularExpressionValidator>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <cmath>
 
 namespace geck {
 
@@ -44,6 +47,7 @@ namespace {
     const QColor PANE_BACKGROUND(40, 36, 30);
     const QColor CLICKED(225, 200, 90);
     const QColor GUESSED(90, 200, 220);
+    const QColor WALL_TOP(240, 150, 40);
 
 } // namespace
 
@@ -93,7 +97,8 @@ void CutBuildingDialog::setupUI() {
     sourceLayout->addWidget(_sourceLabel);
     auto* hint = new QLabel("One point at each end and one at each corner, where the wall meets the ground. "
                             "Right-click takes the last point back. Fewer than two points: the tool guesses "
-                            "(drawn in blue).");
+                            "(drawn in blue). Shift-click the top of a wall, under the eaves, to set the wall "
+                            "height (the orange line): above it is roof.");
     hint->setWordWrap(true);
     hint->setMaximumWidth(SOURCE_W);
     sourceLayout->addWidget(hint);
@@ -188,6 +193,23 @@ void CutBuildingDialog::setupUI() {
     _colourCombo->addItem("As rendered", "none");
     _colourCombo->addItem("Dusty, like the vanilla walls", "walls");
     form->addRow("Colours:", _colourCombo);
+
+    auto* roofRow = new QHBoxLayout();
+    _roofCheck = new QCheckBox("Roof as roof tiles, above a wall height of");
+    _roofCheck->setChecked(true);
+    _roofCheck->setToolTip("Fallout's way: the roof is drawn over everything and hides while the player stands under it. "
+                           "Each tile takes one of the few spare tile slots. Off: the roof stays part of the walls.");
+    roofRow->addWidget(_roofCheck);
+    _wallTopSpin = new QDoubleSpinBox();
+    _wallTopSpin->setDecimals(0);
+    _wallTopSpin->setRange(1, 10000);
+    _wallTopSpin->setSuffix(" render px");
+    _wallTopSpin->setToolTip("Height of the walls above their foot, in the render's pixels. Shift-click a wall's top to set it.");
+    roofRow->addWidget(_wallTopSpin);
+    _wallTopGameLabel = new QLabel();
+    roofRow->addWidget(_wallTopGameLabel);
+    roofRow->addStretch();
+    form->addRow("Roof:", roofRow);
     main->addLayout(form);
 
     _infoLabel = new QLabel();
@@ -217,6 +239,16 @@ void CutBuildingDialog::setupUI() {
     connect(_heightSpin, &QSpinBox::valueChanged, this, &CutBuildingDialog::schedulePreview);
     connect(_scaleSpin, &QDoubleSpinBox::valueChanged, this, &CutBuildingDialog::schedulePreview);
     connect(_colourCombo, &QComboBox::currentIndexChanged, this, &CutBuildingDialog::schedulePreview);
+    connect(_roofCheck, &QCheckBox::toggled, this, [this](bool on) {
+        _wallTopSpin->setEnabled(on);
+        drawSourceView();
+        schedulePreview();
+    });
+    connect(_wallTopSpin, &QDoubleSpinBox::valueChanged, this, [this]() {
+        _wallTopAuto = false; // set by hand now (programmatic sets block this signal)
+        drawSourceView();
+        schedulePreview();
+    });
     connect(_prefixEdit, &QLineEdit::textChanged, this, [this]() {
         _problemLabel->clear();
         updateCreateButton();
@@ -234,6 +266,10 @@ void CutBuildingDialog::setupUI() {
 bool CutBuildingDialog::eventFilter(QObject* watched, QEvent* event) {
     if (watched == _sourceLabel && event->type() == QEvent::MouseButtonPress) {
         auto* mouse = static_cast<QMouseEvent*>(event);
+        if (mouse->button() == Qt::LeftButton && (mouse->modifiers() & Qt::ShiftModifier)) {
+            setWallTopFrom(mouse->position().toPoint());
+            return true;
+        }
         if (mouse->button() == Qt::LeftButton) {
             addPoint(mouse->position().toPoint());
             return true;
@@ -264,6 +300,7 @@ void CutBuildingDialog::loadPicture(const QString& path) {
     _picture = image;
     _points.clear();
     _guessed.clear();
+    _wallTopAuto = true; // a new render: let the tool guess its wall height again
     _previewOk = false;
     _pictureEdit->setText(QDir::toNativeSeparators(path));
     if (_stampEdit->text().isEmpty()) {
@@ -287,6 +324,38 @@ void CutBuildingDialog::addPoint(const QPoint& labelPos) {
     if (_points.size() >= 2) {
         schedulePreview();
     }
+}
+
+std::optional<double> CutBuildingDialog::footAt(double x) const {
+    QList<QPointF> foot = _points.size() >= 2 ? _points : _guessed;
+    if (foot.size() < 2) {
+        return std::nullopt;
+    }
+    std::sort(foot.begin(), foot.end(), [](const QPointF& a, const QPointF& b) { return a.x() < b.x(); });
+    const auto along = [](const QPointF& a, const QPointF& b, double at) {
+        return b.x() == a.x() ? a.y() : a.y() + (b.y() - a.y()) * (at - a.x()) / (b.x() - a.x());
+    };
+    if (x <= foot.first().x()) {
+        return along(foot[0], foot[1], x);
+    }
+    for (int i = 1; i < foot.size(); ++i) {
+        if (x <= foot[i].x()) {
+            return along(foot[i - 1], foot[i], x);
+        }
+    }
+    return along(foot[foot.size() - 2], foot.last(), x);
+}
+
+void CutBuildingDialog::setWallTopFrom(const QPoint& labelPos) {
+    if (_picture.isNull() || _sourceScale <= 0.0 || !_roofCheck->isChecked()) {
+        return;
+    }
+    const QPointF onPicture = QPointF(labelPos - _sourceOffset) / _sourceScale;
+    const std::optional<double> foot = footAt(onPicture.x());
+    if (!foot || *foot - onPicture.y() < 1.0) {
+        return; // no foot yet, or the click is below it
+    }
+    _wallTopSpin->setValue(std::round(*foot - onPicture.y())); // valueChanged marks it set and redraws
 }
 
 void CutBuildingDialog::removeLastPoint() {
@@ -340,6 +409,28 @@ void CutBuildingDialog::drawSourceView() {
     } else if (_guessed.size() >= 2) {
         drawLine(_guessed, GUESSED, Qt::DashLine);
     }
+
+    // the walls' top: the foot raised by the wall height, across the whole picture
+    if (_roofCheck && _roofCheck->isChecked() && (!_wallTopAuto || _wallTopSpin->value() > 1) && footAt(0)) {
+        const double rise = _wallTopSpin->value();
+        QList<double> xs{ 0.0, double(_picture.width()) };
+        for (const QPointF& p : (_points.size() >= 2 ? _points : _guessed)) {
+            xs.append(p.x());
+        }
+        std::sort(xs.begin(), xs.end());
+        QList<QPointF> top;
+        for (double x : xs) {
+            top.append(QPointF(_sourceOffset) + QPointF(x, *footAt(x) - rise) * _sourceScale);
+        }
+        painter.setPen(QPen(Qt::black, 3));
+        for (int i = 1; i < top.size(); ++i) {
+            painter.drawLine(top[i - 1], top[i]);
+        }
+        painter.setPen(QPen(WALL_TOP, 1.5, Qt::DashLine));
+        for (int i = 1; i < top.size(); ++i) {
+            painter.drawLine(top[i - 1], top[i]);
+        }
+    }
     painter.end();
     _sourceLabel->setPixmap(canvas);
 }
@@ -358,6 +449,10 @@ QStringList CutBuildingDialog::buildingArguments() const {
     if (!_stampEdit->text().trimmed().isEmpty()) {
         args << "--stamp" << _stampEdit->text().trimmed();
     }
+    args << "--wall-top"
+         << (!_roofCheck->isChecked() ? QString("none")
+                 : _wallTopAuto      ? QString("auto")
+                                     : QString::number(_wallTopSpin->value(), 'f', 0));
     args << "--line"; // last: it takes every value after it
     if (_points.size() >= 2) {
         QList<QPointF> points = _points;
@@ -420,6 +515,13 @@ void CutBuildingDialog::showPreview(const ModToolResult& result) {
         const QJsonArray xy = value.toArray();
         _guessed.append(QPointF(xy.at(0).toDouble(), xy.at(1).toDouble()));
     }
+    if (_wallTopAuto && result.json.value("wall_top").isDouble()) {
+        const QSignalBlocker block(_wallTopSpin); // the tool's guess, not a setting
+        _wallTopSpin->setValue(std::round(result.json.value("wall_top").toDouble()));
+    }
+    _wallTopGameLabel->setText(result.json.value("wall_top_game").isDouble()
+            ? QString("= %1 game px").arg(result.json.value("wall_top_game").toDouble(), 0, 'f', 0)
+            : QString());
     drawSourceView();
 
     _previewImage = QImage(result.json.value("preview").toString()); // QImage: no pixmap cache to go stale
@@ -434,6 +536,12 @@ void CutBuildingDialog::showPreview(const ModToolResult& result) {
                        .arg(result.json.value("width").toInt())
                        .arg(result.json.value("height").toInt())
                        .arg(along.join(", then "));
+    const int roofTiles = result.json.value("roof_tiles").toInt();
+    if (roofTiles > 0) {
+        info += QString(" %1 roof tiles (%2 spare tile slots left).")
+                    .arg(roofTiles)
+                    .arg(result.json.value("spare_tile_slots").toInt());
+    }
     for (const auto& warning : result.json.value("warnings").toArray()) {
         info += "\nNote: " + warning.toString() + ".";
     }
@@ -441,7 +549,7 @@ void CutBuildingDialog::showPreview(const ModToolResult& result) {
     _infoLabel->setText(info);
 
     QStringList problems;
-    for (const char* key : { "name_problem", "stamp_problem" }) {
+    for (const char* key : { "name_problem", "roof_problem", "stamp_problem" }) {
         const QString problem = result.json.value(key).toString();
         if (!problem.isEmpty()) {
             problems << problem;
@@ -496,11 +604,13 @@ void CutBuildingDialog::create() {
         const QString first = made.isEmpty() ? QString() : made.first().toObject().value("name").toString();
         const QString last = made.isEmpty() ? QString() : made.last().toObject().value("name").toString();
         const QString stamp = QFileInfo(result.json.value("stamp").toString()).completeBaseName();
+        const qsizetype roofMade = result.json.value("roof_made").toArray().size();
+        const QString roofText = roofMade > 0 ? QString(", %1 roof tiles").arg(roofMade) : QString();
         _infoLabel->setStyleSheet(ui::theme::styles::statusSuccess());
-        _infoLabel->setText(QString("Made %1 wall pieces (%2 to %3) and the stamp \"%4\". Tools > Apply New Art puts "
-                                    "them in the game; then Edit > Stamp Pattern > Custom > %4.")
+        _infoLabel->setText(QString("Made %1 wall pieces (%2 to %3)%4 and the stamp \"%5\". Tools > Apply New Art puts "
+                                    "them in the game; then Edit > Stamp Pattern > Custom > %5.")
                                 .arg(made.size())
-                                .arg(first, last, stamp));
+                                .arg(first, last, roofText, stamp));
         _prefixEdit->clear();
         _stampEdit->clear();
         updateCreateButton();

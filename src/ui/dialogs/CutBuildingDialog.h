@@ -8,6 +8,9 @@
 #include <QString>
 #include <QStringList>
 
+#include <optional>
+
+class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
@@ -28,8 +31,10 @@ struct ModToolResult;
  *
  * The left pane is the picture: clicks mark the foot of the building from left to right, one
  * point at each end and one at each corner (right-click takes the last one back). With fewer
- * than two points the tool guesses the foot, and the guess is drawn in a second colour. The
- * right pane is the building as the game draws it beside the player, and where it is cut.
+ * than two points the tool guesses the foot, and the guess is drawn in a second colour. With
+ * "Roof as roof tiles", everything above the wall height (a Shift-click on a wall's top sets it;
+ * the orange line shows it) becomes roof tiles instead of wall. The right pane is the building
+ * as the game draws it beside the player, and where it is cut.
  */
 class CutBuildingDialog : public QDialog {
     Q_OBJECT
@@ -48,6 +53,10 @@ private:
     void loadPicture(const QString& path);
     void addPoint(const QPoint& labelPos);
     void removeLastPoint();
+    void setWallTopFrom(const QPoint& labelPos);
+    /// The foot's y (picture pixels) at picture column x, from the clicked points or the guess,
+    /// the end stretches carried on past the ends; nullopt with no foot yet.
+    [[nodiscard]] std::optional<double> footAt(double x) const;
     void drawSourceView();
     void schedulePreview();
     void runPreview();
@@ -86,6 +95,10 @@ private:
     QSpinBox* _heightSpin = nullptr;
     QDoubleSpinBox* _scaleSpin = nullptr;
     QComboBox* _colourCombo = nullptr;
+    QCheckBox* _roofCheck = nullptr;
+    QDoubleSpinBox* _wallTopSpin = nullptr; ///< walls' height above the foot, picture pixels
+    QLabel* _wallTopGameLabel = nullptr;
+    bool _wallTopAuto = true;               ///< ask the tool to guess until it is set
     QLabel* _infoLabel = nullptr;
     QPushButton* _createButton = nullptr;
 };
