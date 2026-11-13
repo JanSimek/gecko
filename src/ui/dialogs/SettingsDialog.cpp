@@ -1,11 +1,13 @@
 #include "SettingsDialog.h"
 #include "ui/widgets/DataPathsWidget.h"
+#include "ui/widgets/KeybindingsWidget.h"
 #include "ui/widgets/GameLocationWidget.h"
 #include "ui/widgets/TextEditorWidget.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/Settings.h"
 #include "ui/QtDialogs.h"
 #include "ui/assets/ModToolsRunner.h"
+#include "rendering/RenderingEngine.h"
 
 #include <QApplication>
 #include <QDir>
@@ -26,9 +28,8 @@
 namespace geck {
 
 using namespace ui::constants;
-using namespace ui::defaults;
 
-SettingsDialog::SettingsDialog(std::shared_ptr<Settings> settings, QWidget* parent)
+SettingsDialog::SettingsDialog(std::shared_ptr<Settings> settings, KeyBindingRegistry* registry, QWidget* parent)
     : QDialog(parent)
     , _mainLayout(nullptr)
     , _tabWidget(nullptr)
@@ -39,6 +40,7 @@ SettingsDialog::SettingsDialog(std::shared_ptr<Settings> settings, QWidget* pare
     , _editorTab(nullptr)
     , _editorTabLayout(nullptr)
     , _textEditorWidget(nullptr)
+    , _keyBindingRegistry(registry)
     , _statusLabel(nullptr)
     , _progressBar(nullptr)
     , _buttonBox(nullptr)
@@ -73,8 +75,8 @@ QScrollArea* SettingsDialog::wrapInScrollArea(QWidget* content) {
 
 void SettingsDialog::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    _mainLayout->setSpacing(SPACING_LOOSE);
+    _mainLayout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    _mainLayout->setSpacing(ui::theme::spacing::LOOSE);
 
     setupTabs();
 
@@ -100,6 +102,7 @@ void SettingsDialog::setupTabs() {
     setupViewportTab();
     setupEditorTab();
     setupColorsTab();
+    setupKeybindingsTab();
     setupModToolsTab();
 
     _mainLayout->addWidget(_tabWidget);
@@ -108,8 +111,8 @@ void SettingsDialog::setupTabs() {
 void SettingsDialog::setupModToolsTab() {
     _modToolsTab = new QWidget();
     auto* layout = new QVBoxLayout(_modToolsTab);
-    layout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    layout->setSpacing(SPACING_NORMAL);
+    layout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    layout->setSpacing(ui::theme::spacing::NORMAL);
 
     auto* intro = new QLabel(
         "The Tools menu (Add Scenery from Picture, Apply New Art, and the copy and name entries on the "
@@ -121,7 +124,7 @@ void SettingsDialog::setupModToolsTab() {
     layout->addWidget(intro);
 
     auto* form = new QFormLayout();
-    form->setSpacing(SPACING_NORMAL);
+    form->setSpacing(ui::theme::spacing::NORMAL);
 
     auto* rootRow = new QHBoxLayout();
     _modToolsRootEdit = new QLineEdit();
@@ -212,8 +215,8 @@ void SettingsDialog::checkModTools() {
 void SettingsDialog::setupViewportTab() {
     _viewportTab = new QWidget();
     auto* layout = new QVBoxLayout(_viewportTab);
-    layout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    layout->setSpacing(SPACING_NORMAL);
+    layout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    layout->setSpacing(ui::theme::spacing::NORMAL);
 
     _edgeScrollCheckBox = new QCheckBox("Edge scrolling");
     _edgeScrollCheckBox->setToolTip("Scroll the map when the cursor rests near a viewport edge.");
@@ -234,8 +237,8 @@ void SettingsDialog::setupViewportTab() {
 void SettingsDialog::setupColorsTab() {
     _colorsTab = new QWidget();
     auto* layout = new QVBoxLayout(_colorsTab);
-    layout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    layout->setSpacing(SPACING_NORMAL);
+    layout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    layout->setSpacing(ui::theme::spacing::NORMAL);
 
     auto* intro = new QLabel("Colours used to highlight the current selection. Click a swatch to change it.");
     intro->setWordWrap(true);
@@ -291,8 +294,8 @@ void SettingsDialog::updateColorButton(const QString& key) const {
 void SettingsDialog::setupGeneralTab() {
     _generalTab = new QWidget();
     _generalTabLayout = new QVBoxLayout(_generalTab);
-    _generalTabLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    _generalTabLayout->setSpacing(SPACING_LOOSE);
+    _generalTabLayout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    _generalTabLayout->setSpacing(ui::theme::spacing::LOOSE);
 
     _dataPathsWidget = new DataPathsWidget(_settings);
     // A heading, not a box: flat alone still paints a frame and a slightly different fill.
@@ -320,8 +323,8 @@ void SettingsDialog::setupGeneralTab() {
 void SettingsDialog::setupEditorTab() {
     _editorTab = new QWidget();
     _editorTabLayout = new QVBoxLayout(_editorTab);
-    _editorTabLayout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    _editorTabLayout->setSpacing(SPACING_LOOSE);
+    _editorTabLayout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    _editorTabLayout->setSpacing(ui::theme::spacing::LOOSE);
 
     _textEditorWidget = new TextEditorWidget();
     _editorTabLayout->addWidget(_textEditorWidget);
@@ -331,6 +334,36 @@ void SettingsDialog::setupEditorTab() {
     _tabWidget->addTab(_editorTab, "Text Editor");
 
     connect(_textEditorWidget, &TextEditorWidget::configurationChanged, this, &SettingsDialog::onWidgetChanged);
+}
+
+void SettingsDialog::selectTab(const QString& title) {
+    for (int index = 0; index < _tabWidget->count(); ++index) {
+        if (_tabWidget->tabText(index) == title) {
+            _tabWidget->setCurrentIndex(index);
+            return;
+        }
+    }
+}
+
+void SettingsDialog::setupKeybindingsTab() {
+    if (_keyBindingRegistry == nullptr) {
+        return; // no registry (a bare-constructed dialog) -> no tab, rather than an empty one
+    }
+
+    _keybindingsWidget = new KeybindingsWidget(_keyBindingRegistry);
+    _keybindingsWidget->setFlat(true);
+    _keybindingsWidget->setStyleSheet(ui::theme::styles::sectionGroupBox());
+
+    auto* tab = new QWidget();
+    auto* layout = new QVBoxLayout(tab);
+    layout->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    layout->setSpacing(ui::theme::spacing::LOOSE);
+    layout->addWidget(_keybindingsWidget, /*stretch=*/1);
+
+    _tabWidget->addTab(tab, "Keyboard Shortcuts");
+
+    connect(_keybindingsWidget, &KeybindingsWidget::changed, this, &SettingsDialog::onWidgetChanged);
+    connect(_keybindingsWidget, &KeybindingsWidget::statusChanged, this, &SettingsDialog::setMainStatus);
 }
 
 void SettingsDialog::setupButtonBox() {
@@ -376,16 +409,22 @@ void SettingsDialog::loadSettings() {
         _modToolsStatus->clear();
     }
 
-    // Selection colours. Defaults mirror RenderingEngine::SelectionPalette — keep in sync.
+    // Selection colours, defaulting to the renderer's own.
+    const RenderingEngine::SelectionPalette palette;
+    const auto toQColor = [](const sf::Color& c) { return QColor(c.r, c.g, c.b); };
     const QMap<QString, QColor> defaults{
-        { "object", QColor(140, 110, 220) },
-        { "wall", QColor(74, 206, 168) },
-        { "critter", QColor(224, 180, 96) },
-        { "tile", QColor(74, 144, 226) },
+        { "object", toQColor(palette.object) },
+        { "wall", toQColor(palette.wall) },
+        { "critter", toQColor(palette.critter) },
+        { "tile", toQColor(palette.tile) },
     };
     for (auto it = defaults.constBegin(); it != defaults.constEnd(); ++it) {
         _selectionColors[it.key()] = settings.getSelectionColor(it.key(), it.value());
         updateColorButton(it.key());
+    }
+
+    if (_keybindingsWidget) {
+        _keybindingsWidget->reload();
     }
 
     _hasChanges = false;
@@ -423,6 +462,12 @@ void SettingsDialog::saveSettings() {
 
     for (auto it = _selectionColors.constBegin(); it != _selectionColors.constEnd(); ++it) {
         settings.setSelectionColor(it.key(), it.value());
+    }
+
+    // Rebinds take effect here (the registry re-keys every menu, toolbar and canvas sink) and are
+    // written through to Settings, which the save() below puts on disk.
+    if (_keybindingsWidget) {
+        _keybindingsWidget->applyChanges();
     }
 
     settings.save();

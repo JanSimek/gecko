@@ -21,12 +21,30 @@ const Map::MapFile& Map::getMapFile() const {
     return *mapFile;
 }
 
-void Map::setMapFile(std::unique_ptr<MapFile> newMapFile) {
-    mapFile = std::move(newMapFile);
+std::optional<int> Map::scriptProgramIndexForSid(uint32_t sid) const {
+    if (const MapScript* script = scriptForSid(sid)) {
+        return static_cast<int>(script->script_id);
+    }
+    return std::nullopt;
 }
 
-int Map::elevations() const {
-    return static_cast<int>(objects().size());
+const MapScript* Map::scriptForSid(uint32_t sid) const {
+    const int section = MapScript::sidSection(sid);
+    if (!mapFile || section < 0 || section >= SCRIPT_SECTIONS) {
+        return nullptr;
+    }
+
+    for (const MapScript& script : mapFile->map_scripts[section]) {
+        if (script.pid == sid) {
+            return &script;
+        }
+    }
+
+    return nullptr;
+}
+
+void Map::setMapFile(std::unique_ptr<MapFile> newMapFile) {
+    mapFile = std::move(newMapFile);
 }
 
 std::vector<Tile> Map::createEmptyElevation() {

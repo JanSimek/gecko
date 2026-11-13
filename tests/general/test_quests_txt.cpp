@@ -17,7 +17,7 @@ badline
 )";
 } // namespace
 
-TEST_CASE("parseQuestsTxt reads quest rows, skipping comments and short lines", "[quests]") {
+TEST_CASE("parseQuestsTxt reads quest rows, skipping comments and short lines", "[quests_txt]") {
     const QuestsTxt quests = parseQuestsTxt(std::string{ kQuestsTxt });
 
     REQUIRE(quests.quests.size() == 3);
@@ -35,6 +35,6 @@ TEST_CASE("parseQuestsTxt reads quest rows, skipping comments and short lines", 
     CHECK(quests.quests[2].gvar == 100);
 }
 
-TEST_CASE("parseQuestsTxt tolerates empty input", "[quests]") {
+TEST_CASE("parseQuestsTxt tolerates empty input", "[quests_txt]") {
     CHECK(parseQuestsTxt(std::string{}).quests.empty());
 }

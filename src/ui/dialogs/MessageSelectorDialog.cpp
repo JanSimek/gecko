@@ -40,7 +40,7 @@ int MessageSelectorDialog::getSelectedMessageId() const {
 void MessageSelectorDialog::setupUI() {
     _mainLayout = new QVBoxLayout(this);
     _mainLayout->setContentsMargins(ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN, ui::constants::PANEL_MARGIN);
-    _mainLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    _mainLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     _titleLabel = new QLabel("Select a message from the list:");
     _titleLabel->setStyleSheet(ui::theme::styles::boldLabelWithMargin());

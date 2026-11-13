@@ -24,8 +24,6 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     outputs:
-      release_id: ${{ steps.create_release.outputs.result }}
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
     
     steps:
@@ -66,11 +64,10 @@ jobs:
         echo "- **Linux**: \`gecko-linux.AppImage\`" >> release_notes.md
         echo "" >> release_notes.md
         echo "## Requirements" >> release_notes.md
-        echo "- Copy \`master.dat\` and \`critter.dat\` from your Fallout 2 installation" >> release_notes.md
+        echo "- A Fallout 2 installation: add its \`master.dat\` and \`critter.dat\` (or an unpacked \`data\` folder) under Fallout 2 Data Paths in the first-run settings or Preferences" >> release_notes.md
         echo "- Qt6 and SFML libraries (included in packages)" >> release_notes.md
 
     - name: Create Release
-      id: create_release
       uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -129,9 +126,10 @@ jobs:
       run: |
         brew install qt@6 spdlog zlib create-dmg
         # Build SFML 3 from source
-        git clone --depth 1 --branch 3.0.0 https://github.com/SFML/SFML.git
+        git clone --depth 1 --branch 3.0.1 https://github.com/SFML/SFML.git
         cd SFML
-        cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON \
+          -DSFML_BUILD_AUDIO=OFF -DSFML_BUILD_NETWORK=OFF
         cmake --build build --config Release
         sudo cmake --install build
         cd ..
@@ -141,16 +139,14 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          qtbase6-dev qtbase6-dev-tools qt6-base-dev \
-          libgl1-mesa-dev \
-          libxrandr-dev \
-          libxcursor-dev \
-          libudev-dev \
-          libopenal-dev \
-          libflac-dev \
-          libvorbis-dev \
+          qt6-base-dev qt6-base-dev-tools qt6-svg-dev qmake6 \
           libgl1-mesa-dev \
           libegl1-mesa-dev \
+          libxrandr-dev \
+          libxcursor-dev \
+          libxinerama-dev \
+          libxi-dev \
+          libudev-dev \
           libdrm-dev \
           libgbm-dev \
           libfreetype6-dev \
@@ -165,9 +161,10 @@ jobs:
         chmod +x linuxdeploy-plugin-qt-x86_64.AppImage
         sudo mv linuxdeploy-plugin-qt-x86_64.AppImage /usr/local/bin/
         # Build SFML 3 from source
-        git clone --depth 1 --branch 3.0.0 https://github.com/SFML/SFML.git
+        git clone --depth 1 --branch 3.0.1 https://github.com/SFML/SFML.git
         cd SFML
-        cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON \
+          -DSFML_BUILD_AUDIO=OFF -DSFML_BUILD_NETWORK=OFF
         cmake --build build --config Release
         sudo cmake --install build
         cd ..
@@ -187,17 +184,20 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake \
             -DGECK_BUILD_TESTS=OFF \
+            -DGECK_ENABLE_SCRIPTING=ON \
             -S ${{ github.workspace }}
         elif [ "${{ matrix.config.os }}" == "macos-latest" ]; then
           export CMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6:/usr/local/opt/qt@6:$CMAKE_PREFIX_PATH"
           cmake -B ${{ env.BUILD_DIR }} \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DGECK_BUILD_TESTS=OFF \
+            -DGECK_ENABLE_SCRIPTING=ON \
             -S ${{ github.workspace }}
         else
           cmake -B ${{ env.BUILD_DIR }} \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DGECK_BUILD_TESTS=OFF \
+            -DGECK_ENABLE_SCRIPTING=ON \
             -S ${{ github.workspace }}
         fi
 
@@ -217,8 +217,11 @@ jobs:
         # Create distribution directory
         New-Item -ItemType Directory -Force -Path "dist"
         
-        # Copy main executable
+        # The editor, the headless CLI and the MCP server, with the bundled resources they all read
         Copy-Item "build/src/Release/gecko.exe" "dist/"
+        Copy-Item "build/src/Release/gecko-cli.exe" "dist/"
+        Copy-Item "build/src/Release/gecko-mcp.exe" "dist/"
+        Copy-Item -Recurse "build/src/Release/resources" "dist/resources"
         
         # Use windeployqt to gather Qt dependencies
         & "C:/vcpkg/installed/x64-windows/tools/Qt6/bin/windeployqt.exe" "dist/gecko.exe"
@@ -233,15 +236,10 @@ jobs:
         if (Get-Command "makensis" -ErrorAction SilentlyContinue) {
             # Create simple NSIS script
             @"
-        !define APPNAME "GECK Mapper"
-        !define COMPANYNAME "JanSimek"
-        !define DESCRIPTION "Fallout 2 Map Editor"
-        !define VERSIONMAJOR 0
-        !define VERSIONMINOR 1
-        !define VERSIONBUILD 0
+        !define APPNAME "Gecko"
         
         RequestExecutionLevel admin
-        InstallDir `$PROGRAMFILES64\GECKMapper
+        InstallDir `$PROGRAMFILES64\Gecko
         
         Name "`${APPNAME}"
         OutFile "gecko-windows-installer.exe"
@@ -267,40 +265,18 @@ jobs:
         #!/bin/bash
         set -e
         
-        APP_NAME="GECK Mapper"
+        APP_NAME="Gecko"
         APP_DIR="$APP_NAME.app"
         DIST_DIR="dist"
         
-        # Create app bundle structure
-        mkdir -p "$DIST_DIR/$APP_DIR/Contents/"{MacOS,Resources,Frameworks}
-        
-        # Copy executable
-        cp "build/src/gecko" "$DIST_DIR/$APP_DIR/Contents/MacOS/"
-        
-        # Create Info.plist
-        cat > "$DIST_DIR/$APP_DIR/Contents/Info.plist" << PLIST
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>CFBundleExecutable</key>
-            <string>gecko</string>
-            <key>CFBundleIdentifier</key>
-            <string>com.jansimek.geckmapper</string>
-            <key>CFBundleName</key>
-            <string>GECK Mapper</string>
-            <key>CFBundleVersion</key>
-            <string>0.1.0</string>
-            <key>CFBundleShortVersionString</key>
-            <string>0.1.0</string>
-            <key>CFBundleInfoDictionaryVersion</key>
-            <string>6.0</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-        </dict>
-        </plist>
-        PLIST
-        
+        # CMake builds gecko.app (Info.plist, icon and resources included) into the build root;
+        # ship it with the CLI and MCP server beside the editor binary, where they find the
+        # bundle's resources.
+        mkdir -p "$DIST_DIR"
+        cp -R "build/gecko.app" "$DIST_DIR/$APP_DIR"
+        cp "build/gecko-cli" "build/gecko-mcp" "$DIST_DIR/$APP_DIR/Contents/MacOS/"
+        mkdir -p "$DIST_DIR/$APP_DIR/Contents/Frameworks"
+
         # Use macdeployqt to gather dependencies
         /opt/homebrew/opt/qt@6/bin/macdeployqt "$DIST_DIR/$APP_DIR" -verbose=2
         
@@ -311,7 +287,7 @@ jobs:
         if command -v create-dmg &> /dev/null; then
             create-dmg \
                 --volname "$APP_NAME" \
-                --volicon "resources/gecko-icon.png" \
+                --volicon "resources/gecko.icns" \
                 --window-pos 200 120 \
                 --window-size 600 300 \
                 --icon-size 100 \
@@ -341,25 +317,13 @@ jobs:
         mkdir -p AppDir/usr/share/applications
         mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
         
-        # Copy executable
-        cp build/src/gecko AppDir/usr/bin/
+        # The editor, the headless CLI and the MCP server, with the bundled resources they all
+        # read (single-config builds put every executable and resources/ in the build root)
+        cp build/gecko build/gecko-cli build/gecko-mcp AppDir/usr/bin/
+        cp -R build/resources AppDir/usr/bin/resources
         
-        # Create desktop file
-        cat > AppDir/usr/share/applications/gecko.desktop << EOF2
-        [Desktop Entry]
-        Type=Application
-        Name=GECK Mapper
-        Comment=Fallout 2 Map Editor
-        Exec=gecko
-        Icon=gecko
-        Categories=Graphics;Development;
-        EOF2
-        
-        # Copy icon if available
-        if [ -f "resources/gecko-icon.png" ]; then
-            cp resources/gecko-icon.png AppDir/usr/share/icons/hicolor/256x256/apps/gecko.png
-            cp resources/gecko-icon.png AppDir/gecko.png
-        fi
+        cp resources/gecko.desktop AppDir/usr/share/applications/gecko.desktop
+        cp resources/icons/hicolor/256x256/apps/gecko.png AppDir/usr/share/icons/hicolor/256x256/apps/gecko.png
         
         # Create AppRun
         cat > AppDir/AppRun << 'EOF3'
@@ -371,11 +335,12 @@ jobs:
         EOF3
         chmod +x AppDir/AppRun
         
-        # Use linuxdeploy to create AppImage
+        # Use linuxdeploy to create AppImage (its Qt plugin looks for qmake; Ubuntu names it qmake6)
+        export QMAKE="$(command -v qmake6)"
         linuxdeploy --appdir AppDir --plugin qt --output appimage
         
-        # Rename the generated AppImage
-        mv GECK*.AppImage gecko-linux.AppImage 2>/dev/null || true
+        # Rename the generated AppImage (named after the desktop file's Name=Gecko)
+        mv Gecko*.AppImage gecko-linux.AppImage
         EOF
           chmod +x scripts/package-linux.sh
         fi

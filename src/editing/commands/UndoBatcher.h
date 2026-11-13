@@ -37,6 +37,12 @@ public:
 
     [[nodiscard]] bool isBatching() const { return _batchDepth > 0; }
 
+    /// Drops the whole undo/redo history, including commands buffered in an open batch, and
+    /// notifies. For edits that replace the map wholesale: the recorded commands hold the old
+    /// map's objects and tiles, so replaying them would write those onto the new map. An open
+    /// batch stays open, so edits made after the reset still land as one entry.
+    void clearHistory();
+
 private:
     UndoStack& _undoStack;
     std::function<void()> _onStackChanged;

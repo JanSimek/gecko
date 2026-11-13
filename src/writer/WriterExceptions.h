@@ -24,23 +24,8 @@ public:
 /// Exception thrown when a write I/O operation fails.
 class WriteException : public FileWriterException {
 public:
-    explicit WriteException(const std::string& message, const std::filesystem::path& filePath, size_t bytesWritten = 0)
-        : FileWriterException("Write error: " + message, filePath)
-        , _bytesWritten(bytesWritten) { }
-
-    size_t bytesWritten() const noexcept {
-        return _bytesWritten;
-    }
-
-private:
-    size_t _bytesWritten;
-};
-
-/// Exception thrown when attempting to write data in an invalid format.
-class FormatWriteException : public FileWriterException {
-public:
-    explicit FormatWriteException(const std::string& message, const std::filesystem::path& filePath)
-        : FileWriterException("Format error: " + message, filePath) { }
+    explicit WriteException(const std::string& message, const std::filesystem::path& filePath)
+        : FileWriterException("Write error: " + message, filePath) { }
 };
 
 /// Exception thrown when data validation fails before writing.
@@ -58,35 +43,6 @@ public:
     }
 };
 
-/// Exception thrown when insufficient disk space or file system limits are encountered.
-class DiskSpaceException : public FileWriterException {
-private:
-    size_t _bytesRequested;
-    size_t _bytesAvailable;
-
-public:
-    explicit DiskSpaceException(const std::string& message, const std::filesystem::path& filePath,
-        size_t bytesRequested = 0, size_t bytesAvailable = 0)
-        : FileWriterException("Disk space error: " + message, filePath)
-        , _bytesRequested(bytesRequested)
-        , _bytesAvailable(bytesAvailable) { }
-
-    size_t bytesRequested() const noexcept {
-        return _bytesRequested;
-    }
-
-    size_t bytesAvailable() const noexcept {
-        return _bytesAvailable;
-    }
-};
-
-/// Exception thrown when writing to a file that already exists and overwrite is not allowed.
-class FileExistsException : public FileWriterException {
-public:
-    explicit FileExistsException(const std::filesystem::path& filePath)
-        : FileWriterException("File already exists", filePath) { }
-};
-
 /// Exception thrown when file permissions prevent writing.
 class PermissionException : public FileWriterException {
 public:
@@ -96,17 +52,9 @@ public:
 
 /// Exception thrown when attempting to write corrupted or incomplete data structures.
 class CorruptDataException : public FileWriterException {
-private:
-    std::string _dataType;
-
 public:
-    explicit CorruptDataException(const std::string& message, const std::filesystem::path& filePath, const std::string& dataType = "")
-        : FileWriterException("Data corruption error: " + message, filePath)
-        , _dataType(dataType) { }
-
-    const std::string& dataType() const noexcept {
-        return _dataType;
-    }
+    explicit CorruptDataException(const std::string& message, const std::filesystem::path& filePath)
+        : FileWriterException("Data corruption error: " + message, filePath) { }
 };
 
 } // namespace geck

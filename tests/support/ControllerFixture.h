@@ -15,6 +15,8 @@
 #include "rendering/MapSpriteLoader.h"
 #include "util/UndoStack.h"
 
+#include "support/MapObjectBuilder.h"
+
 namespace geck::test {
 
 /// Wires an ObjectCommandController to a fresh empty map for headless tests. The
@@ -33,7 +35,7 @@ struct ControllerFixture {
     ObjectCommandController controller;
 
     ControllerFixture()
-        : map(std::make_unique<Map>("test.map"))
+        : map(mapOf())
         , host(
               [] { /* refreshObjects: no rendering in tests */ },
               [] { /* undoStackChanged: no UI to notify */ },
@@ -42,9 +44,7 @@ struct ControllerFixture {
               [](int, bool, int) { /* updateTileSprite: no rendering in tests */ },
               [] { /* reloadTiles: no rendering in tests */ })
         , controller(
-              resources, map, hexgrid, spriteLoader, objects, overlays, undoStack, host) {
-        map->setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
-    }
+              resources, map, hexgrid, spriteLoader, objects, overlays, undoStack, host) { }
 
     Map::MapFile& mapFile() { return map->getMapFile(); }
 };

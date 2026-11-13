@@ -41,17 +41,12 @@ public:
     /// Removes zone `zoneIndex` on `elevation`. Returns false if there is no edge or the index is out
     /// of range.
     bool deleteZone(int elevation, int zoneIndex);
-    /// Sets one side of a zone's tileRect to a hex index (0..POSITION_COUNT-1). Returns false on bad
-    /// args or when the value is unchanged.
-    bool setZoneSide(int elevation, int zoneIndex, Side side, int hexIndex);
 
     // --- v2 square/clip editing (undoable) ---
 
     /// Marks the edge as version 2 so its per-elevation square/clip block is written. No-op if there
     /// is no edge or it is already v2.
     bool upgradeToVersion2();
-    /// Sets one side of an elevation's squareRect (LEFT/RIGHT = column, TOP/BOTTOM = row; 0..99).
-    bool setSquareSide(int elevation, Side side, int colOrRow);
     /// Flips one clip-side flag of an elevation's square block.
     bool toggleClipSide(int elevation, Side side);
     /// Restores an elevation's squareRect + clip flags to the engine defaults (map_edge.cc:229).
@@ -73,10 +68,9 @@ public:
     // --- Reads ---
 
     const std::optional<MapEdge>& edge() const;
-    bool hasEdge() const;
-    int zoneCount(int elevation) const;
 
 private:
+    bool hasEdge() const;
     void applyEdgeSnapshot(const std::optional<MapEdge>& snapshot);
     /// Records the before/after snapshot of Map::edge() (already mutated by the caller) under
     /// `description`. Records nothing and returns false when the mutation left the edge unchanged.

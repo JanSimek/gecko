@@ -4,6 +4,8 @@
 #include <filesystem>
 
 #include "format/IFile.h"
+#include "format/frm/FrmId.h"
+#include "format/pro/ProtoTypes.h"
 
 namespace geck {
 
@@ -16,34 +18,6 @@ public:
 
     void initializeDataStructures();
 
-    enum class OBJECT_TYPE : uint32_t {
-        ITEM = 0,
-        CRITTER,
-        SCENERY,
-        WALL,
-        TILE,
-        MISC
-    };
-
-    enum class ITEM_TYPE : uint32_t {
-        ARMOR = 0,
-        CONTAINER,
-        DRUG,
-        WEAPON,
-        AMMO,
-        MISC,
-        KEY
-    };
-
-    enum class SCENERY_TYPE : uint32_t {
-        DOOR = 0,
-        STAIRS,
-        ELEVATOR,
-        LADDER_BOTTOM,
-        LADDER_TOP,
-        GENERIC
-    };
-
     // PRO file format constants
     static constexpr int SPECIAL_STATS_COUNT = 7;  // STR, PER, END, CHR, INT, AGL, LCK
     static constexpr int DAMAGE_TYPES_ARMOR = 7;   // Normal, Laser, Fire, Plasma, Electrical, EMP, Explosion
@@ -51,13 +25,6 @@ public:
     static constexpr int SKILLS_COUNT = 18;        // All Fallout 2 skills
     static constexpr int BONUS_DAMAGE_ARRAYS = 8;  // Extended arrays for critter bonuses
     static constexpr int FIELD_SIZE_BYTES = 4;     // Standard 32-bit field size
-
-    // Bits of the trailing WeaponData::weaponFlags word gecko reads and writes. The engine has no such
-    // word (see WeaponData). sfall's "Energy Weapon" flag is extended-flags bit 0x0400 instead (sfall
-    // Skills.cpp, define_extra.h WEAPON_ENERGY).
-    enum class WEAPON_FLAGS : uint32_t {
-        ENERGY_WEAPON = 0x00000001
-    };
 
     // Object Flags - from Fallout 2 CE obj_types.h
     enum class ObjectFlags : uint32_t {
@@ -117,6 +84,9 @@ public:
         // Weapon behavior flags
         BIG_GUN = 0x00000100,    // Forces weapon to use Big Guns skill instead of Small Guns
         TWO_HANDED = 0x00000200, // Weapon requires both hands, prevents dual-wielding
+        // sfall only (define_extra.h WEAPON_ENERGY): forces the Energy Weapons skill. fallout2-ce
+        // leaves PROTO_EXT_FLAG_ENERGY commented out and picks the skill from the damage type.
+        ENERGY = 0x00000400,
 
         // Action/interaction flags
         CAN_USE = 0x00000800,          // Item can be "used" (containers get this automatically)
@@ -240,11 +210,7 @@ public:
         uint32_t ammoType;
         int32_t ammoPID;
         uint32_t ammoCapacity;
-        uint8_t soundId;
-        // Not in the engine's record: fallout2-ce protoItemDataRead stops at the sound byte, so a weapon
-        // proto is 122 bytes, and every shipped one is exactly that. ProReader fills this only from
-        // bytes past that end (so 0 for shipped data); ProWriter always appends it.
-        uint32_t weaponFlags;
+        uint8_t soundId; // fallout2-ce protoItemDataRead stops here: a weapon proto is 122 bytes
     } weaponData;
 
     // The engine reads these four modifiers as armour-class adjust, DR adjust, damage multiplier and
@@ -358,27 +324,31 @@ public:
     unsigned int objectSubtypeId() const;
     void setObjectSubtypeId(unsigned int objectSubtypeId);
 
-    OBJECT_TYPE type() const;
-    ITEM_TYPE itemType() const;
+    ProtoId pid() const { return ProtoId(static_cast<uint32_t>(header.PID)); }
+    FrmId fid() const { return FrmId(static_cast<uint32_t>(header.FID)); }
+
+    ObjectType type() const { return pid().objectType(); }
+
+    /// The script a new object of this proto gets (engine proto->sid; a SID, its type in the high
+    /// byte), or -1 for none. Only item, critter, scenery and wall protos store one.
+    int32_t sid() const {
+        switch (type()) {
+            case ObjectType::Item:
+            case ObjectType::Critter:
+            case ObjectType::Scenery:
+            case ObjectType::Wall:
+                return static_cast<int32_t>(commonItemData.SID);
+            default:
+                return -1;
+        }
+    }
+    ItemType itemType() const;
 
     const std::string typeToString() const;
     /// Canonical category name for an object type ("Item", "Critter", "Scenery", ...). The
-    /// instance overload forwards to this, so callers holding only a type (e.g. decoded from a
-    /// PID's high byte) reuse the same mapping instead of duplicating it.
-    static std::string typeToString(OBJECT_TYPE type);
-
-    /// A proto PID packs the object type in the high byte and the proto id in the low 24 bits.
-    /// These are the one place that bit layout lives, so callers don't re-derive `>> 24` / `<< 24`.
-    static OBJECT_TYPE typeOfPid(uint32_t pid) { return static_cast<OBJECT_TYPE>((pid >> 24) & 0xFFu); }
-    static uint32_t makePid(OBJECT_TYPE type, uint32_t id) {
-        return (static_cast<uint32_t>(type) << 24) | (id & 0x00FFFFFFu);
-    }
-
-    // Allow updating the file path for save operations
-    void setPath(const std::filesystem::path& newPath) {
-        _path = newPath;
-        _filename = newPath.filename().string();
-    }
+    /// instance overload forwards to this, so callers holding only a type (e.g. a ProtoId's
+    /// objectType()) reuse the same mapping instead of duplicating it.
+    static std::string typeToString(ObjectType type);
 };
 
 } // namespace geck

@@ -11,10 +11,6 @@ namespace geck {
 
 /**
  * @brief Manages viewport operations like zooming, panning, and coordinate conversions
- *
- * This class handles all viewport-related functionality that was previously
- * embedded in EditorWidget, providing a clean separation of concerns for
- * camera/view management operations.
  */
 class ViewportController {
 public:
@@ -43,6 +39,23 @@ public:
      * @brief Center the view on the map
      */
     void centerViewOnMap();
+
+    /**
+     * @brief World-space bounds of the whole tile grid.
+     *
+     * Derived from the authoritative forward projection (coordinatesToScreenPosition) at the
+     * grid's four corners, which bound it because the projection is affine — so this cannot
+     * drift from where the tiles are actually drawn.
+     */
+    static sf::FloatRect mapWorldBounds();
+
+    /**
+     * @brief Zoom out far enough to show the whole tile grid, then centre it.
+     *
+     * The zoom is clamped like any other (MIN_ZOOM..MAX_ZOOM); at the clamp the map is centred
+     * but still overflows the view.
+     */
+    void fitMapInView();
 
     /**
      * @brief Pan the view by a delta expressed in world units.
@@ -77,8 +90,7 @@ public:
      * @brief Whether a hex at the given world coordinates is within `view`.
      *
      * The viewport owns this cull/projection math; the renderers delegate here so
-     * there is one definition (HexRenderer and RenderingEngine previously each had
-     * their own copy). Static because it depends only on the hex coords and view.
+     * there is one definition. Static because it depends only on the hex coords and view.
      */
     [[nodiscard]] static bool isHexVisible(int hexWorldX, int hexWorldY, const sf::View& view);
 
@@ -90,31 +102,14 @@ public:
     std::optional<HexPosition> worldPosToHexPosition(const WorldCoords& worldPos) const;
 
     /**
-     * @brief Snap world position to nearest hex grid center
-     * @param worldPos World position to snap
-     * @return Snapped position
-     */
-    sf::Vector2f snapToHexGrid(sf::Vector2f worldPos) const;
-
-    /**
-     * @brief Snap world position to nearest hex grid center (type-safe)
-     * @param worldPos World position to snap
-     * @return Snapped position
-     */
-    WorldCoords snapToHexGrid(const WorldCoords& worldPos) const;
-
-    /**
      * @brief Get current zoom level
      */
     float getZoomLevel() const { return _zoomLevel; }
 
-    /**
-     * @brief Set zoom level directly
-     * @param zoom New zoom level (clamped to valid range)
-     */
+private:
+    // Sets the zoom level (clamped to the valid range), keeping the view centre.
     void setZoomLevel(float zoom);
 
-private:
     const HexagonGrid* _hexGrid;
     sf::View _view;
     sf::Vector2u _windowSize{ 800u, 600u };

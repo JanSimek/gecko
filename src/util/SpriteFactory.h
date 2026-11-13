@@ -66,7 +66,6 @@ public:
         const ScreenPosition& screenPos);
 
 private:
-    static constexpr const char* BLANK_TILE_PATH = "art/tiles/blank.frm";
     static constexpr const char* TILES_PATH_PREFIX = "art/tiles/";
 };
 

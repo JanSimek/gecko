@@ -46,13 +46,6 @@ inline QStringList orientations() {
 }
 
 /**
- * @brief Short orientation codes (6 hex directions)
- */
-inline QStringList orientationsShort() {
-    return { "NE", "E", "SE", "SW", "W", "NW" };
-}
-
-/**
  * @brief Map elevation levels
  */
 inline QStringList elevations() {

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <istream>
 #include <string>
 
 #include "format/ai/AiPacket.h"
@@ -12,7 +11,6 @@ namespace geck {
 /// behaviour-relevant keys are read; a section without a `packet_num` is skipped. Never throws —
 /// returns whatever parsed (an empty AiTxt if the input is empty/garbage), so a missing file just
 /// means AI is reported as the raw packet number.
-AiTxt parseAiTxt(std::istream& in);
 AiTxt parseAiTxt(const std::string& text);
 
 } // namespace geck

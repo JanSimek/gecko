@@ -20,7 +20,7 @@ namespace geck {
 ///
 /// `write()` refuses an edge with no zones (`MapEdge::empty()`), returning false without emitting
 /// anything: the engine writes no file in that case and a zero-zone file does not parse. Callers
-/// should still skip empty edges *before* opening the file (see saveMapEdgeBeside) to avoid leaving
+/// should still skip empty edges *before* opening the file (see resource::writeMapEdgeBeside) to avoid leaving
 /// a stray truncated file behind.
 class MapEdgeWriter : public FileWriter<MapEdge> {
 public:

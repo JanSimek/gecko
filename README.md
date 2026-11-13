@@ -44,6 +44,12 @@ Some dependencies are bundled as git submodules, so clone with `--recursive` —
 `SFML`, `spdlog` and `ZLIB` are used from your system when a compatible version is
 found, and otherwise downloaded and built automatically by CMake. Qt6 must be installed.
 
+Besides the editor (`gecko`), the build produces `gecko-cli`, a headless tool that analyses,
+renders and generates maps (`gecko-cli --help`), and `gecko-mcp`, an MCP server exposing the
+same tools to AI agents (`-DGECK_BUILD_CLI=OFF` / `-DGECK_BUILD_MCP=OFF` skip them). The Luau
+scripting runtime behind map generation, fills and stamps is optional: configure with
+`-DGECK_ENABLE_SCRIPTING=ON` (it downloads Luau).
+
 ### Linux
 
 ```bash
@@ -95,10 +101,18 @@ cmake --build build
 
 ### Setup
 
-1. Copy `master.dat` and `critter.dat` from your Fallout 2 installation to the `resources` subdirectory (`gecko.app/Contents/Resources` on Mac)
+1. On first run Gecko opens its settings: add your Fallout 2 data under **Fallout 2 Data Paths**
+   (**Add Path... → Add DAT File...** for `master.dat` / `critter.dat`, **Add Folder...** for an
+   unpacked `data` directory, or **Auto-Detect**). Change them later in **Preferences → General**.
 2. (Optional) Extract data files using [dat-unpacker](https://github.com/falltergeist/dat-unpacker) with the `--transform` option to convert filenames to lowercase
 
 ### Controls
+
+The keys below are the defaults. Every command shortcut can be rebound in **Preferences → Keyboard
+Shortcuts**, and the status bar always shows the keys that act in the current mode. Single-letter
+keys work while the map view has focus, so typing in a panel never triggers them. **Esc**,
+**Delete**, **Backspace** and **Space** belong to the editing tools and cannot be reassigned. On
+macOS, **Ctrl** below means **Cmd**.
 
 > **Shift is modal.** It means three different things depending on what you are doing: hold
 > **Shift** while placing a tile to paint on the **roof**, while clicking with tiles already
@@ -107,6 +121,9 @@ cmake --build build
 #### Navigation
 - **Right-click + drag**: Pan the view
 - **Mouse wheel**: Zoom in / out
+- **F**: Fit the whole map in the view
+- **Home**: Center the view on the player start position
+- **Ctrl+1** / **Ctrl+2** / **Ctrl+3**: Switch to elevation 1 / 2 / 3
 - **Window resize**: View adjusts automatically
 
 #### Selection & modes
@@ -114,7 +131,9 @@ The active mode is chosen from the toolbar; the status bar shows the keys that a
 
 - **Left-click**: Select the element under the cursor. Clicking the same spot again **cycles** through overlapping elements (roof tile → object → floor tile).
 - **Right-click**: Cancel the active tool / placement mode (when no tool is active, right-click + drag pans).
+- **S**: Switch to Select mode.
 - **Esc**: Clear the selection (or exit the active placement / stamp tool).
+- **Return**: Inspect the selection in the Selection panel.
 - The **Selection** toolbar dropdown picks which layers participate: combine **Floor Tiles**, **Roof Tiles**, and **Objects** (all on = classic "All"), or switch to an exclusive tool (**Roof Tiles**, **Hexes**, **Scroll Blocker Rectangle**).
 
 #### Multi-selection
@@ -128,6 +147,7 @@ The active mode is chosen from the toolbar; the status bar shows the keys that a
 #### Object manipulation
 - **R**: Rotate the selected object(s) — works on single or multiple selections.
 - **Delete** / **Backspace**: Remove the selected object(s).
+- **Ctrl+Shift+E**: Open the selected object's script source in the external editor.
 
 #### Placement tools
 - **Eyedropper — pick under cursor** (**P**): hover over the map and press **P** to sample the topmost thing under the cursor. A **tile** is loaded into the tile palette and tile painting is armed. An **object** raises the object palette and enters placement mode with a ghost that follows the cursor — **left-click** to drop a copy (keeps placing), **R** to rotate the ghost's facing, **Esc** or **right-click** to stop.
@@ -139,25 +159,40 @@ The active mode is chosen from the toolbar; the status bar shows the keys that a
 - **Scroll Blocker Rectangle** (**B**): Drag a rectangle to place scroll blockers along its border.
 
 #### View / layers
+- **G**: Toggle the hex grid.
 - **Ctrl+E**: Toggle the "Show Exit Grids" overlay.
+- **Ctrl+Shift+M**: Open the World Map.
 - **F5**: Save and play the current map in Fallout 2.
-- The **View** menu (and matching toolbar buttons) toggle Objects, Critters, Walls, Roofs, Scroll Blockers, Wall Blockers, Hex Grid, and Light Overlays (no default keys).
+- The **View** menu (and matching toolbar buttons) toggle Objects, Critters, Walls, Roofs, Scroll Blockers, Wall Blockers, and Light Overlays (no default keys).
+
+#### Panels
+- **Alt+1** … **Alt+6**: Map Info, Selection, Scripts, Tile Palette, Object Palette, File Browser
+- **Alt+`**: Log
+- Each key shows its panel, or brings it to the front when it is tabbed behind another; pressing it again on a panel already in front hides it.
 
 #### File
+Save As, Close, Undo/Redo, Preferences and Quit follow each platform's own convention, so their keys
+differ between Windows, macOS and Linux (for example Redo is **Ctrl+Y** on Windows and
+**Ctrl+Shift+Z** on macOS and Linux; Quit has no key on Windows).
+
 - **Ctrl+N**: New map
 - **Ctrl+O**: Open map
 - **Ctrl+B**: Browse maps as thumbnails
 - **Ctrl+S**: Save map
-- **Ctrl+Shift+S**: Save map as…
-- **Ctrl+Z** / **Ctrl+Y**: Undo / Redo
-- **Ctrl+Q**: Quit
+- **Ctrl+Shift+S**: Save map as… (macOS, Linux)
+- **Ctrl+W**: Close map
+- **Ctrl+Z**: Undo
+- **Ctrl+,**: Preferences (macOS)
+- **Ctrl+Q**: Quit (macOS, Linux)
 
 ## Development
 
 ### Code Formatting
-```bash
-./format.sh  # Formats all .cpp and .h files with clang-format
-```
+A pre-commit hook (`.githooks/pre-commit`) runs `git clang-format` on the lines each commit
+changes, with the repository's `.clang-format`. Configuring with CMake installs it by setting
+`core.hooksPath` to `.githooks` (opt out with `-DGECK_INSTALL_GIT_HOOKS=OFF`); it needs
+`clang-format` 22 or newer and `git-clang-format` on `PATH`, and skips formatting with a warning
+without them.
 
 ### Testing
 ```bash
@@ -166,7 +201,6 @@ ctest --output-on-failure
 
 # …or run a suite directly
 ./general_tests       # formats, readers/writers, editor logic
-./performance_tests   # reader benchmarks
 ./qt_tests            # Qt UI regressions
 ```
 

@@ -17,7 +17,7 @@ using namespace geck;
 // its entry is skipped and never takes a slot: the .lst line of third.pro is 2 while its position
 // in the loaded list is 1. Everything that consumes a palette index has to agree on which of those
 // it means, or dropping an object places the wrong one - or none.
-TEST_CASE("Object palette indexes survive a proto that fails to load", "[qt][palette]") {
+TEST_CASE("Object palette indexes survive a proto that fails to load", "[object_palette]") {
     auto resources = std::make_shared<resource::GameResources>();
     resources->files().addDataPath(geck::test::dataPath("palette"));
 

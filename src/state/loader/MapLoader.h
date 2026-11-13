@@ -18,7 +18,6 @@ class MapLoader : public Loader {
 public:
     MapLoader(std::shared_ptr<resource::GameResources> resources,
         const std::filesystem::path& mapPath,
-        int elevation,
         bool forceFilesystem,
         std::function<void(std::unique_ptr<Map>)> onLoadCallback);
     ~MapLoader();
@@ -37,18 +36,12 @@ private:
     void loadFromFilesystem();
     void loadMapResources();
 
-    /// Loads the map's optional ".EDG" map-edge sidecar (if present) onto `_map`. Never throws
-    /// and never fails the map load — a missing or malformed edge file is silently ignored,
-    /// mirroring the engine's `mapEdgeLoad`. `viaVfs` reads through the resource VFS (mounted
-    /// folders + DATs); otherwise the sibling is read from the map file's own directory on disk.
-    void loadSiblingEdge(bool viaVfs);
-
     std::atomic<bool> done = false;
 
     std::shared_ptr<resource::GameResources> _resources;
     std::filesystem::path _mapPath;
     std::unique_ptr<Map> _map;
-    int _elevation;
+    int _elevation = 0; // the map header's player_default_elevation, read on load
     bool _forceFilesystem;
     std::function<void(std::unique_ptr<Map>)> _onLoadCallback;
 

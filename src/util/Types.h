@@ -37,7 +37,6 @@ struct SelectionLayers {
     bool roofTiles = true;
     bool objects = true;
 
-    bool any() const { return floorTiles || roofTiles || objects; }
     bool all() const { return floorTiles && roofTiles && objects; }
 };
 

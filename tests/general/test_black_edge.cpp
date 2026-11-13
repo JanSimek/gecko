@@ -8,7 +8,7 @@
 
 #include "editor/HexagonGrid.h"
 #include "editor/helper/BlackEdge.h"
-#include "ui/tools/BlackEdgeTool.h"
+#include "editing/tools/BlackEdgeTool.h"
 
 using namespace geck;
 using namespace geck::black_edge;

@@ -101,7 +101,7 @@ public:
         const std::string& description);
 
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
-    bool registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath);
+    bool registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, uint32_t newFrmPid, const std::string& newFrmPath);
 
     bool registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation);
     bool registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
@@ -117,10 +117,10 @@ public:
 
 private:
     static void applyInstanceState(MapObject& object, const MapObjectInstanceState& state);
-    // Re-point each object to its target hex position / direction. Shared by the
+    // Set each object's hex position / direction, then rebuild the visuals. Shared by the
     // undo and redo halves of registerObjectMove / registerObjectRotation.
-    void applyObjectPositions(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& positions);
-    static void applyObjectDirections(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& directions);
+    void applyObjectPositions(const std::vector<std::shared_ptr<MapObject>>& objects, const std::vector<int>& positions);
+    void applyObjectDirections(const std::vector<std::shared_ptr<MapObject>>& objects, const std::vector<int>& directions) const;
     void applyObjectSpots(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<ObjectSpotState>& spots);
     // Sets an elevation's object order and re-sorts the drawn objects to match, keeping the same
     // Object instances so the selection survives (a full refreshObjects() would rebuild them).

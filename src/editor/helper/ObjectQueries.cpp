@@ -35,11 +35,6 @@ bool blocksMovement(const MapObject& object, resource::GameResources& resources)
     return !hasNoBlockFlag;
 }
 
-bool isWallBlocker(const MapObject& object, resource::GameResources& resources) {
-    // Any object that blocks movement is treated as a gap-filling wall blocker.
-    return blocksMovement(object, resources);
-}
-
 bool isShootThroughWallBlocker(const MapObject& object, resource::GameResources& resources) {
     Pro* pro = getProData(object, resources);
     if (!pro) {
@@ -47,6 +42,20 @@ bool isShootThroughWallBlocker(const MapObject& object, resource::GameResources&
     }
 
     return (pro->header.flags & static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_SHOOT_THRU)) != 0;
+}
+
+bool applyProtoDefaults(MapObject& object, resource::GameResources& resources) {
+    const Pro* pro = getProData(object, resources);
+    if (!pro) {
+        return false;
+    }
+    object.applyProtoDefaults(*pro);
+    return true;
+}
+
+int32_t protoSid(const MapObject& object, resource::GameResources& resources) {
+    const Pro* pro = getProData(object, resources);
+    return pro ? pro->sid() : -1;
 }
 
 } // namespace geck::object_query

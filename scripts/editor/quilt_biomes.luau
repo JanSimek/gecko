@@ -26,7 +26,7 @@ local REF_A = args.refA or "maps/desert1.map"
 local REF_B = args.refB or "maps/mountn2.map"
 local COVERAGE = tonumber(args.coverage) or 0.55
 local SCALE = tonumber(args.scale) or 0.045
-local TILE_W, TILE_H = 100, 100 -- floor grid (see CLAUDE.md: tiles are 100x100)
+local TILE_W, TILE_H = 100, 100 -- floor grid (see AGENTS.md: tiles are 100x100)
 
 print("Seed " .. args.seed .. " — re-run with --arg seed=" .. args.seed .. " to reproduce.")
 

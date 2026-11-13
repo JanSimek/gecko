@@ -11,6 +11,12 @@
 
 namespace geck::resource {
 
+/// A data path that was requested but is not mounted.
+struct FailedMount {
+    std::filesystem::path sourcePath;
+    std::string reason;
+};
+
 struct MountedSourceInfo {
     enum class Kind {
         Directory,
@@ -53,11 +59,20 @@ public:
     /// earlier one that provides the same path.
     [[nodiscard]] std::vector<MountedSourceInfo> mounts() const;
 
-private:
-    static std::filesystem::path normalizeVfsPath(const std::filesystem::path& path);
+    /// Data paths that were asked for and did not mount, with the reason. A skipped mount is the
+    /// dangerous failure: every answer afterwards is drawn from whatever did mount, and reads as
+    /// confident as a correct one. Nothing here means every requested path mounted.
+    [[nodiscard]] std::vector<FailedMount> failedMounts() const;
+
+    /// The regex source for a shell glob ('*' any run, '?' one character, everything else literal),
+    /// anchored to the whole string. Case-sensitive, as list() matches it.
     static std::string globToRegexPattern(const std::string& pattern);
 
+private:
+    static std::filesystem::path normalizeVfsPath(const std::filesystem::path& path);
+
     vfspp::VirtualFileSystemPtr _vfs;
+    std::vector<FailedMount> _failedMounts;
     mutable std::mutex _mutex;
 };
 

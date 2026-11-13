@@ -2,6 +2,7 @@
 
 #include "cli/MapAnalyzer.h" // listMapPaths
 #include "cli/MapLoad.h"     // loadMap
+#include "cli/ScriptLookup.h"
 #include "editor/HexGeometry.h"
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
@@ -10,7 +11,6 @@
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
-#include "resource/ResourcePaths.h"
 #include "resource/ScriptNames.h"
 #include "util/ProHelper.h"
 
@@ -54,13 +54,13 @@ namespace {
             }
             ProtoInfo info;
             try {
-                if (const Pro* pro = _resources.loadPro(pid); pro != nullptr) {
+                if (const Pro* pro = _resources.tryLoadPro(pid); pro != nullptr) {
                     // Prefer an item's inventory icon, and fall back to its world sprite. Containers
                     // — lockers, footlockers, bookcases, desks — are items by proto type but are never
                     // carried, so their inventoryFID is -1 and only header.FID has art. That is 108 of
                     // the 424 item protos, so without the fallback a quarter of them draw nothing.
                     info.fid = pro->header.FID;
-                    if (Pro::typeOfPid(pid) == Pro::OBJECT_TYPE::ITEM
+                    if (ProtoId(pid).objectType() == ObjectType::Item
                         && pro->commonItemData.inventoryFID >= 0) {
                         info.fid = pro->commonItemData.inventoryFID;
                     }
@@ -83,19 +83,19 @@ namespace {
     };
 
     const char* kindOf(std::uint32_t pid) {
-        using enum Pro::OBJECT_TYPE;
-        switch (Pro::typeOfPid(pid)) {
-            case ITEM:
+        using enum ObjectType;
+        switch (ProtoId(pid).objectType()) {
+            case Item:
                 return "item";
-            case CRITTER:
+            case Critter:
                 return "critter";
-            case SCENERY:
+            case Scenery:
                 return "scenery";
-            case WALL:
+            case Wall:
                 return "wall";
-            case TILE:
+            case Tile:
                 return "tile";
-            case MISC:
+            case Misc:
                 return "misc";
             default:
                 return "unknown";
@@ -106,42 +106,33 @@ namespace {
         if (object.isExitGridMarker()) {
             return true;
         }
-        using enum Pro::OBJECT_TYPE;
-        const auto type = Pro::typeOfPid(object.pro_pid);
-        if (type == ITEM || type == CRITTER) {
+        using enum ObjectType;
+        const auto type = ProtoId(object.pro_pid).objectType();
+        if (type == Item || type == Critter) {
             return true;
         }
-        return includeScenery && (type == SCENERY || type == WALL);
+        return includeScenery && (type == Scenery || type == Wall);
     }
 
     // The script attached to an object, as {programIndex, name}, or null. programIndex is the engine's
     // 0-based scripts.lst index (see cli/ScriptIntrospect.h on the index bases).
     ordered_json scriptOf(const Map& map, std::int32_t sid, const Lst* scriptsLst,
         resource::GameResources& resources) {
-        if (sid == -1) {
+        // A SID of -1 (no script) names no section, so it finds nothing.
+        const MapScript* script = map.scriptForSid(static_cast<std::uint32_t>(sid));
+        if (script == nullptr) {
             return nullptr;
         }
-        const int section = MapScript::sidSection(static_cast<std::uint32_t>(sid));
-        if (section < 0 || section >= Map::SCRIPT_SECTIONS) {
-            return nullptr;
+        const int programIndex = static_cast<int>(script->script_id);
+        std::string name;
+        if (scriptsLst != nullptr && programIndex >= 0 && programIndex < static_cast<int>(scriptsLst->list().size())) {
+            name = scriptsLst->at(programIndex);
         }
-        for (const MapScript& script : map.getMapFile().map_scripts[section]) {
-            if (script.pid != static_cast<std::uint32_t>(sid)) {
-                continue;
-            }
-            const int programIndex = static_cast<int>(script.script_id);
-            std::string name;
-            if (scriptsLst != nullptr && programIndex >= 0
-                && programIndex < static_cast<int>(scriptsLst->list().size())) {
-                name = scriptsLst->at(programIndex);
-            }
-            ordered_json out;
-            out["programIndex"] = programIndex;
-            out["name"] = name;
-            out["description"] = resource::scriptDescription(resources, programIndex);
-            return out;
-        }
-        return nullptr;
+        ordered_json out;
+        out["programIndex"] = programIndex;
+        out["name"] = name;
+        out["description"] = resource::scriptDescription(resources, programIndex);
+        return out;
     }
 
     // Identifies one exit grid by where it leads, so the hexes making up a single doorway collapse
@@ -162,7 +153,7 @@ namespace {
         ordered_json row;
         row["kind"] = object.isExitGridMarker() ? "exitgrid" : kindOf(object.pro_pid);
         row["pid"] = object.pro_pid;
-        row["proto"] = object.pro_pid & 0xFFFFFFu;
+        row["proto"] = object.pid().protoId();
         row["name"] = protos(object.pro_pid).name;
         row["map"] = mapPath;
         row["elevation"] = elevation;
@@ -332,12 +323,7 @@ int exportEntities(resource::GameResources& resources, const ExportOptions& opti
         return 1;
     }
 
-    const Lst* scriptsLst = nullptr;
-    try {
-        scriptsLst = resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
-    } catch (const std::exception& e) {
-        spdlog::debug("export: no scripts.lst: {}", e.what());
-    }
+    const Lst* scriptsLst = script_lookup::loadScriptsLst(resources);
     std::optional<resource::MapNameResolver> names;
     try {
         names.emplace(resources);

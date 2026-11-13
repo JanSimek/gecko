@@ -3,7 +3,7 @@
 #include <utility>
 
 #include "editing/commands/UndoBatcher.h"
-#include "editor/HexagonGrid.h"
+#include "editor/HexGeometry.h"
 #include "format/map/Map.h"
 #include "util/UndoStack.h"
 
@@ -12,10 +12,6 @@ namespace geck {
 namespace {
     bool validElevation(int elevation) {
         return elevation >= 0 && elevation < MapEdge::ELEVATION_COUNT;
-    }
-
-    int clampCoord(int value, int maxInclusive) {
-        return value < 0 ? 0 : (value > maxInclusive ? maxInclusive : value);
     }
 
     void assignRectSide(MapEdge::Rect& rect, EdgeEditService::Side side, int value) {
@@ -48,13 +44,6 @@ const std::optional<MapEdge>& EdgeEditService::edge() const {
 
 bool EdgeEditService::hasEdge() const {
     return _map && _map->edge().has_value();
-}
-
-int EdgeEditService::zoneCount(int elevation) const {
-    if (!hasEdge() || !validElevation(elevation)) {
-        return 0;
-    }
-    return static_cast<int>(_map->edge()->elevations[elevation].zones.size());
 }
 
 void EdgeEditService::applyEdgeSnapshot(const std::optional<MapEdge>& snapshot) {
@@ -109,24 +98,6 @@ bool EdgeEditService::deleteZone(int elevation, int zoneIndex) {
     return recordEdgeEdit("Delete Edge Zone", std::move(before));
 }
 
-bool EdgeEditService::setZoneSide(int elevation, int zoneIndex, Side side, int hexIndex) {
-    if (!hasEdge() || !validElevation(elevation)) {
-        return false;
-    }
-    if (hexIndex < 0 || hexIndex >= HexagonGrid::POSITION_COUNT) {
-        return false;
-    }
-    MapEdge working = *_map->edge();
-    auto& zones = working.elevations[elevation].zones;
-    if (zoneIndex < 0 || zoneIndex >= static_cast<int>(zones.size())) {
-        return false;
-    }
-    std::optional<MapEdge> before = _map->edge();
-    assignRectSide(zones[zoneIndex], side, hexIndex);
-    _map->setEdge(std::move(working));
-    return recordEdgeEdit("Move Edge Side", std::move(before));
-}
-
 std::optional<MapEdge> EdgeEditService::snapshot() const {
     return _map ? _map->edge() : std::nullopt;
 }
@@ -135,7 +106,7 @@ void EdgeEditService::previewZoneSide(int elevation, int zoneIndex, Side side, i
     if (!hasEdge() || !validElevation(elevation)) {
         return;
     }
-    if (hexIndex < 0 || hexIndex >= HexagonGrid::POSITION_COUNT) {
+    if (!hexgrid::isValidPosition(hexIndex)) {
         return;
     }
     MapEdge working = *_map->edge();
@@ -164,33 +135,6 @@ bool EdgeEditService::upgradeToVersion2() {
     working.version = 2;
     _map->setEdge(std::move(working));
     return recordEdgeEdit("Enable Angled Map Edge (v2)", std::move(before));
-}
-
-bool EdgeEditService::setSquareSide(int elevation, Side side, int colOrRow) {
-    // The square/clip block is only serialized for v2 edges (MapEdgeWriter), so reject the edit on v1
-    // rather than "succeed" with a change that would never be saved.
-    if (!hasEdge() || !validElevation(elevation) || !_map->edge()->isVersion2()) {
-        return false;
-    }
-    std::optional<MapEdge> before = _map->edge();
-    MapEdge working = *_map->edge();
-    MapEdge::Rect& square = working.elevations[elevation].squareRect;
-    switch (side) {
-        case LEFT:
-            square.left = clampCoord(colOrRow, MapEdge::SQUARE_GRID_WIDTH - 1);
-            break;
-        case RIGHT:
-            square.right = clampCoord(colOrRow, MapEdge::SQUARE_GRID_WIDTH - 1);
-            break;
-        case TOP:
-            square.top = clampCoord(colOrRow, MapEdge::SQUARE_GRID_HEIGHT - 1);
-            break;
-        case BOTTOM:
-            square.bottom = clampCoord(colOrRow, MapEdge::SQUARE_GRID_HEIGHT - 1);
-            break;
-    }
-    _map->setEdge(std::move(working));
-    return recordEdgeEdit("Move Square Edge Side", std::move(before));
 }
 
 bool EdgeEditService::toggleClipSide(int elevation, Side side) {

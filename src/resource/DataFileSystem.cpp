@@ -2,7 +2,6 @@
 
 #include "util/GameDataPathResolver.h"
 #include "reader/ReaderExceptions.h"
-#include "resource/PathUtils.h"
 #include "vfs/Dat2FileSystem.hpp"
 #include "vfs/VfsppNativeFileSystem.h"
 
@@ -21,6 +20,7 @@ DataFileSystem::DataFileSystem()
 void DataFileSystem::clear() {
     const std::scoped_lock lock(_mutex);
     _vfs = std::make_shared<vfspp::VirtualFileSystem>();
+    _failedMounts.clear();
 }
 
 namespace {
@@ -64,6 +64,15 @@ void DataFileSystem::addDataPath(const std::filesystem::path& path) {
     const std::scoped_lock lock(_mutex);
     const auto mountRoot = resolveMountRoot(path);
     if (!mountRoot) {
+        _failedMounts.push_back({ path, "not a recognized data location" });
+        return;
+    }
+    // A data path that cannot be opened is the failure worth shouting about: everything read
+    // afterwards comes from whatever else mounted, and looks exactly like a correct answer.
+    std::error_code existsEc;
+    if (!std::filesystem::exists(*mountRoot, existsEc)) {
+        spdlog::error("Data path does not exist: {}", mountRoot->string());
+        _failedMounts.push_back({ path, "does not exist" });
         return;
     }
     if (*mountRoot != path) {
@@ -80,12 +89,14 @@ void DataFileSystem::addDataPath(const std::filesystem::path& path) {
         fileSystem = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem("/", mountRoot->string()));
     } else {
         spdlog::error("Unsupported data location: {}", mountRoot->string());
+        _failedMounts.push_back({ path, "unsupported data location (expected a directory or a .dat)" });
         return;
     }
 
     const auto mountStart = std::chrono::steady_clock::now();
     if (!fileSystem->Initialize() || !fileSystem->IsInitialized()) {
         spdlog::error("Failed to initialize data path: {}", mountRoot->string());
+        _failedMounts.push_back({ path, "failed to initialize" });
         return;
     }
     // Mount duration is the dominant cold-start cost (DAT index parse / directory walk);
@@ -98,13 +109,9 @@ void DataFileSystem::addDataPath(const std::filesystem::path& path) {
 
 std::optional<std::vector<uint8_t>> DataFileSystem::readRawBytes(const std::filesystem::path& path) const {
     const std::scoped_lock lock(_mutex);
-    if (!_vfs) {
-        return std::nullopt;
-    }
-
     const std::filesystem::path vfsPath = normalizeVfsPath(path);
     try {
-        vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::toVfsPath(vfsPath), vfspp::IFile::FileMode::Read);
+        vfspp::IFilePtr file = _vfs->OpenFile(vfsPath.generic_string(), vfspp::IFile::FileMode::Read);
         if (!file || !file->IsOpened()) {
             return std::nullopt;
         }
@@ -126,21 +133,13 @@ std::optional<std::vector<uint8_t>> DataFileSystem::readRawBytes(const std::file
 
 bool DataFileSystem::exists(const std::filesystem::path& path) const {
     const std::scoped_lock lock(_mutex);
-    if (!_vfs) {
-        return false;
-    }
-
     const std::filesystem::path vfsPath = normalizeVfsPath(path);
-    vfspp::IFilePtr file = _vfs->OpenFile(PathUtils::toVfsPath(vfsPath), vfspp::IFile::FileMode::Read);
+    vfspp::IFilePtr file = _vfs->OpenFile(vfsPath.generic_string(), vfspp::IFile::FileMode::Read);
     return file != nullptr;
 }
 
 std::vector<std::filesystem::path> DataFileSystem::list(const std::string& pattern) const {
     const std::scoped_lock lock(_mutex);
-    if (!_vfs) {
-        return {};
-    }
-
     const std::vector<std::string> allFiles = _vfs->ListAllFiles();
     std::vector<std::filesystem::path> files(allFiles.begin(), allFiles.end());
 
@@ -160,10 +159,6 @@ std::vector<std::filesystem::path> DataFileSystem::list(const std::string& patte
 
 void DataFileSystem::refresh() {
     const std::scoped_lock lock(_mutex);
-    if (!_vfs) {
-        return;
-    }
-
     const auto fileSystemsOpt = _vfs->GetFilesystems("/");
     if (!fileSystemsOpt) {
         return;
@@ -222,10 +217,6 @@ namespace {
 
 std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesystem::path& path) const {
     const std::scoped_lock lock(_mutex);
-    if (!_vfs) {
-        return std::nullopt;
-    }
-
     const std::string fullVfsPath = normalizeVfsPath(path).generic_string();
 
     // Every mount is registered under the "/" alias and keys entries by virtual path, so the full VFS
@@ -252,12 +243,13 @@ std::optional<MountedSourceInfo> DataFileSystem::sourceInfo(const std::filesyste
     return std::nullopt;
 }
 
+std::vector<FailedMount> DataFileSystem::failedMounts() const {
+    const std::scoped_lock lock(_mutex);
+    return _failedMounts;
+}
+
 std::vector<MountedSourceInfo> DataFileSystem::mounts() const {
     const std::scoped_lock lock(_mutex);
-    if (!_vfs) {
-        return {};
-    }
-
     const auto fileSystemsOpt = _vfs->GetFilesystems("/");
     if (!fileSystemsOpt) {
         return {};

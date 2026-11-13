@@ -20,12 +20,8 @@ protected:
 public:
     virtual ~FileWriter() = default;
 
-    void openFile(const std::filesystem::path& filePath, bool overwrite = true) {
+    void openFile(const std::filesystem::path& filePath) {
         _path = filePath;
-
-        if (!overwrite && std::filesystem::exists(filePath)) {
-            throw FileExistsException(filePath);
-        }
 
         auto parentPath = filePath.parent_path();
         if (!parentPath.empty() && !std::filesystem::exists(parentPath)) {

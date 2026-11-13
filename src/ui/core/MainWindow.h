@@ -5,10 +5,11 @@
 #include <QMenuBar>
 #include <QToolBar>
 #include <QDockWidget>
-#include <QHash>
 #include <QIcon>
 #include <QTimer>
 #include <QKeyEvent>
+#include <QKeySequence>
+#include <QShortcut>
 #include <QPointer>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -24,7 +25,7 @@
 #include <utility>
 #include <SFML/Window/Event.hpp>
 
-#include "EditorMode.h"
+#include "editing/EditorMode.h"
 #include "editor/helper/MapClipboard.h"
 
 QT_BEGIN_NAMESPACE
@@ -39,6 +40,7 @@ namespace resource {
 }
 
 class Settings;
+class KeyBindingRegistry;
 class GameLauncher;
 class ExternalEditorLauncher;
 class ScriptSourceService;
@@ -88,11 +90,6 @@ public:
     void closeCurrentMap();
     bool hasActiveMap() const;
 
-    // Access to palette panels for drag and drop and tile deselection
-    ObjectPalettePanel* getObjectPalettePanel() const { return _objectPalettePanel; }
-    TilePalettePanel* getTilePalettePanel() const { return _tilePalettePanel; }
-    FileBrowserPanel* getFileBrowserPanel() const { return _fileBrowserPanel; }
-
     // Bring a palette dock to the front of its tab group (used by the eyedropper so the picked
     // object/tile's palette is visible). No-op if the dock is hidden or floating on its own.
     void raiseObjectPalette();
@@ -107,16 +104,6 @@ public:
     // Attach the application-wide log record store to the Log panel (the model outlives this
     // window; the in-app spdlog sink feeds it from application startup on).
     void setLogModel(LogModel* model);
-
-    // Plugin UI contributions, keyed by a unique id. Each add* returns nullptr (without
-    // taking any ownership) on an empty id/text or a duplicate id. addPluginDock takes
-    // ownership of `widget` on success — removePluginUi deletes the dock and the widget
-    // with it; on failure the widget stays with the caller.
-    QAction* addPluginMenuItem(const QString& id, const QString& text);
-    QAction* addPluginToolButton(const QString& id, const QString& text, const QIcon& icon = {});
-    QDockWidget* addPluginDock(const QString& id, const QString& title, QWidget* widget,
-        Qt::DockWidgetArea area = Qt::RightDockWidgetArea);
-    void removePluginUi(const QString& id);
 
     // Re-scan the open map's referenced resources against the mounted data and refresh the Log
     // dock's "Map" tab (clears it when no map is open). Cheap — in-memory index lookups only.
@@ -148,7 +135,6 @@ signals:
     void showMapEdgesToggled(bool enabled);
     void showUnreachableToggled(bool enabled);
     void elevationChanged(int elevation);
-    void selectionModeRequested();
     void rotateObjectRequested();
     void toggleScrollBlockerRectangleMode();
 
@@ -162,7 +148,10 @@ private slots:
     void handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem = false);
     void updateHexIndexDisplay(int hexIndex);
     void updateModeDisplay(const QString& modeText, const QString& iconPath);
-    void showPreferences();
+    /// `initialTab` names the tab to open on (empty = whichever was last shown).
+    void showPreferences(const QString& initialTab = {});
+    /// Help > Keyboard Shortcuts: the Preferences page listing every binding.
+    void showKeyboardShortcuts();
     void showAbout();
 
     // Tools menu: new art through the mod's tools/gecko_assets.py (ui/assets/ModToolsRunner.h).
@@ -185,6 +174,9 @@ private slots:
     void showMapBrowserDialog();
     /// Switches the central area between the world map and whatever was showing before it.
     void toggleWorldMap(bool show);
+    /// An undoable header edit, or its undo/redo, may have added or removed an elevation: refresh the
+    /// Map Info panel and the elevation menu, and leave an elevation that is gone.
+    void onMapHeaderChanged();
 
 public slots:
     void showStatusMessage(const QString& message);
@@ -193,19 +185,6 @@ public slots:
 
 private:
     using DockActionPair = std::pair<QDockWidget*, QAction*>;
-    struct PluginUiRegistration {
-        enum class Kind {
-            MenuAction,
-            ToolBarAction,
-            Dock,
-        };
-
-        Kind kind;
-        QPointer<QAction> action;
-        QPointer<QMenu> menu;
-        QPointer<QDockWidget> dock;
-    };
-
     void setupUI();
     void setupMenuBar();
     void setupToolBar();
@@ -224,6 +203,8 @@ private:
     // to Select. Updates the toolbar button text/icon to match. See setupToolModeActions.
     void applyBlockerTool(bool checked);
     void syncToolModeActions(EditorMode mode);
+    /// Stand down every canvas shortcut whose key the mode handles itself (see InputHandler).
+    void syncCanvasShortcutsForMode(EditorMode mode);
     void setupDockWidgets();
 #ifdef GECK_SCRIPTING_ENABLED
     // Connects the script console's Run signal to the editor and adds its View-menu toggle.
@@ -249,13 +230,30 @@ private:
     /// Play writes the map as it stands into the game folder, so unsaved edits are played either
     /// way. This asks whether to save them to the user's own file as well.
     QIcon themedIcon(const QString& iconPath) const;
-    QMenu* ensurePluginMenu();
     // A map just opened: re-apply the persisted dock layout that was transiently hidden for the
     // welcome screen (no map). Restores from the saved Qt dock state, the single source of truth.
     void showPanelsForMap();
     void hidePanelsForNoMap();
     void setDockVisibility(QDockWidget* dock, QAction* action, bool visible);
-    QAction* addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef);
+    QAction* addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef,
+        const char* actionId = nullptr);
+    // Show/raise/hide a panel dock for its menu item or keyboard shortcut. Docks are tabbed, so a
+    // dock Qt calls visible may be sitting behind another tab: raise it rather than hide it, and
+    // only hide when it is already the tab on top. `action` (optional) is re-checked to match.
+    void revealPanel(QDockWidget* dock, QAction* action);
+    /// Show and raise a dock without ever hiding it (revealPanel toggles one already on top).
+    void showPanel(QDockWidget* dock, QAction* action);
+    // Select the Scripts panel row of whatever script the map selection names, or none.
+    void syncScriptsPanelSelection();
+    // (Re)install the shortcuts scoped to the map canvas. Called whenever an EditorWidget is
+    // installed, since the SFML widget they hang off is rebuilt with it.
+    void installCanvasShortcuts();
+    // Numpad Enter mirrors the inspect-selection key, but only while that key is Return — see
+    // installCanvasShortcuts(). Re-run whenever that binding changes.
+    void syncInspectSelectionCompanionKey();
+    // Ctrl+Shift+E: open the .ssl of the script attached to the selected object (the same
+    // ScriptSourceService flow as the Selection panel's "Edit Source..." button).
+    void editSelectedObjectScriptSource();
     std::array<QDockWidget*, 6> managedDocks() const;
     std::array<DockActionPair, 6> managedDockActionPairs() const;
     void applyDefaultDockPlacements();
@@ -291,7 +289,6 @@ private:
     // Dock widget state management
     void saveDockWidgetState();
     void restoreDockWidgetState();
-    void resetDockWidgetLayout();
     void restoreDefaultLayout();
 
     void convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, bool pressed);
@@ -311,6 +308,9 @@ private:
     std::unique_ptr<GameLauncher> _gameLauncher;
     std::unique_ptr<ExternalEditorLauncher> _externalEditorLauncher;
     std::unique_ptr<ScriptSourceService> _scriptSourceService;
+    // The single source of truth for which key runs which command: shipped defaults plus the
+    // user's overrides, re-keying every menu/toolbar/canvas sink the moment one changes.
+    std::unique_ptr<KeyBindingRegistry> _keyBindings;
 
     // Current widgets
     EditorWidget* _currentEditorWidget;
@@ -328,7 +328,6 @@ private:
     QMenu* _viewMenu;
     QMenu* _panelsMenu;
     QMenu* _elevationMenu;
-    QMenu* _pluginMenu = nullptr;
     QMenu* _toolsMenu = nullptr;
     QMenu* _helpMenu;
 
@@ -346,8 +345,6 @@ private:
     // Black edge line tool (BlackEdgeTool): checked while it is the active registered tool.
     QAction* _blackEdgeAction = nullptr;
     QMenu* _exitGridsMenu = nullptr;
-    QAction* _exitGridPlaceHexAction = nullptr;   // "Place single hex" -> EditorMode::PlaceExitGrid
-    QAction* _exitGridDrawRegionAction = nullptr; // "Draw edge"       -> EditorMode::MarkExits
     QAction* _rotateAction = nullptr;
     QAction* _fillSelectionAction = nullptr;
     QAction* _undoAction = nullptr;
@@ -384,7 +381,6 @@ private:
     // saved state and refreshed on every genuine user change. See saveDockWidgetState/showPanelsForMap.
     QByteArray _restoredDockState;
     bool _mapModified = false; // current map has edits not yet written to disk
-    QHash<QString, PluginUiRegistration> _pluginUi;
 
     // Panel widgets
     SelectionPanel* _selectionPanel;
@@ -406,6 +402,19 @@ private:
     QAction* _tilePalettePanelAction;
     QAction* _objectPalettePanelAction;
     QAction* _fileBrowserPanelAction;
+    QAction* _logPanelAction = nullptr;
+    // Edit-menu "Scroll Blocker Rectangle"; its key lives on the canvas, so the action is held to
+    // be triggered from there.
+    QAction* _scrollBlockerRectAction = nullptr;
+
+    // "Inspect the selection": reveals the Selection panel from the canvas. Lives on the SFML
+    // widget (WidgetWithChildrenShortcut), so Return typed in a panel's filter box is untouched.
+    // Numpad Enter is a separate key code from Return, so it gets a companion shortcut that
+    // mirrors the reveal key while that key is Return.
+    QPointer<QShortcut> _inspectSelectionEnterShortcut;
+    // Every shortcut hung off the current map view, so the ones on a key a tool mode claims can
+    // stand down in that mode (syncCanvasShortcutsForMode).
+    QList<QPointer<QShortcut>> _canvasShortcuts;
 
     // Toolbar actions
     QAction* _selectionModeAction;

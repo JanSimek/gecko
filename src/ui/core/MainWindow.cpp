@@ -18,14 +18,17 @@
 #include "ui/panels/CompletenessView.h"
 #include "resource/MapCompleteness.h"
 #include "ui/rendering/ThumbnailPrewarmer.h"
+#include "viewport/ViewportController.h"
+#include "ui/input/ActionSpec.h"
+#include "ui/input/KeyBindingRegistry.h"
 #ifdef GECK_SCRIPTING_ENABLED
 #include "ui/panels/ScriptConsoleWidget.h"
 #include "scripting/LuaScriptRuntime.h" // ScriptResult
 #endif
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
-#include "ui/tools/BlackEdgeTool.h"
-#include "ui/tools/FillBrushTool.h"
+#include "editing/tools/BlackEdgeTool.h"
+#include "editing/tools/FillBrushTool.h"
 #include "util/Constants.h"
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/dialogs/AboutDialog.h"
@@ -78,6 +81,7 @@
 #include <QMenu>
 #include <QToolButton>
 #include <QIcon>
+#include <QPointer>
 #include <QSignalBlocker>
 #include <QTabWidget>
 #include <QFileDialog>
@@ -163,6 +167,22 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
 
     setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
 
+    // Before setupUI(): every menu, toolbar and canvas binding below asks the registry for its
+    // key rather than carrying a literal, so it has to exist first.
+    _keyBindings = std::make_unique<KeyBindingRegistry>(_settings, this);
+    connect(_keyBindings.get(), &KeyBindingRegistry::bindingChanged, this, [this](const QString& id, const QKeySequence&) {
+        if (_hintLabel && _currentEditorWidget) {
+            _hintLabel->setText(_currentEditorWidget->currentHintText());
+        }
+        if (id == QLatin1StringView(actions::PANEL_SELECTION_REVEAL)) {
+            syncInspectSelectionCompanionKey();
+        }
+        // A key just moved, possibly onto one the current tool mode claims.
+        if (_currentEditorWidget) {
+            syncCanvasShortcutsForMode(_currentEditorWidget->currentMode());
+        }
+    });
+
     setupUI();
 
     // The unique_ptr owns the launcher, so it has no QObject parent (it still
@@ -215,13 +235,40 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     _centralStack->setCurrentWidget(_currentEditorWidget);
     clearWorldMapAction(); // the map replaced whatever page was showing, world map included
 
-    _currentEditorWidget->setMainWindow(this);
+    _currentEditorWidget->setMapClipboard(&_mapClipboard);
+    // The editor reaches the palettes through these hooks and signals rather than a pointer back here.
+    _currentEditorWidget->setObjectPaletteHooks({
+        .objectInfo = [this](int objectIndex, ObjectCategory category) {
+            return _objectPalettePanel ? _objectPalettePanel->getObjectInfo(objectIndex, category) : nullptr;
+        },
+        .revealProto = [this](uint32_t pid) -> std::optional<std::pair<int, ObjectCategory>> {
+            if (!_objectPalettePanel) {
+                return std::nullopt;
+            }
+            auto found = _objectPalettePanel->revealProto(pid);
+            if (found) {
+                raiseObjectPalette();
+            }
+            return found;
+        },
+    });
     {
         const auto initStart = std::chrono::steady_clock::now();
         _currentEditorWidget->init();
         spdlog::info("EditorWidget::init (map view build) took {}ms",
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - initStart).count());
     }
+
+    // The canvas exists only once init() has built it, and it is rebuilt per map, so the
+    // canvas-scoped shortcuts are re-installed here (parented to the widget, so the old ones go
+    // with it). Before connectToEditorWidget(), whose syncToolModeActions() seeds their enabled state.
+    installCanvasShortcuts();
+
+    // Status-bar hints name the key that is actually bound, so they follow a rebind. Native text
+    // ("⌥1" on macOS, "Alt+1" elsewhere) because this is read, not parsed.
+    _currentEditorWidget->setHintKeyLookup([this](const QString& actionId) {
+        return _keyBindings ? _keyBindings->shortcut(actionId).toString(QKeySequence::NativeText) : QString();
+    });
 
     connectToEditorWidget();
     connect(_currentEditorWidget, &EditorWidget::undoStackChanged, this, &MainWindow::updateUndoRedoActions);
@@ -272,7 +319,7 @@ void MainWindow::setupUI() {
             _worldMapAction->setChecked(true);
         }
     });
-    connect(_welcomeWidget, &WelcomeWidget::preferencesRequested, this, &MainWindow::showPreferences);
+    connect(_welcomeWidget, &WelcomeWidget::preferencesRequested, this, [this]() { showPreferences(); });
     _centralStack->addWidget(_welcomeWidget);
     _centralStack->setCurrentWidget(_welcomeWidget);
 
@@ -361,37 +408,218 @@ void MainWindow::connectMenuSignals() {
     updateUndoRedoActions();
 }
 
-QAction* MainWindow::addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef) {
-    auto showDock = [this](QDockWidget* targetDock, bool visible) {
-        if (!targetDock) {
-            return;
-        }
+void MainWindow::revealPanel(QDockWidget* dock, QAction* action) {
+    if (!dock) {
+        return;
+    }
 
-        if (visible) {
-            targetDock->show();
-            if (!targetDock->isFloating() && dockWidgetArea(targetDock) != Qt::NoDockWidgetArea) {
-                targetDock->raise();
+    // Panels are tabbed, so "visible" is not the same as "on screen": a dock sitting behind
+    // another tab is visible to Qt but hidden to the user, and a plain toggle would take it away
+    // just as they asked for it. Raise those instead, and hide only the tab already on top.
+    const bool onTop = !dock->isHidden() && !dock->visibleRegion().isEmpty();
+
+    if (onTop) {
+        dock->hide();
+        if (action) {
+            const QSignalBlocker blocker(*action);
+            action->setChecked(false);
+        }
+    } else {
+        showPanel(dock, action);
+    }
+}
+
+void MainWindow::syncScriptsPanelSelection() {
+    if (!_scriptsPanel || !_currentEditorWidget) {
+        return;
+    }
+    // The Scripts panel follows the map: a selected spatial script, else the script of the one
+    // selected object. Both signals that can change this arrive here, in either order.
+    uint32_t sid = _currentEditorWidget->selectedSpatialScript();
+    if (sid == MapScript::NONE) {
+        const auto& selection = _currentEditorWidget->getSelectionManager()->getCurrentSelection();
+        if (selection.items.size() == 1 && selection.items[0].type == selection::SelectionType::OBJECT) {
+            const auto object = selection.items[0].getObject();
+            if (object && object->hasMapObject() && object->getMapObject().map_scripts_pid != -1) {
+                sid = static_cast<uint32_t>(object->getMapObject().map_scripts_pid);
             }
+        }
+    }
+    _scriptsPanel->selectScriptRow(sid);
+}
+
+void MainWindow::showPanel(QDockWidget* dock, QAction* action) {
+    if (!dock) {
+        return;
+    }
+
+    dock->show();
+    if (!dock->isFloating() && dockWidgetArea(dock) != Qt::NoDockWidgetArea) {
+        dock->raise();
+    }
+    // Put the caret in the panel so it can be used straight away. A panel whose widget takes
+    // no focus simply keeps it where it was.
+    if (QWidget* panel = dock->widget()) {
+        panel->setFocus(Qt::ShortcutFocusReason);
+    }
+
+    // show() fires visibilityChanged, which re-syncs the menu check state; a raise fires
+    // nothing, so re-assert it here for the tabbed-behind case.
+    if (action) {
+        const QSignalBlocker blocker(*action);
+        action->setChecked(true);
+    }
+}
+
+void MainWindow::installCanvasShortcuts() {
+    SFMLWidget* canvas = _currentEditorWidget ? _currentEditorWidget->getSFMLWidget() : nullptr;
+    if (!canvas) {
+        return;
+    }
+
+    // "Inspect the selection": reveal the Selection panel for whatever was just clicked. Scoped to
+    // the canvas so a Return pressed in a panel's filter box or a spin box is left alone, and a
+    // no-op with an empty selection (there is nothing to inspect).
+    const auto inspectSelection = [this]() {
+        if (!_currentEditorWidget) {
             return;
         }
-
-        targetDock->hide();
+        const selection::SelectionManager* selectionManager = _currentEditorWidget->getSelectionManager();
+        if (!selectionManager || !selectionManager->hasSelection()) {
+            return;
+        }
+        // Show, never toggle: inspecting again must not hide the panel it is inspecting into.
+        showPanel(_selectionDock, _selectionPanelAction);
     };
 
+    // The registry supplies each key and re-keys the shortcut if the user rebinds it. The shortcut
+    // is parented to the canvas, so it dies with the map view and the registry drops the dead sink.
+    const auto addCanvasShortcut = [this, canvas](const char* actionId, auto handler) {
+        auto* shortcut = new QShortcut(canvas);
+        shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(shortcut, &QShortcut::activated, this, std::move(handler));
+        _keyBindings->bind(QString::fromLatin1(actionId), shortcut);
+        _canvasShortcuts.append(shortcut);
+        return shortcut;
+    };
+
+    // The previous map view's shortcuts died with it.
+    _canvasShortcuts.clear();
+    addCanvasShortcut(actions::PANEL_SELECTION_REVEAL, inspectSelection);
+
+    // Numpad Enter is a distinct key code that no QKeySequence on Return catches, and it is the
+    // same command rather than a second binding — so it is a companion of the reveal key, not a
+    // table row of its own. It exists only while that key IS Return: rebound elsewhere, the
+    // companion clears, so numpad Enter never keeps working a shortcut the user moved away.
+    _inspectSelectionEnterShortcut = new QShortcut(canvas);
+    _inspectSelectionEnterShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(_inspectSelectionEnterShortcut, &QShortcut::activated, this, inspectSelection);
+    _canvasShortcuts.append(_inspectSelectionEnterShortcut);
+    syncInspectSelectionCompanionKey();
+
+    // Navigation and tool keys. Single letters belong on the canvas: window-scoped they would fire
+    // while a palette grid, a tree or a non-editable combo has focus, and typing "b" in such a
+    // place would start placing scroll blockers.
+    addCanvasShortcut(actions::TOOL_SELECT, [this]() {
+        if (_selectToolAction) {
+            _selectToolAction->trigger();
+        }
+    });
+    addCanvasShortcut(actions::HEX_GRID, [this]() {
+        if (_showHexGridAction) {
+            _showHexGridAction->toggle();
+        }
+    });
+    addCanvasShortcut(actions::TOOL_SCROLL_BLOCKER_RECT, [this]() {
+        if (_scrollBlockerRectAction) {
+            _scrollBlockerRectAction->trigger();
+        }
+    });
+    addCanvasShortcut(actions::TOOL_ROTATE, [this]() {
+        if (_rotateAction) {
+            _rotateAction->trigger();
+        }
+    });
+    // Eyedropper: sample whatever is under the cursor into the matching palette. It used to be
+    // dispatched inside InputHandler with the tool-state keys, but it is a canvas command like the
+    // rest of these, so it belongs here where it is rebindable.
+    addCanvasShortcut(actions::TOOL_PICK, [this]() {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->pickAtLastCursor();
+        }
+    });
+
+    addCanvasShortcut(actions::CENTER_ON_PLAYER, [this]() {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->centerViewOnPlayerPosition();
+        }
+    });
+    addCanvasShortcut(actions::FIT_MAP, [this]() {
+        if (_currentEditorWidget) {
+            _currentEditorWidget->viewport().fitMapInView();
+        }
+    });
+}
+
+void MainWindow::syncInspectSelectionCompanionKey() {
+    if (!_inspectSelectionEnterShortcut || !_keyBindings) {
+        return;
+    }
+    const bool revealIsOnReturn = (_keyBindings->shortcut(actions::PANEL_SELECTION_REVEAL)
+        == QKeySequence(Qt::Key_Return));
+    _inspectSelectionEnterShortcut->setKey(revealIsOnReturn ? QKeySequence(Qt::Key_Enter) : QKeySequence());
+}
+
+void MainWindow::editSelectedObjectScriptSource() {
+    if (!_currentEditorWidget || !_scriptSourceService) {
+        return;
+    }
+
+    const Map* map = _currentEditorWidget->getMap();
+    const selection::SelectionManager* selectionManager = _currentEditorWidget->getSelectionManager();
+    if (!map || !selectionManager) {
+        return;
+    }
+
+    // The first selected object that actually owns a script. A selection of tiles, or of objects
+    // with nothing attached, is a no-op with a word in the status bar rather than a dialog.
+    for (const selection::SelectedItem& item : selectionManager->getCurrentSelection().items) {
+        if (!item.isObject()) {
+            continue;
+        }
+        const std::shared_ptr<Object> object = item.getObject();
+        const std::shared_ptr<MapObject> mapObject = object ? object->getMapObjectPtr() : nullptr;
+        if (!mapObject || mapObject->map_scripts_pid == -1) {
+            continue;
+        }
+        const auto sid = static_cast<uint32_t>(mapObject->map_scripts_pid);
+        if (const std::optional<int> programIndex = map->scriptProgramIndexForSid(sid)) {
+            _scriptSourceService->editScriptSource(*programIndex);
+            return;
+        }
+    }
+
+    showStatusMessage(tr("No script attached to the selection"));
+}
+
+QAction* MainWindow::addPanelToggleAction(const QString& label, QDockWidget* dock, QAction*& actionRef,
+    const char* actionId) {
     actionRef = _panelsMenu->addAction(label);
     actionRef->setCheckable(true);
     actionRef->setChecked(true);
     QAction* action = actionRef;
+    if (actionId != nullptr) {
+        _keyBindings->bind(QString::fromLatin1(actionId), action);
+    }
 
-    connect(action, &QAction::toggled, this, [this, dock, showDock](bool visible) {
-        if (_suppressDockStateSave) {
-            return;
-        }
-
-        spdlog::debug("{} action toggled: {}", dock->windowTitle().toStdString(), visible);
-        // showDock() flips the dock, which fires QDockWidget::visibilityChanged below; that handler
-        // persists the new layout, so there's nothing to save here.
-        showDock(dock, visible);
+    // triggered(), not toggled(): the check state Qt flips before this runs is only a request —
+    // revealPanel() decides from the dock's own state and re-asserts the box. Using triggered()
+    // also means the programmatic setChecked() calls elsewhere cannot reach here.
+    connect(action, &QAction::triggered, this, [this, dock, action]() {
+        spdlog::debug("{} panel action triggered", dock->windowTitle().toStdString());
+        // revealPanel() flips the dock, which fires QDockWidget::visibilityChanged below; that
+        // handler persists the new layout, so there's nothing to save here.
+        revealPanel(dock, action);
     });
 
     connect(dock, &QDockWidget::visibilityChanged, this, [this, dock, action](bool visible) {
@@ -486,10 +714,13 @@ void MainWindow::applyDefaultPanelDockLayout() {
 void MainWindow::setupMenuBar() {
     _menuBar = menuBar();
 
-    auto addMenuAction = [this](QMenu* menu, const QString& iconPath, const QString& text, auto slot, const QKeySequence& shortcut = QKeySequence(), const QString& statusTip = QString()) {
+    // `actionId` names a row of the shipped keybinding table (ui/input/ActionSpec.h); the registry
+    // supplies the key and re-keys the action if the user rebinds it. Pass nullptr for the actions
+    // that have no shortcut.
+    auto addMenuAction = [this](QMenu* menu, const QString& iconPath, const QString& text, auto slot, const char* actionId = nullptr, const QString& statusTip = QString()) {
         QAction* action = menu->addAction(createIcon(iconPath), text);
-        if (!shortcut.isEmpty()) {
-            action->setShortcut(shortcut);
+        if (actionId != nullptr) {
+            _keyBindings->bind(QString::fromLatin1(actionId), action);
         }
         if (!statusTip.isEmpty()) {
             action->setStatusTip(statusTip);
@@ -498,45 +729,50 @@ void MainWindow::setupMenuBar() {
         return action;
     };
 
-    auto addViewToggleAction = [this](QAction*& actionRef, const QString& iconPath, const QString& text, bool checked, auto signal, const QString& statusTip = QString(), const QKeySequence& shortcut = QKeySequence()) {
+    auto addViewToggleAction = [this](QAction*& actionRef, const QString& iconPath, const QString& text, bool checked, auto signal, const QString& statusTip = QString(), const char* actionId = nullptr) {
         actionRef = _viewMenu->addAction(createIcon(iconPath), text);
         actionRef->setCheckable(true);
         actionRef->setChecked(checked);
         if (!statusTip.isEmpty()) {
             actionRef->setStatusTip(statusTip);
         }
-        if (!shortcut.isEmpty()) {
-            actionRef->setShortcut(shortcut);
+        if (actionId != nullptr) {
+            _keyBindings->bind(QString::fromLatin1(actionId), actionRef);
         }
         connect(actionRef, &QAction::toggled, this, signal);
     };
 
     _fileMenu = _menuBar->addMenu("&File");
-    addMenuAction(_fileMenu, ":/icons/actions/new.svg", "&New Map", &MainWindow::newMapRequested, QKeySequence::New, "Create a new map");
-    addMenuAction(_fileMenu, ":/icons/actions/open.svg", "&Open Map", &MainWindow::openMapRequested, QKeySequence::Open, "Open an existing map");
-    addMenuAction(_fileMenu, ":/icons/actions/open.svg", "&Browse Maps...", &MainWindow::showMapBrowserDialog, QKeySequence("Ctrl+B"), "Browse available maps as thumbnails");
-    addMenuAction(_fileMenu, ":/icons/actions/save.svg", "&Save Map", &MainWindow::saveMapRequested, QKeySequence::Save, "Save current map");
-    addMenuAction(_fileMenu, ":/icons/actions/save.svg", "Save Map &As...", &MainWindow::saveMapAsRequested, QKeySequence::SaveAs, "Save the current map to a chosen file");
-    addMenuAction(_fileMenu, ":/icons/actions/close.svg", "&Close Map", &MainWindow::closeMapRequested, QKeySequence::Close, "Close the current map and return to the welcome screen");
+    addMenuAction(_fileMenu, ":/icons/actions/new.svg", "&New Map", &MainWindow::newMapRequested, actions::NEW_MAP, "Create a new map");
+    addMenuAction(_fileMenu, ":/icons/actions/open.svg", "&Open Map", &MainWindow::openMapRequested, actions::OPEN_MAP, "Open an existing map");
+    addMenuAction(_fileMenu, ":/icons/actions/open.svg", "&Browse Maps...", &MainWindow::showMapBrowserDialog, actions::BROWSE_MAPS, "Browse available maps as thumbnails");
+    addMenuAction(_fileMenu, ":/icons/actions/save.svg", "&Save Map", &MainWindow::saveMapRequested, actions::SAVE_MAP, "Save current map");
+    addMenuAction(_fileMenu, ":/icons/actions/save.svg", "Save Map &As...", &MainWindow::saveMapAsRequested, actions::SAVE_MAP_AS, "Save the current map to a chosen file");
+    addMenuAction(_fileMenu, ":/icons/actions/close.svg", "&Close Map", &MainWindow::closeMapRequested, actions::CLOSE_MAP, "Close the current map and return to the welcome screen");
 
     _fileMenu->addSeparator();
-    addMenuAction(_fileMenu, ":/icons/actions/settings.svg", "&Preferences...", &MainWindow::showPreferences, QKeySequence::Preferences, "Open application preferences");
+    addMenuAction(_fileMenu, ":/icons/actions/settings.svg", "&Preferences...", [this]() { showPreferences(); }, actions::PREFERENCES, "Open application preferences");
 
     _fileMenu->addSeparator();
-    addMenuAction(_fileMenu, ":/icons/actions/quit.svg", "&Quit", &QWidget::close, QKeySequence::Quit, "Exit the application");
+    addMenuAction(_fileMenu, ":/icons/actions/quit.svg", "&Quit", &QWidget::close, actions::QUIT, "Exit the application");
 
     _editMenu = _menuBar->addMenu("&Edit");
-    addMenuAction(_editMenu, ":/icons/actions/select-all.svg", "Select &All", &MainWindow::selectAllRequested, QKeySequence("Ctrl+A"), "Select all items of current type");
-    addMenuAction(_editMenu, ":/icons/actions/deselect.svg", "&Deselect All", &MainWindow::deselectAllRequested, QKeySequence("Ctrl+D"), "Clear all selections");
+    addMenuAction(_editMenu, ":/icons/actions/select-all.svg", "Select &All", &MainWindow::selectAllRequested, actions::SELECT_ALL, "Select all items of current type");
+    addMenuAction(_editMenu, ":/icons/actions/deselect.svg", "&Deselect All", &MainWindow::deselectAllRequested, actions::DESELECT_ALL, "Clear all selections");
 
     _editMenu->addSeparator();
-    addMenuAction(_editMenu, ":/icons/actions/scroll-blocker.svg", "Scroll &Blocker Rectangle", &MainWindow::toggleScrollBlockerRectangleMode, QKeySequence("B"), "Draw rectangle and place scroll blockers on borders");
-    addMenuAction(_editMenu, ":/icons/actions/save.svg", "Save Selection as &Pattern...", &MainWindow::showSavePatternDialog, QKeySequence(), "Save the current selection as a reusable prefab pattern");
-    addMenuAction(_editMenu, ":/icons/actions/open.svg", "S&tamp Pattern...", &MainWindow::showStampPatternDialog, QKeySequence(), "Load a prefab pattern and click to place it");
+    // No shortcut on the action itself: "B" is canvas-scoped (installCanvasShortcuts), so it cannot
+    // fire while a palette grid or a tree has focus.
+    _scrollBlockerRectAction = addMenuAction(_editMenu, ":/icons/actions/scroll-blocker.svg", "Scroll &Blocker Rectangle", &MainWindow::toggleScrollBlockerRectangleMode, nullptr, "Draw rectangle and place scroll blockers on borders (B)");
+    addMenuAction(_editMenu, ":/icons/actions/save.svg", "Save Selection as &Pattern...", &MainWindow::showSavePatternDialog, nullptr, "Save the current selection as a reusable prefab pattern");
+    addMenuAction(_editMenu, ":/icons/actions/open.svg", "S&tamp Pattern...", &MainWindow::showStampPatternDialog, nullptr, "Load a prefab pattern and click to place it");
+    // Jump from a scripted object straight to its .ssl. Window-scoped: it is a command, not a
+    // single letter, so it costs nothing while a filter box has focus.
+    addMenuAction(_editMenu, ":/icons/actions/settings.svg", "&Edit Script Source", &MainWindow::editSelectedObjectScriptSource, actions::EDIT_SCRIPT_SOURCE, "Open the .ssl of the script attached to the selected object");
 #ifdef GECK_SCRIPTING_ENABLED
     // Fill is driven entirely by Luau fill scripts, so it is offered only when scripting is built in.
     // Every use of _fillSelectionAction below is null-guarded, so leaving it null disables the feature.
-    _fillSelectionAction = addMenuAction(_editMenu, ":/icons/actions/paint.svg", "&Fill Selection...", &MainWindow::showFillDialog, QKeySequence(), "Fill the selected area with a Luau fill script");
+    _fillSelectionAction = addMenuAction(_editMenu, ":/icons/actions/paint.svg", "&Fill Selection...", &MainWindow::showFillDialog, nullptr, "Fill the selected area with a Luau fill script");
 #endif
 
     // Draw order, also on the viewport's right-click menu. The keys are handled by InputHandler while
@@ -548,7 +784,7 @@ void MainWindow::setupMenuBar() {
             if (_currentEditorWidget) {
                 _currentEditorWidget->reorderSelectedObjects(step);
             }
-        }, QKeySequence(), statusTip);
+        }, nullptr, statusTip);
     };
     addReorderAction("Bring to &Front\tHome", object_order::Step::BringToFront, "Draw the selected objects over everything else");
     addReorderAction("Bring F&orward\tPgUp", object_order::Step::BringForward, "Draw the selected objects over the next object they overlap");
@@ -558,7 +794,7 @@ void MainWindow::setupMenuBar() {
     _editMenu->addSeparator();
 
     _undoAction = _editMenu->addAction("&Undo");
-    _undoAction->setShortcut(QKeySequence::Undo);
+    _keyBindings->bind(actions::UNDO, _undoAction);
     _undoAction->setStatusTip("Undo last edit");
     connect(_undoAction, &QAction::triggered, [this]() {
         if (_currentEditorWidget) {
@@ -572,7 +808,7 @@ void MainWindow::setupMenuBar() {
     });
 
     _redoAction = _editMenu->addAction("&Redo");
-    _redoAction->setShortcut(QKeySequence::Redo);
+    _keyBindings->bind(actions::REDO, _redoAction);
     _redoAction->setStatusTip("Redo last edit");
     connect(_redoAction, &QAction::triggered, [this]() {
         if (_currentEditorWidget) {
@@ -615,7 +851,7 @@ void MainWindow::setupMenuBar() {
     // separated from the rendering switches below. It needs mounted game data, not an open map.
     _worldMapAction = _viewMenu->addAction(createIcon(":/icons/actions/world-map.svg"), "&World Map");
     _worldMapAction->setCheckable(true);
-    _worldMapAction->setShortcut(QKeySequence("Ctrl+Shift+M"));
+    _keyBindings->bind(actions::WORLD_MAP, _worldMapAction);
     _worldMapAction->setStatusTip("Show the Fallout 2 world map with its area markers");
     connect(_worldMapAction, &QAction::toggled, this, &MainWindow::toggleWorldMap);
     _viewMenu->addSeparator();
@@ -627,26 +863,26 @@ void MainWindow::setupMenuBar() {
         bool checked;
         void (MainWindow::*signal)(bool);
         QString statusTip;
-        QKeySequence shortcut;
+        const char* actionId;
     };
 
     const std::array<ViewToggleSpec, 12> viewToggleSpecs = { {
-        { &_showObjectsAction, ":/icons/actions/view-objects.svg", "Show &Objects", UI::DEFAULT_SHOW_OBJECTS, &MainWindow::showObjectsToggled, {}, {} },
-        { &_showCrittersAction, ":/icons/actions/view-critters.svg", "Show &Critters", UI::DEFAULT_SHOW_CRITTERS, &MainWindow::showCrittersToggled, {}, {} },
-        { &_showWallsAction, ":/icons/actions/view-walls.svg", "Show &Walls", UI::DEFAULT_SHOW_WALLS, &MainWindow::showWallsToggled, {}, {} },
-        { &_showRoofsAction, ":/icons/actions/view-roofs.svg", "Show &Roofs", UI::DEFAULT_SHOW_ROOF, &MainWindow::showRoofsToggled, {}, {} },
-        { &_showScrollBlockersAction, ":/icons/actions/view-scroll-blockers.svg", "Show Scroll &Blockers", UI::DEFAULT_SHOW_SCROLL_BLK, &MainWindow::showScrollBlockersToggled, {}, {} },
-        { &_showWallBlockersAction, ":/icons/actions/view-wall-blockers.svg", "Show &Wall Blockers", UI::DEFAULT_SHOW_WALL_BLK, &MainWindow::showWallBlockersToggled, {}, {} },
-        { &_showHexGridAction, ":/icons/actions/view-grid.svg", "Show &Hex Grid", UI::DEFAULT_SHOW_HEX_GRID, &MainWindow::showHexGridToggled, {}, {} },
-        { &_showLightOverlaysAction, ":/icons/actions/view-light.svg", "Show &Light Overlays", false, &MainWindow::showLightOverlaysToggled, {}, {} },
-        { &_showExitGridsAction, ":/icons/actions/view-exits.svg", "Show &Exit Grids", false, &MainWindow::showExitGridsToggled, "Show exit grid markers", QKeySequence("Ctrl+E") },
-        { &_showSpatialScriptsAction, ":/icons/actions/target-arrow.svg", "Show Spatial &Scripts", false, &MainWindow::showSpatialScriptsToggled, "Show spatial-script trigger markers and their radius", {} },
-        { &_showMapEdgesAction, ":/icons/actions/map-edges.svg", "Show Map &Edges", false, &MainWindow::showMapEdgesToggled, "Show the .edg scroll-boundary zones and clip rect", {} },
-        { &_showUnreachableAction, ":/icons/actions/view-unreachable.svg", "Highlight &Unreachable Areas", false, &MainWindow::showUnreachableToggled, "Shade walkable hexes cut off from the player start and every exit grid", {} },
+        { &_showObjectsAction, ":/icons/actions/view-objects.svg", "Show &Objects", UI::DEFAULT_SHOW_OBJECTS, &MainWindow::showObjectsToggled, {}, nullptr },
+        { &_showCrittersAction, ":/icons/actions/view-critters.svg", "Show &Critters", UI::DEFAULT_SHOW_CRITTERS, &MainWindow::showCrittersToggled, {}, nullptr },
+        { &_showWallsAction, ":/icons/actions/view-walls.svg", "Show &Walls", UI::DEFAULT_SHOW_WALLS, &MainWindow::showWallsToggled, {}, nullptr },
+        { &_showRoofsAction, ":/icons/actions/view-roofs.svg", "Show &Roofs", UI::DEFAULT_SHOW_ROOF, &MainWindow::showRoofsToggled, {}, nullptr },
+        { &_showScrollBlockersAction, ":/icons/actions/view-scroll-blockers.svg", "Show Scroll &Blockers", UI::DEFAULT_SHOW_SCROLL_BLK, &MainWindow::showScrollBlockersToggled, {}, nullptr },
+        { &_showWallBlockersAction, ":/icons/actions/view-wall-blockers.svg", "Show &Wall Blockers", UI::DEFAULT_SHOW_WALL_BLK, &MainWindow::showWallBlockersToggled, {}, nullptr },
+        { &_showHexGridAction, ":/icons/actions/view-grid.svg", "Show &Hex Grid", UI::DEFAULT_SHOW_HEX_GRID, &MainWindow::showHexGridToggled, {}, nullptr },
+        { &_showLightOverlaysAction, ":/icons/actions/view-light.svg", "Show &Light Overlays", false, &MainWindow::showLightOverlaysToggled, {}, nullptr },
+        { &_showExitGridsAction, ":/icons/actions/view-exits.svg", "Show &Exit Grids", false, &MainWindow::showExitGridsToggled, "Show exit grid markers", actions::SHOW_EXIT_GRIDS },
+        { &_showSpatialScriptsAction, ":/icons/actions/target-arrow.svg", "Show Spatial &Scripts", false, &MainWindow::showSpatialScriptsToggled, "Show spatial-script trigger markers and their radius", nullptr },
+        { &_showMapEdgesAction, ":/icons/actions/map-edges.svg", "Show Map &Edges", false, &MainWindow::showMapEdgesToggled, "Show the .edg scroll-boundary zones and clip rect", nullptr },
+        { &_showUnreachableAction, ":/icons/actions/view-unreachable.svg", "Highlight &Unreachable Areas", false, &MainWindow::showUnreachableToggled, "Shade walkable hexes cut off from the player start and every exit grid", nullptr },
     } };
 
     for (const ViewToggleSpec& spec : viewToggleSpecs) {
-        addViewToggleAction(*spec.actionRef, spec.iconPath, spec.text, spec.checked, spec.signal, spec.statusTip, spec.shortcut);
+        addViewToggleAction(*spec.actionRef, spec.iconPath, spec.text, spec.checked, spec.signal, spec.statusTip, spec.actionId);
     }
 
     _viewMenu->addSeparator();
@@ -760,12 +996,16 @@ void MainWindow::setupMenuBar() {
         const char* text;
         int elevation;
         bool checked;
+        const char* actionId;
     };
 
+    // Ctrl+digit, the counterpart to the panels' Alt+digit. updateElevationMenu() enables only the
+    // elevations the open map actually has, and a shortcut on a disabled action is a no-op — so a
+    // map with one elevation ignores Ctrl+2 rather than switching to a level that isn't there.
     const std::array<ElevationActionSpec, 3> elevationSpecs = { {
-        { &_elevation1Action, "Elevation &1", ELEVATION_1, true },
-        { &_elevation2Action, "Elevation &2", ELEVATION_2, false },
-        { &_elevation3Action, "Elevation &3", ELEVATION_3, false },
+        { &_elevation1Action, "Elevation &1", ELEVATION_1, true, actions::SET_ELEVATION_1 },
+        { &_elevation2Action, "Elevation &2", ELEVATION_2, false, actions::SET_ELEVATION_2 },
+        { &_elevation3Action, "Elevation &3", ELEVATION_3, false, actions::SET_ELEVATION_3 },
     } };
 
     for (const ElevationActionSpec& spec : elevationSpecs) {
@@ -773,6 +1013,7 @@ void MainWindow::setupMenuBar() {
         action->setCheckable(true);
         action->setChecked(spec.checked);
         action->setData(spec.elevation);
+        _keyBindings->bind(QString::fromLatin1(spec.actionId), action);
         action->setDisabled(true);
         elevationGroup->addAction(action);
         connect(action, &QAction::triggered, this, [this, elevation = spec.elevation]() { elevationChanged(elevation); });
@@ -782,16 +1023,22 @@ void MainWindow::setupMenuBar() {
     // New art through the mod's own tools (Preferences > Mod Tools); see ui/assets/ModToolsRunner.h.
     _toolsMenu = _menuBar->addMenu("&Tools");
     addMenuAction(_toolsMenu, QString(), "Add &Scenery from Picture...", &MainWindow::showAddSceneryDialog,
-        QKeySequence(), "Turn a render or photo into a new scenery piece");
+        nullptr, "Turn a render or photo into a new scenery piece");
     addMenuAction(_toolsMenu, QString(), "Cut &Building into Walls...", &MainWindow::showCutBuildingDialog,
-        QKeySequence(), "Cut a building render into wall pieces, one per hex, and a stamp that lays them down");
-    addMenuAction(_toolsMenu, QString(), "&Apply New Art...", &MainWindow::applyNewArt, QKeySequence(),
+        nullptr, "Cut a building render into wall pieces, one per hex, and a stamp that lays them down");
+    addMenuAction(_toolsMenu, QString(), "&Apply New Art...", &MainWindow::applyNewArt, nullptr,
         "Save the map, close gecko, deploy the mod with the new art, and open gecko again on this map");
     _toolsMenu->addSeparator();
-    addMenuAction(_toolsMenu, ":/icons/actions/settings.svg", "Mod Tools &Setup...", &MainWindow::showPreferences,
-        QKeySequence(), "Where the mod's tools are (Preferences > Mod Tools)");
+    addMenuAction(_toolsMenu, ":/icons/actions/settings.svg", "Mod Tools &Setup...", [this]() { showPreferences(QStringLiteral("Mod Tools")); },
+        nullptr, "Where the mod's tools are (Preferences > Mod Tools)");
 
     _helpMenu = _menuBar->addMenu("&Help");
+    // The discoverability half of the keybinding work: one place that lists every shortcut, which
+    // is the same table the user rebinds from rather than a second copy that can drift.
+    QAction* shortcutsAction = _helpMenu->addAction("&Keyboard Shortcuts...");
+    shortcutsAction->setStatusTip("List every keyboard shortcut, and rebind them");
+    connect(shortcutsAction, &QAction::triggered, this, &MainWindow::showKeyboardShortcuts);
+    _helpMenu->addSeparator();
     QAction* aboutAction = _helpMenu->addAction("&About Gecko...");
     aboutAction->setStatusTip("Show information about the application");
     connect(aboutAction, &QAction::triggered, this, &MainWindow::showAbout);
@@ -850,22 +1097,24 @@ void MainWindow::setupToolBar() {
         const char* iconPath;
         const char* text;
         const char* statusTip;
-        QKeySequence shortcut;
+        const char* actionId;
         std::function<void()> trigger;
     };
 
+    // New / Browse / Save duplicate File-menu actions that already carry the key, so only Play
+    // binds here — two sinks on one id would be an ambiguous shortcut, and Qt would fire neither.
     const std::array<ToolbarActionSpec, 4> primaryToolbarActions = { {
-        { ":/icons/actions/new.svg", "New", "Create a new map", {}, [this]() { newMapRequested(); } },
-        { ":/icons/actions/open.svg", "Browse Maps", "Browse available maps as thumbnails", {}, [this]() { showMapBrowserDialog(); } },
-        { ":/icons/actions/save.svg", "Save", "Save the current map", {}, [this]() { saveMapRequested(); } },
-        { ":/icons/actions/play.svg", "Play", "Save and play the current map in Fallout 2", QKeySequence("F5"), [this]() { onPlayGame(); } },
+        { ":/icons/actions/new.svg", "New", "Create a new map", nullptr, [this]() { newMapRequested(); } },
+        { ":/icons/actions/open.svg", "Browse Maps", "Browse available maps as thumbnails", nullptr, [this]() { showMapBrowserDialog(); } },
+        { ":/icons/actions/save.svg", "Save", "Save the current map", nullptr, [this]() { saveMapRequested(); } },
+        { ":/icons/actions/play.svg", "Play", "Save and play the current map in Fallout 2", actions::PLAY_MAP, [this]() { onPlayGame(); } },
     } };
 
     for (const ToolbarActionSpec& spec : primaryToolbarActions) {
         QAction* action = _mainToolBar->addAction(createIcon(spec.iconPath), spec.text);
         action->setStatusTip(spec.statusTip);
-        if (!spec.shortcut.isEmpty()) {
-            action->setShortcut(spec.shortcut);
+        if (spec.actionId != nullptr) {
+            _keyBindings->bind(QString::fromLatin1(spec.actionId), action);
         }
         connect(action, &QAction::triggered, this, [trigger = spec.trigger]() { trigger(); });
     }
@@ -927,9 +1176,9 @@ void MainWindow::setupToolBar() {
 
     _mainToolBar->addSeparator();
 
-    // Stored so it can be disabled while stamping a pattern — otherwise its "R" shortcut
-    // swallows the key before it reaches the viewport, where R cycles pattern variants.
-    _rotateAction = addToolAction(":/icons/actions/rotate.svg", "Rotate", &MainWindow::rotateObjectRequested, "Rotate selected object", QKeySequence("R"));
+    // "R" is canvas-scoped (installCanvasShortcuts) rather than a shortcut on this action, so it
+    // only fires with the map view focused. The button itself stays enabled in every mode.
+    _rotateAction = addToolAction(":/icons/actions/rotate.svg", "Rotate", &MainWindow::rotateObjectRequested, "Rotate selected object (R)");
 
     _mainToolBar->addSeparator();
 
@@ -994,10 +1243,9 @@ void MainWindow::setupToolModeActions() {
             _exitGridsAction->setChecked(true);
             applyExitGridsTool(true);
         });
-        return action;
     };
-    _exitGridDrawRegionAction = addExitGridMode("Draw edge", EditorMode::MarkExits, true);
-    _exitGridPlaceHexAction = addExitGridMode("Place single hex", EditorMode::PlaceExitGrid, false);
+    addExitGridMode("Draw edge", EditorMode::MarkExits, true);
+    addExitGridMode("Place single hex", EditorMode::PlaceExitGrid, false);
 
     // Attach the sub-mode dropdown to the button's menu-indicator arrow (MenuButtonPopup): the main
     // button is a plain on/off toggle, while the small arrow opens the dropdown to switch sub-mode.
@@ -1229,10 +1477,36 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
         }
     }
 
-    // Free up "R" for the viewport while stamping or while a registered tool runs (object
-    // placement); otherwise the toolbar shortcut would swallow the key before it reaches the editor.
-    if (_rotateAction) {
-        _rotateAction->setEnabled(mode != EditorMode::StampPattern && mode != EditorMode::PluginTool);
+    syncCanvasShortcutsForMode(mode);
+}
+
+void MainWindow::syncCanvasShortcutsForMode(EditorMode mode) {
+    // A canvas shortcut consumes its key before InputHandler sees it, so whichever shortcut sits on
+    // a key the mode claims stands down — judged by key, not by action, because the user may have
+    // rebound any action onto Return or R. Return and Enter finish a Draw-edge line; R cycles a
+    // stamp's variants and is left to a registered tool. The toolbar buttons stay enabled either
+    // way — only the key steps aside.
+    // By key code alone: InputHandler ignores modifiers on these, so Shift+R reaches it as R too.
+    const auto claimedByMode = [mode](const QKeySequence& keys) {
+        if (keys.count() != 1) {
+            return false;
+        }
+        const Qt::Key key = keys[0].key();
+        switch (mode) {
+            case EditorMode::MarkExits:
+                return key == Qt::Key_Return || key == Qt::Key_Enter;
+            case EditorMode::StampPattern:
+            case EditorMode::PluginTool:
+                return key == Qt::Key_R;
+            default:
+                return false;
+        }
+    };
+
+    for (QShortcut* shortcut : std::as_const(_canvasShortcuts)) {
+        if (shortcut) {
+            shortcut->setEnabled(!claimedByMode(shortcut->key()));
+        }
     }
 }
 
@@ -1252,129 +1526,6 @@ void MainWindow::wireScriptConsole() {
 void MainWindow::setLogModel(LogModel* model) {
     if (_logPanel) {
         _logPanel->setModel(model);
-    }
-}
-
-QMenu* MainWindow::ensurePluginMenu() {
-    if (!_pluginMenu && _menuBar) {
-        // Keep Help rightmost, per platform convention: insert Plugins before it.
-        _pluginMenu = new QMenu(tr("&Plugins"), _menuBar);
-        if (_helpMenu) {
-            _menuBar->insertMenu(_helpMenu->menuAction(), _pluginMenu);
-        } else {
-            _menuBar->addMenu(_pluginMenu);
-        }
-    }
-    return _pluginMenu;
-}
-
-QAction* MainWindow::addPluginMenuItem(const QString& id, const QString& text) {
-    // Validate before ensurePluginMenu() so a rejected registration can't leave an empty
-    // Plugins menu in the menu bar.
-    if (id.isEmpty() || text.isEmpty() || _pluginUi.contains(id)) {
-        return nullptr;
-    }
-    QMenu* menu = ensurePluginMenu();
-    if (!menu) {
-        return nullptr;
-    }
-
-    QAction* action = menu->addAction(text);
-    menu->menuAction()->setVisible(true);
-    _pluginUi.insert(id, PluginUiRegistration{
-                             .kind = PluginUiRegistration::Kind::MenuAction,
-                             .action = action,
-                             .menu = menu,
-                         });
-    return action;
-}
-
-QAction* MainWindow::addPluginToolButton(const QString& id, const QString& text, const QIcon& icon) {
-    if (id.isEmpty() || text.isEmpty() || !_mainToolBar || _pluginUi.contains(id)) {
-        return nullptr;
-    }
-
-    QAction* action = icon.isNull() ? _mainToolBar->addAction(text) : _mainToolBar->addAction(icon, text);
-    _pluginUi.insert(id, PluginUiRegistration{
-                             .kind = PluginUiRegistration::Kind::ToolBarAction,
-                             .action = action,
-                         });
-    return action;
-}
-
-QDockWidget* MainWindow::addPluginDock(const QString& id, const QString& title, QWidget* widget,
-    Qt::DockWidgetArea area) {
-    if (id.isEmpty() || title.isEmpty() || !widget || _pluginUi.contains(id)) {
-        return nullptr;
-    }
-
-    QDockWidget* dock = new QDockWidget(title, this);
-    dock->setObjectName(QStringLiteral("PluginDock_%1").arg(id));
-    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
-    dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable);
-    dock->setWidget(widget);
-    addDockWidget(area, dock);
-    dock->hide();
-
-    QAction* toggleAction = dock->toggleViewAction();
-    toggleAction->setText(title);
-    if (_viewMenu) {
-        _viewMenu->addAction(toggleAction);
-    }
-    connect(dock, &QDockWidget::visibilityChanged, this, [this](bool) {
-        if (!_suppressDockStateSave) {
-            saveDockWidgetState();
-        }
-    });
-
-    _pluginUi.insert(id, PluginUiRegistration{
-                             .kind = PluginUiRegistration::Kind::Dock,
-                             .action = toggleAction,
-                             .dock = dock,
-                         });
-    return dock;
-}
-
-void MainWindow::removePluginUi(const QString& id) {
-    const auto it = _pluginUi.find(id);
-    if (it == _pluginUi.end()) {
-        return;
-    }
-
-    const PluginUiRegistration registration = it.value();
-    _pluginUi.erase(it);
-
-    switch (registration.kind) {
-        case PluginUiRegistration::Kind::MenuAction:
-            if (registration.menu && registration.action) {
-                registration.menu->removeAction(registration.action);
-            }
-            if (registration.action) {
-                registration.action->deleteLater();
-            }
-            // An empty Plugins menu is just noise in the menu bar; hide it until the next
-            // registration (the QMenu itself stays alive so pointers remain stable).
-            if (_pluginMenu && _pluginMenu->isEmpty()) {
-                _pluginMenu->menuAction()->setVisible(false);
-            }
-            break;
-        case PluginUiRegistration::Kind::ToolBarAction:
-            if (_mainToolBar && registration.action) {
-                _mainToolBar->removeAction(registration.action);
-            }
-            if (registration.action) {
-                registration.action->deleteLater();
-            }
-            break;
-        case PluginUiRegistration::Kind::Dock:
-            if (_viewMenu && registration.action) {
-                _viewMenu->removeAction(registration.action);
-            }
-            if (registration.dock) {
-                removeDockWidget(registration.dock);
-                registration.dock->deleteLater();
-            }
-            break;
     }
 }
 
@@ -1437,7 +1588,7 @@ void MainWindow::setupDockWidgets() {
     _mapInfoPanel = new MapInfoPanel(*_resourcesShared, _settings);
     _mapInfoDock = createDock("Map Information", "MapInfoDock", _mapInfoPanel, Qt::RightDockWidgetArea, QSizePolicy::Preferred, ui::constants::dock::MIN_HEIGHT_SMALL);
 
-    _selectionPanel = new SelectionPanel(*_resourcesShared);
+    _selectionPanel = new SelectionPanel(*_resourcesShared, _settings);
     _selectionDock = createDock("Selection", "SelectionDock", _selectionPanel, Qt::RightDockWidgetArea, QSizePolicy::Preferred, ui::constants::dock::MIN_HEIGHT_SMALL);
 
     _scriptsPanel = new ScriptsPanel(*_resourcesShared);
@@ -1482,9 +1633,22 @@ void MainWindow::setupDockWidgets() {
         consoleAction->setText(tr("Script &Console"));
         _viewMenu->addAction(consoleAction);
 #endif
-        QAction* logAction = _logDock->toggleViewAction();
-        logAction->setText(tr("&Log"));
-        _viewMenu->addAction(logAction);
+        // Not _logDock->toggleViewAction(): that one plain-toggles, and the Log dock shares the
+        // bottom area with the Script Console, so Alt+` needs to raise it when it is tabbed
+        // behind. The check state is kept in step with the dock below instead.
+        _logPanelAction = _viewMenu->addAction(tr("&Log"));
+        _logPanelAction->setCheckable(true);
+        _logPanelAction->setChecked(!_logDock->isHidden());
+        _keyBindings->bind(actions::PANEL_LOG, _logPanelAction);
+        connect(_logPanelAction, &QAction::triggered, this, [this]() { revealPanel(_logDock, _logPanelAction); });
+        // The Log dock sits outside the managed-layout persistence, so this only mirrors state.
+        connect(_logDock, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+            if (!_logPanelAction) {
+                return;
+            }
+            const QSignalBlocker blocker(*_logPanelAction);
+            _logPanelAction->setChecked(visible);
+        });
     }
 
     // MainWindow signals → current editor widget (connected once; both sender
@@ -1622,7 +1786,7 @@ void MainWindow::rebuildResourcePanels() {
     _scriptsPanel = new ScriptsPanel(*_resourcesShared);
     replaceDockPanelWidget(_scriptsDock, _scriptsPanel, QSizePolicy::Preferred);
 
-    _selectionPanel = new SelectionPanel(*_resourcesShared);
+    _selectionPanel = new SelectionPanel(*_resourcesShared, _settings);
     replaceDockPanelWidget(_selectionDock, _selectionPanel, QSizePolicy::Preferred);
 
     _tilePalettePanel = new TilePalettePanel(*_resourcesShared);
@@ -1851,8 +2015,9 @@ void MainWindow::raiseTilePalette() {
 }
 
 void MainWindow::keyPressEvent(QKeyEvent* event) {
-    // Viewport shortcuts (the "P" eyedropper, ...) are handled by InputHandler on the forwarded SFML
-    // key stream: a focused child consumes key events before this override. This only forwards.
+    // The viewport's own tool-state keys (Esc, Space, the stamp "R") are handled by InputHandler on
+    // the forwarded SFML key stream: a focused child consumes key events before this override.
+    // This only forwards.
     if (_currentEditorWidget) {
         SFMLWidget* sfmlWidget = _currentEditorWidget->getSFMLWidget();
         if (sfmlWidget) {
@@ -1935,11 +2100,6 @@ void MainWindow::connectPanelSignals() {
 
     // SelectionPanel signals → MainWindow / current editor widget
     if (_selectionPanel) {
-        connect(_selectionPanel, &SelectionPanel::objectFrmChanged,
-            this, [this](std::shared_ptr<Object> object, uint32_t newFrmPid) {
-                if (_currentEditorWidget)
-                    _currentEditorWidget->onObjectFrmChanged(object, newFrmPid);
-            });
         connect(_selectionPanel, &SelectionPanel::objectFrmPathChanged,
             this, [this](std::shared_ptr<Object> object, const std::string& newFrmPath) {
                 if (_currentEditorWidget)
@@ -1985,6 +2145,21 @@ void MainWindow::connectPanelSignals() {
             if (_scriptSourceService)
                 _scriptSourceService->editScriptSource(programIndex);
         });
+        connect(_selectionPanel, &SelectionPanel::requestShowScriptInPanel, this, [this](uint32_t sid) {
+            showPanel(_scriptsDock, _scriptsPanelAction);
+            if (_scriptsPanel)
+                _scriptsPanel->selectScriptRow(sid);
+        });
+        _selectionPanel->setScriptStatusProvider([this](int programIndex) {
+            return _scriptSourceService ? _scriptSourceService->scriptStatus(programIndex)
+                                        : ScriptSourceService::ScriptStatus{ };
+        });
+        if (_scriptsPanel) {
+            _scriptsPanel->setStatusProvider([this](int programIndex) {
+                return _scriptSourceService ? _scriptSourceService->scriptStatus(programIndex)
+                                            : ScriptSourceService::ScriptStatus{ };
+            });
+        }
         connect(_selectionPanel, &SelectionPanel::requestObjectHighlight,
             this, [this](std::shared_ptr<Object> object) {
                 if (!_currentEditorWidget || !object)
@@ -2027,63 +2202,56 @@ void MainWindow::connectPanelSignals() {
                     updateModeDisplay("Mode: All", ":/icons/actions/select.svg");
                 }
             });
-        connect(_tilePalettePanel, &TilePalettePanel::placementModeChanged,
-            this, [this]([[maybe_unused]] TilePalettePanel::PlacementMode mode) {
-                if (!_currentEditorWidget)
-                    return;
-                _currentEditorWidget->setTilePlacementAreaFill(true);
-                _currentEditorWidget->setTilePlacementReplaceMode(false);
-                spdlog::debug("Set unified tile placement mode");
-            });
-        connect(_tilePalettePanel, &TilePalettePanel::replaceSelectedTiles,
-            this, [this](int newTileIndex) {
-                if (_currentEditorWidget)
-                    _currentEditorWidget->replaceSelectedTiles(newTileIndex);
-            });
     }
 
     // MapInfoPanel signals → current editor widget
     if (_mapInfoPanel) {
         connect(_mapInfoPanel, &MapInfoPanel::selectPlayerPositionRequested,
             this, [this]() {
-                if (_currentEditorWidget)
-                    _currentEditorWidget->enterPlayerPositionSelectionMode();
+                if (!_currentEditorWidget) {
+                    return;
+                }
+                _currentEditorWidget->beginHexPick(
+                    [this](std::optional<int> hex) {
+                        if (hex.has_value() && _mapInfoPanel && _currentEditorWidget) {
+                            _mapInfoPanel->setPlayerPosition(*hex, _currentEditorWidget->getCurrentElevation());
+                        }
+                    },
+                    "Click on a hex to set the player starting position (Press Escape to cancel)");
             });
         connect(_mapInfoPanel, &MapInfoPanel::centerViewOnPlayerPositionRequested,
             this, [this]() {
                 if (_currentEditorWidget)
                     _currentEditorWidget->centerViewOnPlayerPosition();
             });
-        connect(_mapInfoPanel, &MapInfoPanel::elevationAdded,
-            this, [this](int elevation) {
-                if (!_currentEditorWidget)
-                    return;
-                setMapModified(true);
-                updateElevationMenu(_currentEditorWidget->getMap());
-                if (_currentEditorWidget->getCurrentElevation() == elevation) {
-                    _currentEditorWidget->loadTileSprites();
-                    spdlog::debug("MainWindow: Reloaded sprites for newly added elevation {}", elevation);
+        // Header and elevation edits are requests the editor applies as undoable commands; the panel
+        // and the elevation menu follow through EditorWidget::mapHeaderChanged.
+        connect(_mapInfoPanel, &MapInfoPanel::headerEditRequested, this,
+            [this](const Map::MapHeader& after, const QString& description, const QString& mergeKey) {
+                if (_currentEditorWidget) {
+                    _currentEditorWidget->editMapHeader(after, description.toStdString(), mergeKey.toStdString());
                 }
             });
-        connect(_mapInfoPanel, &MapInfoPanel::elevationRemoved,
-            this, [this](int elevation) {
-                if (!_currentEditorWidget)
+        connect(_mapInfoPanel, &MapInfoPanel::elevationPresenceRequested, this, [this](int elevation, bool present) {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->setElevationPresent(elevation, present);
+            }
+        });
+        // The panel owns the .gam a global-variable edit changes, so the undo entry restores its state.
+        connect(_mapInfoPanel, &MapInfoPanel::globalVarsEdited, this,
+            [this](const MapInfoPanel::GlobalVarsState& before, const MapInfoPanel::GlobalVarsState& after,
+                const QString& description) {
+                if (!_currentEditorWidget) {
                     return;
-                setMapModified(true);
-                updateElevationMenu(_currentEditorWidget->getMap());
-                if (_currentEditorWidget->getCurrentElevation() == elevation) {
-                    auto* map = _currentEditorWidget->getMap();
-                    if (map) {
-                        uint32_t flags = map->getMapFile().header.flags;
-                        if ((flags & 0x2) == 0)
-                            elevationChanged(ELEVATION_1);
-                        else if ((flags & 0x4) == 0)
-                            elevationChanged(ELEVATION_2);
-                        else if ((flags & 0x8) == 0)
-                            elevationChanged(ELEVATION_3);
-                    }
-                    spdlog::debug("MainWindow: Switched away from removed elevation {}", elevation);
                 }
+                auto restore = [panel = QPointer<MapInfoPanel>(_mapInfoPanel)](const MapInfoPanel::GlobalVarsState& state) {
+                    if (panel) {
+                        panel->applyGlobalVarsState(state);
+                    }
+                };
+                _currentEditorWidget->pushUndoCommand({ .description = description.toStdString(),
+                    .undo = [restore, before]() { restore(before); },
+                    .redo = [restore, after]() { restore(after); } });
             });
         connect(_mapInfoPanel, &MapInfoPanel::clearElevationRequested,
             this, [this](int elevation) {
@@ -2130,14 +2298,6 @@ void MainWindow::connectPanelSignals() {
             }
         });
 
-        // Header edits write straight to the map with no undo command, so flag it modified here. They
-        // also fire while populating from a fresh map, but the callers clear the flag right after.
-        connect(_mapInfoPanel, &MapInfoPanel::playerPositionChanged, this, [this](int) { setMapModified(true); });
-        connect(_mapInfoPanel, &MapInfoPanel::playerElevationChanged, this, [this](int) { setMapModified(true); });
-        connect(_mapInfoPanel, &MapInfoPanel::playerOrientationChanged, this, [this](int) { setMapModified(true); });
-        connect(_mapInfoPanel, &MapInfoPanel::mapScriptIdChanged, this, [this](int) { setMapModified(true); });
-        connect(_mapInfoPanel, &MapInfoPanel::darknessChanged, this, [this](int) { setMapModified(true); });
-        connect(_mapInfoPanel, &MapInfoPanel::timestampChanged, this, [this](int) { setMapModified(true); });
         // Editing a Map name / Lookup name marks the map modified; the value is written to the writable
         // copy when the map is saved (see the saveMap handlers, which call persistMapNames()).
         connect(_mapInfoPanel, &MapInfoPanel::mapNamesChanged, this, [this]() { setMapModified(true); });
@@ -2168,10 +2328,15 @@ void MainWindow::connectPanelSignals() {
                 }
             });
 
-        // Selecting a spatial-script row drives the shared selection (highlights its marker on the map).
+        // Selecting a spatial-script row drives the shared selection: it highlights the marker on the
+        // map and brings it into view, switching elevation when it lives on another one.
         connect(_scriptsPanel, &ScriptsPanel::spatialScriptSelected, this, [this](uint32_t sid) {
-            if (_currentEditorWidget) {
-                _currentEditorWidget->setSelectedSpatialScript(sid);
+            if (!_currentEditorWidget) {
+                return;
+            }
+            _currentEditorWidget->setSelectedSpatialScript(sid);
+            if (sid != MapScript::NONE && _currentEditorWidget->revealSpatialScript(sid)) {
+                updateElevationMenu(_currentEditorWidget->getMap());
             }
         });
         // Edit / delete requested from the panel (context menu or double-click).
@@ -2214,6 +2379,22 @@ void MainWindow::connectToEditorWidget() {
         _tilePalettePanel->setSelectionManager(_currentEditorWidget->getSelectionManager());
     }
 
+    connect(_currentEditorWidget, &EditorWidget::mapHeaderChanged, this, &MainWindow::onMapHeaderChanged);
+    connect(_currentEditorWidget, &EditorWidget::mapInfoRefreshRequested, this, [this]() {
+        updateMapInfo(_currentEditorWidget->getMap());
+    });
+    connect(_currentEditorWidget, &EditorWidget::tilePaletteDeselectRequested, this, [this]() {
+        if (_tilePalettePanel) {
+            _tilePalettePanel->deselectTile();
+        }
+    });
+    connect(_currentEditorWidget, &EditorWidget::markExitsModeCancelled, this, &MainWindow::deselectMarkExitsMode);
+    connect(_currentEditorWidget, &EditorWidget::tilePicked, this, [this](int tileId, bool isRoof) {
+        if (_tilePalettePanel) {
+            _tilePalettePanel->pickTile(tileId, isRoof);
+            raiseTilePalette();
+        }
+    });
     connect(_currentEditorWidget, &EditorWidget::statusMessageRequested, this, &MainWindow::showStatusMessage);
     connect(_currentEditorWidget, &EditorWidget::statusMessageClearRequested, this, &MainWindow::clearStatusMessage);
     _currentEditorWidget->setModToolsAvailable(modToolsConfigured());
@@ -2244,26 +2425,16 @@ void MainWindow::connectToEditorWidget() {
 
     // Spatial-script selection/editing sync (map <-> Scripts panel). The panel mirrors the map-side
     // selection; a map double-click opens the editor; add/edit/delete repopulate the panel.
-    connect(_currentEditorWidget, &EditorWidget::spatialScriptSelectionChanged, this, [this](uint32_t sid) {
-        if (_scriptsPanel) {
-            _scriptsPanel->selectSpatialScriptRow(sid);
-        }
-    });
+    connect(_currentEditorWidget, &EditorWidget::spatialScriptSelectionChanged, this,
+        [this](uint32_t) { syncScriptsPanelSelection(); });
+    connect(_currentEditorWidget, &EditorWidget::selectionChanged, this,
+        [this](const selection::SelectionState&, int) { syncScriptsPanelSelection(); });
     connect(_currentEditorWidget, &EditorWidget::spatialScriptEditActivated, this,
         [this](uint32_t sid) { openSpatialScriptDialog(sid); });
     connect(_currentEditorWidget, &EditorWidget::mapScriptsChanged, this,
         [this]() { refreshScriptsPanel(); });
     connect(_currentEditorWidget, &EditorWidget::mapEdgeChanged, this,
         [this]() { refreshMapEdgesPanel(); });
-
-    if (_mapInfoPanel) {
-        connect(_currentEditorWidget, &EditorWidget::playerPositionSelected,
-            this, [this](int hexPosition) {
-                if (_mapInfoPanel && _currentEditorWidget) {
-                    _mapInfoPanel->setPlayerPosition(hexPosition, _currentEditorWidget->getCurrentElevation());
-                }
-            });
-    }
 
     applySelectionColorsToEditor();
 
@@ -2360,7 +2531,7 @@ void MainWindow::refreshScriptsPanel() {
     if (_scriptsPanel && _currentEditorWidget) {
         _scriptsPanel->setMap(_currentEditorWidget->getMap());
         // populate() drops the selection; re-assert the shared spatial selection so the row stays lit.
-        _scriptsPanel->selectSpatialScriptRow(_currentEditorWidget->selectedSpatialScript());
+        _scriptsPanel->selectScriptRow(_currentEditorWidget->selectedSpatialScript());
     }
 }
 
@@ -2374,7 +2545,7 @@ void MainWindow::refreshMapEdgesPanel() {
     }
 
     const bool hasMap = _currentEditorWidget->getMap() != nullptr;
-    const int elevation = _currentEditorWidget->currentElevation();
+    const int elevation = _currentEditorWidget->getCurrentElevation();
     const auto& edge = _currentEditorWidget->mapEdge();
 
     int version = 0;
@@ -2489,6 +2660,29 @@ void MainWindow::updateMapInfo(Map* map) {
     }
 }
 
+void MainWindow::onMapHeaderChanged() {
+    Map* map = _currentEditorWidget ? _currentEditorWidget->getMap() : nullptr;
+    if (!map) {
+        return;
+    }
+    if (_mapInfoPanel) {
+        _mapInfoPanel->refreshHeaderFields();
+    }
+    updateElevationMenu(map);
+
+    const uint32_t flags = map->getMapFile().header.flags;
+    if (Map::elevationIsPresent(flags, _currentEditorWidget->getCurrentElevation())) {
+        return;
+    }
+    for (int elevation = 0; elevation < Map::ELEVATION_COUNT; ++elevation) {
+        if (Map::elevationIsPresent(flags, elevation)) {
+            Q_EMIT elevationChanged(elevation);
+            spdlog::debug("MainWindow: switched to elevation {}, the shown one was removed", elevation);
+            return;
+        }
+    }
+}
+
 void MainWindow::updateElevationMenu(Map* map) {
     if (!map) {
         _elevation1Action->setDisabled(true);
@@ -2497,11 +2691,10 @@ void MainWindow::updateElevationMenu(Map* map) {
         return;
     }
 
-    // MAP header flag bits 0x2/0x4/0x8: a set bit means that elevation is DISABLED
     uint32_t map_flags = map->getMapFile().header.flags;
-    bool hasElevation1 = ((map_flags & 0x2) == 0);
-    bool hasElevation2 = ((map_flags & 0x4) == 0);
-    bool hasElevation3 = ((map_flags & 0x8) == 0);
+    bool hasElevation1 = Map::elevationIsPresent(map_flags, ELEVATION_1);
+    bool hasElevation2 = Map::elevationIsPresent(map_flags, ELEVATION_2);
+    bool hasElevation3 = Map::elevationIsPresent(map_flags, ELEVATION_3);
 
     _elevation1Action->setEnabled(hasElevation1);
     _elevation2Action->setEnabled(hasElevation2);
@@ -2532,7 +2725,7 @@ void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFile
     // MapLoader is Qt-free; LoadingWidget owns it once added, so the callback uses
     // a handle to read its error message and present it here on the main thread.
     auto loaderHandle = std::make_shared<MapLoader*>(nullptr);
-    auto mapLoader = std::make_unique<MapLoader>(_resourcesShared, mapPath, -1, forceFilesystem, [this, loaderHandle](auto map) {
+    auto mapLoader = std::make_unique<MapLoader>(_resourcesShared, mapPath, forceFilesystem, [this, loaderHandle](auto map) {
         if (map) {
             auto editorWidget = std::make_unique<EditorWidget>(*_resourcesShared, std::move(map));
             setEditorWidget(std::move(editorWidget));
@@ -2554,19 +2747,20 @@ void MainWindow::setupPanelsMenu() {
         const char* label;
         QDockWidget* dock;
         QAction** actionRef;
+        const char* actionId; // the Alt+<digit> family; see ui/input/ActionSpec.cpp
     };
 
     const std::array<PanelToggleSpec, 6> panelToggleSpecs = { {
-        { "Map &Information", _mapInfoDock, &_mapInfoPanelAction },
-        { "Scri&pts", _scriptsDock, &_scriptsPanelAction },
-        { "&Selection", _selectionDock, &_selectionPanelAction },
-        { "&Tile Palette", _tilePaletteDock, &_tilePalettePanelAction },
-        { "&Object Palette", _objectPaletteDock, &_objectPalettePanelAction },
-        { "&Virtual File System Browser", _fileBrowserDock, &_fileBrowserPanelAction },
+        { "Map &Information", _mapInfoDock, &_mapInfoPanelAction, actions::PANEL_MAP_INFO },
+        { "Scri&pts", _scriptsDock, &_scriptsPanelAction, actions::PANEL_SCRIPTS },
+        { "&Selection", _selectionDock, &_selectionPanelAction, actions::PANEL_SELECTION },
+        { "&Tile Palette", _tilePaletteDock, &_tilePalettePanelAction, actions::PANEL_TILE_PALETTE },
+        { "&Object Palette", _objectPaletteDock, &_objectPalettePanelAction, actions::PANEL_OBJECT_PALETTE },
+        { "&Virtual File System Browser", _fileBrowserDock, &_fileBrowserPanelAction, actions::PANEL_FILE_BROWSER },
     } };
 
     for (const PanelToggleSpec& spec : panelToggleSpecs) {
-        addPanelToggleAction(spec.label, spec.dock, *spec.actionRef);
+        addPanelToggleAction(spec.label, spec.dock, *spec.actionRef, spec.actionId);
     }
 }
 
@@ -2797,8 +2991,15 @@ bool MainWindow::hasActiveMap() const {
     return _currentEditorWidget != nullptr;
 }
 
-void MainWindow::showPreferences() {
-    SettingsDialog dialog(_settings, this);
+void MainWindow::showKeyboardShortcuts() {
+    showPreferences(QStringLiteral("Keyboard Shortcuts"));
+}
+
+void MainWindow::showPreferences(const QString& initialTab) {
+    SettingsDialog dialog(_settings, _keyBindings.get(), this);
+    if (!initialTab.isEmpty()) {
+        dialog.selectTab(initialTab);
+    }
 
     connect(&dialog, &SettingsDialog::settingsSaved, this, [this](bool dataPathsChanged) {
         if (dataPathsChanged) {
@@ -2864,7 +3065,7 @@ std::unique_ptr<ModToolsRunner> MainWindow::makeModToolsRunner() {
             "The Tools menu runs your mod's own tools: tools/gecko_assets.py in the mod folder, "
             "with Python.\n\nSet the mod folder in File > Preferences > Mod Tools. Open Preferences now?");
         if (openPreferences) {
-            showPreferences();
+            showPreferences(QStringLiteral("Mod Tools"));
         }
         if (!modToolsConfigured()) {
             return nullptr;
@@ -3094,14 +3295,14 @@ void MainWindow::editNameAndText(ModToolsRunner& runner, quint32 pid) {
 void MainWindow::onPlayGame() {
     // No save prompt: playGame writes the in-memory map into the game folder, so the file on disk
     // has no bearing on what is played.
-    const Map::MapFile* mapFile = _currentEditorWidget ? &_currentEditorWidget->getMapFile() : nullptr;
-    std::string mapFilename = _currentEditorWidget ? _currentEditorWidget->getMap()->filename() : "";
+    const Map* map = _currentEditorWidget ? _currentEditorWidget->getMap() : nullptr;
+    std::string mapFilename = map ? map->filename() : "";
 
     if (!mapFilename.ends_with(".map")) {
         mapFilename += ".map";
     }
 
-    _gameLauncher->playGame(mapFile, mapFilename);
+    _gameLauncher->playGame(map, mapFilename);
 }
 
 void MainWindow::showSavePatternDialog() {

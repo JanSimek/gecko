@@ -20,7 +20,7 @@ inline std::string scriptDisplayName(GameResources& resources, int programIndex)
         return {};
     }
     try {
-        if (Msg* msg = resources.repository().load<Msg>("text/english/game/scrname.msg"); msg != nullptr) {
+        if (Msg* msg = resources.repository().tryLoad<Msg>("text/english/game/scrname.msg"); msg != nullptr) {
             // Use find() rather than message()/operator[], so a miss (a program index past scrname.msg)
             // doesn't insert an empty entry into the cached Msg — this is called per scripts.lst entry.
             const auto& messages = msg->getMessages();
@@ -47,7 +47,7 @@ inline std::string scriptDescription(GameResources& resources, int programIndex)
         return {};
     }
     try {
-        if (const Lst* lst = resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS); lst != nullptr) {
+        if (const Lst* lst = resources.repository().tryLoad<Lst>(ResourcePaths::Lst::SCRIPTS); lst != nullptr) {
             const auto& comments = lst->comments();
             if (static_cast<std::size_t>(programIndex) < comments.size()) {
                 return comments[static_cast<std::size_t>(programIndex)];

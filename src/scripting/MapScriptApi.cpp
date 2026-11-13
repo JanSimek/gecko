@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <format>
@@ -15,8 +14,11 @@
 
 #include "editor/FloorSynth.h"
 #include "editor/Hex.h"
+#include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
 #include "editor/Object.h"
+#include "editor/Reachability.h"
+#include "editor/helper/ObjectQueries.h"
 #include "scripting/EditArea.h"
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
@@ -29,6 +31,7 @@
 #include "pattern/FillPlan.h"
 #include "pattern/PatternSprite.h"
 #include "pattern/PatternStamper.h"
+#include "reader/TextParsing.h"
 #include "reader/map/MapReader.h"
 #include "resource/GameResources.h"
 #include <spdlog/spdlog.h>
@@ -44,70 +47,20 @@ namespace geck {
 
 MapScriptApi::MapScriptApi(resource::GameResources& resources, const HexagonGrid& hexgrid,
     ObjectCommandController& controller, Map& map, int elevation, bool buildSprites)
-    : _resources(&resources)
-    , _hexgrid(&hexgrid)
-    , _controller(&controller)
-    , _map(&map)
+    : _resources(resources)
+    , _hexgrid(hexgrid)
+    , _controller(controller)
+    , _map(map)
     , _elevation(elevation)
     , _buildSprites(buildSprites) {
 }
 
-void MapScriptApi::retarget(resource::GameResources& resources, const HexagonGrid& hexgrid,
-    ObjectCommandController& controller, Map* map, int elevation, bool buildSprites) {
-    _resources = &resources;
-    _hexgrid = &hexgrid;
-    _controller = &controller;
-    _map = map;
-    _elevation = elevation;
-    _buildSprites = buildSprites;
-    _referenceCache.clear(); // the data mount may have changed with the host
-    _lastQuilt = {};
-}
-
-void MapScriptApi::detach() {
-    _resources = nullptr;
-    _hexgrid = nullptr;
-    _controller = nullptr;
-    _map = nullptr;
-    _referenceCache.clear();
-    _lastQuilt = {};
-}
-
-Map& MapScriptApi::mapRef() const {
-    if (_map == nullptr) {
-        throw ScriptError("no map is open");
-    }
-    return *_map;
-}
-
-ObjectCommandController& MapScriptApi::controllerRef() const {
-    if (_controller == nullptr) {
-        throw ScriptError("the api is detached from the editor");
-    }
-    return *_controller;
-}
-
-const HexagonGrid& MapScriptApi::hexgridRef() const {
-    if (_hexgrid == nullptr) {
-        throw ScriptError("the api is detached from the editor");
-    }
-    return *_hexgrid;
-}
-
-resource::GameResources& MapScriptApi::resourcesRef() const {
-    if (_resources == nullptr) {
-        throw ScriptError("the api is detached from the editor");
-    }
-    return *_resources;
-}
-
 bool MapScriptApi::isValidHex(int hex) const {
-    return hex >= 0 && hex < HexagonGrid::POSITION_COUNT;
+    return hexgrid::isValidPosition(hex);
 }
 
 std::vector<int> MapScriptApi::hexNeighbors(int hex) const {
-    // Parity-correct cube-coordinate neighbours; shared with the editor's exit-grid edge walk.
-    return hexline::hexNeighbors(hex);
+    return hexgrid::neighbors(hex);
 }
 
 int MapScriptApi::hexDir(int fromHex, int toHex) const {
@@ -116,40 +69,62 @@ int MapScriptApi::hexDir(int fromHex, int toHex) const {
     return hexline::hexDirection(fromHex, toHex);
 }
 
-uint16_t MapScriptApi::getFloor(int tileIndex) const {
-    const auto& tiles = mapRef().getMapFile().tiles;
-    const auto it = tiles.find(_elevation);
-    if (it == tiles.end() || tileIndex < 0 || tileIndex >= static_cast<int>(it->second.size())) {
-        return static_cast<uint16_t>(Map::EMPTY_TILE);
+namespace {
+    // The floor or roof id of `tileIndex` on `elevation`, or EMPTY_TILE when there is none.
+    uint16_t tileLayerAt(const Map& map, int elevation, int tileIndex, bool isRoof) {
+        const auto& tiles = map.getMapFile().tiles;
+        const auto it = tiles.find(elevation);
+        if (it == tiles.end() || tileIndex < 0 || tileIndex >= static_cast<int>(it->second.size())) {
+            return static_cast<uint16_t>(Map::EMPTY_TILE);
+        }
+        return isRoof ? it->second[tileIndex].getRoof() : it->second[tileIndex].getFloor();
     }
-    return it->second[tileIndex].getFloor();
+
+    // tiles.lst; a failure to load it is a real error (no data mounted) and is raised.
+    const Lst& tilesLst(resource::GameResources& resources) {
+        const Lst* lst = resources.repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::TILES));
+        if (lst == nullptr) {
+            throw ScriptError("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
+        }
+        return *lst;
+    }
+
+    // A wrong answer from a proto query silently breaks what a generator builds, so an unloadable
+    // proto is a raised error, never a guess.
+    const Pro& loadProOrRaise(resource::GameResources& resources, int pid) {
+        const Pro* pro = nullptr;
+        try {
+            pro = resources.loadPro(static_cast<uint32_t>(pid));
+        } catch (const std::exception&) {
+            pro = nullptr;
+        }
+        if (pro == nullptr) {
+            throw ScriptError(std::format(
+                "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
+                static_cast<uint32_t>(pid)));
+        }
+        return *pro;
+    }
+} // namespace
+
+uint16_t MapScriptApi::getFloor(int tileIndex) const {
+    return tileLayerAt(_map, _elevation, tileIndex, false);
 }
 
 uint16_t MapScriptApi::getRoof(int tileIndex) const {
-    const auto& tiles = mapRef().getMapFile().tiles;
-    const auto it = tiles.find(_elevation);
-    if (it == tiles.end() || tileIndex < 0 || tileIndex >= static_cast<int>(it->second.size())) {
-        return static_cast<uint16_t>(Map::EMPTY_TILE);
-    }
-    return it->second[tileIndex].getRoof();
+    return tileLayerAt(_map, _elevation, tileIndex, true);
 }
 
 int MapScriptApi::tileId(const std::string& name) const {
-    // A failure to load tiles.lst is a real error (no data mounted) and is raised so the caller
-    // sees it; an unknown name in a *loaded* list is a legitimate "not found" -> -1.
-    const Lst* lst = resourcesRef().repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
-    if (lst == nullptr) {
-        throw ScriptError("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
-    }
+    // A missing tiles.lst raises; an unknown name in a *loaded* list is a legitimate "not found" -> -1.
+    const Lst& lst = tilesLst(_resources);
     // tiles.lst entries are already lowercased/trimmed by the reader; normalise the query the
     // same way so "edg5000", "EDG5000.FRM" and "edg5000.frm" all match.
-    std::string needle = name;
-    std::ranges::transform(needle, needle.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::string needle = text::toLower(name);
     if (needle.size() < 4 || needle.compare(needle.size() - 4, 4, ".frm") != 0) {
         needle += ".frm";
     }
-    const auto& entries = lst->list();
+    const auto& entries = lst.list();
     for (std::size_t i = 0; i < entries.size(); ++i) {
         if (entries[i] == needle) {
             return static_cast<int>(i);
@@ -159,17 +134,12 @@ int MapScriptApi::tileId(const std::string& name) const {
 }
 
 std::map<std::string, int> MapScriptApi::tilesByPrefix(const std::string& prefix) const {
-    // Same availability contract as tileId(): a missing tiles.lst is a real error, an
-    // unmatched prefix is a legitimate empty result.
-    const Lst* lst = resourcesRef().repository().load<Lst>(std::string(ResourcePaths::Lst::TILES));
-    if (lst == nullptr) {
-        throw ScriptError("tiles.lst is unavailable — are the Fallout 2 data files (master.dat) mounted?");
-    }
-    std::string needle = prefix;
-    std::ranges::transform(needle, needle.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    // Same availability contract as tileId(): a missing tiles.lst raises, an unmatched prefix is a
+    // legitimate empty result.
+    const Lst& lst = tilesLst(_resources);
+    const std::string needle = text::toLower(prefix);
     std::map<std::string, int> matches;
-    const auto& entries = lst->list();
+    const auto& entries = lst.list();
     for (std::size_t i = 0; i < entries.size(); ++i) {
         if (!entries[i].starts_with(needle)) {
             continue;
@@ -187,7 +157,7 @@ std::map<std::string, int> MapScriptApi::tilesByPrefix(const std::string& prefix
 std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) const {
     // Failing to read/parse the reference is a real error (bad path or no data) — raise it rather
     // than returning null, so the caller isn't handed a silently-empty result.
-    const auto bytes = resourcesRef().files().readRawBytes(mapPath);
+    const auto bytes = _resources.files().readRawBytes(mapPath);
     if (!bytes) {
         throw ScriptError(std::format("could not read map '{}' — check the path and that Fallout 2 data is mounted", mapPath));
     }
@@ -195,7 +165,7 @@ std::unique_ptr<Map> MapScriptApi::loadReferenceMap(const std::string& mapPath) 
     // A proto that won't load yields nullptr and its extra fields are skipped, per object.
     const std::function<Pro*(uint32_t)> proLoad = [this](uint32_t pid) -> Pro* {
         try {
-            return resourcesRef().loadPro(pid);
+            return _resources.loadPro(pid);
         } catch (const std::exception&) {
             return nullptr;
         }
@@ -221,7 +191,7 @@ bool MapScriptApi::isScatterableScenery(uint32_t pid) const {
     // while upright decorations (scrub, trees, rocks) do not — is excluded from a scatter palette.
     const Pro* pro = nullptr;
     try {
-        pro = resourcesRef().loadPro(pid);
+        pro = _resources.loadPro(pid);
     } catch (const std::exception&) {
         return true; // best-effort: keep a proto we can't inspect
     }
@@ -233,7 +203,7 @@ std::map<int, int> MapScriptApi::sceneryCounts(const Map& map) const {
     std::unordered_map<int, bool> eligible; // pid -> scatter-eligible (decided once, then cached)
     for (const auto& [elevation, objects] : map.getMapFile().map_objects) {
         for (const auto& object : objects) {
-            if (!object || Pro::typeOfPid(object->pro_pid) != Pro::OBJECT_TYPE::SCENERY) {
+            if (!object || ProtoId(object->pro_pid).objectType() != ObjectType::Scenery) {
                 continue;
             }
             const int pid = static_cast<int>(object->pro_pid);
@@ -301,16 +271,12 @@ namespace {
 
     // Resolved against the engine's own type names (Pro::typeToString), singular or plural, rather
     // than a second hardcoded table. Throws ScriptError on an unknown name.
-    Pro::OBJECT_TYPE objectTypeFromName(const std::string& typeName) {
-        const auto lower = [](std::string s) {
-            std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            return s;
-        };
-        const std::string wanted = lower(typeName);
+    ObjectType objectTypeFromName(const std::string& typeName) {
+        const std::string wanted = text::toLower(typeName);
 
-        using enum Pro::OBJECT_TYPE;
-        for (const Pro::OBJECT_TYPE type : { ITEM, CRITTER, SCENERY, WALL, TILE, MISC }) {
-            const std::string name = lower(Pro::typeToString(type));
+        using enum ObjectType;
+        for (const ObjectType type : { Item, Critter, Scenery, Wall, Tile, Misc }) {
+            const std::string name = text::toLower(Pro::typeToString(type));
             if (wanted == name || wanted == name + "s") {
                 return type;
             }
@@ -333,7 +299,7 @@ std::vector<int> MapScriptApi::mapFloorAt(const std::string& mapPath, int elevat
 }
 
 std::vector<int> MapScriptApi::mapObjectsAt(const std::string& mapPath, int elevation, const std::string& typeName) const {
-    const Pro::OBJECT_TYPE wanted = objectTypeFromName(typeName); // throws on an unknown type
+    const ObjectType wanted = objectTypeFromName(typeName); // throws on an unknown type
     const Map& reference = referenceMap(mapPath);
     requireReferenceElevation(reference, mapPath, elevation);
 
@@ -344,7 +310,7 @@ std::vector<int> MapScriptApi::mapObjectsAt(const std::string& mapPath, int elev
         return triples; // the elevation exists but holds no objects — a valid empty answer
     }
     for (const auto& object : it->second) {
-        if (Pro::typeOfPid(object->pro_pid) != wanted) {
+        if (ProtoId(object->pro_pid).objectType() != wanted) {
             continue;
         }
         triples.push_back(static_cast<int>(object->pro_pid));
@@ -355,48 +321,48 @@ std::vector<int> MapScriptApi::mapObjectsAt(const std::string& mapPath, int elev
 }
 
 bool MapScriptApi::protoBlocks(int pid) const {
-    // A wrong answer here silently breaks walkability, so an unloadable proto is a raised error,
-    // never a guess (same contract as tileId's missing tiles.lst).
-    const Pro* pro = nullptr;
-    try {
-        pro = resourcesRef().loadPro(static_cast<uint32_t>(pid));
-    } catch (const std::exception&) {
-        pro = nullptr;
-    }
-    if (pro == nullptr) {
-        throw ScriptError(std::format(
-            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
-            static_cast<uint32_t>(pid)));
-    }
-    return !Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_NO_BLOCK);
+    // A wrong answer here silently breaks walkability: an unloadable proto raises.
+    const Pro& pro = loadProOrRaise(_resources, pid);
+    return !Pro::hasFlag(pro.header.flags, Pro::ObjectFlags::OBJECT_NO_BLOCK);
 }
 
 bool MapScriptApi::protoFlat(int pid) const {
     // OBJECT_FLAT marks ground-hugging art drawn below standing objects, as opposed to a wall face -
     // cave walls come in both. Hard-fail like protoBlocks: an unloadable proto is never guessed.
-    const Pro* pro = nullptr;
-    try {
-        pro = resourcesRef().loadPro(static_cast<uint32_t>(pid));
-    } catch (const std::exception&) {
-        pro = nullptr;
+    const Pro& pro = loadProOrRaise(_resources, pid);
+    return Pro::hasFlag(pro.header.flags, Pro::ObjectFlags::OBJECT_FLAT);
+}
+
+std::string MapScriptApi::protoSceneryType(int pid) const {
+    const Pro& pro = loadProOrRaise(_resources, pid);
+    if (ProtoId(static_cast<uint32_t>(pid)).objectType() != ObjectType::Scenery) {
+        throw ScriptError(std::format("protoSceneryType: proto 0x{:08x} is not scenery", static_cast<uint32_t>(pid)));
     }
-    if (pro == nullptr) {
-        throw ScriptError(std::format(
-            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
-            static_cast<uint32_t>(pid)));
+    switch (static_cast<SceneryType>(pro.objectSubtypeId())) {
+        case SceneryType::Door:
+            return "Door";
+        case SceneryType::Stairs:
+            return "Stairs";
+        case SceneryType::Elevator:
+            return "Elevator";
+        case SceneryType::LadderUp:
+            return "LadderUp";
+        case SceneryType::LadderDown:
+            return "LadderDown";
+        case SceneryType::Generic:
+            return "Generic";
+        default:
+            throw ScriptError(std::format("protoSceneryType: proto 0x{:08x} has unknown scenery type {}",
+                static_cast<uint32_t>(pid), pro.objectSubtypeId()));
     }
-    return Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
 }
 
 std::vector<std::string> MapScriptApi::listMaps() const {
     std::vector<std::string> maps;
     try {
         // Keep the .map files case-insensitively (robust against the DAT/mount's key casing).
-        for (const auto& path : resourcesRef().files().list("*")) {
-            std::string ext = path.extension().string();
-            std::ranges::transform(ext, ext.begin(),
-                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (ext == ".map") {
+        for (const auto& path : _resources.files().list("*")) {
+            if (text::toLower(path.extension().string()) == ".map") {
                 maps.push_back(path.generic_string());
             }
         }
@@ -411,16 +377,8 @@ namespace {
     // Smootherstep, for C1-continuous interpolation between lattice values.
     double fade(double t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
 
-    // Hash a lattice corner to a stable pseudo-random value in [0,1).
-    double latticeValue(int xi, int yi) {
-        uint32_t h = static_cast<uint32_t>(xi) * 374761393u + static_cast<uint32_t>(yi) * 668265263u;
-        h = (h ^ (h >> 13)) * 1274126177u;
-        h ^= h >> 16;
-        return (h & 0xFFFFFFu) / static_cast<double>(0x1000000);
-    }
-
-    // 3D form of latticeValue: a stable [0,1) hash of a (xi, yi, zi) lattice corner.
-    double latticeValue3(int xi, int yi, int zi) {
+    // Hash a lattice corner to a stable pseudo-random value in [0,1); 2D noise uses the z = 0 plane.
+    double latticeValue(int xi, int yi, int zi) {
         uint32_t h = static_cast<uint32_t>(xi) * 374761393u + static_cast<uint32_t>(yi) * 668265263u
             + static_cast<uint32_t>(zi) * 2246822519u;
         h = (h ^ (h >> 13)) * 1274126177u;
@@ -437,10 +395,10 @@ double MapScriptApi::noise2d(double x, double y) const {
     const double tx = fade(x - xf);
     const double ty = fade(y - yf);
 
-    const double v00 = latticeValue(xi, yi);
-    const double v10 = latticeValue(xi + 1, yi);
-    const double v01 = latticeValue(xi, yi + 1);
-    const double v11 = latticeValue(xi + 1, yi + 1);
+    const double v00 = latticeValue(xi, yi, 0);
+    const double v10 = latticeValue(xi + 1, yi, 0);
+    const double v01 = latticeValue(xi, yi + 1, 0);
+    const double v11 = latticeValue(xi + 1, yi + 1, 0);
 
     return std::lerp(std::lerp(v00, v10, tx), std::lerp(v01, v11, tx), ty); // bilinear -> [0,1)
 }
@@ -457,30 +415,30 @@ double MapScriptApi::noise3d(double x, double y, double z) const {
     const double tz = fade(z - zf);
 
     // Trilinear blend of the 8 cube-corner lattice values -> [0,1).
-    const double x00 = std::lerp(latticeValue3(xi, yi, zi), latticeValue3(xi + 1, yi, zi), tx);
-    const double x10 = std::lerp(latticeValue3(xi, yi + 1, zi), latticeValue3(xi + 1, yi + 1, zi), tx);
-    const double x01 = std::lerp(latticeValue3(xi, yi, zi + 1), latticeValue3(xi + 1, yi, zi + 1), tx);
-    const double x11 = std::lerp(latticeValue3(xi, yi + 1, zi + 1), latticeValue3(xi + 1, yi + 1, zi + 1), tx);
+    const double x00 = std::lerp(latticeValue(xi, yi, zi), latticeValue(xi + 1, yi, zi), tx);
+    const double x10 = std::lerp(latticeValue(xi, yi + 1, zi), latticeValue(xi + 1, yi + 1, zi), tx);
+    const double x01 = std::lerp(latticeValue(xi, yi, zi + 1), latticeValue(xi + 1, yi, zi + 1), tx);
+    const double x11 = std::lerp(latticeValue(xi, yi + 1, zi + 1), latticeValue(xi + 1, yi + 1, zi + 1), tx);
     return std::lerp(std::lerp(x00, x10, ty), std::lerp(x01, x11, ty), tz);
 }
 
 uint32_t MapScriptApi::proto(const std::string& typeName, int number) const {
-    const Pro::OBJECT_TYPE type = objectTypeFromName(typeName); // throws on an unknown type
+    const ObjectType type = objectTypeFromName(typeName); // throws on an unknown type
     // The id occupies the low 24 bits of the PID and is 1-based (proto ids start at 1).
-    if (number <= 0 || number > 0x00FFFFFF) {
+    if (number <= 0 || static_cast<uint32_t>(number) > ProtoId::MAX_PROTO_ID) {
         throw ScriptError(std::format("proto number out of range (1..16777215): {}", number));
     }
-    return Pro::makePid(type, static_cast<uint32_t>(number));
+    return ProtoId(type, static_cast<uint32_t>(number)).pid();
 }
 
 std::string MapScriptApi::protoName(int pid) const {
     // A proto that can't be loaded (no data / bad pid) is a real error and is raised. A proto that
     // loads but has no name string is a legitimate empty result.
-    const Pro* pro = resourcesRef().loadPro(static_cast<uint32_t>(pid));
+    const Pro* pro = _resources.tryLoadPro(static_cast<uint32_t>(pid));
     if (pro == nullptr) {
         throw ScriptError(std::format("proto could not be loaded for pid {}", pid));
     }
-    if (Msg* msg = ProHelper::msgFile(resourcesRef(), pro->type()); msg != nullptr) {
+    if (Msg* msg = ProHelper::msgFile(_resources, pro->type()); msg != nullptr) {
         return msg->message(pro->header.message_id).text;
     }
     return {};
@@ -489,32 +447,21 @@ std::string MapScriptApi::protoName(int pid) const {
 int MapScriptApi::protoFid(int pid) const {
     // The proto's art FID, what placeProto resolves and stores, so a generator can identify art rather
     // than reason from the proto number. Hard-fail: an unloadable proto is raised, never guessed.
-    const Pro* pro = nullptr;
-    try {
-        pro = resourcesRef().loadPro(static_cast<uint32_t>(pid));
-    } catch (const std::exception&) {
-        pro = nullptr;
-    }
-    if (pro == nullptr) {
-        throw ScriptError(std::format(
-            "proto 0x{:08x} can't be loaded — check the pid and that the Fallout 2 data is mounted",
-            static_cast<uint32_t>(pid)));
-    }
-    return pro->header.FID;
+    return loadProOrRaise(_resources, pid).header.FID;
 }
 
-std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
-    // Proto -> art FID -> FRM, the path placeProto and the renderer take, flattened to per-frame
-    // geometry. Hard-fail: a caller measuring footprints cannot recover from a silent wrong answer.
+const Frm& MapScriptApi::protoFrm(int pid) const {
+    // Proto -> art FID -> FRM, the path placeProto and the renderer take. Hard-fail: a caller
+    // measuring footprints cannot recover from a silent wrong answer.
     const int fid = protoFid(pid); // raises if the proto can't load
-    const std::string artPath = resourcesRef().frmResolver().resolve(static_cast<uint32_t>(fid));
+    const std::string artPath = _resources.frmResolver().resolve(static_cast<uint32_t>(fid));
     if (artPath.empty()) {
         throw ScriptError(std::format("proto 0x{:08x} art (fid 0x{:08x}) does not resolve to an FRM path",
             static_cast<uint32_t>(pid), static_cast<uint32_t>(fid)));
     }
     const Frm* frm = nullptr;
     try {
-        frm = resourcesRef().repository().load<Frm>(artPath);
+        frm = _resources.repository().load<Frm>(artPath);
     } catch (const std::exception&) {
         frm = nullptr;
     }
@@ -522,8 +469,13 @@ std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
         throw ScriptError(std::format("proto 0x{:08x} art '{}' has no renderable frame",
             static_cast<uint32_t>(pid), artPath));
     }
+    return *frm;
+}
+
+std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
+    // The FRM flattened to per-frame geometry.
     std::vector<int> out;
-    const auto& directions = frm->directions();
+    const auto& directions = protoFrm(pid).directions();
     for (int d = 0; d < static_cast<int>(directions.size()); ++d) {
         const auto& frames = directions[d].frames();
         out.reserve(out.size() + frames.size() * 6);
@@ -540,12 +492,31 @@ std::vector<int> MapScriptApi::protoArtFrames(int pid) const {
     return out;
 }
 
-void MapScriptApi::beginBatch(const std::string& description) {
-    controllerRef().beginBatch(description);
-}
-
-void MapScriptApi::endBatch() {
-    controllerRef().endBatch();
+std::vector<int> MapScriptApi::artRect(int pid, int hex) const {
+    if (!isValidHex(hex)) {
+        throw ScriptError(std::format("artRect: hex {} is off the 200x200 hex grid", hex));
+    }
+    const auto& direction = protoFrm(pid).directions().front();
+    if (direction.frames().empty()) {
+        throw ScriptError(std::format("artRect: proto 0x{:08x} art has no frame", static_cast<uint32_t>(pid)));
+    }
+    const Frame& frame = direction.frames().front();
+    // fallout2-ce tile.cc tileToScreenXY with the view origin at (0, 0): columns run right to left,
+    // and an odd column (counted from the right) sits half a hex lower.
+    const int col = HexagonGrid::GRID_WIDTH - 1 - hex % HexagonGrid::GRID_WIDTH;
+    const int row = hex / HexagonGrid::GRID_WIDTH;
+    int x = 48 * (col / 2) + 16 * row;
+    int y = -12 * (col / 2) + 12 * row;
+    if (col % 2 != 0) {
+        x += 32;
+    }
+    // object.cc objectGetRect: the art hangs from (tile + (16, 8) + the direction's shift), centred
+    // on x, bottom on y. Rotation 0, frame 0 and no per-object pixel offset, as the map objects
+    // scripts place.
+    const int anchorX = x + 16 + direction.shiftX();
+    const int anchorY = y + 8 + direction.shiftY();
+    const int left = anchorX - frame.width() / 2;
+    return { left, anchorY - frame.height() + 1, left + frame.width() - 1, anchorY };
 }
 
 std::size_t MapScriptApi::sinkCap() const {
@@ -556,11 +527,8 @@ std::size_t MapScriptApi::sinkCap() const {
     return kSinkCapFactor * std::max<std::size_t>(footprint, 1);
 }
 
-bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction) {
-    // Placement is map state: with no map open this must raise rather than write through the
-    // controller's own reference. The (void) discards a [[nodiscard]] (MSVC C4834 under /WX).
-    (void)mapRef();
-
+bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction,
+    ProtoScript protoScript) {
     // Plan sink active: build the object exactly as the commit paths do, then record it into the plan
     // instead of committing. PlacementBatch::replay applies it later, matching a direct run.
     if (_planSink != nullptr) {
@@ -572,13 +540,13 @@ bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, i
         }
         std::shared_ptr<Object> object;
         if (_buildSprites) {
-            object = pattern::buildSpriteObject(resourcesRef(), hexgridRef(), frmPid, hex, direction);
+            object = pattern::buildSpriteObject(_resources, _hexgrid, frmPid, hex, direction);
             if (!object) {
                 return false;
             }
             object->setMapObject(mapObject);
         }
-        _planSink->objects.push_back({ mapObject, std::move(object) }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
+        _planSink->objects.push_back({ mapObject, std::move(object), protoScript == ProtoScript::Attach }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
         ++_placedObjects;
         return true;
     }
@@ -586,7 +554,7 @@ bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, i
     // Headless: record data only. The .map stores just these ids and the art resolves at load, so no
     // sprite or GL is needed and the FRM need not be mounted.
     if (!_buildSprites) {
-        if (controllerRef().registerObjectData(mapObject)) {
+        if (_controller.registerObjectData(mapObject, protoScript)) {
             ++_placedObjects;
             return true;
         }
@@ -595,12 +563,12 @@ bool MapScriptApi::registerObject(const std::shared_ptr<MapObject>& mapObject, i
 
     // GUI: the object draws a sprite, so it requires resolvable art; without it there is
     // nothing to place (the same skip the prefab stamper makes when a fid can't load).
-    auto object = pattern::buildSpriteObject(resourcesRef(), hexgridRef(), frmPid, hex, direction);
+    auto object = pattern::buildSpriteObject(_resources, _hexgrid, frmPid, hex, direction);
     if (!object) {
         return false;
     }
     object->setMapObject(mapObject);
-    if (controllerRef().registerObjectPlacement(mapObject, object)) {
+    if (_controller.registerObjectPlacement(mapObject, object, protoScript)) {
         ++_placedObjects;
         return true;
     }
@@ -620,8 +588,9 @@ bool MapScriptApi::placeObject(uint32_t proPid, uint32_t frmPid, int hex, uint32
     mapObject->y = 0;
     mapObject->pro_pid = proPid;
     mapObject->frm_pid = frmPid;
+    object_query::applyProtoDefaults(*mapObject, _resources);
 
-    return registerObject(mapObject, hex, frmPid, direction);
+    return registerObject(mapObject, hex, frmPid, direction, ProtoScript::Attach);
 }
 
 bool MapScriptApi::placeProto(uint32_t proPid, int hex, uint32_t direction) {
@@ -632,7 +601,7 @@ bool MapScriptApi::placeProto(uint32_t proPid, int hex, uint32_t direction) {
     // so callers place by PID alone. A proto we can't load has no art to place.
     uint32_t frmPid = 0;
     try {
-        if (const Pro* pro = resourcesRef().loadPro(proPid);
+        if (const Pro* pro = _resources.tryLoadPro(proPid);
             pro != nullptr) {
             frmPid = static_cast<uint32_t>(pro->header.FID);
         }
@@ -672,18 +641,15 @@ bool MapScriptApi::paintTile(int tileIndex, uint16_t tileId, bool isRoof) {
         return true;
     }
     std::vector<TileChange> changes{ { _elevation, tileIndex, isRoof, before, tileId } };
-    controllerRef().applyTileChanges(changes, true);
-    controllerRef().registerTileEdit(isRoof ? "Script: paint roof" : "Script: paint floor", changes);
+    _controller.applyTileChanges(changes, true);
+    _controller.registerTileEdit(isRoof ? "Script: paint roof" : "Script: paint floor", changes);
     ++_paintedTiles;
     return true;
 }
 
 // --- Coordinates -------------------------------------------------------------
 int MapScriptApi::hexIndex(int col, int row) const {
-    if (col < 0 || col >= HexagonGrid::GRID_WIDTH || row < 0 || row >= HexagonGrid::GRID_HEIGHT) {
-        return -1;
-    }
-    return row * HexagonGrid::GRID_WIDTH + col;
+    return hexgrid::positionOf({ col, row }).value_or(-1);
 }
 
 int MapScriptApi::tileIndex(int col, int row) const {
@@ -694,11 +660,11 @@ int MapScriptApi::tileIndex(int col, int row) const {
 }
 
 int MapScriptApi::hexCol(int hex) const {
-    return (hex >= 0 && hex < HexagonGrid::POSITION_COUNT) ? hex % HexagonGrid::GRID_WIDTH : -1;
+    return isValidHex(hex) ? hexgrid::columnOf(hex) : -1;
 }
 
 int MapScriptApi::hexRow(int hex) const {
-    return (hex >= 0 && hex < HexagonGrid::POSITION_COUNT) ? hex / HexagonGrid::GRID_WIDTH : -1;
+    return isValidHex(hex) ? hexgrid::rowOf(hex) : -1;
 }
 
 int MapScriptApi::tileCol(int tile) const {
@@ -733,7 +699,7 @@ int MapScriptApi::hexTile(int hex) const {
     if (!isValidHex(hex)) {
         return -1;
     }
-    const auto h = hexgridRef().getHexByPosition(static_cast<uint32_t>(hex));
+    const auto h = _hexgrid.getHexByPosition(static_cast<uint32_t>(hex));
     if (!h.has_value()) {
         return -1;
     }
@@ -797,7 +763,7 @@ bool MapScriptApi::areaContainsTile(int tileIndex) const {
 
 // --- Deterministic helpers ---------------------------------------------------
 uint32_t MapScriptApi::objectAt(int hex) const {
-    const auto& byElevation = mapRef().getMapFile().map_objects;
+    const auto& byElevation = _map.getMapFile().map_objects;
     const auto it = byElevation.find(_elevation);
     if (it == byElevation.end()) {
         return 0;
@@ -836,24 +802,22 @@ bool MapScriptApi::paintFloorXY(int col, int row, uint16_t tileId) {
     return paintFloor(tileIndex(col, row), tileId);
 }
 
-int MapScriptApi::fillFloorRect(int col0, int row0, int col1, int row1, uint16_t tileId) {
+int MapScriptApi::fillTileRect(int col0, int row0, int col1, int row1, uint16_t tileId, bool isRoof) {
     int painted = 0;
     for (const int tile : tilesInRect(col0, row0, col1, row1)) {
-        if (paintFloor(tile, tileId)) {
+        if (paintTile(tile, tileId, isRoof)) {
             ++painted;
         }
     }
     return painted;
 }
 
+int MapScriptApi::fillFloorRect(int col0, int row0, int col1, int row1, uint16_t tileId) {
+    return fillTileRect(col0, row0, col1, row1, tileId, false);
+}
+
 int MapScriptApi::fillRoofRect(int col0, int row0, int col1, int row1, uint16_t tileId) {
-    int painted = 0;
-    for (const int tile : tilesInRect(col0, row0, col1, row1)) {
-        if (paintRoof(tile, tileId)) {
-            ++painted;
-        }
-    }
-    return painted;
+    return fillTileRect(col0, row0, col1, row1, tileId, true);
 }
 
 int MapScriptApi::fillRegion(int col, int row, uint16_t tileId) {
@@ -902,7 +866,7 @@ void MapScriptApi::quiltSource(int col0, int row0, int col1, int row1) {
 }
 
 int MapScriptApi::quiltObjects(const std::string& typeName, const std::vector<int>& excludePids) {
-    const Pro::OBJECT_TYPE wanted = objectTypeFromName(typeName); // throws on an unknown type
+    const ObjectType wanted = objectTypeFromName(typeName); // throws on an unknown type
     if (_lastQuilt.refElevation < 0) {
         throw ScriptError("quiltObjects: run quiltFloorRect/quiltFloorTiles first — it records which reference cells were copied");
     }
@@ -917,7 +881,7 @@ int MapScriptApi::quiltObjects(const std::string& typeName, const std::vector<in
         return 0; // the reference elevation holds no objects — a valid empty transplant
     }
     for (const auto& object : it->second) {
-        if (!object || object->position == -1 || Pro::typeOfPid(object->pro_pid) != wanted) {
+        if (!object || object->position == -1 || ProtoId(object->pro_pid).objectType() != wanted) {
             continue;
         }
         if (std::ranges::find(excludePids, static_cast<int>(object->pro_pid)) != excludePids.end()) {
@@ -944,6 +908,70 @@ int MapScriptApi::quiltObjects(const std::string& typeName, const std::vector<in
             if (hex >= 0 && placeObject(source->pro_pid, source->frm_pid, hex, source->direction)) {
                 ++placed;
             }
+        }
+    }
+    return placed;
+}
+
+std::vector<int> MapScriptApi::blockedHexes() const {
+    std::vector<std::shared_ptr<MapObject>> objects;
+    const auto& objectsByElevation = _map.getMapFile().map_objects;
+    if (const auto it = objectsByElevation.find(_elevation); it != objectsByElevation.end()) {
+        objects = it->second;
+    }
+    if (_planSink != nullptr) {
+        for (const auto& entry : _planSink->objects) {
+            if (entry.mapObject && static_cast<int>(entry.mapObject->elevation) == _elevation) {
+                objects.push_back(entry.mapObject);
+            }
+        }
+    }
+    const std::vector<char> mask = reachability::blockedMask(_resources, objects);
+    std::vector<int> hexes;
+    for (int hex = 0; hex < static_cast<int>(mask.size()); ++hex) {
+        if (mask[hex] != 0) {
+            hexes.push_back(hex);
+        }
+    }
+    return hexes;
+}
+
+int MapScriptApi::copyObjects(const std::string& mapPath, int refElevation, const std::vector<std::string>& typeNames,
+    const std::vector<int>& excludePids) {
+    std::vector<ObjectType> wanted;
+    for (const auto& typeName : typeNames) {
+        wanted.push_back(objectTypeFromName(typeName)); // throws on an unknown type
+    }
+    const Map& reference = referenceMap(mapPath); // throws if unreadable
+    const auto& objectsByElevation = reference.getMapFile().map_objects;
+    const auto it = objectsByElevation.find(refElevation);
+    if (it == objectsByElevation.end()) {
+        return 0; // the reference elevation holds no objects — a valid empty copy
+    }
+    // One pass in the reference's own order: objects sharing a hex draw in list order, so copying
+    // one type after another would stack e.g. a rock over the wall on its hex.
+    int placed = 0;
+    for (const auto& object : it->second) {
+        if (!object || object->position < 0 || std::ranges::find(wanted, ProtoId(object->pro_pid).objectType()) == wanted.end()) {
+            continue;
+        }
+        if (std::ranges::find(excludePids, static_cast<int>(object->pro_pid)) != excludePids.end()) {
+            continue;
+        }
+        // The whole record — instance flags (flat, no-block, hidden), light, pixel offset, frame —
+        // not just pid/art/direction: the engine reads those from the map, not the proto. What
+        // ties it to the source map stays behind: its script and its inventory.
+        std::shared_ptr<MapObject> copy = object->cloneDeep();
+        copy->elevation = static_cast<uint32_t>(_elevation);
+        copy->script_id = -1;
+        copy->map_scripts_pid = -1;
+        copy->critter_index = -1;
+        copy->inventory.clear();
+        copy->objects_in_inventory = 0;
+        // As the engine's _obj_copy: a scripted source gets its proto's script back, an unscripted one none.
+        const ProtoScript protoScript = object->map_scripts_pid != -1 ? ProtoScript::Attach : ProtoScript::None;
+        if (registerObject(copy, copy->position, copy->frm_pid, copy->direction, protoScript)) {
+            ++placed;
         }
     }
     return placed;
@@ -1056,7 +1084,7 @@ int MapScriptApi::placeStamp(const std::string& name, int anchorHex, int variant
     if (variant < 0 || variant >= static_cast<int>(pattern.variants.size())) {
         throw ScriptError("placeStamp: variant " + std::to_string(variant) + " out of range for stamp '" + name + "'");
     }
-    pattern::PatternStamper stamper(resourcesRef(), hexgridRef(), controllerRef(), mapRef(), _buildSprites);
+    pattern::PatternStamper stamper(_resources, _hexgrid, _controller, _map, _buildSprites);
     // Plan sink active: capture the stamp's objects/tiles into the plan, so it previews and lands in
     // the fill's single undo entry instead of opening its own batch against the live map.
     if (_planSink != nullptr) {
@@ -1092,10 +1120,7 @@ void MapScriptApi::newMap() {
     if (_planSink != nullptr) {
         throw ScriptError("newMap() is not allowed in a fill — it would reset the live map");
     }
-    // Resetting is map state: with the api's map null the controller may still be bound to one, and
-    // resetting it behind the host's back would desync the two.
-    (void)mapRef();
-    controllerRef().newEmptyMap();
+    _controller.newEmptyMap();
     _mutatedDirectly = true;
 }
 
@@ -1113,7 +1138,7 @@ void MapScriptApi::setPlayerStart(int hex, int orientation, int elevation) {
         throw ScriptError("setPlayerStart: elevation must be 0.." + std::to_string(Map::ELEVATION_COUNT - 1)
             + ", got " + std::to_string(elevation));
     }
-    auto& header = mapRef().getMapFile().header;
+    auto& header = _map.getMapFile().header;
     header.player_default_position = static_cast<uint32_t>(hex);
     header.player_default_orientation = static_cast<uint32_t>(orientation);
     header.player_default_elevation = static_cast<uint32_t>(elevation);
@@ -1126,9 +1151,9 @@ void MapScriptApi::setElevation(int elevation) {
     }
     // A .map only carries the elevations its header enables; editing an absent one would write
     // into a tile block that doesn't exist. Same contract as generate --in's validation.
-    if (!mapRef().getMapFile().tiles.contains(elevation)) {
+    if (!_map.getMapFile().tiles.contains(elevation)) {
         std::string present;
-        for (const int level : mapRef().getMapFile().tiles | std::views::keys) {
+        for (const int level : _map.getMapFile().tiles | std::views::keys) {
             present += std::format(" {}", level);
         }
         throw ScriptError(std::format("setElevation: the map has no elevation {} (present:{})", elevation, present));
@@ -1145,7 +1170,7 @@ namespace {
             throw ScriptError("placeExitGrid: destMapId must be a map id, -1 (town map) or -2 (worldmap), got "
                 + std::to_string(destMapId));
         }
-        if (destHex < 0 || destHex >= HexagonGrid::POSITION_COUNT) {
+        if (!hexgrid::isValidPosition(destHex)) {
             throw ScriptError("placeExitGrid: destHex must be 0..39999, got " + std::to_string(destHex));
         }
         if (destElevation < 0 || destElevation >= Map::ELEVATION_COUNT) {
@@ -1187,11 +1212,12 @@ bool MapScriptApi::placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid
     mapObject->y = 0;
     mapObject->pro_pid = proPid;
     mapObject->frm_pid = frmPid;
+    object_query::applyProtoDefaults(*mapObject, _resources);
     mapObject->exit_map = dest.map;
     mapObject->exit_position = static_cast<uint32_t>(dest.hex);
     mapObject->exit_elevation = static_cast<uint32_t>(dest.elevation);
     mapObject->exit_orientation = static_cast<uint32_t>(dest.orientation);
-    return registerObject(mapObject, hex, frmPid, 0);
+    return registerObject(mapObject, hex, frmPid, 0, ProtoScript::None);
 }
 
 bool MapScriptApi::placeExitGrid(int hex, int destMapId, int destHex, int destElevation, int orientation) {
@@ -1205,6 +1231,41 @@ bool MapScriptApi::placeExitGrid(int hex, int destMapId, int destHex, int destEl
     // family the destination implies (green inter-map / brown world-town).
     const ExitGridArt art = exitGridArtForDirection(ExitGrid::DIR_BOTTOM, destinationKindFor(dest));
     return placeExitGridMarker(hex, art.proPid, art.frmPid, { dest, destHex, destElevation, orientation });
+}
+
+int MapScriptApi::copyExitGrids(const std::string& mapPath, int refElevation, const std::vector<int>& hexes,
+    int destMapId, int destHex, int destElevation, int orientation) {
+    validateExitGridDest(destMapId, destHex, destElevation, orientation);
+    const Map& reference = referenceMap(mapPath); // throws if unreadable
+    const auto& objectsByElevation = reference.getMapFile().map_objects;
+    const auto it = objectsByElevation.find(refElevation);
+    if (it == objectsByElevation.end()) {
+        return 0;
+    }
+    const auto dest = static_cast<uint32_t>(destMapId);
+    const ExitGridDestinationKind kind = destinationKindFor(dest);
+    int placed = 0;
+    for (const auto& object : it->second) {
+        if (!object || !object->isExitGridMarker() || std::ranges::find(hexes, object->position) == hexes.end()) {
+            continue;
+        }
+        // Keep the marker's own direction (its proto: which bar, which way it faces), so the exit
+        // line reads as the mappers drew it; only the art family follows the new destination.
+        const int dir = static_cast<int>(object->pro_pid - ExitGrid::FIRST_EXIT_GRID_PID);
+        std::shared_ptr<MapObject> copy = object->cloneDeep();
+        copy->elevation = static_cast<uint32_t>(_elevation);
+        copy->script_id = -1;
+        copy->map_scripts_pid = -1;
+        copy->frm_pid = exitGridArtForDirection(dir, kind).frmPid;
+        copy->exit_map = dest;
+        copy->exit_position = static_cast<uint32_t>(destHex);
+        copy->exit_elevation = static_cast<uint32_t>(destElevation);
+        copy->exit_orientation = static_cast<uint32_t>(orientation);
+        if (registerObject(copy, copy->position, copy->frm_pid, copy->direction, ProtoScript::None)) {
+            ++placed;
+        }
+    }
+    return placed;
 }
 
 int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int screenHalfHeight,
@@ -1246,7 +1307,7 @@ int MapScriptApi::placeExitGridRect(int centerHex, int screenHalfWidth, int scre
 
 std::array<std::vector<int>, 4> MapScriptApi::screenRectEdges(int centerHex, int screenHalfWidth, int screenHalfHeight) const {
     std::array<std::vector<int>, 4> edges;
-    const auto centre = hexgridRef().getHexByPosition(static_cast<uint32_t>(centerHex));
+    const auto centre = _hexgrid.getHexByPosition(static_cast<uint32_t>(centerHex));
     if (!centre.has_value()) {
         return edges;
     }
@@ -1259,15 +1320,15 @@ std::array<std::vector<int>, 4> MapScriptApi::screenRectEdges(int centerHex, int
 
     // The four screen corners; each edge is the gap-free hex line between two of them, walked along
     // the iso staircase so the vertical sides are continuous (not a sparse single column).
-    const int tl = nearestHex(hexgridRef(), left, top);
-    const int tr = nearestHex(hexgridRef(), right, top);
-    const int bl = nearestHex(hexgridRef(), left, bottom);
-    const int br = nearestHex(hexgridRef(), right, bottom);
+    const int tl = nearestHex(_hexgrid, left, top);
+    const int tr = nearestHex(_hexgrid, right, top);
+    const int bl = nearestHex(_hexgrid, left, bottom);
+    const int br = nearestHex(_hexgrid, right, bottom);
 
-    edges[0] = hexline::hexLine(hexgridRef(), tl, tr); // top
-    edges[1] = hexline::hexLine(hexgridRef(), bl, br); // bottom
-    edges[2] = hexline::hexLine(hexgridRef(), tl, bl); // left
-    edges[3] = hexline::hexLine(hexgridRef(), tr, br); // right
+    edges[0] = hexline::hexLine(tl, tr); // top
+    edges[1] = hexline::hexLine(bl, br); // bottom
+    edges[2] = hexline::hexLine(tl, bl); // left
+    edges[3] = hexline::hexLine(tr, br); // right
     return edges;
 }
 

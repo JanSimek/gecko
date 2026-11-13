@@ -65,7 +65,7 @@ int countUnobservedSeams(const Grid& grid, const AdjacencyModel& model) {
 
 } // namespace
 
-TEST_CASE("learnAdjacency records ordered directional pairs", "[floorsynth]") {
+TEST_CASE("learnAdjacency records ordered directional pairs", "[floor_synth]") {
     // [ 10 11 ]
     // [ 12 10 ]
     const Grid grid = makeGrid(2, 2, [](int col, int row) {
@@ -88,7 +88,7 @@ TEST_CASE("learnAdjacency records ordered directional pairs", "[floorsynth]") {
     CHECK(model.marginal.at(12) == 1);
 }
 
-TEST_CASE("learnAdjacency never counts pairs touching the empty id", "[floorsynth]") {
+TEST_CASE("learnAdjacency never counts pairs touching the empty id", "[floor_synth]") {
     // [ 10  E ]
     // [  E 11 ]
     const Grid grid = makeGrid(2, 2, [](int col, int row) {
@@ -103,7 +103,7 @@ TEST_CASE("learnAdjacency never counts pairs touching the empty id", "[floorsynt
     CHECK(model.marginal.count(EMPTY) == 0);
 }
 
-TEST_CASE("synthesize covers the region exactly, ascending, without the empty id", "[floorsynth]") {
+TEST_CASE("synthesize covers the region exactly, ascending, without the empty id", "[floor_synth]") {
     const Grid reference = makeGrid(20, 20, periodicId);
     const Grid target = makeGrid(30, 30, [](int, int) { return EMPTY; });
     const std::vector<int> region = rectRegion(target, 0, 0, 29, 29);
@@ -126,7 +126,7 @@ TEST_CASE("synthesize covers the region exactly, ascending, without the empty id
     }
 }
 
-TEST_CASE("synthesize produces only reference-observed seams on a clean run", "[floorsynth]") {
+TEST_CASE("synthesize produces only reference-observed seams on a clean run", "[floor_synth]") {
     const Grid reference = makeGrid(20, 20, periodicId);
     const Grid target = makeGrid(30, 30, [](int, int) { return EMPTY; });
     const std::vector<int> region = rectRegion(target, 0, 0, 29, 29);
@@ -151,7 +151,7 @@ TEST_CASE("synthesize produces only reference-observed seams on a clean run", "[
     }
 }
 
-TEST_CASE("synthesize is deterministic for a seed and varies across seeds", "[floorsynth]") {
+TEST_CASE("synthesize is deterministic for a seed and varies across seeds", "[floor_synth]") {
     const Grid reference = makeGrid(20, 20, periodicId);
     const Grid target = makeGrid(24, 24, [](int, int) { return EMPTY; });
     const std::vector<int> region = rectRegion(target, 0, 0, 23, 23);
@@ -173,7 +173,7 @@ TEST_CASE("synthesize is deterministic for a seed and varies across seeds", "[fl
     CHECK(anySeedDiffers);
 }
 
-TEST_CASE("synthesize result is independent of the caller's region ordering", "[floorsynth]") {
+TEST_CASE("synthesize result is independent of the caller's region ordering", "[floor_synth]") {
     const Grid reference = makeGrid(20, 20, periodicId);
     const Grid target = makeGrid(16, 16, [](int, int) { return EMPTY; });
     std::vector<int> region = rectRegion(target, 2, 2, 13, 13);
@@ -192,7 +192,7 @@ TEST_CASE("synthesize result is independent of the caller's region ordering", "[
     CHECK(sorted.cells == shuffled.cells);
 }
 
-TEST_CASE("synthesize blends into pre-existing tiles: hole inpainting restores the pattern", "[floorsynth]") {
+TEST_CASE("synthesize blends into pre-existing tiles: hole inpainting restores the pattern", "[floor_synth]") {
     const Grid reference = makeGrid(20, 20, periodicId);
     // Target carries the same pattern (phase 0) with a 10x10 hole; the only zero-penalty
     // continuation of the surrounding constraints is the original content.
@@ -211,7 +211,7 @@ TEST_CASE("synthesize blends into pre-existing tiles: hole inpainting restores t
     CHECK(result.stats.repairedCells == 0);
 }
 
-TEST_CASE("synthesize never bridges vocabularies an empty stripe separates", "[floorsynth]") {
+TEST_CASE("synthesize never bridges vocabularies an empty stripe separates", "[floor_synth]") {
     // Left 10 columns: vocabulary A (periodic). Column 10: empty stripe. Right 10 columns:
     // vocabulary B (periodic, disjoint ids). No A|B pair exists in the reference.
     const Grid reference = makeGrid(21, 20, [](int col, int row) -> uint16_t {
@@ -243,7 +243,7 @@ TEST_CASE("synthesize never bridges vocabularies an empty stripe separates", "[f
         CHECK((id < 200) == firstLeft);
 }
 
-TEST_CASE("synthesize fills an irregular region and touches nothing else", "[floorsynth]") {
+TEST_CASE("synthesize fills an irregular region and touches nothing else", "[floor_synth]") {
     const Grid reference = makeGrid(20, 20, periodicId);
     const Grid target = makeGrid(20, 20, [](int, int) { return EMPTY; });
 
@@ -266,7 +266,7 @@ TEST_CASE("synthesize fills an irregular region and touches nothing else", "[flo
     }
 }
 
-TEST_CASE("synthesize degrades the block size for a tiny reference and still completes", "[floorsynth]") {
+TEST_CASE("synthesize degrades the block size for a tiny reference and still completes", "[floor_synth]") {
     // 3x3 reference: blockSize 5 must degrade to K=3 windows.
     const Grid reference = makeGrid(3, 3, [](int col, int row) {
         return static_cast<uint16_t>(50 + col + 3 * row);
@@ -286,7 +286,7 @@ TEST_CASE("synthesize degrades the block size for a tiny reference and still com
     }
 }
 
-TEST_CASE("synthesize reports honest stats when the reference cannot satisfy the seams", "[floorsynth]") {
+TEST_CASE("synthesize reports honest stats when the reference cannot satisfy the seams", "[floor_synth]") {
     // A 1x1 reference has no windows and no observed pairs: every cell falls to the marginal rung
     // and every generated seam stays unobserved — the stats must say so, loudly.
     const Grid reference = makeGrid(1, 1, [](int, int) { return static_cast<uint16_t>(77); });
@@ -314,7 +314,7 @@ TEST_CASE("synthesize reports honest stats when the reference cannot satisfy the
     }
 }
 
-TEST_CASE("synthesize assigns nothing for an all-empty reference or an empty region", "[floorsynth]") {
+TEST_CASE("synthesize assigns nothing for an all-empty reference or an empty region", "[floor_synth]") {
     const Grid emptyReference = makeGrid(5, 5, [](int, int) { return EMPTY; });
     const Grid target = makeGrid(6, 6, [](int, int) { return EMPTY; });
 

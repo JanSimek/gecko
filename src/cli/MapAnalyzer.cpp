@@ -1,6 +1,9 @@
 #include "cli/MapAnalyzer.h"
 
+#include "cli/CritterCombatFlags.h"
+
 #include "cli/MapLoad.h"
+#include "cli/ScriptLookup.h"
 #include "editor/FloorSynth.h"
 #include "editor/HexGeometry.h"
 #include "editor/HexagonGrid.h"
@@ -13,26 +16,28 @@
 #include "format/map/Tile.h"
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
+#include "reader/TextParsing.h"
 #include "resource/AiTxtLoader.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
-#include "resource/ResourcePaths.h"
 #include "resource/ScriptNames.h"
 #include "util/ProHelper.h"
 
 #include <nlohmann/json.hpp>
+
+#include <optional>
+#include <regex>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <format>
 #include <map>
 #include <memory>
 #include <numeric>
-#include <optional>
 #include <ostream>
 #include <string>
 #include <tuple>
@@ -44,9 +49,8 @@ namespace geck::cli {
 
 namespace {
 
-    std::string baseName(const std::string& path) {
-        const auto slash = path.find_last_of("/\\");
-        return slash == std::string::npos ? path : path.substr(slash + 1);
+    std::string fileNameOf(const std::string& path) {
+        return std::filesystem::path(path).filename().string();
     }
 
     // The object's raw engine PID, "0x%08X" — the actual identifier a generator/MCP client
@@ -57,7 +61,7 @@ namespace {
 
     // Category label for a PID's type byte, via the canonical Pro mapping (no local table).
     std::string typeLabel(uint32_t pid) {
-        return Pro::typeToString(Pro::typeOfPid(pid));
+        return Pro::typeToString(ProtoId(pid).objectType());
     }
 
     // Histogram entries sorted by count (descending), then by key for a stable order.
@@ -139,8 +143,8 @@ namespace {
             }
             uint32_t packet = 0;
             try {
-                const Pro* pro = _resources.loadPro(pid);
-                if (pro != nullptr && pro->type() == Pro::OBJECT_TYPE::CRITTER) {
+                const Pro* pro = _resources.tryLoadPro(pid);
+                if (pro != nullptr && pro->type() == ObjectType::Critter) {
                     packet = pro->critterData.aiPacket;
                 }
             } catch (const std::exception& e) {
@@ -170,7 +174,7 @@ namespace {
             bool loaded = false;
             bool flat = false;
             try {
-                if (const Pro* pro = _resources.loadPro(pid); pro != nullptr) {
+                if (const Pro* pro = _resources.tryLoadPro(pid); pro != nullptr) {
                     loaded = true;
                     flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
                 }
@@ -186,8 +190,8 @@ namespace {
             std::string file;
             try {
                 const std::string proPath = ProHelper::basePath(_resources, pid);
-                file = baseName(proPath);
-                if (const Pro* pro = _resources.repository().load<Pro>(proPath); pro != nullptr) {
+                file = fileNameOf(proPath);
+                if (const Pro* pro = _resources.repository().tryLoad<Pro>(proPath); pro != nullptr) {
                     if (Msg* msg = ProHelper::msgFile(_resources, pro->type()); msg != nullptr) {
                         engineName = msg->message(pro->header.message_id).text;
                     }
@@ -208,60 +212,6 @@ namespace {
         std::unordered_map<uint32_t, bool> _resolved;
         std::unordered_map<uint32_t, uint32_t> _critterAiPackets;
     };
-
-    // The mounted scripts.lst (script_id is a 0-based index into list()), or nullptr if absent.
-    const Lst* loadScriptsLst(resource::GameResources& resources) {
-        try {
-            return resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
-        } catch (const std::exception& e) {
-            spdlog::debug("loadScriptsLst: {}", e.what());
-            return nullptr;
-        }
-    }
-
-    // {programIndex, filename} for an object's attached script, or nullopt. The object's SID matches a
-    // MapScript whose script_id is the 0-based scripts.lst index (no offset, as the engine does).
-    std::optional<std::pair<int, std::string>> resolveObjectScript(Map& map, int32_t mapScriptsPid, const Lst* scriptsLst) {
-        if (mapScriptsPid < 0) {
-            return std::nullopt;
-        }
-        const auto sid = static_cast<uint32_t>(mapScriptsPid);
-        const int section = MapScript::sidSection(sid);
-        const auto& sections = map.getMapFile().map_scripts;
-        if (section < 0 || section >= Map::SCRIPT_SECTIONS) {
-            return std::nullopt;
-        }
-        for (const auto& script : sections[section]) {
-            if (script.pid == sid) {
-                const int programIndex = static_cast<int>(script.script_id);
-                std::string name;
-                if (scriptsLst != nullptr && programIndex >= 0 && programIndex < static_cast<int>(scriptsLst->list().size())) {
-                    name = scriptsLst->at(programIndex);
-                }
-                return std::make_pair(programIndex, name);
-            }
-        }
-        return std::nullopt;
-    }
-
-    // The MapScript an object's SID points at, or nullptr. Mirrors resolveObjectScript's lookup so the
-    // caller can read local variables without re-deriving the section.
-    const MapScript* findObjectScript(Map& map, int32_t mapScriptsPid) {
-        if (mapScriptsPid < 0) {
-            return nullptr;
-        }
-        const auto sid = static_cast<uint32_t>(mapScriptsPid);
-        const int section = MapScript::sidSection(sid);
-        if (section < 0 || section >= Map::SCRIPT_SECTIONS) {
-            return nullptr;
-        }
-        for (const auto& script : map.getMapFile().map_scripts[section]) {
-            if (script.pid == sid) {
-                return &script;
-            }
-        }
-        return nullptr;
-    }
 
     // Ordered so the emitted objects keep the field order below (nlohmann's default json sorts keys).
     using ordered_json = nlohmann::ordered_json;
@@ -438,7 +388,7 @@ namespace {
         }
 
         const MapUsage usage = collectUsage(*map);
-        out << "=== " << baseName(mapPath) << " ===\n";
+        out << "=== " << fileNameOf(mapPath) << " ===\n";
         out << "  floor tiles (" << usage.floors.size() << "):\n";
         for (const auto& [id, count] : sortedByCountDesc(usage.floors)) {
             out << "    " << names.tileName(id) << "  x" << count << "\n";
@@ -488,7 +438,7 @@ namespace {
     ordered_json objectsToJson(const MapUsage& usage, NameResolver& names, Aggregate& agg) {
         auto array = ordered_json::array();
         for (const auto& [pid, count] : sortedByCountDesc(usage.objects)) {
-            array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu }, { "type", typeLabel(pid) },
+            array.push_back({ { "pid", pidHex(pid) }, { "number", ProtoId(pid).protoId() }, { "type", typeLabel(pid) },
                 { "name", names.protoName(pid) }, { "count", count }, { "flat", names.isFlat(pid) } });
             agg.objCount[pid] += count;
             agg.objMaps[pid]++;
@@ -509,7 +459,7 @@ namespace {
     ordered_json aggObjectsToJson(const Aggregate& agg, NameResolver& names) {
         auto array = ordered_json::array();
         for (const auto& [pid, count] : sortedByCountDesc(agg.objCount)) {
-            array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu }, { "type", typeLabel(pid) },
+            array.push_back({ { "pid", pidHex(pid) }, { "number", ProtoId(pid).protoId() }, { "type", typeLabel(pid) },
                 { "name", names.protoName(pid) }, { "total", count }, { "maps", agg.objMaps.at(pid) }, { "flat", names.isFlat(pid) } });
         }
         return array;
@@ -527,7 +477,7 @@ namespace {
     ordered_json paletteSceneryToJson(const std::map<uint32_t, int>& scenery, NameResolver& names) {
         auto array = ordered_json::array();
         for (const auto& [pid, weight] : sortedByCountDesc(scenery)) {
-            array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
+            array.push_back({ { "pid", pidHex(pid) }, { "number", ProtoId(pid).protoId() },
                 { "name", names.protoName(pid) }, { "weight", weight } });
         }
         return array;
@@ -551,7 +501,7 @@ namespace {
             for (const auto& [pid, count] : usage.objects) {
                 // Curated palette = scatter-eligible scenery the agent can actually place: scenery
                 // type, the proto resolves (no guessing — keep unplaceable protos out), not flat.
-                if (Pro::typeOfPid(pid) == Pro::OBJECT_TYPE::SCENERY && names.resolved(pid) && !names.isFlat(pid)) {
+                if (ProtoId(pid).objectType() == ObjectType::Scenery && names.resolved(pid) && !names.isFlat(pid)) {
                     scenery[pid] += count;
                 }
             }
@@ -616,32 +566,101 @@ namespace {
             { "areaAttackMode", packet->areaAttackMode }, { "secondaryFreq", packet->secondaryFreq } };
     }
 
-    // Per-map critter array. `team` is the instance group_id; `aiPacket` falls back to the proto
-    // default when 0 and resolves through ai.txt into the behaviour sub-object.
-    ordered_json crittersToJson(Map& map, NameResolver& names, const AiTxt& ai, const Lst* scriptsLst) {
-        auto array = ordered_json::array();
+    bool isHiddenObject(const MapObject& object) {
+        return (object.flags & static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_HIDDEN)) != 0;
+    }
+
+    // Critters by elevation, then combat id.
+    using CombatIdIndex = std::map<uint32_t, std::map<int32_t, const MapObject*>>;
+
+    // whoHitMeCid names another critter by its combat id. combatLoad relinks it only among the critters it lists
+    // again: the non-hidden ones on the player's elevation, first match in object order. A map does not record the
+    // player's elevation, so an id resolves within the critter's own elevation, a hidden critter's never resolves,
+    // and the player (whose record is in SAVE.DAT) is not on the map to be found.
+    const MapObject* combatIdTarget(const CombatIdIndex& byCid, const MapObject& critter, int32_t cid) {
+        if (cid < 0 || isHiddenObject(critter)) {
+            return nullptr;
+        }
+        const auto elevation = byCid.find(critter.elevation);
+        if (elevation == byCid.end()) {
+            return nullptr;
+        }
+        const auto it = elevation->second.find(cid);
+        return it != elevation->second.end() ? it->second : nullptr;
+    }
+
+    // A saved map's live combat state for one critter (header flag MAP_HEADER_SAVED, fallout2-ce
+    // map_defs.h). Shipped maps store zeros in these slots, so it is only reported for saves.
+    ordered_json critterCombatToJson(const MapObject& object, const CombatIdIndex& byCid, NameResolver& names) {
+        const auto whoHitMeCid = static_cast<int32_t>(object.who_hit_me);
+        ordered_json whoHitMe = nullptr;
+        if (const MapObject* hitter = combatIdTarget(byCid, object, whoHitMeCid); hitter != nullptr) {
+            whoHitMe = { { "pid", pidHex(hitter->pro_pid) }, { "name", names.protoName(hitter->pro_pid) },
+                { "hex", hitter->position } };
+        }
+        return { { "cid", object.critter_index }, { "hp", static_cast<int32_t>(object.current_hp) },
+            { "ap", static_cast<int32_t>(object.current_ap) },
+            { "damageLastTurn", static_cast<int32_t>(object.damage_last_turn) },
+            { "maneuver", object.maneuver }, { "maneuverFlags", flagNames(object.maneuver, kCritterManeuverFlags) },
+            { "results", object.combat_results }, { "resultFlags", flagNames(object.combat_results, kDamFlags) },
+            { "whoHitMeCid", whoHitMeCid }, { "whoHitMe", std::move(whoHitMe) } };
+    }
+
+    // The non-hidden critters by elevation and combat id, the first in object order winning, for resolving a saved
+    // map's whoHitMeCid.
+    CombatIdIndex crittersByCombatId(Map& map) {
+        CombatIdIndex byCid;
         for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
             for (const auto& object : mapObjects) {
-                if (!object || object->objectType() != static_cast<uint32_t>(Pro::OBJECT_TYPE::CRITTER)) {
+                if (object && object->objectType() == ObjectType::Critter
+                    && object->critter_index >= 0 && !isHiddenObject(*object)) {
+                    byCid[object->elevation].emplace(object->critter_index, object.get());
+                }
+            }
+        }
+        return byCid;
+    }
+
+    // The attached script as {programIndex, name, localVars} (feed programIndex to describe_script) or
+    // null. localVars is the script's slice of the map's LVAR pool.
+    ordered_json critterScriptJson(const Map& map, const MapObject& object, const Lst* scriptsLst) {
+        // A SID of -1 (no script) names no section, so it finds nothing.
+        const MapScript* script = map.scriptForSid(static_cast<uint32_t>(object.map_scripts_pid));
+        if (script == nullptr) {
+            return nullptr;
+        }
+        const int programIndex = static_cast<int>(script->script_id);
+        std::string name;
+        if (scriptsLst != nullptr && programIndex >= 0 && programIndex < static_cast<int>(scriptsLst->list().size())) {
+            name = scriptsLst->at(programIndex);
+        }
+        return { { "programIndex", programIndex }, { "name", name },
+            { "localVars", localVarsToJson(*script, map.getMapFile().map_local_vars) } };
+    }
+
+    // Per-map critter array. `team` is the instance group_id; `aiPacket` falls back to the proto
+    // default when 0 and resolves through ai.txt into the behaviour sub-object. A saved map also gives
+    // each critter its live combat state.
+    ordered_json crittersToJson(Map& map, NameResolver& names, const AiTxt& ai, const Lst* scriptsLst) {
+        auto array = ordered_json::array();
+        const bool savedMap = (map.getMapFile().header.flags & static_cast<uint32_t>(MapHeaderFlags::Saved)) != 0;
+        const auto byCid = savedMap ? crittersByCombatId(map) : CombatIdIndex{};
+        for (const auto& [elevation, mapObjects] : map.getMapFile().map_objects) {
+            for (const auto& object : mapObjects) {
+                if (!object || object->objectType() != ObjectType::Critter) {
                     continue;
                 }
                 const uint32_t pid = object->pro_pid;
                 const uint32_t packet = object->ai_packet != 0 ? object->ai_packet : names.critterAiPacket(pid);
-                // The attached script as {programIndex, name, localVars} (feed programIndex to
-                // describe_script) or null. localVars is the script's slice of the map's LVAR pool.
-                ordered_json scriptJson = nullptr;
-                if (const auto ref = resolveObjectScript(map, object->map_scripts_pid, scriptsLst); ref.has_value()) {
-                    ordered_json localVars = ordered_json::array();
-                    if (const MapScript* script = findObjectScript(map, object->map_scripts_pid); script != nullptr) {
-                        localVars = localVarsToJson(*script, map.getMapFile().map_local_vars);
-                    }
-                    scriptJson = ordered_json{ { "programIndex", ref->first }, { "name", ref->second },
-                        { "localVars", std::move(localVars) } };
-                }
-                array.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
+                ordered_json entry = { { "pid", pidHex(pid) }, { "number", ProtoId(pid).protoId() },
                     { "name", names.protoName(pid) }, { "hex", object->position }, { "elevation", elevation },
-                    { "team", object->group_id }, { "aiPacket", packet },
-                    { "ai", critterAiToJson(ai.byPacketNum(static_cast<int>(packet))) }, { "script", scriptJson } });
+                    { "hidden", isHiddenObject(*object) }, { "team", object->group_id }, { "aiPacket", packet },
+                    { "ai", critterAiToJson(ai.byPacketNum(static_cast<int>(packet))) },
+                    { "script", critterScriptJson(map, *object, scriptsLst) } };
+                if (savedMap) {
+                    entry["combat"] = critterCombatToJson(*object, byCid, names);
+                }
+                array.push_back(std::move(entry));
             }
         }
         return array;
@@ -727,8 +746,8 @@ namespace {
         // The header's script_id is 1-based: the engine runs scripts.lst[script_id - 1] (fallout2-ce
         // map.cc), so resolve to that 0-based programIndex. Null when the map has no script.
         root["scriptId"] = header.script_id;
-        if (header.script_id > 0) {
-            const int programIndex = header.script_id - 1;
+        if (const auto mapProgramIndex = header.programIndex(); mapProgramIndex.has_value()) {
+            const int programIndex = *mapProgramIndex;
             std::string name;
             if (scriptsLst != nullptr && programIndex < static_cast<int>(scriptsLst->list().size())) {
                 name = scriptsLst->at(programIndex);
@@ -785,7 +804,7 @@ namespace {
     // The analysed map's own friendly name (map.msg at elevation 0), found by matching its filename to
     // a maps.txt section. null when the map isn't in the registry or map.msg isn't mounted.
     ordered_json selfDisplayName(const std::string& mapPath, const AnalyzeContext& ctx) {
-        const int index = ctx.mapNames.indexOf(baseName(mapPath));
+        const int index = ctx.mapNames.indexOf(fileNameOf(mapPath));
         if (index < 0) {
             return nullptr;
         }
@@ -798,7 +817,7 @@ namespace {
     ordered_json mapToJson(const std::string& mapPath, Map& map, const AnalyzeContext& ctx, Aggregate& agg) {
         const MapUsage usage = collectUsage(map);
         ordered_json entry;
-        entry["name"] = baseName(mapPath);
+        entry["name"] = fileNameOf(mapPath);
         entry["path"] = mapPath;
         entry["displayName"] = selfDisplayName(mapPath, ctx);
         entry["floor"] = floorsToJson(usage, ctx.names, agg);
@@ -814,10 +833,10 @@ namespace {
 
     // Machine-readable analyze for an MCP client: per map and an aggregate. `flat` is the
     // structural-vs-decoration hint; `adjacency` lists directional borders; `clusters` groups objects.
-    void emitJson(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
-        NameResolver& names, const AiTxt& ai, std::ostream& out) {
+    ordered_json analyzeJson(const std::vector<std::string>& mapPaths, resource::GameResources& resources,
+        NameResolver& names, const AiTxt& ai) {
         Aggregate agg;
-        const Lst* scriptsLst = loadScriptsLst(resources);   // shared across maps (cached); names attached scripts
+        const Lst* scriptsLst = script_lookup::loadScriptsLst(resources); // shared across maps (cached); names attached scripts
         const resource::MapNameResolver mapNames(resources); // maps.txt + map.msg, loaded once
         const AnalyzeContext ctx{ resources, names, ai, scriptsLst, mapNames };
         auto maps = ordered_json::array();
@@ -838,9 +857,7 @@ namespace {
         aggregate["objects"] = aggObjectsToJson(agg, names);
         aggregate["adjacency"] = aggAdjacencyToJson(agg, names);
         root["aggregate"] = std::move(aggregate);
-        // Fallout 2 text (proto/tile/critter names, AI labels) is CP-1252; `replace` keeps dump() from
-        // throwing on stray non-UTF-8 bytes and emits valid JSON (U+FFFD substitutes).
-        out << root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
+        return root;
     }
 
     // One elevation's floor or roof layer as a flat row-major id array (index = row*COLS + col).
@@ -853,23 +870,56 @@ namespace {
     }
 
     // One elevation's objects as an array (pid/number/type/name/fid/hex/col/row/dir/flat per object).
-    ordered_json objectGridArray(const Map::MapFile& mapFile, int elevation, NameResolver& names) {
+    ordered_json objectGridArray(
+        const Map::MapFile& mapFile, int elevation, NameResolver& names, const std::string& nameFilter) {
         auto objects = ordered_json::array();
         const auto it = mapFile.map_objects.find(elevation);
         if (it == mapFile.map_objects.end()) {
             return objects;
+        }
+        // A regex, not a substring: "locker" as a substring also matches "Scroll Blocker", which is
+        // most of a map. ^Locker or \bLocker\b says what was meant.
+        std::optional<std::regex> pattern;
+        if (!nameFilter.empty()) {
+            try {
+                pattern.emplace(nameFilter, std::regex::icase);
+            } catch (const std::regex_error&) {
+                pattern.reset();
+            }
         }
         for (const auto& object : it->second) {
             if (!object) {
                 continue;
             }
             const uint32_t pid = object->pro_pid;
-            objects.push_back({ { "pid", pidHex(pid) }, { "number", pid & 0xFFFFFFu },
+            if (pattern && !std::regex_search(names.protoName(pid), *pattern)) {
+                continue;
+            }
+            ordered_json record{ { "pid", pidHex(pid) }, { "number", ProtoId(pid).protoId() },
                 { "type", typeLabel(pid) }, { "name", names.protoName(pid) },
                 { "fid", pidHex(object->frm_pid) }, // the art FID — feed to resolve_fid to SEE what it is
                 { "hex", object->position }, { "col", hexgrid::columnOf(object->position) },
                 { "row", hexgrid::rowOf(object->position) }, { "dir", object->direction },
-                { "flat", names.isFlat(pid) } });
+                { "flat", names.isFlat(pid) } };
+
+            // What a container actually holds. Parsed all along and never reported, so "the locker
+            // with the combat shotgun" could only be checked by opening it in game. Present only
+            // when there is something inside, so an empty crate costs nothing to read.
+            if (!object->inventory.empty()) {
+                auto contents = ordered_json::array();
+                for (const auto& item : object->inventory) {
+                    if (!item) {
+                        continue;
+                    }
+                    contents.push_back({ { "pid", pidHex(item->pro_pid) },
+                        { "number", ProtoId(item->pro_pid).protoId() }, { "name", names.protoName(item->pro_pid) },
+                        { "count", item->objects_in_inventory > 0 ? item->objects_in_inventory : 1u } });
+                }
+                if (!contents.empty()) {
+                    record["contents"] = std::move(contents);
+                }
+            }
+            objects.push_back(std::move(record));
         }
         return objects;
     }
@@ -896,10 +946,7 @@ std::vector<std::string> listMapPaths(const resource::DataFileSystem& files) {
     // the raw VFS keys (whose case and leading "/" depend on the DAT/mount).
     std::vector<std::string> mapPaths;
     for (const auto& path : files.list("*")) {
-        std::string ext = path.extension().string();
-        std::ranges::transform(ext, ext.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (ext == ".map") {
+        if (text::toLower(path.extension().string()) == ".map") {
             mapPaths.push_back(path.generic_string());
         }
     }
@@ -908,10 +955,6 @@ std::vector<std::string> listMapPaths(const resource::DataFileSystem& files) {
 }
 
 int dumpMapGrid(resource::GameResources& resources, const DumpGridOptions& options, std::ostream& out) {
-    if (options.map.empty()) {
-        out << "error: dump-grid requires --map <path>\n";
-        return 2;
-    }
     const std::unique_ptr<Map> map = loadMap(resources, options.map);
     if (!map) {
         out << "skip (unreadable or parse failed): " << options.map << "\n";
@@ -920,7 +963,7 @@ int dumpMapGrid(resource::GameResources& resources, const DumpGridOptions& optio
     NameResolver names(resources);
 
     ordered_json root;
-    root["map"] = baseName(options.map);
+    root["map"] = fileNameOf(options.map);
     root["path"] = options.map;
     root["tileCols"] = Map::COLS;
     root["tileRows"] = Map::ROWS;
@@ -943,13 +986,18 @@ int dumpMapGrid(resource::GameResources& resources, const DumpGridOptions& optio
             entry["roof"] = tileGridArray(tiles, /*roof=*/true);
         }
         if (options.objects) {
-            entry["objects"] = objectGridArray(mapFile, elevation, names);
+            entry["objects"] = objectGridArray(mapFile, elevation, names, options.nameFilter);
         }
         elevations.push_back(std::move(entry));
     }
     root["elevations"] = std::move(elevations);
     out << root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     return 0;
+}
+
+ordered_json analyzeMapsJson(resource::GameResources& resources, const std::vector<std::string>& mapPaths) {
+    NameResolver names(resources);
+    return analyzeJson(mapPaths, resources, names, resource::loadAiTxt(resources));
 }
 
 int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& options, std::ostream& out) {
@@ -965,7 +1013,11 @@ int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& option
         return 0;
     }
     if (options.json) {
-        emitJson(mapPaths, resources, names, resource::loadAiTxt(resources), out);
+        // Fallout 2 text (proto/tile/critter names, AI labels) is CP-1252; `replace` keeps dump() from
+        // throwing on stray non-UTF-8 bytes and emits valid JSON (U+FFFD substitutes).
+        out << analyzeJson(mapPaths, resources, names, resource::loadAiTxt(resources))
+                   .dump(-1, ' ', false, ordered_json::error_handler_t::replace)
+            << "\n";
         return 0;
     }
 

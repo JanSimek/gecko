@@ -1,10 +1,10 @@
 #include "ObjectPicker.h"
 
 #include <algorithm>
-#include <iterator>
 #include <spdlog/spdlog.h>
 
 #include "editor/Object.h"
+#include "rendering/ObjectDrawOrder.h"
 #include "rendering/ObjectVisibility.h"
 #include "ui/core/EditorSession.h"
 
@@ -16,16 +16,19 @@ std::vector<std::shared_ptr<Object>> ObjectPicker::objectsAtPosition(sf::Vector2
     // Only objects that are actually drawn are selectable: a click must never land on a
     // hidden object (e.g. a scroll blocker on a hidden layer) and produce an invisible
     // selection. isObjectVisible is the same rule RenderingEngine::renderObjects applies.
-    std::ranges::copy_if(_session.objects(), std::back_inserter(objectsAtPos),
-        [this, worldPos](const auto& object) {
-            return isObjectVisible(object->getMapObject(), _session.visibility())
-                && isPointInSpritePixel(worldPos, object->getSprite());
+    forEachInDrawOrder(
+        _session.objects(), [](const auto& object) -> const MapObject& { return object->getMapObject(); },
+        [this, worldPos, &objectsAtPos](const auto& object) {
+            if (isObjectVisible(object->getMapObject(), _session.visibility())
+                && isPointInSpritePixel(worldPos, object->getSprite())) {
+                objectsAtPos.push_back(object);
+            }
         });
 
-    // Objects are drawn in _session.objects() order (see RenderingEngine::renderObjects), so the object
-    // drawn last is the one visually on top. copy_if preserved that draw order, so reverse it to
-    // put the topmost-drawn object first: the pick then matches exactly what the user sees, and
-    // repeated clicks cycle stacked objects from top to bottom.
+    // Collected in draw order (forEachInDrawOrder, as RenderingEngine::renderObjects draws), so the
+    // object drawn last is the one visually on top. Reverse it to put the topmost-drawn object
+    // first: the pick then matches exactly what the user sees, and repeated clicks cycle stacked
+    // objects from top to bottom.
     std::ranges::reverse(objectsAtPos);
 
     if (objectsAtPos.size() > 1) {

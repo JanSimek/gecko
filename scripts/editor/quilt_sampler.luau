@@ -33,7 +33,7 @@ local PATCH = tonumber(args.patch) or 25
 if PATCH < 1 then
     error("--arg patch= must be at least 1")
 end
-local TILE_W, TILE_H = 100, 100 -- floor grid (see CLAUDE.md: tiles are 100x100)
+local TILE_W, TILE_H = 100, 100 -- floor grid (see AGENTS.md: tiles are 100x100)
 
 print("Seed " .. args.seed .. " — re-run with --arg seed=" .. args.seed .. " to reproduce.")
 

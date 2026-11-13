@@ -18,11 +18,6 @@ ProContainerKeyWidget::ProContainerKeyWidget(resource::GameResources& resources,
     for (int i = 0; i < NUM_CONTAINER_FLAGS; ++i) {
         _containerFlagChecks[i] = nullptr;
     }
-
-    setupUI();
-}
-
-void ProContainerKeyWidget::setupUI() {
 }
 
 void ProContainerKeyWidget::setupContainerUI() {
@@ -38,7 +33,7 @@ void ProContainerKeyWidget::setupContainerUI() {
     QWidget* leftColumn = new QWidget();
     QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    leftLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     QGroupBox* containerGroup = createStandardGroupBox("Container Properties");
     QFormLayout* containerLayout = createStandardFormLayout();
@@ -53,13 +48,13 @@ void ProContainerKeyWidget::setupContainerUI() {
     QWidget* rightColumn = new QWidget();
     QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
-    rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    rightLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     QGroupBox* flagsGroup = new QGroupBox("Container Flags");
     flagsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QVBoxLayout* flagsLayout = new QVBoxLayout(flagsGroup);
     flagsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    flagsLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    flagsLayout->setSpacing(ui::theme::spacing::TIGHT);
 
     const QStringList flagNames = game::enums::containerFlags();
     for (int i = 0; i < NUM_CONTAINER_FLAGS; ++i) {
@@ -99,8 +94,8 @@ void ProContainerKeyWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
     if (!pro || !canHandle(pro))
         return;
 
-    _isContainer = (pro->itemType() == Pro::ITEM_TYPE::CONTAINER);
-    _isKey = (pro->itemType() == Pro::ITEM_TYPE::KEY);
+    _isContainer = (pro->itemType() == ItemType::Container);
+    _isKey = (pro->itemType() == ItemType::Key);
 
     if (_isContainer) {
         setupContainerUI();
@@ -158,7 +153,7 @@ void ProContainerKeyWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 }
 
 bool ProContainerKeyWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
-    return pro && pro->type() == Pro::OBJECT_TYPE::ITEM && (pro->itemType() == Pro::ITEM_TYPE::CONTAINER || pro->itemType() == Pro::ITEM_TYPE::KEY);
+    return pro && pro->type() == ObjectType::Item && (pro->itemType() == ItemType::Container || pro->itemType() == ItemType::Key);
 }
 
 QString ProContainerKeyWidget::getTabLabel() const {

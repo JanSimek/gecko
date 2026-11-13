@@ -3,9 +3,14 @@
 #include <QWidget>
 
 #include <cstdint>
+#include <functional>
+#include <vector>
+
+#include "ui/ScriptSourceService.h"
 
 class QTableWidget;
 class QLineEdit;
+class QTimer;
 
 namespace geck {
 
@@ -25,15 +30,22 @@ class ScriptsPanel : public QWidget {
     Q_OBJECT
 
 public:
+    using StatusProvider = std::function<ScriptSourceService::ScriptStatus(int programIndex)>;
+
     explicit ScriptsPanel(resource::GameResources& resources, QWidget* parent = nullptr);
+
+    /// How to lint a script (MainWindow passes ScriptSourceService::scriptStatus). With one, every row
+    /// gets a problem marker after the table fills: the scripts are checked one per event-loop turn so
+    /// a map with many scripts stays responsive.
+    void setStatusProvider(StatusProvider provider);
 
     /// Repopulate the table from `map`, or clear it when `map` is null.
     void setMap(Map* map);
 
-    /// Select the row for the spatial script with this SID (or clear the selection when it is
-    /// MapScript::NONE / not found). Used to mirror a map-side selection. Does not re-emit
-    /// spatialScriptSelected, so it is safe to call in response to that signal.
-    void selectSpatialScriptRow(uint32_t sid);
+    /// Select the row for the script with this SID - a spatial script or an object's - or clear the
+    /// selection when it is MapScript::NONE / not found. Used to mirror a map-side selection. Does not
+    /// re-emit spatialScriptSelected, so it is safe to call in response to that signal.
+    void selectScriptRow(uint32_t sid);
 
 signals:
     /// Emitted when the user double-clicks a row owned by a map object. `sid` is the
@@ -70,6 +82,11 @@ private:
     uint32_t sidOfRow(int row) const;
     // The row's 0-based scripts.lst program index (the Script ID cell's display value), or -1.
     int programIndexOfRow(int row) const;
+    // Queue every program on the table for linting, dropping what an earlier fill queued.
+    void startLint();
+    void lintNext();
+    // Mark each row of `programIndex` with what `status` found, plus its own local variable block.
+    void markRows(int programIndex, const ScriptSourceService::ScriptStatus& status);
 
     resource::GameResources& _resources;
     Map* _map = nullptr;
@@ -78,7 +95,11 @@ private:
     QTableWidget* _table;
     QTableWidget* _localVarsTable; // local variables (LVARs) of the currently selected script
 
-    // Guards selectSpatialScriptRow() against re-emitting spatialScriptSelected (feedback loop when
+    StatusProvider _statusProvider;
+    std::vector<int> _lintQueue; // program indices still to check, for the map now shown
+    QTimer* _lintTimer;
+
+    // Guards selectScriptRow() against re-emitting spatialScriptSelected (feedback loop when
     // the map-side selection drives the panel row and vice versa).
     bool _suppressSpatialSelectionSignal = false;
 };

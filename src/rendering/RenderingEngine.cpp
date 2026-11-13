@@ -8,11 +8,11 @@
 #include "format/map/MapScript.h"
 #include "util/BuiltTile.h"
 #include "rendering/MapEdgeOverlayGeometry.h"
+#include "rendering/ObjectDrawOrder.h"
 #include "rendering/ObjectVisibility.h"
 #include "rendering/ToolPreview.h"
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
-#include "util/ColorUtils.h"
 #include "util/Constants.h"
 #include "util/Coordinates.h"
 #include "util/TileUtils.h"
@@ -92,7 +92,7 @@ sf::Color RenderingEngine::objectOutlineColor(const Object& object) const {
         if (mapObject->isWallObject()) {
             return _selectionColors.wall;
         }
-        if (mapObject->objectType() == 1u) { // Pro::OBJECT_TYPE::CRITTER
+        if (mapObject->objectType() == ObjectType::Critter) {
             return _selectionColors.critter;
         }
     }
@@ -358,15 +358,16 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
         return;
     }
 
-    for (const auto& object : *renderData.objects) {
-        // Shared with picking (EditorWidget::getObjectsAtPosition) via isObjectVisible so a
-        // hidden object is never drawn nor selectable.
-        if (!isObjectVisible(object->getMapObject(), visibility)) {
-            continue;
-        }
-
-        target.draw(object->getSprite());
-    }
+    // Flat objects first, as the engine draws them, so a wall in front covers an exit grid.
+    // Shared with picking (ObjectPicker) via forEachInDrawOrder and isObjectVisible so a hidden
+    // object is never drawn nor selectable, and the topmost pick is the topmost sprite.
+    forEachInDrawOrder(
+        *renderData.objects, [](const auto& object) -> const MapObject& { return object->getMapObject(); },
+        [&](const auto& object) {
+            if (isObjectVisible(object->getMapObject(), visibility)) {
+                target.draw(object->getSprite());
+            }
+        });
 
     // Wall blocker overlays render on top of regular objects
     if (visibility.showWallBlockers && renderData.wallBlockerOverlays) {
@@ -550,11 +551,6 @@ void RenderingEngine::renderHexHighlights(sf::RenderTarget& target,
     _hexRenderer.renderHighlights(target, *renderData.hexGrid, renderData.currentHoverHex, renderData.playerPositionHex);
 }
 
-bool RenderingEngine::isHexVisible(int hexWorldX, int hexWorldY,
-    const sf::View& view) const {
-    return ViewportController::isHexVisible(hexWorldX, hexWorldY, view);
-}
-
 void RenderingEngine::applySelectionRectangleColors(sf::RectangleShape& rectangle,
     SelectionMode selectionMode) {
     if (selectionMode == SelectionMode::SCROLL_BLOCKER_RECTANGLE) {
@@ -564,8 +560,8 @@ void RenderingEngine::applySelectionRectangleColors(sf::RectangleShape& rectangl
             SelectionColors::SCROLL_BLOCKER_FILL_ALPHA));
         rectangle.setOutlineColor(sf::Color(0, 200, 0, SelectionColors::SCROLL_BLOCKER_OUTLINE_ALPHA));
     } else {
-        rectangle.setFillColor(ColorUtils::createSelectionFillColor());
-        rectangle.setOutlineColor(ColorUtils::createSelectionOutlineColor());
+        rectangle.setFillColor(TileColors::selectionFill());
+        rectangle.setOutlineColor(TileColors::selectionOutline());
     }
 }
 
@@ -595,7 +591,7 @@ void RenderingEngine::renderExitGrids(sf::RenderTarget& target,
         }
         const int cx = hex->get().x();
         const int cy = hex->get().y();
-        if (!isHexVisible(cx, cy, view)) {
+        if (!ViewportController::isHexVisible(cx, cy, view)) {
             continue;
         }
         exitGridSprite.setPosition(sf::Vector2f(static_cast<float>(cx), static_cast<float>(cy)));
@@ -664,7 +660,7 @@ void RenderingEngine::renderSpatialScripts(sf::RenderTarget& target,
         }
         const int cx = hex->get().x();
         const int cy = hex->get().y();
-        if (!isHexVisible(cx, cy, view)) {
+        if (!ViewportController::isHexVisible(cx, cy, view)) {
             continue;
         }
         if (markerSprite) {
@@ -803,7 +799,7 @@ std::shared_ptr<Object> RenderingEngine::buildExitGridPreviewObject(const Render
         // frame's FRM offset, which it reads from the current frame.
         auto previewObject = std::make_shared<Object>(frm);
         previewObject->setSprite(sf::Sprite{ _resources.textures().get(frmName) });
-        previewObject->setDirection(ObjectDirection(0));
+        previewObject->setDirection(Rotation::NE);
         previewObject->setHexPosition(hexOptional.value().get());
         return previewObject;
     } catch (const std::exception& e) {
@@ -829,7 +825,7 @@ void RenderingEngine::drawExitGridPreviewMarkers(sf::RenderTarget& target, const
         }
         const auto hexOptional = renderData.hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex));
         if (!hexOptional.has_value()
-            || !isHexVisible(hexOptional.value().get().x(), hexOptional.value().get().y(), view)) {
+            || !ViewportController::isHexVisible(hexOptional.value().get().x(), hexOptional.value().get().y(), view)) {
             continue;
         }
         if (auto previewObject = buildExitGridPreviewObject(renderData, hexIndex, (*frmPids)[i])) {

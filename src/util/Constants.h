@@ -3,6 +3,9 @@
 #include <cstdint>
 #include <string_view>
 
+#include "format/frm/FrmId.h"
+#include "format/pro/ProtoTypes.h"
+
 namespace geck {
 
 /**
@@ -15,8 +18,6 @@ namespace geck {
 // Map and tile constants
 constexpr int MAP_WIDTH = 100;             ///< Number of tiles per row in a map
 constexpr int MAP_HEIGHT = 100;            ///< Number of tiles per column in a map
-constexpr int TILES_PER_ELEVATION = 10000; ///< Total tiles per elevation (100x100)
-constexpr int INVALID_ELEVATION = -1;      ///< Invalid or unset elevation value
 constexpr int ELEVATION_1 = 0;
 constexpr int ELEVATION_2 = 1;
 constexpr int ELEVATION_3 = 2;
@@ -30,16 +31,6 @@ constexpr int TILE_Y_OFFSET_SMALL = 24; ///< Small Y offset for tile positioning
 constexpr int TILE_Y_OFFSET_TINY = 12;  ///< Tiny Y offset for tile positioning
 
 constexpr int ROOF_OFFSET = 96; ///< Roof height offset (adjusted for coordinate system alignment)
-
-// View movement constants
-constexpr float VIEW_MOVE_STEP = 50.0f; ///< Distance to move view with arrow keys
-
-// Mouse and interaction constants
-constexpr float TILE_CLICK_DISTANCE_THRESHOLD = 40.0f; ///< Maximum distance for tile click detection
-constexpr float DRAG_START_THRESHOLD = 5.0f;           ///< Minimum drag distance to start drag operation
-
-// Color constants
-constexpr int HEX_HIGHLIGHT_ALPHA = 200; ///< Alpha value for hex highlighting
 
 // Area selection padding constants
 constexpr float AREA_SELECTION_X_PADDING = 40.0f;       ///< X padding for area selection bounds
@@ -74,40 +65,21 @@ namespace Colors {
     constexpr int ERROR_ALPHA = 150;
     constexpr int ERROR_OUTLINE_ALPHA = 255;
 
-    // Tile selection overlay alpha (floor + roof) — higher visibility.
-    constexpr int SELECTION_TILE_ALPHA = 220;
-
     // Standard alpha values
     constexpr int FULLY_OPAQUE = 255;
-    constexpr int SEMI_TRANSPARENT = 150;
 }
 
 // UI constants
 namespace UI {
-    constexpr int TITLE_FONT_SIZE = 24;   ///< Font size for titles
-    constexpr int STATUS_FONT_SIZE = 14;  ///< Font size for status text
-    constexpr int PROGRESS_BAR_MAX = 100; ///< Maximum value for progress bars
-    constexpr int PROGRESS_BAR_MIN = 0;   ///< Minimum value for progress bars
     constexpr int TIMER_INTERVAL_MS = 33; ///< Timer interval for 30 FPS updates (33ms = ~30 FPS)
-}
-
-// Object rotation constants
-namespace Rotation {
-    constexpr int DEFAULT_DIRECTION = 0; ///< Default object direction
-    constexpr int DIRECTION_RESET = 0;   ///< Reset direction value
 }
 
 // File format constants
 namespace FileFormat {
-    constexpr int TYPE_MASK_SHIFT = 24;              ///< Bit shift for type field in PIDs/FIDs
-    constexpr uint32_t TYPE_MASK = 0x0F000000;       ///< FID type mask: high nibble only (bits 28-30 hold rotation)
-    constexpr uint32_t FULL_TYPE_MASK = 0xFF000000;  ///< PID type mask: full high byte (PIDs carry no rotation)
-    constexpr uint32_t BASE_ID_MASK = 0x00FFFFFF;    ///< Base ID mask for PIDs/FIDs
-    constexpr uint32_t CRITTER_ID_MASK = 0x00000FFF; ///< Special mask for critter IDs
-    constexpr int FALLOUT2_MAP_VERSION = 20;         ///< Standard Fallout 2 map version
+    constexpr int FALLOUT2_MAP_VERSION = 20; ///< Standard Fallout 2 map version
 }
 
-// Wall Blocker constants
+// Blocker objects
 namespace WallBlockers {
     // The invisible, single-hex, movement-blocking marker real Fallout 2 maps place to seal
     // footprints the visible art doesn't cover (car chassis, odd building corners) — the same
@@ -116,24 +88,15 @@ namespace WallBlockers {
     // previously as a "wall blocker", does not exist in any Fallout 2 data set, and the real
     // engine's _obj_blocking_at() (fallout2-ce object.cc) only ever treats CRITTER/SCENERY/WALL
     // FIDs as blocking — a MISC object could never have blocked movement even if 620 were real.
-    constexpr uint32_t SECRET_BLOCKING_HEX_PID = 0x02000000 | 67; ///< Proto 67 (scenery) - Secret Blocking Hex
+    constexpr ProtoId SECRET_BLOCKING_HEX_PID{ ObjectType::Scenery, 67 }; ///< Proto 67 (scenery) - Secret Blocking Hex
 
     // Scroll blockers. The engine identifies them by this exact proto and never looks at the art:
     // _obj_scroll_blocking_at() tests `obj->pid == 0x500000C` (fallout2-ce object.cc), which
     // tileSetCenter() consults to refuse a scroll. Proto 12 is "Scroll Blocker"; proto 24, which
     // this editor used to write, is "Flare" - the engine ignores those entirely.
-    constexpr uint32_t SCROLL_BLOCKER_PID = 0x05000000 | 12;                         ///< Proto 12 - Scroll Blocker
-    constexpr uint32_t SCROLL_BLOCKER_BASE_ID = 1;                                   ///< scrblk.frm's art index, within MISC art
-    constexpr uint32_t SCROLL_BLOCKER_FRM_PID = 0x05000000 | SCROLL_BLOCKER_BASE_ID; ///< art/misc/scrblk.frm
-
-    // Flag bit for blocking objects
-    constexpr uint32_t BLOCKING_FLAG = 0x00000010; ///< Flag indicating object blocks movement
-
-    // MISC object type ID
-    constexpr uint32_t MISC_TYPE_ID = 5; ///< MISC type in object type enum
-
-    // Generic proto ID for simple objects
-    constexpr uint32_t GENERIC_PROTO_ID = 24; ///< Proto 24 - Generic small object
+    constexpr ProtoId SCROLL_BLOCKER_PID{ MiscProtoTypeId::ScrollBlocker };
+    /// The art the shipped Scroll Blocker proto carries (block.frm); FrmResolver draws it as scrblk.frm.
+    constexpr FrmId SCROLL_BLOCKER_FID{ MiscFrameId::Block };
 }
 
 // Registered-tool ids for the Add/Remove Blocker toolbar dropdown (AddBlockerTool /
@@ -175,8 +138,8 @@ namespace ExitGrid {
     constexpr uint32_t WORLD_MAP_EXIT = 0xFFFFFFFE; ///< -2: Opens world map view
 
     // Proto PIDs for exit grids (MISC type 0x05, indices 16-23 = the eight directions)
-    constexpr uint32_t FIRST_EXIT_GRID_PID = 0x05000010; ///< First exit grid proto (index 16, dir 0)
-    constexpr uint32_t LAST_EXIT_GRID_PID = 0x05000017;  ///< Last exit grid proto (index 23, dir 7)
+    constexpr uint32_t FIRST_EXIT_GRID_PID = ProtoId(MiscProtoTypeId::FirstExitGrid).pid(); ///< 0x05000010, dir 0
+    constexpr uint32_t LAST_EXIT_GRID_PID = ProtoId(MiscProtoTypeId::LastExitGrid).pid();   ///< 0x05000017, dir 7
 
     // The eight directions, by the line a user draws / the iso edge the marker caps.
     enum Direction {
@@ -198,8 +161,7 @@ namespace ExitGrid {
     /// The BROWN (world/town-map) FRM PID for a direction's proto: frm = proto + 0x11.
     constexpr uint32_t brownFrm(int dir) { return exitGridProto(dir) + 0x11; }
 
-    // Convenience aliases for the cardinal directions, used by the explicit Marker-Direction
-    // override and the single-hex fallback. The matching FRM comes from greenFrm()/brownFrm() by
+    // Each direction's proto by name. The matching FRM comes from greenFrm()/brownFrm() by
     // destination kind — these name only the proto (= direction).
     constexpr uint32_t LEFT_PRO_PID = exitGridProto(DIR_LEFT);     ///< 0x05000010, 96x24 (vertical line)
     constexpr uint32_t RIGHT_PRO_PID = exitGridProto(DIR_RIGHT);   ///< 0x05000011, 96x24 (vertical line)
@@ -227,12 +189,6 @@ namespace MapDefaults {
 namespace SpriteOffset {
     constexpr int HEX_HIGHLIGHT_X = -16; ///< X offset for hex highlighting
     constexpr int HEX_HIGHLIGHT_Y = -8;  ///< Y offset for hex highlighting
-}
-
-// View constants - fixed size for consistent coordinate system
-namespace View {
-    constexpr float DEFAULT_WIDTH = 800.0f;  ///< Default view width
-    constexpr float DEFAULT_HEIGHT = 600.0f; ///< Default view height
 }
 
 namespace UI {

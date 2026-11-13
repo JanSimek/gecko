@@ -20,9 +20,10 @@ PlacementBatch::Result PlacementBatch::replay(ObjectCommandController& controlle
         // GUI: the object draws, so it needs a built visual; a null one (art that wouldn't load)
         // is counted as failed and dropped, like the prefab stamper always did. Headless: record
         // the MapObject as data — the .map stores only these ids, so no sprite or GL is needed.
+        const ProtoScript protoScript = entry.attachProtoScript ? ProtoScript::Attach : ProtoScript::None;
         const bool ok = buildSprites
-            ? (entry.object != nullptr && controller.registerObjectPlacement(entry.mapObject, entry.object))
-            : controller.registerObjectData(entry.mapObject);
+            ? (entry.object != nullptr && controller.registerObjectPlacement(entry.mapObject, entry.object, protoScript))
+            : controller.registerObjectData(entry.mapObject, protoScript);
         if (ok) {
             ++r.objectsPlaced;
         } else {

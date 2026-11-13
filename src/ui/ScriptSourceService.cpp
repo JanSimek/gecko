@@ -8,6 +8,7 @@
 #include "resource/GameResources.h"
 #include "resource/ResourcePaths.h"
 #include "resource/ScriptSourceLocator.h"
+#include "resource/VfsSourceProvider.h"
 #include "resource/WritableDataRoot.h"
 
 #include <spdlog/spdlog.h>
@@ -26,24 +27,104 @@ ScriptSourceService::ScriptSourceService(resource::GameResources& resources,
     , _dialogParent(dialogParent) {
 }
 
-std::string ScriptSourceService::resolveBaseName(int programIndex) {
+std::string ScriptSourceService::baseNameOf(int programIndex) const {
     try {
-        const Lst* lst = _resources.repository().load<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
+        const Lst* lst = _resources.repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
         if (lst != nullptr && programIndex >= 0
             && static_cast<size_t>(programIndex) < lst->list().size()) {
-            const std::string baseName
-                = resource::scriptBaseName(lst->list().at(static_cast<size_t>(programIndex)));
-            if (!baseName.empty()) {
-                return baseName;
-            }
+            return resource::scriptBaseName(lst->list().at(static_cast<size_t>(programIndex)));
         }
     } catch (const FileReaderException& e) {
         spdlog::warn("scripts.lst not available: {}", e.what());
     }
-    QtDialogs::showError(_dialogParent, "Edit Script",
-        QString("Script #%1 could not be resolved through scripts.lst — is the game data mounted?")
-            .arg(programIndex));
     return {};
+}
+
+std::string ScriptSourceService::resolveBaseName(int programIndex) {
+    std::string baseName = baseNameOf(programIndex);
+    if (baseName.empty()) {
+        QtDialogs::showError(_dialogParent, "Edit Script",
+            QString("Script #%1 could not be resolved through scripts.lst — is the game data mounted?")
+                .arg(programIndex));
+    }
+    return baseName;
+}
+
+ScriptSourceService::ScriptStatus ScriptSourceService::scriptStatus(int programIndex) {
+    ScriptStatus status;
+    const std::string baseName = baseNameOf(programIndex);
+    if (baseName.empty()) {
+        return status;
+    }
+    status.resolved = true;
+
+    const auto& files = _resources.files();
+    status.compiled = files.exists("scripts/" + baseName + ".int");
+
+    // Same order as editScriptSource: the marked source trees first, then the mounted data.
+    if (auto hit = _sourceRootHits.find(baseName); hit != _sourceRootHits.end()) {
+        status.report = diskReport(hit->second);
+        if (!status.report) {
+            _sourceRootHits.erase(hit); // moved or deleted since; look again
+        }
+    }
+    if (!status.report) {
+        if (const auto sourcePaths = _settings->getScriptSourcePaths(); !sourcePaths.empty()) {
+            if (const auto match = resource::findScriptSourceInRoots(sourcePaths, baseName); match.has_value()) {
+                status.report = diskReport(match->file);
+                if (status.report) {
+                    _sourceRootHits.try_emplace(baseName, match->file);
+                }
+            }
+        }
+    }
+    if (!status.report) {
+        if (const auto source = resource::locateScriptSource(files, baseName); source.has_value()) {
+            const resource::VfsSourceProvider provider(files);
+            status.report = std::make_shared<const resource::ScriptReport>(resource::reportScript(ssl::ScriptUnit::load(provider, source->vfsPath)));
+        }
+    }
+    // Without a source, what the compiled script itself shows.
+    if (!status.report && status.compiled) {
+        if (auto compiled = resource::reportCompiled(_resources, baseName); compiled.has_value()) {
+            status.report = std::make_shared<const resource::ScriptReport>(std::move(*compiled));
+        }
+    }
+    lint(programIndex, status);
+    return status;
+}
+
+void ScriptSourceService::lint(int programIndex, ScriptStatus& status) {
+    try {
+        const Lst* lst = _resources.repository().tryLoad<Lst>(std::string(ResourcePaths::Lst::SCRIPTS));
+        if (lst == nullptr) {
+            return;
+        }
+        resource::ScriptLinter linter(_resources, lst, "english");
+        status.localVarCount = linter.localVariableCount(programIndex);
+        if (status.report) {
+            status.findings = linter.findings(*status.report, programIndex, false);
+        }
+    } catch (const FileReaderException& e) {
+        spdlog::warn("scripts.lst not available: {}", e.what());
+    }
+}
+
+std::shared_ptr<const resource::ScriptReport> ScriptSourceService::diskReport(const fs::path& file) {
+    std::error_code ec;
+    const auto modified = fs::last_write_time(file, ec);
+    if (ec) {
+        _reportsByFile.erase(file);
+        return nullptr;
+    }
+    // Keyed on the script alone: an edited header is picked up when the script itself changes.
+    if (const auto it = _reportsByFile.find(file); it != _reportsByFile.end() && it->second.modified == modified) {
+        return it->second.report;
+    }
+    const ssl::DiskSourceProvider provider;
+    auto report = std::make_shared<const resource::ScriptReport>(resource::reportScript(ssl::ScriptUnit::load(provider, file)));
+    _reportsByFile.insert_or_assign(file, CachedReport{ modified, report });
+    return report;
 }
 
 bool ScriptSourceService::openFromScriptSourceRoots(const std::string& baseName) {

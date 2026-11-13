@@ -1,11 +1,18 @@
 #include "cli/ScriptIntrospect.h"
 
+#include "resource/GameVarsLoader.h"
+#include "cli/IntDisassembler.h"
+#include "cli/ScriptLint.h"
+#include "cli/ScriptLookup.h"
+#include "format/gam/Gam.h"
+
 #include "cli/MapAnalyzer.h" // listMapPaths
 #include "cli/MapLoad.h"     // loadMap
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
 #include "format/map/MapScript.h"
 #include "format/msg/Msg.h"
+#include "reader/TextParsing.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
 #include "resource/ResourcePaths.h"
@@ -15,12 +22,12 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
-#include <cctype>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <ostream>
 #include <regex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -30,32 +37,8 @@ namespace geck::cli {
 
 namespace {
     using nlohmann::ordered_json;
-
-    std::string toLower(std::string s) {
-        std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return s;
-    }
-
-    // Basename of a path without directory or extension ("scripts_src/newreno/ncprosti.ssl" -> "ncprosti").
-    std::string stem(const std::string& path) {
-        const auto slash = path.find_last_of("/\\");
-        const std::string file = slash == std::string::npos ? path : path.substr(slash + 1);
-        const auto dot = file.find_last_of('.');
-        return dot == std::string::npos ? file : file.substr(0, dot);
-    }
-
-    // basename(lowercased) -> VFS path for every *.ssl in the mounted data (i.e. a mounted source tree).
-    std::unordered_map<std::string, std::string> indexSslSources(resource::GameResources& resources) {
-        std::unordered_map<std::string, std::string> index;
-        for (const auto& path : resources.files().list("*")) {
-            std::string ext = path.extension().string();
-            std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (ext == ".ssl") {
-                index.try_emplace(toLower(stem(path.generic_string())), path.generic_string());
-            }
-        }
-        return index;
-    }
+    using namespace script_lookup;
+    using text::toLower;
 
     // Attach the .ssl source (from a mounted source tree) to `root`, or flag its absence.
     void attachSource(resource::GameResources& resources, const std::string& basename, ordered_json& root) {
@@ -72,12 +55,40 @@ namespace {
         root["sourceHint"] = "mount a script-source patch (e.g. FRP scripts_src) as a --data path to read the .ssl";
     }
 
+    // Attach a disassembly of the compiled scripts/<filename> (the .int the engine runs), or null with
+    // the reason. Global-variable reads/writes are annotated with GVAR_* names when vault13.gam is mounted.
+    void attachDisassembly(resource::GameResources& resources, ordered_json& root) {
+        const std::string filename = root["filename"].get<std::string>();
+        const std::string path = "scripts/" + filename;
+        auto bytes = resources.files().readRawBytes(path);
+        if (!bytes) {
+            bytes = resources.files().readRawBytes("scripts/" + toLower(filename));
+        }
+        if (!bytes) {
+            root["disassembly"] = nullptr;
+            root["disassemblyError"] = path + " not found in the mounted data";
+            return;
+        }
+        std::vector<std::string> globalVarNames;
+        if (const Gam* gam = resource::loadVault13Gam(resources); gam != nullptr) {
+            for (const auto& [name, value] : gam->gameGlobalVars()) {
+                globalVarNames.push_back(name);
+            }
+        }
+        try {
+            root["disassembly"] = intProgramToJson(ssl::disassembleInt(*bytes, globalVarNames.empty() ? nullptr : &globalVarNames));
+        } catch (const std::runtime_error& e) {
+            root["disassembly"] = nullptr;
+            root["disassemblyError"] = std::string("could not disassemble ") + path + ": " + e.what();
+        }
+    }
+
     // The dialog .msg lines for `basename` as [{id,text}], or an empty array if none.
     ordered_json loadDialog(resource::GameResources& resources, const std::string& basename, const std::string& locale) {
         auto dialog = ordered_json::array();
         const std::string path = "text/" + locale + "/dialog/" + basename + ".msg";
         try {
-            if (const Msg* msg = resources.repository().load<Msg>(path); msg != nullptr) {
+            if (const Msg* msg = resources.repository().tryLoad<Msg>(path); msg != nullptr) {
                 for (const auto& [id, message] : msg->getMessages()) {
                     dialog.push_back({ { "id", id }, { "text", message.text } });
                 }
@@ -88,109 +99,6 @@ namespace {
         return dialog;
     }
 
-    // --- script resolution -------------------------------------------------------
-
-    const Lst* loadScriptsLst(resource::GameResources& resources) {
-        try {
-            return resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
-        } catch (const std::exception& e) {
-            spdlog::debug("scripts.lst load failed: {}", e.what());
-            return nullptr;
-        }
-    }
-
-    // The identity block every script-shaped result leads with. `sslConstant` is the 1-based number
-    // the FRP headers/scripts.h SCRIPT_* constants carry, echoed next to the 0-based programIndex so
-    // the two bases can be told apart on sight instead of by silently naming the wrong script.
-    ordered_json scriptIdentity(resource::GameResources& resources, const Lst& scripts, int programIndex) {
-        const std::string& filename = scripts.list()[static_cast<std::size_t>(programIndex)];
-        ordered_json identity;
-        identity["programIndex"] = programIndex;
-        identity["sslConstant"] = programIndex + 1;
-        identity["filename"] = filename;
-        identity["name"] = stem(filename);
-        const std::string description = resource::scriptDescription(resources, programIndex);
-        identity["description"] = description.empty() ? ordered_json(nullptr) : ordered_json(description);
-        return identity;
-    }
-
-    // The outcome of turning a caller's `name`/`programIndex` into one scripts.lst entry: exactly one
-    // index, or a candidate list when a name fragment was ambiguous, or a hard error.
-    struct Resolution {
-        int programIndex = -1;       ///< >= 0 when a single script was selected
-        std::vector<int> candidates; ///< non-empty when `name` matched several entries
-        std::string error;           ///< non-empty when nothing matched at all
-        bool fromFragment = false;   ///< resolved from a substring, not an exact basename
-    };
-
-    // Resolve by name (exact basename first, then substring — so a half-remembered name still helps)
-    // or, failing that, by 0-based program index.
-    Resolution resolveScript(const Lst& scripts, const std::string& name, int programIndex) {
-        const auto& list = scripts.list();
-        if (!name.empty()) {
-            const std::string needle = toLower(stem(name));
-            std::vector<int> exact;
-            std::vector<int> partial;
-            for (std::size_t i = 0; i < list.size(); ++i) {
-                const std::string entry = toLower(stem(list[i]));
-                if (entry.empty()) {
-                    continue;
-                }
-                if (entry == needle) {
-                    exact.push_back(static_cast<int>(i));
-                } else if (!needle.empty() && entry.find(needle) != std::string::npos) {
-                    partial.push_back(static_cast<int>(i));
-                }
-            }
-            if (exact.size() == 1) {
-                return { exact.front(), {}, {}, false };
-            }
-            if (!exact.empty()) {
-                return { -1, exact, {}, false }; // scripts.lst genuinely lists the same basename twice
-            }
-            if (partial.size() == 1) {
-                // Exactly one entry contains the fragment, so there is nothing to choose between —
-                // resolve it, and flag that it came from a fragment so the caller can see what it got.
-                return { partial.front(), {}, {}, true };
-            }
-            if (!partial.empty()) {
-                return { -1, partial, {}, false };
-            }
-            return { -1, {}, "no script named '" + name + "' in scripts.lst", false };
-        }
-        if (programIndex < 0 || programIndex >= static_cast<int>(list.size())) {
-            return { -1, {},
-                "program index " + std::to_string(programIndex) + " out of range (have "
-                    + std::to_string(list.size())
-                    + " scripts). Note the SCRIPT_* constants in headers/scripts.h are 1-based: subtract 1, "
-                      "or pass 'name' instead",
-                false };
-        }
-        return { programIndex, {}, {}, false };
-    }
-
-    // A candidate-list result: the caller gave a fragment that names several scripts, so report them
-    // rather than picking one.
-    ordered_json ambiguousResult(resource::GameResources& resources, const Lst& scripts,
-        const std::string& query, const std::vector<int>& candidates) {
-        ordered_json root;
-        root["query"] = query;
-        root["ambiguous"] = true;
-        auto matches = ordered_json::array();
-        for (const int index : candidates) {
-            matches.push_back(scriptIdentity(resources, scripts, index));
-        }
-        root["matches"] = std::move(matches);
-        root["hint"] = "several scripts.lst entries match that name; re-run with an exact 'name' or a 'programIndex'";
-        return root;
-    }
-
-    void emit(std::ostream& out, const ordered_json& root) {
-        // Fallout 2 text is CP-1252, not UTF-8; `replace` substitutes U+FFFD for stray bytes so dump()
-        // emits valid JSON instead of throwing on e.g. 0x85 ("…").
-        out << root.dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
-    }
-
     // --- find_script -------------------------------------------------------------
 
     // Every placement of `programIndex` in one map: the map's own header script, plus per-section
@@ -199,8 +107,7 @@ namespace {
         const auto& mapFile = map.getMapFile();
         // The header's script_id is 1-based (the engine runs scripts.lst[script_id - 1], fallout2-ce
         // map.cc), unlike MapScript::script_id below, which is already the 0-based program index.
-        const bool asMapScript = mapFile.header.script_id > 0
-            && mapFile.header.script_id - 1 == programIndex;
+        const bool asMapScript = mapFile.header.programIndex() == programIndex;
 
         auto sections = ordered_json::array();
         int total = 0;
@@ -313,15 +220,6 @@ namespace {
         return toLower(path.extension().string());
     }
 
-    std::string trimmed(const std::string& line) {
-        const auto first = line.find_first_not_of(" \t\r\n");
-        if (first == std::string::npos) {
-            return {};
-        }
-        const auto last = line.find_last_not_of(" \t\r\n");
-        return line.substr(first, last - first + 1);
-    }
-
     // Accumulates hits up to the caller's limit, so a broad pattern truncates instead of flooding.
     struct MatchSink {
         ordered_json matches = ordered_json::array();
@@ -383,7 +281,7 @@ namespace {
                 (lineEnd == std::string::npos ? text.size() : lineEnd) - lineStart);
             if (matcher.matches(line)) {
                 sink.add({ { "kind", "source" }, { "script", stem(path) }, { "file", stem(path) },
-                    { "path", path }, { "line", lineNumber }, { "text", trimmed(line) } });
+                    { "path", path }, { "line", lineNumber }, { "text", text::trim(line) } });
             }
             if (lineEnd == std::string::npos) {
                 break;
@@ -421,7 +319,14 @@ int describeScript(resource::GameResources& resources, const DescribeScriptOptio
     }
     const std::string basename = root["name"].get<std::string>();
     attachSource(resources, basename, root);
+    if (options.disassemble) {
+        attachDisassembly(resources, root);
+    }
     root["dialog"] = loadDialog(resources, basename, options.locale);
+    if (options.analyze) {
+        const auto analysis = analyzeScript(resources, *scripts, resolved.programIndex, options.locale);
+        root["analysis"] = analysis.has_value() ? *analysis : ordered_json(nullptr);
+    }
     emit(out, root);
     return 0;
 }

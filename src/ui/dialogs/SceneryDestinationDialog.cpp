@@ -13,10 +13,10 @@ namespace {
     constexpr int MAX_HEX_TILE = HexagonGrid::POSITION_COUNT - 1;
 } // namespace
 
-SceneryDestinationDialog::SceneryDestinationDialog(Pro::SCENERY_TYPE sceneryType,
+SceneryDestinationDialog::SceneryDestinationDialog(SceneryType sceneryType,
     uint32_t elevhex, uint32_t map, uint32_t elevtype, uint32_t elevlevel, QWidget* parent)
     : BaseDialog("Scenery Destination", parent)
-    , _isElevator(sceneryType == Pro::SCENERY_TYPE::ELEVATOR)
+    , _isElevator(sceneryType == SceneryType::Elevator)
     , _elevhex(elevhex)
     , _map(map)
     , _elevtype(elevtype)

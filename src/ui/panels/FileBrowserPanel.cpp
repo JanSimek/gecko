@@ -133,7 +133,7 @@ QString FileLoaderWorker::resolveProName(const std::string& vfsPath) const {
             path = path.substr(1);
         }
 
-        const auto* pro = _resources->repository().load<Pro>(path);
+        const auto* pro = _resources->repository().tryLoad<Pro>(path);
         if (!pro) {
             return QStringLiteral("Failed to load");
         }
@@ -315,7 +315,6 @@ bool FileBrowserPanel::isTextFile(const QString& filePath) const {
 FileBrowserPanel::FileBrowserPanel(std::shared_ptr<resource::GameResources> resources, std::shared_ptr<Settings> settings, QWidget* parent)
     : QWidget(parent)
     , _mainLayout(nullptr)
-    , _filterLayout(nullptr)
     , _searchLineEdit(nullptr)
     , _fileTypeComboBox(nullptr)
     , _refreshButton(nullptr)
@@ -401,7 +400,7 @@ FileBrowserPanel::~FileBrowserPanel() {
 void FileBrowserPanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
     _mainLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
-    _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    _mainLayout->setSpacing(ui::theme::spacing::TIGHT);
 
     setupFilterControls();
     setupTreeView();
@@ -477,7 +476,6 @@ void FileBrowserPanel::setupTreeView() {
     _treeView->setContextMenuPolicy(Qt::CustomContextMenu);
     setupHeaderContextMenu();
 
-    connect(_treeView, &QTreeView::clicked, this, &FileBrowserPanel::onTreeItemClicked);
     connect(_treeView, &QTreeView::doubleClicked, this, &FileBrowserPanel::onTreeItemDoubleClicked);
     connect(_treeView, &QTreeView::customContextMenuRequested, this, &FileBrowserPanel::onCustomContextMenuRequested);
 
@@ -595,12 +593,12 @@ void FileBrowserPanel::updateFileTypeComboBox() {
     }
 }
 
-void FileBrowserPanel::insertFileRow(FileTreeItem* rootItem, const FileBrowserEntry& entry) {
+void FileBrowserPanel::insertFileRow(QStandardItem* rootItem, const FileBrowserEntry& entry) {
     QStringList pathComponents = entry.normalizedPath.split('/', Qt::SkipEmptyParts);
     if (pathComponents.isEmpty())
         return;
 
-    FileTreeItem* currentParent = rootItem;
+    QStandardItem* currentParent = rootItem;
     for (int i = 0; i < pathComponents.size() - 1; ++i) {
         currentParent = findOrCreateDirectory(currentParent, pathComponents[i]);
     }
@@ -644,7 +642,8 @@ void FileBrowserPanel::buildFileTree(const std::vector<FileBrowserEntry>& entrie
 
     applyDefaultColumnVisibility();
 
-    FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
+    // The model's invisible root is a plain QStandardItem; every row under it is a FileTreeItem.
+    QStandardItem* rootItem = _treeModel->invisibleRootItem();
 
     for (const auto& entry : entries) {
         if (!_currentSearchFilter.isEmpty() && !entry.path.contains(_currentSearchFilter, Qt::CaseInsensitive)) {
@@ -668,7 +667,7 @@ void FileBrowserPanel::buildFileTree(const std::vector<FileBrowserEntry>& entrie
     resizeNameColumnToContent();
 }
 
-FileTreeItem* FileBrowserPanel::findOrCreateDirectory(FileTreeItem* parent, const QString& dirName) {
+FileTreeItem* FileBrowserPanel::findOrCreateDirectory(QStandardItem* parent, const QString& dirName) {
     for (int i = 0; i < parent->rowCount(); ++i) {
         QStandardItem* child = parent->child(i, 0);
         FileTreeItem* treeItem = static_cast<FileTreeItem*>(child);
@@ -690,16 +689,6 @@ FileTreeItem* FileBrowserPanel::findOrCreateDirectory(FileTreeItem* parent, cons
 
     parent->appendRow(QList<QStandardItem*>() << dirItem << typeItem << sourceItem << pathItem << proNameItem);
     return dirItem;
-}
-
-QString FileBrowserPanel::getFileExtension(const QString& filePath) const {
-    QFileInfo fileInfo(filePath);
-    QString suffix = fileInfo.suffix().toLower();
-    return suffix.isEmpty() ? QString() : "." + suffix;
-}
-
-QString FileBrowserPanel::getFileIcon(const QString& extension) const {
-    return extension;
 }
 
 void FileBrowserPanel::updateFileCount() {
@@ -748,11 +737,6 @@ void FileBrowserPanel::refreshFileList() {
     loadFiles();
 }
 
-void FileBrowserPanel::setSearchFilter(const QString& filter) {
-    _currentSearchFilter = filter;
-    updateFileDisplay();
-}
-
 void FileBrowserPanel::setFileTypeFilter(const QString& fileType) {
     _currentFileTypeFilter = fileType;
     updateFileDisplay();
@@ -788,21 +772,6 @@ void FileBrowserPanel::onFileTypeChanged(const QString& fileType) {
 
 void FileBrowserPanel::onRefreshClicked() {
     refreshFileList();
-}
-
-void FileBrowserPanel::onTreeItemClicked(const QModelIndex& index) {
-    if (!index.isValid())
-        return;
-
-    QModelIndex sourceIndex = _proxyModel->mapToSource(index);
-    QStandardItem* item = _treeModel->itemFromIndex(sourceIndex);
-    FileTreeItem* treeItem = static_cast<FileTreeItem*>(item);
-
-    if (treeItem && treeItem->getType() == FileTreeItem::File) {
-        QString filePath = treeItem->getFilePath();
-        spdlog::debug("FileBrowserPanel: File selected: {}", filePath.toStdString());
-        Q_EMIT fileSelected(filePath);
-    }
 }
 
 void FileBrowserPanel::onTreeItemDoubleClicked(const QModelIndex& index) {
@@ -931,7 +900,8 @@ void FileBrowserPanel::processNextChunk() {
         return;
     }
 
-    FileTreeItem* rootItem = static_cast<FileTreeItem*>(_treeModel->invisibleRootItem());
+    // The model's invisible root is a plain QStandardItem; every row under it is a FileTreeItem.
+    QStandardItem* rootItem = _treeModel->invisibleRootItem();
 
     // No nested processEvents here. Re-entrant pumping let other timers - notably the SFML render
     // loop - run long work re-entrantly, freezing a map load's progress bar until the load finished,
@@ -1079,8 +1049,6 @@ void FileBrowserPanel::exportFile(const QString& filePath) {
         _statusLabel->setText(QString("Exported %1 (%2 bytes)").arg(fileInfo.fileName()).arg(bytesWritten));
         spdlog::debug("FileBrowserPanel: Exported {} to {} ({} bytes)",
             filePath.toStdString(), saveFilePath.toStdString(), bytesWritten);
-
-        Q_EMIT fileExportRequested(filePath);
 
     } catch (const std::exception& e) {
         QMessageBox::critical(this, "Export Error",

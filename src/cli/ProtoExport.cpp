@@ -1,6 +1,8 @@
 #include "cli/ProtoExport.h"
 
+#include "cli/ScriptLookup.h"
 #include "format/lst/Lst.h"
+#include "format/map/MapScript.h"
 #include "format/msg/Msg.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
@@ -77,8 +79,8 @@ namespace {
             : _proto(tryLoad([&] { return ProHelper::protoMsgFile(resources); }))
             , _perk(tryLoad([&] { return ProHelper::perkMsgFile(resources); }))
             , _stat(tryLoad([&] { return ProHelper::statMsgFile(resources); }))
-            , _itemNames(tryLoad([&] { return ProHelper::msgFile(resources, Pro::OBJECT_TYPE::ITEM); }))
-            , _critterNames(tryLoad([&] { return ProHelper::msgFile(resources, Pro::OBJECT_TYPE::CRITTER); })) {
+            , _itemNames(tryLoad([&] { return ProHelper::msgFile(resources, ObjectType::Item); }))
+            , _critterNames(tryLoad([&] { return ProHelper::msgFile(resources, ObjectType::Critter); })) {
         }
 
         // {id, name} for a proto.msg-named id; message ids per fallout2-ce proto.cc protoInit.
@@ -105,8 +107,8 @@ namespace {
         }
 
         // The proto's own name and examine text: message_id and message_id + 1 in pro_item/pro_crit.msg.
-        ordered_json protoText(Pro::OBJECT_TYPE type, std::uint32_t messageId) const {
-            return text(type == Pro::OBJECT_TYPE::ITEM ? _itemNames : _critterNames, static_cast<int>(messageId));
+        ordered_json protoText(ObjectType type, std::uint32_t messageId) const {
+            return text(type == ObjectType::Item ? _itemNames : _critterNames, static_cast<int>(messageId));
         }
 
     private:
@@ -160,7 +162,8 @@ namespace {
     ordered_json extendedItemFlags(std::uint32_t flags) {
         using enum Pro::ExtendedItemFlags;
         return { { "raw", flags }, { "bigGun", Pro::hasFlag(flags, BIG_GUN) },
-            { "twoHanded", Pro::hasFlag(flags, TWO_HANDED) }, { "hiddenItem", Pro::hasFlag(flags, ITEM_HIDDEN) } };
+            { "twoHanded", Pro::hasFlag(flags, TWO_HANDED) }, { "energyWeapon", Pro::hasFlag(flags, ENERGY) },
+            { "hiddenItem", Pro::hasFlag(flags, ITEM_HIDDEN) } };
     }
 
     ordered_json weaponData(const Pro::WeaponData& w, const Labels& labels) {
@@ -179,12 +182,6 @@ namespace {
         out["ammoPid"] = w.ammoPID;
         out["ammoCapacity"] = s32(w.ammoCapacity);
         out["soundId"] = w.soundId;
-        // Not part of the engine's weapon record. fallout2-ce protoItemDataRead stops at the soundCode
-        // byte (a 122-byte file), and every shipped weapon proto is exactly that long, so ProReader only
-        // ever fills this with its 0 default. sfall's "Energy Weapon" flag is extendedFlags 0x0400
-        // (sfall Skills.cpp), not a trailing field. Exported because gecko reads it, and it is 0 for any
-        // proto the engine can load.
-        out["weaponFlags"] = w.weaponFlags;
         return out;
     }
 
@@ -218,31 +215,33 @@ namespace {
 
     // One object named after the item type, holding that type's record.
     void addItemTypeData(ordered_json& row, const Pro& pro, const Labels& labels) {
-        using enum Pro::ITEM_TYPE;
+        using enum ItemType;
         const auto key = std::string(kItemTypeKeys[pro.objectSubtypeId()]);
         switch (pro.itemType()) {
-            case ARMOR:
+            case Armor:
                 row[key] = armorData(pro.armorData, labels);
                 break;
-            case CONTAINER:
+            case Container:
                 row[key] = { { "maxSize", s32(pro.containerData.maxSize) },
                     { "openFlags", pro.containerData.flags } };
                 break;
-            case DRUG:
+            case Drug:
                 row[key] = drugData(pro.drugData, labels);
                 break;
-            case WEAPON:
+            case Weapon:
                 row[key] = weaponData(pro.weaponData, labels);
                 break;
-            case AMMO:
+            case Ammo:
                 row[key] = ammoData(pro.ammoData, labels);
                 break;
-            case MISC:
+            case Misc:
                 row[key] = { { "powerTypePid", pro.miscData.powerTypePid },
                     { "powerType", s32(pro.miscData.powerType) }, { "charges", s32(pro.miscData.charges) } };
                 break;
-            case KEY:
+            case Key:
                 row[key] = { { "keyCode", s32(pro.keyData.keyId) } };
+                break;
+            default:
                 break;
         }
     }
@@ -383,7 +382,7 @@ namespace {
         if (sid == -1) {
             return nullptr;
         }
-        const auto programIndex = static_cast<std::size_t>(sid & 0xFFFFFF);
+        const auto programIndex = static_cast<std::size_t>(MapScript::sidIndex(static_cast<std::uint32_t>(sid)));
         ordered_json script;
         script["programIndex"] = programIndex;
         script["name"] = scriptsLst != nullptr && programIndex < scriptsLst->list().size()
@@ -392,12 +391,38 @@ namespace {
         return script;
     }
 
-    const char* kindName(Pro::OBJECT_TYPE kind) {
-        return kind == Pro::OBJECT_TYPE::ITEM ? "item" : "critter";
+    const char* kindName(ObjectType kind) {
+        return kind == ObjectType::Item ? "item" : "critter";
+    }
+
+    // An item whose subtype has no kItemTypeKeys entry cannot be described; the engine has no such type.
+    bool knownItemType(const Pro& pro) {
+        return pro.objectSubtypeId() < kItemTypeKeys.size();
+    }
+
+    ordered_json protoRecord(ObjectType kind, std::uint32_t pid, const std::string& file, const Pro& pro,
+        const Labels& labels, const Lst* scriptsLst) {
+        ordered_json row;
+        row["pid"] = pid;
+        row["kind"] = kindName(kind);
+        row["file"] = file;
+        row["name"] = labels.protoText(kind, pro.header.message_id);
+        row["description"] = labels.protoText(kind, pro.header.message_id + 1);
+        row["fid"] = pro.header.FID;
+        row["flags"] = pro.header.flags;
+        const auto sid = s32(pro.commonItemData.SID);
+        row["sid"] = sid;
+        row["script"] = scriptOf(sid, scriptsLst);
+        if (kind == ObjectType::Item) {
+            addItemFields(row, pro, labels);
+        } else {
+            addCritterFields(row, pro, labels);
+        }
+        return row;
     }
 
     struct ListSource {
-        Pro::OBJECT_TYPE kind;
+        ObjectType kind;
         std::string_view path;
     };
 
@@ -406,12 +431,8 @@ namespace {
         Exporter(resource::GameResources& resources, const ProtoExportOptions& options)
             : _resources(resources)
             , _options(options)
-            , _labels(resources) {
-            try {
-                _scriptsLst = resources.repository().load<Lst>(ResourcePaths::Lst::SCRIPTS);
-            } catch (const std::exception&) {
-                _scriptsLst = nullptr; // no script names; the sid is still reported
-            }
+            , _labels(resources)
+            , _scriptsLst(script_lookup::loadScriptsLst(resources)) { // null: no script names, the sid still reported
         }
 
         // Returns false (with `error` set) when the list itself cannot be read.
@@ -428,7 +449,7 @@ namespace {
                 { "entries", entries.size() } });
             // PIDs are 1-based lines of the .lst (proto.cc _proto_list_str).
             for (std::size_t line = 1; line <= entries.size(); ++line) {
-                addProto(source.kind, Pro::makePid(source.kind, static_cast<std::uint32_t>(line)), entries[line - 1]);
+                addProto(source.kind, ProtoId(source.kind, static_cast<std::uint32_t>(line)).pid(), entries[line - 1]);
             }
             return true;
         }
@@ -443,7 +464,7 @@ namespace {
         }
 
     private:
-        void addProto(Pro::OBJECT_TYPE kind, std::uint32_t pid, const std::string& file) {
+        void addProto(ObjectType kind, std::uint32_t pid, const std::string& file) {
             const Pro* pro = nullptr;
             try {
                 pro = _resources.loadPro(pid);
@@ -457,45 +478,25 @@ namespace {
                     { "reason", "not loaded" } });
                 return;
             }
-            if (kind == Pro::OBJECT_TYPE::ITEM && pro->objectSubtypeId() >= kItemTypeKeys.size()) {
+            if (kind == ObjectType::Item && !knownItemType(*pro)) {
                 _unreadable.push_back({ { "pid", pid }, { "kind", kindName(kind) }, { "file", file },
                     { "reason", "unknown item type " + std::to_string(pro->objectSubtypeId()) } });
                 return;
             }
-            if (kind == Pro::OBJECT_TYPE::ITEM && !matchesItemType(*pro)) {
+            if (kind == ObjectType::Item && !matchesItemType(*pro)) {
                 return;
             }
-            _protos.push_back(row(kind, pid, file, *pro));
+            _protos.push_back(protoRecord(kind, pid, file, *pro, _labels, _scriptsLst));
         }
 
         bool matchesItemType(const Pro& pro) const {
             return !_options.itemType.has_value() || pro.itemType() == *_options.itemType;
         }
 
-        ordered_json row(Pro::OBJECT_TYPE kind, std::uint32_t pid, const std::string& file, const Pro& pro) const {
-            ordered_json row;
-            row["pid"] = pid;
-            row["kind"] = kindName(kind);
-            row["file"] = file;
-            row["name"] = _labels.protoText(kind, pro.header.message_id);
-            row["description"] = _labels.protoText(kind, pro.header.message_id + 1);
-            row["fid"] = pro.header.FID;
-            row["flags"] = pro.header.flags;
-            const auto sid = s32(pro.commonItemData.SID);
-            row["sid"] = sid;
-            row["script"] = scriptOf(sid, _scriptsLst);
-            if (kind == Pro::OBJECT_TYPE::ITEM) {
-                addItemFields(row, pro, _labels);
-            } else {
-                addCritterFields(row, pro, _labels);
-            }
-            return row;
-        }
-
         resource::GameResources& _resources;
         const ProtoExportOptions& _options;
         Labels _labels;
-        const Lst* _scriptsLst = nullptr;
+        const Lst* _scriptsLst;
         ordered_json _lists = ordered_json::array();
         ordered_json _unreadable = ordered_json::array();
         ordered_json _protos = ordered_json::array();
@@ -506,22 +507,22 @@ std::optional<std::string> parseProtoFilter(std::string_view kind, std::string_v
     ProtoExportOptions& out) {
     out = {};
     if (kind == "item") {
-        out.kind = Pro::OBJECT_TYPE::ITEM;
+        out.kind = ObjectType::Item;
     } else if (kind == "critter") {
-        out.kind = Pro::OBJECT_TYPE::CRITTER;
+        out.kind = ObjectType::Critter;
     } else if (!kind.empty()) {
         return "unknown kind '" + std::string(kind) + "' (expected item or critter)";
     }
     if (itemType.empty()) {
         return std::nullopt;
     }
-    if (out.kind == Pro::OBJECT_TYPE::CRITTER) {
+    if (out.kind == ObjectType::Critter) {
         return std::string("itemType filters items; it cannot be combined with kind critter");
     }
     for (std::size_t i = 0; i < kItemTypeKeys.size(); ++i) {
         if (kItemTypeKeys[i] == itemType) {
-            out.kind = Pro::OBJECT_TYPE::ITEM;
-            out.itemType = static_cast<Pro::ITEM_TYPE>(i);
+            out.kind = ObjectType::Item;
+            out.itemType = static_cast<ItemType>(i);
             return std::nullopt;
         }
     }
@@ -531,11 +532,11 @@ std::optional<std::string> parseProtoFilter(std::string_view kind, std::string_v
 
 int exportProtos(resource::GameResources& resources, const ProtoExportOptions& options, std::ostream& out) {
     std::vector<ListSource> sources;
-    if (!options.kind.has_value() || *options.kind == Pro::OBJECT_TYPE::ITEM) {
-        sources.push_back({ Pro::OBJECT_TYPE::ITEM, ResourcePaths::Lst::PROTO_ITEMS });
+    if (!options.kind.has_value() || *options.kind == ObjectType::Item) {
+        sources.push_back({ ObjectType::Item, ResourcePaths::Lst::PROTO_ITEMS });
     }
-    if (!options.kind.has_value() || *options.kind == Pro::OBJECT_TYPE::CRITTER) {
-        sources.push_back({ Pro::OBJECT_TYPE::CRITTER, ResourcePaths::Lst::PROTO_CRITTERS });
+    if (!options.kind.has_value() || *options.kind == ObjectType::Critter) {
+        sources.push_back({ ObjectType::Critter, ResourcePaths::Lst::PROTO_CRITTERS });
     }
 
     Exporter exporter(resources, options);
@@ -548,6 +549,16 @@ int exportProtos(resource::GameResources& resources, const ProtoExportOptions& o
     // Fallout 2 text is CP-1252; `replace` keeps dump() from throwing on stray bytes.
     out << exporter.result().dump(-1, ' ', false, ordered_json::error_handler_t::replace) << "\n";
     return 0;
+}
+
+std::optional<ordered_json> protoRow(resource::GameResources& resources, std::uint32_t pid, const Pro& pro) {
+    const ObjectType kind = ProtoId(pid).objectType();
+    if ((kind != ObjectType::Item && kind != ObjectType::Critter) || (kind == ObjectType::Item && !knownItemType(pro))) {
+        return std::nullopt;
+    }
+    // The row's file is the PID's .lst entry, as exportProtos walks it (PIDs are 1-based lines).
+    const std::string& file = ProHelper::lstFile(resources, pid)->list().at(ProtoId(pid).protoId() - 1);
+    return protoRecord(kind, pid, file, pro, Labels(resources), script_lookup::loadScriptsLst(resources));
 }
 
 } // namespace geck::cli

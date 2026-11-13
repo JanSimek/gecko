@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -15,12 +16,13 @@ struct PatternObject {
     uint32_t proPid = 0;
     uint32_t frmPid = 0;
     uint32_t direction = 0; ///< Stored verbatim; matches the authored sprite.
-    uint32_t flags = 0;
+    /// The captured instance flags; absent (a hand-written stamp without "flags") takes the proto's.
+    std::optional<uint32_t> flags;
 };
 
 /// A floor or roof tile captured in a pattern variant, positioned by its tile offset
 /// relative to the anchor. Tile space is a distinct 100x100 grid from hex space —
-/// never validate one against the other's range (see CLAUDE.md).
+/// never validate one against the other's range (see AGENTS.md).
 struct PatternTile {
     int dxTile = 0;
     int dyTile = 0;

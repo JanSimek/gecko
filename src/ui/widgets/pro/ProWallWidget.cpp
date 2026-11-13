@@ -39,7 +39,7 @@ void ProWallWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 }
 
 bool ProWallWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
-    return pro && pro->type() == Pro::OBJECT_TYPE::WALL;
+    return pro && pro->type() == ObjectType::Wall;
 }
 
 QString ProWallWidget::getTabLabel() const {

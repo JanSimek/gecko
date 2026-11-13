@@ -34,10 +34,6 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
     }
     int tileIndex_pos = *resolvedTile;
 
-    // updateTileSprite works in hex space; recover the tile's canonical top-left hex.
-    // tileIndexToHexIndex -> tileIndexForPosition is a lossless round-trip back to tileIndex_pos.
-    int hexIndex = tileIndexToHexIndex(tileIndex_pos);
-
     auto& elevationTiles = _context.ensureElevationTiles(_context.getCurrentElevation());
 
     if (tileIndex_pos >= static_cast<int>(elevationTiles.size())) {
@@ -54,7 +50,7 @@ void TilePlacementManager::placeTileAtPosition(int tileIndex, sf::Vector2f world
     }
     uint16_t after = isRoof ? elevationTiles[tileIndex_pos].getRoof() : elevationTiles[tileIndex_pos].getFloor();
 
-    _context.updateTileSprite(hexIndex, isRoof);
+    _context.updateTileSprite(tileIndex_pos, isRoof);
 
     _context.registerTileEdit("Place Tile", { { _context.getCurrentElevation(), tileIndex_pos, isRoof, before, after } });
 }
@@ -65,7 +61,7 @@ void TilePlacementManager::fillAreaWithTile(int tileIndex, const sf::FloatRect& 
         return;
     }
 
-    std::vector<int> tilesToFill = _context.getSelectionManager()->getTilesInAreaIncludingEmpty(area, isRoof, _context.getCurrentElevation());
+    std::vector<int> tilesToFill = _context.getSelectionManager()->getTilesInAreaIncludingEmpty(area, isRoof);
 
     if (tilesToFill.empty()) {
         spdlog::debug("TilePlacementManager::fillAreaWithTile: No tiles found in area");
@@ -88,8 +84,7 @@ void TilePlacementManager::fillAreaWithTile(int tileIndex, const sf::FloatRect& 
             uint16_t after = isRoof ? elevationTiles[tileIdx].getRoof() : elevationTiles[tileIdx].getFloor();
             changes.push_back({ _context.getCurrentElevation(), tileIdx, isRoof, before, after });
 
-            int hexIndex = tileIndexToHexIndex(tileIdx);
-            _context.updateTileSprite(hexIndex, isRoof);
+            _context.updateTileSprite(tileIdx, isRoof);
         }
     }
 
@@ -126,8 +121,7 @@ void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
             uint16_t after = elevationTiles[tileIdx].getFloor();
             changes.push_back({ _context.getCurrentElevation(), tileIdx, false, before, after });
 
-            int hexIndex = tileIndexToHexIndex(tileIdx);
-            _context.updateTileSprite(hexIndex, false); // false = floor tile
+            _context.updateTileSprite(tileIdx, false); // false = floor tile
         }
     }
 
@@ -138,8 +132,7 @@ void TilePlacementManager::replaceSelectedTiles(int newTileIndex) {
             uint16_t after = elevationTiles[tileIdx].getRoof();
             changes.push_back({ _context.getCurrentElevation(), tileIdx, true, before, after });
 
-            int hexIndex = tileIndexToHexIndex(tileIdx);
-            _context.updateTileSprite(hexIndex, true); // true = roof tile
+            _context.updateTileSprite(tileIdx, true); // true = roof tile
         }
     }
 
@@ -152,14 +145,6 @@ void TilePlacementManager::setTilePlacementMode(bool enabled, int tileIndex, boo
     _tilePlacementMode = enabled;
     _tilePlacementIndex = tileIndex;
     _tilePlacementIsRoof = isRoof;
-}
-
-void TilePlacementManager::setTilePlacementAreaFill(bool enabled) {
-    _tilePlacementAreaFill = enabled;
-}
-
-void TilePlacementManager::setTilePlacementReplaceMode(bool enabled) {
-    _tilePlacementReplaceMode = enabled;
 }
 
 void TilePlacementManager::handleTilePlacement(sf::Vector2f worldPos, bool /*isRoof*/) {
@@ -194,8 +179,6 @@ void TilePlacementManager::handleTileAreaFill(sf::Vector2f startPos, sf::Vector2
 
 void TilePlacementManager::resetState() {
     _tilePlacementMode = false;
-    _tilePlacementAreaFill = false;
-    _tilePlacementReplaceMode = false;
     _tilePlacementIndex = -1;
     _tilePlacementIsRoof = false;
 }

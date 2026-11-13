@@ -38,7 +38,6 @@ public:
 
     // Data paths management
     void addDataPath(const std::filesystem::path& path);
-    void removeDataPath(const std::filesystem::path& path);
     std::vector<std::filesystem::path> getDataPaths() const;
     void setDataPaths(const std::vector<std::filesystem::path>& paths);
 
@@ -79,6 +78,10 @@ public:
     bool getEdgeScrollEnabled() const;
     void setEdgeScrollEnabled(bool enabled);
 
+    // Keys of the panel sections (CollapsibleSection::key) the user has folded away.
+    QStringList getCollapsedSections() const;
+    void setCollapsedSections(const QStringList& keys);
+
     // Floating dock geometries
     QByteArray getFloatingDockGeometry(const QString& dockName) const;
     void setFloatingDockGeometry(const QString& dockName, const QByteArray& geometry);
@@ -100,6 +103,13 @@ public:
 
     // Selection highlight colours (preferences). Keys: "object", "wall", "critter", "tile".
     // Returns @p fallback when the colour has not been configured.
+    // Keyboard-shortcut overrides: action id -> QKeySequence portable text. Only entries that
+    // differ from the shipped default are stored, so changing a default in a later release still
+    // reaches everyone who never rebound that action. An action the user deliberately unbound is
+    // stored as an empty string, which is distinct from absent.
+    QMap<QString, QString> getKeyBindings() const;
+    void setKeyBindings(const QMap<QString, QString>& bindings);
+
     QColor getSelectionColor(const QString& key, const QColor& fallback) const;
     void setSelectionColor(const QString& key, const QColor& color);
 
@@ -113,7 +123,6 @@ public:
     // Game location configuration
     std::filesystem::path getGameLocation() const;
     bool isGameLocationValid() const;
-    void autoDetectGameLocation();
 
     std::filesystem::path getExecutableGameLocation() const;
     void setExecutableGameLocation(const std::filesystem::path& location);
@@ -152,8 +161,8 @@ private:
     bool _windowMaximized = true;        // Default to maximized
     bool _mergeSelectionOutlines = true; // Default: merge touching same-category outlines
     bool _edgeScrollEnabled = true;      // Default: auto-scroll when the cursor rests near an edge
+    QStringList _collapsedSections;      // Default: every section expanded
     QMap<QString, QByteArray> _floatingDockGeometries;
-    QString _version;
 
     // Text editor configuration
     TextEditorMode _textEditorMode = TextEditorMode::SYSTEM_DEFAULT;
@@ -161,6 +170,7 @@ private:
 
     // Selection highlight colour overrides (empty = use the renderer defaults).
     QMap<QString, QColor> _selectionColors;
+    QMap<QString, QString> _keyBindings;
 
     // Mod tools (empty = not set up)
     std::filesystem::path _modToolsRoot;
@@ -171,9 +181,6 @@ private:
     std::filesystem::path _gameDataDirectory;
 
     // Constants
-    // 1.1: data paths store each DAT as an explicit entry (no silent nested-mounting). fromJson
-    // migrates older "1.0" settings by expanding folders into folder + master.dat/critter.dat.
-    static constexpr const char* SETTINGS_VERSION = "1.1";
     static constexpr const char* SETTINGS_FILENAME = "settings.json";
     static constexpr const char* ORGANIZATION_NAME = "gecko";
     static constexpr const char* APPLICATION_NAME = "editor";

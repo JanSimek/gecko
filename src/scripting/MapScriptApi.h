@@ -14,11 +14,13 @@
 
 namespace geck {
 
+class Frm;
 class HexagonGrid;
 class Map;
 struct MapObject;
 struct EditArea;
 class ObjectCommandController;
+enum class ProtoScript;
 namespace pattern {
     struct FillPlan;
 }
@@ -38,9 +40,8 @@ public:
 /// ObjectCommandController. Pure C++ with no scripting-runtime dependency, so it is usable
 /// (and unit-testable) without Lua.
 ///
-/// A run that touches many hexes must be wrapped in beginBatch()/endBatch() (or a
-/// ScopedUndoBatch) so it collapses into ONE undo entry instead of one-per-hex — the
-/// UndoStack has a hard command cap.
+/// A run that touches many hexes must be wrapped in a ScopedUndoBatch so it collapses into ONE
+/// undo entry instead of one-per-hex — the UndoStack has a hard command cap.
 class MapScriptApi {
 public:
     /// Binds to a live editing session at `elevation`. References are borrowed and must
@@ -56,22 +57,6 @@ public:
         Map& map,
         int elevation,
         bool buildSprites = true);
-
-    /// Re-point a long-lived api (a resident plugin VM's host) at the current editor and map.
-    /// `map` may be null: the editor host is alive but no map is open — map-touching calls
-    /// then raise ScriptError until the next retarget. Per-run callers never need this: they
-    /// construct fresh over one map and drop the api afterwards.
-    void retarget(resource::GameResources& resources,
-        const HexagonGrid& hexgrid,
-        ObjectCommandController& controller,
-        Map* map,
-        int elevation,
-        bool buildSprites);
-
-    /// The editor host itself is gone (widget teardown): every api call raises ScriptError
-    /// until retarget() re-points at a live host. Prevents a resident VM from dereferencing
-    /// a destroyed controller/grid through a stale api.
-    void detach();
 
     // --- Queries (no mutation) ---------------------------------------------------
     bool isValidHex(int hex) const;
@@ -131,6 +116,11 @@ public:
     /// objects, as opposed to a wall face. Lets a generator tell boundary walls from the flat rock
     /// texture that carpets solid ground. Raises when the proto can't be loaded (like protoBlocks).
     bool protoFlat(int pid) const;
+    /// The scenery proto's engine subtype (SCENERY_TYPE_* without the prefix): "Door", "Stairs",
+    /// "Elevator", "LadderUp", "LadderDown" or "Generic". Lets a generator copying a shipped map
+    /// leave out the doors, ladders and elevators that lead to places the copy doesn't have. Raises
+    /// when the proto can't be loaded or isn't scenery.
+    std::string protoSceneryType(int pid) const;
     /// The proto's art FID (what placeProto resolves and stores) — lets a generator identify a
     /// proto's art via resolve_fid. Raises when the proto can't be loaded (like protoBlocks).
     int protoFid(int pid) const;
@@ -140,6 +130,10 @@ public:
     /// width to tile wall art gap-free) or its per-frame anchor offsets, without a one-off accessor
     /// per field. Raises when the proto or its FRM can't be resolved (like protoBlocks).
     std::vector<int> protoArtFrames(int pid) const;
+    /// The screen rectangle {left, top, right, bottom} the engine draws `pid`'s art in when it stands
+    /// on `hex` (fallout2-ce object.cc objectGetRect: rotation 0, frame 0, no pixel offset), in a
+    /// fixed screen frame — only differences between rects mean anything.
+    std::vector<int> artRect(int pid, int hex) const;
     /// Every map file in the mounted data (VFS paths, e.g. "maps/desert1.map"), sorted. Lets a
     /// generator pick a reference map at random when none was given.
     std::vector<std::string> listMaps() const;
@@ -215,10 +209,6 @@ public:
     /// [lo,hi]. Deterministic and cross-platform (mt19937 + integer reduction), so a seed reproduces.
     double rng();
     int rngInt(int lo, int hi);
-
-    // --- Undo batching -----------------------------------------------------------
-    void beginBatch(const std::string& description);
-    void endBatch();
 
     // --- Plan sink (host-only; not script-bound) ---------------------------------
     /// Redirect the mutators: while a sink is installed, placeObject/placeProto/paint*/placeStamp/
@@ -298,6 +288,26 @@ public:
     /// markers). Cells the repair ladder re-drew bring nothing (their floor no longer matches the
     /// source). Returns objects placed; raises on an unknown type or when no quilt has run.
     int quiltObjects(const std::string& typeName, const std::vector<int>& excludePids);
+    /// The hexes of the bound elevation that block movement, by the engine's instance-flag rule
+    /// (a critter/scenery/wall neither hidden nor no-block; doors count as passable) — the same
+    /// mask `map reachability` floods, over the objects placed so far (a fill's planned objects
+    /// included). Sorted. Lets a generator put the player start and exits where they can be walked.
+    std::vector<int> blockedHexes() const;
+    /// Copy a reference elevation's objects of the given types onto the same hexes of the bound
+    /// map — the whole object record (art, direction, instance flags, light, pixel offset),
+    /// untranslated, in the reference's own order (objects sharing a hex draw in list order): how a generator
+    /// reuses a shipped layout's hand-placed walls exactly. Scripts and inventories stay behind.
+    /// `excludePids` skips protos the copy must not carry over. Returns objects placed; raises on
+    /// an unknown type or an unreadable map.
+    int copyObjects(const std::string& mapPath, int refElevation, const std::vector<std::string>& typeNames,
+        const std::vector<int>& excludePids);
+    /// Copy the reference elevation's exit-grid markers standing on `hexes`, retargeted to a new
+    /// destination (same arguments as placeExitGrid). Each keeps its own direction proto and pixel
+    /// offset, so an exit line keeps the mappers' shape; its art switches to the destination's
+    /// family (brown to the world map, green to a map). Returns markers placed; raises on an
+    /// invalid destination or an unreadable map.
+    int copyExitGrids(const std::string& mapPath, int refElevation, const std::vector<int>& hexes, int destMapId,
+        int destHex, int destElevation, int orientation);
     /// The previous quiltFloor* run's fidelity stats, flattened as (painted, blocks,
     /// perfectBlocks, mismatchedCells, repairedCells, unresolvedSeams). Repaired cells are normal
     /// in small numbers; unresolved seams are borders the reference never showed. Script-visible
@@ -353,6 +363,9 @@ public:
     bool mutated() const { return _placedObjects > 0 || _paintedTiles > 0 || _mutatedDirectly; }
 
 private:
+    /// The FRM of `pid`'s art; raises if the proto or its art can't load.
+    const Frm& protoFrm(int pid) const;
+
     // Where an exit grid sends the player (engine fields exit_map/exit_position/exit_elevation/
     // exit_orientation). Bundled so the exit-grid builders don't take a long parameter list.
     struct ExitDest {
@@ -362,8 +375,10 @@ private:
         int orientation;
     };
     // Record a freshly-built `mapObject`: data-only when headless, else build its sprite from `frmPid`
-    // and register the placement. False when the GUI cannot resolve the art.
-    bool registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction);
+    // and register the placement. False when the GUI cannot resolve the art. `protoScript` says
+    // whether it also gets its proto's script (see ProtoScript).
+    bool registerObject(const std::shared_ptr<MapObject>& mapObject, int hex, uint32_t frmPid, uint32_t direction,
+        ProtoScript protoScript);
     // Build + register one exit-grid MISC marker at `hex` with the given art and destination. Assumes
     // `hex` is on-grid (callers validate). Returns registerObject's result.
     bool placeExitGridMarker(int hex, uint32_t proPid, uint32_t frmPid, const ExitDest& dest);
@@ -371,10 +386,11 @@ private:
     // placeExitGridRect and hexesOnScreenRect. Callers validate the centre and extents.
     std::array<std::vector<int>, 4> screenRectEdges(int centerHex, int screenHalfWidth, int screenHalfHeight) const;
     bool paintTile(int tileIndex, uint16_t tileId, bool isRoof);
+    int fillTileRect(int col0, int row0, int col1, int row1, uint16_t tileId, bool isRoof);
     // Parse a reference map headlessly (GL-free) for the palette queries; raises if unreadable.
     std::unique_ptr<Map> loadReferenceMap(const std::string& mapPath) const;
     // loadReferenceMap through a per-api cache keyed by the path string, so a run that learns from a
-    // reference more than once parses it once. Cleared on retarget()/detach() after a data remount.
+    // reference more than once parses it once.
     const Map& referenceMap(const std::string& mapPath) const;
     // pid -> placement count for the scatter-eligible scenery in `map` (scenery type, non-flat).
     // Shared by mapScenery (keys) and mapSceneryHistogram (the counts).
@@ -382,12 +398,10 @@ private:
     // Whether a scenery proto belongs in a scatter palette (upright decoration, not a flat blocker).
     bool isScatterableScenery(uint32_t pid) const;
 
-    // Pointers so a persistent host can re-point one long-lived api at the current map/editor (see
-    // retarget()/detach()). The value constructor takes references, so per-run callers see no nulls.
-    resource::GameResources* _resources;
-    const HexagonGrid* _hexgrid;
-    ObjectCommandController* _controller;
-    Map* _map;
+    resource::GameResources& _resources;
+    const HexagonGrid& _hexgrid;
+    ObjectCommandController& _controller;
+    Map& _map;
     int _elevation;
     bool _buildSprites;
     int _placedObjects = 0;
@@ -396,15 +410,6 @@ private:
     // so mutated() reports them even though the placed/painted counters stay at 0.
     bool _mutatedDirectly = false;
     std::unordered_map<std::string, pattern::Pattern> _stamps;
-
-    /// Guarded access to the re-pointable host members: mapRef() raises ScriptError when no
-    /// map is open, the others when the api is detached from its editor host. Every method
-    /// that touches the map/host goes through these, so a resident VM's stale calls surface
-    /// as catchable script errors instead of dereferencing dead objects.
-    [[nodiscard]] Map& mapRef() const;
-    [[nodiscard]] ObjectCommandController& controllerRef() const;
-    [[nodiscard]] const HexagonGrid& hexgridRef() const;
-    [[nodiscard]] resource::GameResources& resourcesRef() const;
 
     /// Hard ceiling on entries a plan sink accepts per run, kSinkCapFactor x the bound
     /// area's total footprint (hexes + floor tiles + roof tiles, floored at 1): a runaway

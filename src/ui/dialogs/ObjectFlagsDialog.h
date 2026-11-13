@@ -1,5 +1,6 @@
 #pragma once
 
+#include "format/ObjTypes.h"
 #include "ui/common/BaseDialog.h"
 
 #include <cstdint>
@@ -21,8 +22,8 @@ class ObjectFlagsDialog : public BaseDialog {
 
 public:
     /// @param flags      current MapObject.flags value
-    /// @param objectType Pro::OBJECT_TYPE ordinal (pro_pid >> 24)
-    ObjectFlagsDialog(uint32_t flags, uint32_t objectType, QWidget* parent = nullptr);
+    /// @param objectType the object's proto type (MapObject::objectType())
+    ObjectFlagsDialog(uint32_t flags, ObjectType objectType, QWidget* parent = nullptr);
 
     /// Returns the edited flags, preserving any bits not shown for this type.
     uint32_t getFlags() const;

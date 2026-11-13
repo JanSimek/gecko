@@ -1,9 +1,9 @@
 #include "HexagonGrid.h"
 #include "Hex.h"
+#include "HexGeometry.h"
 #include <algorithm>
 #include <functional>
 #include <limits>
-#include <set>
 
 namespace geck {
 
@@ -80,22 +80,15 @@ std::optional<std::reference_wrapper<const Hex>> HexagonGrid::getHexByPosition(u
 }
 
 std::optional<HexagonGrid::GridCoordinates> HexagonGrid::coordinatesForPosition(int position) const {
-    if (!containsPosition(position)) {
+    if (!hexgrid::isValidPosition(position)) {
         return std::nullopt;
     }
 
-    return GridCoordinates{
-        position % GRID_WIDTH,
-        position / GRID_WIDTH
-    };
+    return GridCoordinates{ hexgrid::columnOf(position), hexgrid::rowOf(position) };
 }
 
 std::optional<int> HexagonGrid::positionForCoordinates(int x, int y) const {
-    if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) {
-        return std::nullopt;
-    }
-
-    return y * GRID_WIDTH + x;
+    return hexgrid::positionOf({ x, y });
 }
 
 std::optional<int> HexagonGrid::tileIndexForPosition(int position) const {
@@ -109,50 +102,30 @@ std::optional<int> HexagonGrid::tileIndexForPosition(int position) const {
     return tileY * TILE_GRID_WIDTH + tileX;
 }
 
-std::vector<int> HexagonGrid::rectangleBorderPositions(int topLeftPosition,
-    int topRightPosition,
-    int bottomLeftPosition,
-    int bottomRightPosition) const {
-    auto topLeft = coordinatesForPosition(topLeftPosition);
-    auto topRight = coordinatesForPosition(topRightPosition);
-    auto bottomLeft = coordinatesForPosition(bottomLeftPosition);
-    auto bottomRight = coordinatesForPosition(bottomRightPosition);
-    if (!topLeft.has_value() || !topRight.has_value() || !bottomLeft.has_value() || !bottomRight.has_value()) {
-        return {};
-    }
+std::vector<int> HexagonGrid::screenRectangleBorderPositions(float left, float top, float right, float bottom) const {
+    const auto inside = [this, left, top, right, bottom](int position) {
+        const Hex& hex = _grid[static_cast<size_t>(position)];
+        const auto x = static_cast<float>(hex.x());
+        const auto y = static_cast<float>(hex.y());
+        return x >= left && x <= right && y >= top && y <= bottom;
+    };
 
-    int leftX = std::min(topLeft->x, bottomLeft->x);
-    int rightX = std::max(topRight->x, bottomRight->x);
-    int topY = std::min(topLeft->y, topRight->y);
-    int bottomY = std::max(bottomLeft->y, bottomRight->y);
-
-    std::set<int> uniquePositions;
-
-    for (int x = leftX; x <= rightX; ++x) {
-        auto topPosition = positionForCoordinates(x, topY);
-        if (topPosition.has_value()) {
-            uniquePositions.insert(*topPosition);
+    std::vector<int> border;
+    for (int position = 0; position < POSITION_COUNT; ++position) {
+        if (!inside(position)) {
+            continue;
         }
-
-        auto bottomPosition = positionForCoordinates(x, bottomY);
-        if (bottomPosition.has_value()) {
-            uniquePositions.insert(*bottomPosition);
+        const hexgrid::Cube center = hexgrid::cubeOfPosition(position);
+        // Neighbours are taken in cube space, which absorbs the grid's column-parity offset.
+        const bool onEdge = std::ranges::any_of(hexgrid::DIRECTIONS, [&center, &inside](const hexgrid::Cube& direction) {
+            const auto neighbour = hexgrid::positionOf(hexgrid::cubeToOffset(center + direction));
+            return !neighbour.has_value() || !inside(*neighbour);
+        });
+        if (onEdge) {
+            border.push_back(position);
         }
     }
-
-    for (int y = topY + 1; y < bottomY; ++y) {
-        auto leftPosition = positionForCoordinates(leftX, y);
-        if (leftPosition.has_value()) {
-            uniquePositions.insert(*leftPosition);
-        }
-
-        auto rightPosition = positionForCoordinates(rightX, y);
-        if (rightPosition.has_value()) {
-            uniquePositions.insert(*rightPosition);
-        }
-    }
-
-    return { uniquePositions.begin(), uniquePositions.end() };
+    return border;
 }
 
 } // namespace geck

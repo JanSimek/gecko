@@ -105,6 +105,14 @@ std::string applyManagedModsOrderBlock(const std::string& existingContent, const
 std::optional<std::filesystem::path> macOsBundleDataRoot(const std::filesystem::path& executablePath);
 
 /**
+ * @brief The executable to launch for a detected Fallout 2 installation, or nullopt.
+ *
+ * A macOS .app bundle is itself the executable choice and is returned as is; for an installation
+ * folder this is the vanilla or Community Edition binary inside it (fallout2.exe, fallout2-ce, ...).
+ */
+std::optional<std::filesystem::path> findGameExecutable(const std::filesystem::path& installation);
+
+/**
  * @brief Reports configuration problems that would make the game load data the editor is not
  * editing (pure).
  *
@@ -138,7 +146,8 @@ public:
     /// Restores mods_order.txt if the game is still running when the editor shuts down.
     ~GameLauncher() override;
 
-    void playGame(const Map::MapFile* mapFile, const std::string& mapFilename);
+    /// Writes `map`, with its .EDG map-edge sidecar, into the game's data/maps and starts the game on it.
+    void playGame(const Map* map, const std::string& mapFilename);
 
 private:
     bool confirmLaunchConfiguration(const std::filesystem::path& gameDataDirectory,

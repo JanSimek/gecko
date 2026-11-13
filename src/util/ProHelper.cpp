@@ -22,9 +22,9 @@ namespace {
         std::string_view msg;       // e.g. "text/english/game/pro_item.msg"
     };
 
-    const ProtoTypePaths& protoTypePaths(Pro::OBJECT_TYPE type) {
+    const ProtoTypePaths& protoTypePaths(ObjectType type) {
         namespace RP = ResourcePaths;
-        // Indexed by the OBJECT_TYPE ordinal (ITEM = 0 .. MISC = 5).
+        // Indexed by the ObjectType ordinal (Item = 0 .. Misc = 5).
         static constexpr std::array<ProtoTypePaths, 6> kPaths = { {
             { RP::Directories::PROTO_ITEMS, RP::Lst::PROTO_ITEMS, RP::Msg::PRO_ITEM },
             { RP::Directories::PROTO_CRITTERS, RP::Lst::PROTO_CRITTERS, RP::Msg::PRO_CRIT },
@@ -33,11 +33,10 @@ namespace {
             { RP::Directories::PROTO_TILES, RP::Lst::PROTO_TILES, RP::Msg::PRO_TILE },
             { RP::Directories::PROTO_MISC, RP::Lst::PROTO_MISC, RP::Msg::PRO_MISC },
         } };
-        const auto index = static_cast<std::size_t>(type);
-        if (index >= kPaths.size()) {
-            throw std::runtime_error{ "Invalid PRO type: " + std::to_string(index) };
+        if (!protoObjectTypeIsValid(static_cast<int>(type))) {
+            throw std::runtime_error{ "Invalid PRO type: " + std::to_string(static_cast<int>(type)) };
         }
-        return kPaths[index];
+        return kPaths[static_cast<std::size_t>(type)];
     }
 } // namespace
 
@@ -53,21 +52,20 @@ Msg* ProHelper::perkMsgFile(resource::GameResources& resources) {
     return resources.repository().load<Msg>(std::string(ResourcePaths::Msg::PERK));
 }
 
-Msg* ProHelper::msgFile(resource::GameResources& resources, Pro::OBJECT_TYPE type) {
+Msg* ProHelper::msgFile(resource::GameResources& resources, ObjectType type) {
     return resources.repository().load<Msg>(std::string(protoTypePaths(type).msg));
 }
 
 Lst* ProHelper::lstFile(resource::GameResources& resources, uint32_t PID) {
-    return resources.repository().load<Lst>(std::string(protoTypePaths(Pro::typeOfPid(PID)).lst));
+    return resources.repository().load<Lst>(std::string(protoTypePaths(ProtoId(PID).objectType()).lst));
 }
 
 std::string ProHelper::basePath(resource::GameResources& resources, uint32_t PID) {
-    const ProtoTypePaths& paths = protoTypePaths(Pro::typeOfPid(PID));
+    const ProtoTypePaths& paths = protoTypePaths(ProtoId(PID).objectType());
 
-    // The low 24 bits of a PID are the 1-based line number in the type's LST (matching the engine's
-    // proto-number decode `pid & 0xFFFFFF` in proto.cc and Pro::makePid); index 0 is not a valid proto
-    // and would underflow the index - 1 lookup below.
-    unsigned int index = 0x00FFFFFF & PID;
+    // A PID's proto id is the 1-based line number in the type's LST (the engine's proto-number decode
+    // in proto.cc); index 0 is not a valid proto and would underflow the index - 1 lookup below.
+    const uint32_t index = ProtoId(PID).protoId();
     auto lst = ProHelper::lstFile(resources, PID);
     if (index == 0 || index > lst->list().size()) {
         throw std::runtime_error{ "PID index out of range (expected 1.."

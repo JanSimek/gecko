@@ -28,9 +28,9 @@ namespace cli {
     /// (fallout2-ce `scripts.cc`, `scriptsGetFileName`). This is deliberate, and required by the
     /// engine-fidelity rule: stored ids are preserved exactly as the engine stores them rather than
     /// re-based for convenience. The 1-based forms are the engine's own inputs, and the engine
-    /// itself decrements them — so gecko normalises on the way in, in the same two places:
+    /// itself decrements them — so gecko normalises on the way in, where the engine does:
     ///
-    ///  - map header: `MapAnalyzer` resolves `script_id - 1` (fallout2-ce `map.cc`,
+    ///  - map header: `Map::MapHeader::programIndex()` (fallout2-ce `map.cc`,
     ///    `script->index = gMapHeader.scriptIndex - 1`);
     ///  - sfall `set_script()`: the opcode decrements before validating (fallout2-ce
     ///    `sfall_opcodes.cc`).
@@ -49,6 +49,13 @@ namespace cli {
         /// "EPAC17.int"). Preferred over `programIndex`: no index base to get wrong.
         std::string name;
         std::string locale = "english"; ///< dialog .msg locale subdirectory
+        /// Also disassemble the compiled scripts/<name>.int (see ssl/IntProgram.h). Opt-in: a script
+        /// runs to thousands of instructions. It is what the engine executes, so it answers what a
+        /// script does when no .ssl source tree is mounted.
+        bool disassemble = false;
+        /// Also analyse the .ssl source (see cli/ScriptLint.h analyzeScript): procedures and which
+        /// run, variable accesses, self-assigned critter fields, message uses and lint findings.
+        bool analyze = false;
     };
 
     /// Describe a Fallout 2 script, selected by `name` or by 0-based `programIndex` (see the index-base

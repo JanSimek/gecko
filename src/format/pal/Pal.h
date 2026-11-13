@@ -27,7 +27,6 @@ public:
 
     std::array<uint8_t, NUM_CONVERSION_VALUES>& rgbConversionTable();
     const std::array<uint8_t, NUM_CONVERSION_VALUES>& rgbConversionTable() const;
-    void setRgbConversionTable(const std::array<uint8_t, NUM_CONVERSION_VALUES>& rgbConversionTable);
 
 private:
     std::array<Rgb, NUM_PALETTE_COLORS> _palette;

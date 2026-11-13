@@ -5,17 +5,13 @@
 # include() does not change CMAKE_CURRENT_SOURCE_DIR, so paths like
 # ${CMAKE_CURRENT_SOURCE_DIR}/vendor/... still resolve against the project root.
 
-# System dependencies first
-find_package(PkgConfig QUIET)
-
-# Qt6 for dialogs and future UI migration
+# Qt6 for the editor UI
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Svg)
 if(GECK_BUILD_TESTS)
     find_package(Qt6 REQUIRED COMPONENTS Test)
 endif()
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC ON)
 
 # SFML - prefer system package
 if(GECK_USE_SYSTEM_LIBS)
@@ -33,7 +29,7 @@ if(NOT SFML_FOUND)
     set(SFML_BUILD_AUDIO FALSE CACHE BOOL "Build audio module")
     set(SFML_BUILD_NETWORK FALSE CACHE BOOL "Build network module")
     FetchContent_MakeAvailable(SFML)
-    geck_disable_target_warnings(sfml-system sfml-window sfml-graphics sfml-network sfml-audio sfml-main)
+    geck_disable_target_warnings(sfml-system sfml-window sfml-graphics sfml-main)
 endif()
 
 # ZLIB - use FetchContent as fallback if not found
@@ -49,7 +45,7 @@ if(NOT ZLIB_FOUND)
     set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "Build zlib examples")
     FetchContent_MakeAvailable(zlib)
     geck_disable_target_warnings(zlibstatic zlib)
-    # Create ZLIB::ZLIB target for compatibility
+    # Expose the fetched library under the imported target name find_package(ZLIB) provides
     if(NOT TARGET ZLIB::ZLIB)
         add_library(ZLIB::ZLIB ALIAS zlibstatic)
     endif()
@@ -58,9 +54,6 @@ if(NOT ZLIB_FOUND)
         ${zlib_SOURCE_DIR}
         ${zlib_BINARY_DIR}
     )
-    set(ZLIB_FOUND TRUE)
-    set(ZLIB_LIBRARIES zlibstatic)
-    set(ZLIB_INCLUDE_DIRS ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
 endif()
 
 # macOS find_package(ZLIB) points at the SDK's <SDK>/usr/include (the C stdlib
@@ -84,11 +77,8 @@ if(NOT spdlog_FOUND)
     FetchContent_Declare(
             spdlog
             GIT_REPOSITORY https://github.com/gabime/spdlog.git
-            # Bumped from v1.12.0: its bundled fmt fails under Apple clang 21
-            # (FMT_COMPILE_STRING rejected as non-constexpr). We also use
-            # SPDLOG_USE_STD_FORMAT (below) so spdlog uses C++20 <format> instead
-            # of bundled fmt, side-stepping the macOS-SDK/libc++ fmt incompatibilities
-            # entirely (the codebase has no fmt:: usage or custom fmt formatters).
+            # SPDLOG_USE_STD_FORMAT (below) makes spdlog use C++20 <format>: its bundled
+            # fmt breaks under Apple clang 21 / the macOS SDK's libc++.
             GIT_TAG v1.15.3
             GIT_SHALLOW TRUE
     )
@@ -127,14 +117,7 @@ add_library(vfspp INTERFACE)
 add_library(vfspp::vfspp ALIAS vfspp)
 target_include_directories(vfspp SYSTEM INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor/vfspp/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/vendor/vfspp/vendor/miniz-cpp
 )
-target_compile_features(vfspp INTERFACE cxx_std_17)
-
-# Make SFML available
-if(NOT SFML_FOUND)
-    FetchContent_MakeAvailable(SFML)
-endif()
 
 # Catch2 for testing - prefer system package, fall back to FetchContent
 if(GECK_BUILD_TESTS)

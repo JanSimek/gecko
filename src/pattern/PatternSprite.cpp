@@ -38,7 +38,7 @@ std::shared_ptr<Object> buildSpriteObject(resource::GameResources& resources,
         auto object = std::make_shared<Object>(frm);
         sf::Sprite sprite{ resources.textures().get(frmPath) };
         object->setSprite(std::move(sprite));
-        object->setDirection(static_cast<ObjectDirection>(direction));
+        object->setDirection(static_cast<Rotation>(direction));
         if (auto h = hexgrid.getHexByPosition(static_cast<uint32_t>(hex)); h.has_value()) {
             object->setHexPosition(h->get());
         }

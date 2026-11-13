@@ -142,7 +142,7 @@ void ItemSelectorDialog::populate() {
     QApplication::setOverrideCursor(Qt::WaitCursor);
     for (std::size_t i = 0; i < files.size(); ++i) {
         // An item PID's low 24 bits are the 1-based items.lst line; the type (ITEM) is the high byte.
-        const uint32_t pid = Pro::makePid(Pro::OBJECT_TYPE::ITEM, static_cast<uint32_t>(i + 1));
+        const uint32_t pid = ProtoId(ObjectType::Item, static_cast<uint32_t>(i + 1)).pid();
 
         const ui::inventory::ItemDetails details = ui::inventory::describeItem(_resources, pid);
         // describeItem yields a placeholder name when a proto can't be resolved; prefer the real .pro

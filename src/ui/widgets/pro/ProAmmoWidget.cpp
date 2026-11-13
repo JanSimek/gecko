@@ -95,7 +95,7 @@ void ProAmmoWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 }
 
 bool ProAmmoWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
-    return pro && pro->type() == Pro::OBJECT_TYPE::ITEM && pro->itemType() == Pro::ITEM_TYPE::AMMO;
+    return pro && pro->type() == ObjectType::Item && pro->itemType() == ItemType::Ammo;
 }
 
 QString ProAmmoWidget::getTabLabel() const {

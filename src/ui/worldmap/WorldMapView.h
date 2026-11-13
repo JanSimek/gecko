@@ -29,19 +29,15 @@ public:
 
     /// Takes over the scene to display; pass nullptr to clear. Resets the view to fit.
     void setScene(std::shared_ptr<worldmap::WorldMapScene> scene);
-    [[nodiscard]] const worldmap::WorldMapScene* scene() const { return _scene.get(); }
 
     void setMarkersVisible(bool visible);
     void setLabelsVisible(bool visible);
-    [[nodiscard]] bool labelsVisible() const { return _labelsVisible; }
 
     /// Scales the whole worldmap to fit the widget, and re-centres.
     void zoomToFit();
     /// Back to one screen pixel per worldmap pixel, centred on the view's middle.
     void zoomToActualSize();
 
-    /// The area the user last clicked, or nullptr.
-    [[nodiscard]] const worldmap::AreaMarker* selectedArea() const { return _selected; }
     /// Scrolls an area into the middle of the view and selects it.
     void revealArea(int areaIndex);
 

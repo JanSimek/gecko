@@ -4,7 +4,7 @@
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
 #include "resource/GameResources.h"
-#include "writer/map/MapWriter.h"
+#include "resource/MapFileIO.h"
 
 #include <algorithm>
 
@@ -37,9 +37,7 @@ int stripExitGrids(resource::GameResources& resources, const StripExitGridsOptio
         out << "no exit grid markers found - nothing to remove\n";
     }
 
-    MapWriter writer(makeProtoLoader(resources));
-    writer.openFile(options.outPath);
-    if (!writer.write(mapFile)) {
+    if (!resource::writeMap(resources, *map, options.outPath).has_value()) {
         out << "error: failed to write map: " << options.outPath << "\n";
         return 1;
     }

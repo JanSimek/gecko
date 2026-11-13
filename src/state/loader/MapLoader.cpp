@@ -1,8 +1,5 @@
 #include "MapLoader.h"
 #include <algorithm>
-#include <array>
-#include <fstream>
-#include <iterator>
 #include <string>
 #include <thread>
 #include <unordered_set>
@@ -13,9 +10,6 @@
 #include "resource/ResourcePaths.h"
 
 #include "reader/ReaderExceptions.h"
-#include "reader/ReaderFactory.h"
-#include "reader/map/MapEdgeReader.h"
-#include "reader/map/MapReader.h"
 
 #include "format/pro/Pro.h"
 #include "format/map/Map.h"
@@ -25,6 +19,7 @@
 #include "format/frm/Direction.h"
 
 #include "resource/GameResources.h"
+#include "resource/MapFileIO.h"
 #include "resource/ResourceInitializer.h"
 
 namespace geck {
@@ -53,12 +48,10 @@ namespace {
 
 MapLoader::MapLoader(std::shared_ptr<resource::GameResources> resources,
     const std::filesystem::path& mapFile,
-    int elevation,
     bool forceFilesystem,
     std::function<void(std::unique_ptr<Map>)> onLoadCallback)
     : _resources(std::move(resources))
     , _mapPath(mapFile)
-    , _elevation(elevation)
     , _forceFilesystem(forceFilesystem)
     , _onLoadCallback(onLoadCallback) {
 }
@@ -104,34 +97,11 @@ void MapLoader::loadFromVFS() {
         setProgress("Parsing map file from VFS");
         _percentDone = 15;
 
-        auto mapData = _resources->files().readRawBytes(_mapPath);
-        if (!mapData) {
-            spdlog::error("MapLoader: Failed to open map file in VFS: {}", _mapPath.string());
-            _errorMessage = "Failed to open map file in VFS: " + _mapPath.string();
-            _hasError = true;
-            done = true;
-            return;
-        }
-
-        auto proLoadCallback = [&](uint32_t PID) {
-            return _resources->loadPro(PID);
-        };
-        MapReader mapReader(proLoadCallback);
-
-        _map = mapReader.openFile(_mapPath.string(), *mapData);
-
-        if (!_map) {
-            spdlog::error("MapLoader: Failed to parse map data from VFS: {}", _mapPath.string());
-            _errorMessage = "Failed to parse map file: " + _mapPath.string();
-            _hasError = true;
-            done = true;
-            return;
-        }
+        _map = resource::readMap(*_resources, _mapPath, resource::MapSource::DataPaths);
 
         _percentDone = 20;
         spdlog::debug("MapLoader: Successfully loaded map from VFS: {}", _mapPath.string());
 
-        loadSiblingEdge(/*viaVfs=*/true);
         loadMapResources();
 
         // Only mark complete if loadMapResources didn't set an error.
@@ -158,13 +128,8 @@ void MapLoader::loadFromFilesystem() {
     setProgress("Parsing map file from filesystem");
     _percentDone = 15;
 
-    // MapReader requires callback in constructor, so we need to create it directly
     try {
-        auto proLoadCallback = [&](uint32_t PID) {
-            return _resources->loadPro(PID);
-        };
-        MapReader map_reader{ proLoadCallback };
-        _map = map_reader.openFile(_mapPath);
+        _map = resource::readMap(*_resources, _mapPath, resource::MapSource::Disk);
     } catch (const std::exception& e) {
         _errorMessage = "Failed to parse map file:\n" + std::string(e.what())
             + "\n\nPlease ensure all game data files are properly configured.";
@@ -177,7 +142,6 @@ void MapLoader::loadFromFilesystem() {
     _percentDone = 20;
     spdlog::debug("MapLoader: Successfully loaded map from filesystem: {}", _mapPath.string());
 
-    loadSiblingEdge(/*viaVfs=*/false);
     loadMapResources();
 
     // Only mark complete if loadMapResources didn't set an error.
@@ -206,11 +170,8 @@ void MapLoader::loadMapResources() {
     spdlog::stopwatch stopwatch_chunk;
 
     try {
-        if (_elevation == INVALID_ELEVATION) {
-            uint32_t default_elevation = _map->getMapFile().header.player_default_elevation;
-            spdlog::debug("Using default map elevation {}", default_elevation);
-            _elevation = default_elevation;
-        }
+        _elevation = static_cast<int>(_map->getMapFile().header.player_default_elevation);
+        spdlog::debug("Using default map elevation {}", _elevation);
 
         Lst* lst = nullptr;
         try {
@@ -294,12 +255,7 @@ void MapLoader::loadMapResources() {
                 unresolvedObjectArt.size(), _elevation, joinCapped(unresolvedObjectArt, kMaxNamesInWarning));
         }
 
-        // Load essential editor textures
-        _resources->textures().preload(ResourcePaths::Frm::BLANK_TILE);
-        _resources->textures().preload(ResourcePaths::Frm::LIGHT);
-        _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK);
-        _resources->textures().preload(ResourcePaths::Frm::WALL_BLOCK_FULL);
-        _resources->textures().preload(ResourcePaths::Frm::SCROLL_BLOCKER);
+        ResourceInitializer::loadEssentialTextures(*_resources);
 
         _percentDone = 100;
         setProgress("Map loading complete");
@@ -308,48 +264,6 @@ void MapLoader::loadMapResources() {
         _errorMessage = "Failed to load map file:\n" + _mapPath.string() + "\n\nError: " + e.what();
         _hasError = true;
         done = true;
-    }
-}
-
-void MapLoader::loadSiblingEdge(bool viaVfs) {
-    if (!_map) {
-        return;
-    }
-
-    // The engine writes uppercase ".EDG"; also probe ".edg" for case-sensitive filesystems.
-    std::filesystem::path lowerVariant = _mapPath;
-    lowerVariant.replace_extension(".edg");
-    const std::array<std::filesystem::path, 2> candidates{
-        MapEdgeReader::siblingPath(_mapPath), lowerVariant
-    };
-
-    for (const auto& edgePath : candidates) {
-        std::optional<std::vector<uint8_t>> bytes;
-        if (viaVfs) {
-            bytes = _resources->files().readRawBytes(edgePath);
-        } else {
-            std::error_code ec;
-            if (std::filesystem::exists(edgePath, ec)) {
-                std::ifstream in{ edgePath, std::ios::binary };
-                if (in) {
-                    bytes = std::vector<uint8_t>(std::istreambuf_iterator<char>(in),
-                        std::istreambuf_iterator<char>());
-                }
-            }
-        }
-
-        if (!bytes) {
-            continue;
-        }
-
-        // Stop at the first sibling that parses: a case-sensitive filesystem could hold a valid ".edg"
-        // beside an unparsable ".EDG".
-        if (auto edge = MapEdgeReader::tryParse(edgePath, *bytes)) {
-            spdlog::debug("MapLoader: loaded map-edge sidecar {} ({} zones)",
-                edgePath.string(), edge->totalZones());
-            _map->setEdge(std::move(edge));
-            return;
-        }
     }
 }
 

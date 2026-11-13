@@ -1,6 +1,7 @@
 #include "ProInfoPanelWidget.h"
 
 #include "format/msg/Msg.h"
+#include "format/pro/ProtoTypes.h"
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
 #include "util/ProHelper.h"
@@ -24,20 +25,22 @@ namespace {
 
     QString itemTypeLabel(const Pro& pro) {
         switch (pro.itemType()) {
-            case Pro::ITEM_TYPE::ARMOR:
+            case ItemType::Armor:
                 return "Armor";
-            case Pro::ITEM_TYPE::CONTAINER:
+            case ItemType::Container:
                 return "Container";
-            case Pro::ITEM_TYPE::DRUG:
+            case ItemType::Drug:
                 return "Drug";
-            case Pro::ITEM_TYPE::WEAPON:
+            case ItemType::Weapon:
                 return "Weapon";
-            case Pro::ITEM_TYPE::AMMO:
+            case ItemType::Ammo:
                 return "Ammo";
-            case Pro::ITEM_TYPE::MISC:
+            case ItemType::Misc:
                 return "Misc Item";
-            case Pro::ITEM_TYPE::KEY:
+            case ItemType::Key:
                 return "Key";
+            default:
+                break;
         }
 
         return "Item";
@@ -45,18 +48,20 @@ namespace {
 
     QString objectTypeLabel(const Pro& pro) {
         switch (pro.type()) {
-            case Pro::OBJECT_TYPE::ITEM:
+            case ObjectType::Item:
                 return itemTypeLabel(pro);
-            case Pro::OBJECT_TYPE::CRITTER:
+            case ObjectType::Critter:
                 return "Critter";
-            case Pro::OBJECT_TYPE::SCENERY:
+            case ObjectType::Scenery:
                 return "Scenery";
-            case Pro::OBJECT_TYPE::WALL:
+            case ObjectType::Wall:
                 return "Wall";
-            case Pro::OBJECT_TYPE::TILE:
+            case ObjectType::Tile:
                 return "Tile";
-            case Pro::OBJECT_TYPE::MISC:
+            case ObjectType::Misc:
                 return "Misc";
+            default:
+                break;
         }
 
         return "Object";
@@ -79,7 +84,7 @@ void ProInfoPanelWidget::setupUI() {
     _mainLayout->setSpacing(0);
 
     auto* nameLayout = new QHBoxLayout();
-    nameLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    nameLayout->setSpacing(ui::theme::spacing::TIGHT);
 
     _nameLabel = new QLabel(this);
     _nameLabel->setAlignment(Qt::AlignCenter);
@@ -98,7 +103,7 @@ void ProInfoPanelWidget::setupUI() {
 
     _previewContainer = new QWidget(this);
     _previewLayout = new QVBoxLayout(_previewContainer);
-    _previewLayout->setContentsMargins(0, ui::constants::SPACING_TIGHT, 0, ui::constants::SPACING_TIGHT);
+    _previewLayout->setContentsMargins(0, ui::theme::spacing::TIGHT, 0, ui::theme::spacing::TIGHT);
     _previewLayout->setSpacing(0);
     _mainLayout->addWidget(_previewContainer);
 
@@ -112,7 +117,8 @@ void ProInfoPanelWidget::setupUI() {
     pidLayout->addWidget(new QLabel("PID (hex):", this));
 
     _pidEdit = new QSpinBox(this);
-    _pidEdit->setRange(0, 0x5FFFFFF);
+    // The highest PID: the last proto type (misc) with the largest 24-bit proto index.
+    _pidEdit->setRange(0, static_cast<int>(ProtoId(ObjectType::Misc, ProtoId::MAX_PROTO_ID).pid()));
     _pidEdit->setDisplayIntegerBase(16);
     _pidEdit->setToolTip("Object ID and Type (combined 32-bit value)");
     _pidEdit->setButtonSymbols(QAbstractSpinBox::NoButtons);

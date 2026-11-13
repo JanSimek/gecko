@@ -33,7 +33,7 @@ disposition=none
 )";
 } // namespace
 
-TEST_CASE("parseAiTxt reads behaviour fields keyed by packet_num", "[ai]") {
+TEST_CASE("parseAiTxt reads behaviour fields keyed by packet_num", "[ai_txt]") {
     const AiTxt ai = parseAiTxt(std::string{ kAiTxt });
 
     // Two packets define a packet_num; the third (no packet_num) is dropped.
@@ -61,7 +61,7 @@ TEST_CASE("parseAiTxt reads behaviour fields keyed by packet_num", "[ai]") {
     CHECK(ai.byPacketNum(5) == nullptr); // the no-packet_num section
 }
 
-TEST_CASE("parseAiTxt tolerates empty / section-less input", "[ai]") {
+TEST_CASE("parseAiTxt tolerates empty / section-less input", "[ai_txt]") {
     CHECK(parseAiTxt(std::string{}).size() == 0);
     CHECK(parseAiTxt(std::string{ "aggression=10\npacket_num=1\n" }).size() == 0); // keys before any [section]
 }

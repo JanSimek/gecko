@@ -19,27 +19,41 @@ namespace geck {
 
 struct MapObject;
 
+/// Engine MapHeaderFlags (map_defs.h MAP_HEADER_*): bits of Map::MapHeader::flags.
+enum class MapHeaderFlags : uint32_t {
+    None = 0x00,
+    Saved = 0x01,
+    Elevation0 = 0x02, // set when elevation 0 has no tile block
+    Elevation1 = 0x04,
+    Elevation2 = 0x08,
+};
+
 class Map : public IFile {
 public:
     static constexpr unsigned ROWS = 100;
     static constexpr unsigned COLS = 100;
     static constexpr unsigned TILES_PER_ELEVATION = ROWS * COLS;
-    static constexpr unsigned TILES_TOTAL = TILES_PER_ELEVATION * 2; // roof + floor
 
     static constexpr int EMPTY_TILE = 1;
     static constexpr int SCRIPT_SECTIONS = 5;
     static constexpr int FILENAME_LENGTH = 16;
 
-    //!< Fallout 2 maps always have three elevation slots (engine ELEVATION_COUNT).
-    static constexpr int ELEVATION_COUNT = 3;
+    //!< Fallout 2 maps always have three elevation slots (engine ELEVATION_COUNT); defined once on
+    //!< MapEdge, which this header includes and which sizes its per-elevation table with it.
+    static constexpr int ELEVATION_COUNT = MapEdge::ELEVATION_COUNT;
 
     Map(std::filesystem::path path)
         : IFile(path) { }
 
-    /// A cleared elevation flag bit (0x2 << elevation) means that elevation's
-    /// tile block is present in the .map file; a set bit means it is absent.
+    /// The MapHeaderFlags::Elevation* bit for an elevation (0..2).
+    static constexpr uint32_t elevationFlag(int elevation) {
+        return static_cast<uint32_t>(MapHeaderFlags::Elevation0) << elevation;
+    }
+
+    /// A cleared elevation flag bit means that elevation's tile block is present in the .map file;
+    /// a set bit means it is absent.
     static constexpr bool elevationIsPresent(uint32_t flags, int elevation) {
-        return (flags & (0x2u << elevation)) == 0;
+        return (flags & elevationFlag(elevation)) == 0;
     }
 
     // Header
@@ -58,6 +72,15 @@ public:
         uint32_t num_global_vars;
         uint32_t map_id;
         uint32_t timestamp;
+
+        bool operator==(const MapHeader&) const = default;
+
+        /// The 0-based scripts.lst program index the 1-based script_id names, or nullopt when the map
+        /// has no script. The engine does the same conversion (fallout2-ce map.cc,
+        /// `script->index = gMapHeader.scriptIndex - 1`); see AGENTS.md "Script Index Bases".
+        [[nodiscard]] std::optional<int> programIndex() const {
+            return script_id > 0 ? std::optional<int>(script_id - 1) : std::nullopt;
+        }
     };
 
     struct MapFile {
@@ -80,8 +103,6 @@ public:
 
     const std::unordered_map<int, std::vector<std::shared_ptr<MapObject>>>& objects() const;
 
-    int elevations() const;
-
     MapFile& getMapFile();
     const MapFile& getMapFile() const;
     void setMapFile(std::unique_ptr<MapFile> newMapFile);
@@ -91,6 +112,14 @@ public:
     /// be written back beside the map on save without re-reading from the original location.
     const std::optional<MapEdge>& edge() const { return _edge; }
     void setEdge(std::optional<MapEdge> edge) { _edge = std::move(edge); }
+
+    /// The scripts.lst program index (0-based, what gecko speaks — see AGENTS.md "Script Index
+    /// Bases") of the map script an object's SID names, or nullopt when this map has no script
+    /// with that SID. The SID's section picks which of the five script lists to search.
+    std::optional<int> scriptProgramIndexForSid(uint32_t sid) const;
+
+    /// The map script an object's SID names, or nullptr when this map has none with that SID.
+    const MapScript* scriptForSid(uint32_t sid) const;
 
     /// Builds a blank Fallout 2 map: default header, three empty elevations of
     /// EMPTY_TILE tiles, and no scripts or objects.

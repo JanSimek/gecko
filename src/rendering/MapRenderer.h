@@ -49,7 +49,6 @@ public:
         unsigned int maxDimension = 1600;
         /// Roof tiles cover the floor, so they are off by default — a biome view wants the ground.
         bool showRoof = false;
-        bool showObjects = true;
         /// Schematic only: include FLAT objects (invisible engine blockers — scroll/hex blockers,
         /// exit grids). Off by default so the dots show the real, in-game-visible scenery and walls.
         bool showBlockers = false;
@@ -57,10 +56,7 @@ public:
         /// cropping to drawn content. Lets sparse/empty maps still show the entire grid. Off by default
         /// so the usual view stays tight around the content.
         bool fullExtent = false;
-        /// Natural style only: overlay a small magenta dot on each exit-grid marker's TRIGGER hex (its
-        /// saved hex position, not the slid bar). A verification aid for the diagonal-band widening —
-        /// it shows the hex sits on the band's outer edge. Off by default (the clean artwork view).
-        bool exitDots = false;
+
         /// Natural style only: shade the walkable hexes cut off from every entry point (player start +
         /// exit grids) with a translucent red wash — the same "unreachable areas" the editor overlay
         /// and the `reachability` tool report, so a rendered map shows walled-off regions at a glance.

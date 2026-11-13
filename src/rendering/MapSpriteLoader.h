@@ -48,7 +48,7 @@ public:
         std::vector<std::shared_ptr<Object>>& objects,
         std::vector<sf::Sprite>& wallBlockerOverlays) const;
     void updateTileSprite(
-        int hexIndex,
+        int tileIndex,
         bool isRoof,
         int elevation,
         const std::vector<Tile>& elevationTiles,
@@ -59,7 +59,6 @@ public:
 
 private:
     void createWallBlockerOverlay(const std::shared_ptr<MapObject>& mapObject, int hexPosition, std::vector<sf::Sprite>& wallBlockerOverlays) const;
-    static const sf::Texture& blankTexture();
 
     resource::GameResources& _resources;
     const HexagonGrid& _hexgrid;

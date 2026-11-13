@@ -48,7 +48,7 @@ private:
     QSpinBox* _drugAddictionDelayEdit;  // Addiction onset delay
 
     // Data
-    ProDrugData _drugData;
+    Pro::DrugData _drugData;
 
     // Constants
     static constexpr int NUM_DRUG_STATS = 3;

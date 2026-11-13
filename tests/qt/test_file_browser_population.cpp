@@ -1,13 +1,14 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <QAbstractItemModel>
-#include <QCoreApplication>
-#include <QElapsedTimer>
-#include <QLabel>
 #include <QTreeView>
+
+#include <chrono>
 
 #include "resource/GameResources.h"
 #include "support/Fixtures.h"
+#include "support/QtFind.h"
+#include "support/QtWait.h"
 #include "ui/Settings.h"
 #include "ui/panels/FileBrowserPanel.h"
 
@@ -33,23 +34,13 @@ bool modelContains(const QAbstractItemModel* model, int column, const QString& n
 
 // The population is asynchronous (loader worker thread, then the chunked tree build);
 // completion is observable through the status label's "N files loaded" text.
-bool waitForPopulation(FileBrowserPanel& panel, int timeoutMs) {
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-        for (const auto* label : panel.findChildren<QLabel*>()) {
-            if (label->text().contains(QStringLiteral("files loaded"))) {
-                return true;
-            }
-        }
-    }
-    return false;
+bool populated(const FileBrowserPanel& panel) {
+    return geck::test::labelContaining(panel, QStringLiteral("files loaded")) != nullptr;
 }
 
 } // namespace
 
-TEST_CASE("FileBrowserPanel populates the tree with worker-computed metadata", "[qt][filebrowser]") {
+TEST_CASE("FileBrowserPanel populates the tree with worker-computed metadata", "[file_browser]") {
     auto resources = std::make_shared<resource::GameResources>();
     resources->files().addDataPath(geck::test::dataPath("f2_res.dat"));
     resources->files().addDataPath(geck::test::dataDir()); // loose files, incl. a .pro fixture
@@ -57,7 +48,7 @@ TEST_CASE("FileBrowserPanel populates the tree with worker-computed metadata", "
 
     FileBrowserPanel panel(resources, settings);
     panel.loadFiles();
-    REQUIRE(waitForPopulation(panel, 15000));
+    REQUIRE(geck::test::pumpUntil([&panel]() { return populated(panel); }, std::chrono::seconds(15)));
 
     auto* tree = panel.findChild<QTreeView*>();
     REQUIRE(tree != nullptr);
@@ -74,13 +65,7 @@ TEST_CASE("FileBrowserPanel populates the tree with worker-computed metadata", "
     // either via the cache at row insertion or as a live column update. The fixture tree
     // carries no pro_item.msg, so the resolved value is the explicit "MSG not found"
     // (never silently blank), which is exactly what proves the pipeline delivered.
-    QElapsedTimer timer;
-    timer.start();
-    bool proNameArrived = false;
-    while (timer.elapsed() < 15000 && !proNameArrived) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-        proNameArrived = modelContains(model, 4, QStringLiteral("MSG not found"));
-    }
-    CHECK(proNameArrived);
+    CHECK(geck::test::pumpUntil([model]() { return modelContains(model, 4, QStringLiteral("MSG not found")); },
+        std::chrono::seconds(15)));
     CHECK(modelContains(model, 0, QStringLiteral("test_item_drug_radx.pro")));
 }

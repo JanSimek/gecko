@@ -38,8 +38,10 @@ Msg::Msg(std::filesystem::path path, std::map<int, Message> messages)
     }
 }
 
-const Msg::Message& Msg::message(int id) {
-    return _messages[id];
+const Msg::Message& Msg::message(int id) const {
+    static const Message missing;
+    const auto it = _messages.find(id);
+    return it != _messages.end() ? it->second : missing;
 }
 
 const std::map<int, Msg::Message>& Msg::getMessages() const {

@@ -18,7 +18,7 @@ class ResourceRepository;
 
 /// Maps an art/ path to its FRM type using the canonical directory prefixes.
 /// Returns nullopt for paths that are not under a known art/ directory.
-[[nodiscard]] std::optional<Frm::FRM_TYPE> frmTypeForArtPath(std::string_view path);
+[[nodiscard]] std::optional<ObjectType> frmTypeForArtPath(std::string_view path);
 
 /// True if the filename ends in a Fallout FRM extension: the standard ".frm" or a
 /// directional ".fr0"-".fr5" (used by split critter animations). This is the
@@ -29,11 +29,11 @@ class FrmResolver final {
 public:
     explicit FrmResolver(ResourceRepository& repository);
 
-    /// Resolves a FID to its art path (LST lookup, type byte = FRM_TYPE).
+    /// Resolves a FID to its art path (LST lookup by FrmId::objectType() and frameId()).
     [[nodiscard]] std::string resolve(uint32_t fid);
 
     /// Inverse of resolve(): derives the FID for an art/ path by locating its
-    /// filename in the matching LST. The FID type byte is the FRM_TYPE ordinal,
+    /// filename in the matching LST. The FID type byte is the ObjectType ordinal,
     /// matching the engine (OBJ_TYPE) and resolve(). Returns nullopt when the
     /// path is not under a known art/ directory or is absent from its LST; there
     /// is no heuristic fallback. Critter resolution is lossy (animation-encoded),
@@ -41,6 +41,10 @@ public:
     [[nodiscard]] std::optional<uint32_t> resolveFid(const std::string& artPath);
 
 private:
+    // The critter file for `fid`'s weapon and animation codes, or the standing art when that file is
+    // not in the data.
+    std::string critterFrmName(const std::string& baseName, uint32_t fid);
+
     ResourceRepository& _repository;
 };
 

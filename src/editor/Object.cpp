@@ -13,7 +13,7 @@
 namespace geck {
 
 Object::Object(const Frm* frm)
-    : _sprite(createBlankTexture())
+    : _sprite(blankTexture())
     , _frm(frm)
     , _direction(0)
     , _selected(false) {
@@ -36,7 +36,7 @@ Object::Object(const Frm* frm)
     }
 }
 
-sf::Texture& Object::createBlankTexture() {
+const sf::Texture& Object::blankTexture() {
     // Intentionally leaked: this tiny 1x1 texture must outlive the OpenGL context.
     // Static sf::Texture objects are destroyed during __cxa_finalize after the GL
     // context is gone, causing a crash in sf::Texture::~Texture().  Heap-allocating
@@ -81,28 +81,6 @@ const sf::Sprite& Object::getSprite() const noexcept {
 
 sf::Sprite& Object::getSprite() noexcept {
     return _sprite;
-}
-
-void Object::setFrm(const Frm* frm) {
-    if (!frm) {
-        spdlog::error("Object::setFrm - FRM pointer is null");
-        return;
-    }
-
-    if (frm->directions().empty()) {
-        spdlog::error("Object::setFrm - FRM '{}' has no directions", frm->filename());
-        return;
-    }
-
-    if (frm->directions()[0].frames().empty()) {
-        spdlog::error("Object::setFrm - FRM '{}' direction 0 has no frames", frm->filename());
-        return;
-    }
-
-    _frm = frm;
-
-    _direction = 0;
-    setDirection(ObjectDirection(_direction));
 }
 
 void Object::setHexPosition(const Hex& hex) {
@@ -155,7 +133,7 @@ int Object::height() const {
     return _frm->directions().at(_direction).frames().at(0).height();
 }
 
-void Object::setDirection(ObjectDirection direction) {
+void Object::setDirection(Rotation direction) {
     _direction = static_cast<int>(direction);
 
     // Clamp out-of-range direction index. arcaves.map has one scrblk object with an
@@ -185,7 +163,7 @@ void Object::rotate() {
     } else {
         _direction++;
     }
-    setDirection(ObjectDirection(_direction));
+    setDirection(Rotation(_direction));
 }
 
 void Object::select() {

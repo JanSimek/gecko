@@ -22,7 +22,9 @@ namespace {
         j["proPid"] = o.proPid;
         j["frmPid"] = o.frmPid;
         j["direction"] = o.direction;
-        j["flags"] = o.flags;
+        if (o.flags.has_value()) {
+            j["flags"] = *o.flags;
+        }
         return j;
     }
 
@@ -117,7 +119,8 @@ namespace {
             return false;
         }
         out = { static_cast<int>(dx), static_cast<int>(dy), static_cast<uint32_t>(pro),
-            static_cast<uint32_t>(frm), static_cast<uint32_t>(dir), static_cast<uint32_t>(flags) };
+            static_cast<uint32_t>(frm), static_cast<uint32_t>(dir),
+            json.contains("flags") ? std::optional<uint32_t>(static_cast<uint32_t>(flags)) : std::nullopt };
         return true;
     }
 

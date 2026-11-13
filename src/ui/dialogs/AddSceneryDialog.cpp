@@ -66,8 +66,8 @@ AddSceneryDialog::AddSceneryDialog(ModToolsRunner* runner, QWidget* parent)
 
 void AddSceneryDialog::setupUI() {
     auto* main = new QVBoxLayout(this);
-    main->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    main->setSpacing(SPACING_LOOSE);
+    main->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    main->setSpacing(ui::theme::spacing::LOOSE);
 
     // picture
     auto* pictureRow = new QHBoxLayout();
@@ -83,7 +83,7 @@ void AddSceneryDialog::setupUI() {
 
     // the two panes
     auto* panes = new QHBoxLayout();
-    panes->setSpacing(SPACING_LOOSE);
+    panes->setSpacing(ui::theme::spacing::LOOSE);
 
     auto* sourceBox = new QGroupBox("Your picture: click the point that stands on the hex");
     auto* sourceLayout = new QVBoxLayout(sourceBox);
@@ -121,7 +121,7 @@ void AddSceneryDialog::setupUI() {
 
     // the piece
     auto* form = new QFormLayout();
-    form->setSpacing(SPACING_NORMAL);
+    form->setSpacing(ui::theme::spacing::NORMAL);
 
     auto* nameRow = new QHBoxLayout();
     _nameEdit = new QLineEdit();

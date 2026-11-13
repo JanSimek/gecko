@@ -11,7 +11,7 @@
 using geck::ui::PaletteItem;
 using geck::ui::PaletteModel;
 
-TEST_CASE("PaletteModel serves rows to a view", "[qt][palette]") {
+TEST_CASE("PaletteModel serves rows to a view", "[palette_model]") {
     PaletteModel model;
     model.setItems({ { 7, "grass", "Tile #7" }, { 12, "sand", "Tile #12" } });
 
@@ -91,7 +91,7 @@ TEST_CASE("PaletteModel serves rows to a view", "[qt][palette]") {
     }
 }
 
-TEST_CASE("PaletteView leaves room for a caption when labels are on", "[qt][palette]") {
+TEST_CASE("PaletteView leaves room for a caption when labels are on", "[palette_view]") {
     // The cell has to grow by the caption's height, otherwise the text is drawn into the row below
     // and shows up clipped - which is exactly how the first captioned grid looked.
     constexpr int ICON = 48;

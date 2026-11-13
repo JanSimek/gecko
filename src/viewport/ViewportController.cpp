@@ -1,9 +1,13 @@
 #include "ViewportController.h"
 #include "editor/Hex.h"
+#include "editor/HexGeometry.h"
 #include "util/Constants.h"
+#include "util/TileUtils.h"
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <limits>
 
 using namespace geck;
 
@@ -31,6 +35,57 @@ void ViewportController::centerViewOnMap() {
 
     _view.setCenter(sf::Vector2f(centerX, centerY));
     spdlog::debug("ViewportController: Centered view on ({:.1f}, {:.1f})", centerX, centerY);
+}
+
+sf::FloatRect ViewportController::mapWorldBounds() {
+    // The projection is affine, so the grid's four corner tiles bound every tile between them.
+    const std::array<TileCoordinates, 4> corners = { {
+        TileCoordinates(0u, 0u),
+        TileCoordinates(0u, static_cast<unsigned int>(MAP_WIDTH - 1)),
+        TileCoordinates(static_cast<unsigned int>(MAP_HEIGHT - 1), 0u),
+        TileCoordinates(static_cast<unsigned int>(MAP_HEIGHT - 1), static_cast<unsigned int>(MAP_WIDTH - 1)),
+    } };
+
+    float minX = std::numeric_limits<float>::max();
+    float minY = std::numeric_limits<float>::max();
+    float maxX = std::numeric_limits<float>::lowest();
+    float maxY = std::numeric_limits<float>::lowest();
+
+    for (const TileCoordinates& corner : corners) {
+        const auto topLeft = coordinatesToScreenPosition(corner);
+        const auto x = static_cast<float>(topLeft.x);
+        const auto y = static_cast<float>(topLeft.y);
+        minX = std::min(minX, x);
+        minY = std::min(minY, y);
+        maxX = std::max(maxX, x + static_cast<float>(TILE_WIDTH));
+        maxY = std::max(maxY, y + static_cast<float>(TILE_HEIGHT));
+    }
+
+    return sf::FloatRect({ minX, minY }, { maxX - minX, maxY - minY });
+}
+
+void ViewportController::fitMapInView() {
+    if (_windowSize.x == 0 || _windowSize.y == 0) {
+        spdlog::warn("ViewportController: Cannot fit the map into a {}x{} window", _windowSize.x, _windowSize.y);
+        return;
+    }
+
+    const sf::FloatRect bounds = mapWorldBounds();
+    if (bounds.size.x <= 0.f || bounds.size.y <= 0.f) {
+        return;
+    }
+
+    // The tighter of the two axes decides, so the whole grid fits rather than just one dimension.
+    const float fitZoom = std::min(
+        static_cast<float>(_windowSize.x) / bounds.size.x,
+        static_cast<float>(_windowSize.y) / bounds.size.y);
+
+    setZoomLevel(fitZoom); // clamps, and resizes the view to match
+    // After the zoom: setZoomLevel keeps the old centre, and the map centre is what we want.
+    _view.setCenter(bounds.position + bounds.size / 2.0f);
+
+    spdlog::debug("ViewportController: Fit map ({:.0f}x{:.0f}) into {}x{} at zoom {:.2f}",
+        bounds.size.x, bounds.size.y, _windowSize.x, _windowSize.y, _zoomLevel);
 }
 
 void ViewportController::panBy(sf::Vector2f worldDelta) {
@@ -76,6 +131,12 @@ int ViewportController::worldPosToHexIndex(sf::Vector2f worldPos) const {
         return -1;
     }
 
+    // Left of or above the grid's origin is off the map, and converting a negative float to unsigned
+    // is undefined, so stop here (the comparisons are also false for NaN).
+    if (constexpr float MAX_COORDINATE = 4.0e9f; // below UINT32_MAX
+        !(worldPos.x >= 0.0f && worldPos.y >= 0.0f && worldPos.x < MAX_COORDINATE && worldPos.y < MAX_COORDINATE)) {
+        return -1;
+    }
     uint32_t hexPosition = _hexGrid->positionAt(static_cast<uint32_t>(worldPos.x), static_cast<uint32_t>(worldPos.y));
 
     if (hexPosition == Hex::HEX_OUT_OF_MAP) {
@@ -85,7 +146,7 @@ int ViewportController::worldPosToHexIndex(sf::Vector2f worldPos) const {
     }
 
     const int hexIndex = static_cast<int>(hexPosition);
-    if (_hexGrid->containsPosition(hexIndex)) {
+    if (hexgrid::isValidPosition(hexIndex)) {
         spdlog::trace("ViewportController::worldPosToHexIndex: world({:.1f}, {:.1f}) -> hex({})",
             worldPos.x, worldPos.y, hexIndex);
         return hexIndex;
@@ -98,7 +159,6 @@ bool ViewportController::isHexVisible(int hexWorldX, int hexWorldY, const sf::Vi
     // A hex sprite spans ~2 hex-widths and sits a few px below its baseline, so pad
     // the right/bottom test by those amounts to avoid culling partially-visible hexes.
     constexpr int HEX_SPRITE_WIDTH_SPAN = Hex::HEX_WIDTH * 2;
-    constexpr int HEX_BASELINE_OFFSET = 4;
 
     const sf::Vector2f viewCenter = view.getCenter();
     const sf::Vector2f viewSize = view.getSize();
@@ -108,21 +168,7 @@ bool ViewportController::isHexVisible(int hexWorldX, int hexWorldY, const sf::Vi
     const int viewHeight = static_cast<int>(viewSize.y);
 
     return (hexWorldX + HEX_SPRITE_WIDTH_SPAN > worldX && hexWorldX < worldX + viewWidth)
-        && (hexWorldY + Hex::HEX_HEIGHT + HEX_BASELINE_OFFSET > worldY && hexWorldY < worldY + viewHeight);
-}
-
-sf::Vector2f ViewportController::snapToHexGrid(sf::Vector2f worldPos) const {
-    if (!_hexGrid) {
-        return worldPos;
-    }
-
-    // Find closest hex and return its center position
-    int hexIndex = worldPosToHexIndex(worldPos);
-    if (auto hex = _hexGrid->getHexByPosition(static_cast<uint32_t>(hexIndex)); hex.has_value()) {
-        return sf::Vector2f(static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()));
-    }
-
-    return worldPos; // Return original position if no valid hex found
+        && (hexWorldY + Hex::HEX_HEIGHT + Hex::SPRITE_BASELINE_OFFSET > worldY && hexWorldY < worldY + viewHeight);
 }
 
 void ViewportController::updateViewForWindowSize(sf::Vector2u windowSize) {
@@ -150,15 +196,10 @@ void ViewportController::updateViewForWindowSize(sf::Vector2u windowSize) {
 
 std::optional<HexPosition> ViewportController::worldPosToHexPosition(const WorldCoords& worldPos) const {
     int hexIndex = worldPosToHexIndex(worldPos.toVector());
-    if (hexIndex >= 0 && isValidHexPosition(hexIndex)) {
+    if (hexgrid::isValidPosition(hexIndex)) {
         return HexPosition(hexIndex);
     }
     return std::nullopt;
-}
-
-WorldCoords ViewportController::snapToHexGrid(const WorldCoords& worldPos) const {
-    sf::Vector2f snapped = snapToHexGrid(worldPos.toVector());
-    return WorldCoords(snapped.x, snapped.y);
 }
 
 } // namespace geck

@@ -19,12 +19,11 @@ constexpr int kCenter = 100 * hexgrid::WIDTH + 100; // a comfortably interior he
 } // namespace
 
 TEST_CASE("blocksMovementByInstance mirrors the engine's instance-flag rule", "[reachability]") {
-    using OT = geck::Pro::OBJECT_TYPE;
-    constexpr uint32_t kWall = static_cast<uint32_t>(OT::WALL);
-    constexpr uint32_t kScenery = static_cast<uint32_t>(OT::SCENERY);
-    constexpr uint32_t kCritter = static_cast<uint32_t>(OT::CRITTER);
-    constexpr uint32_t kItem = static_cast<uint32_t>(OT::ITEM);
-    constexpr uint32_t kMisc = static_cast<uint32_t>(OT::MISC);
+    constexpr ObjectType kWall = ObjectType::Wall;
+    constexpr ObjectType kScenery = ObjectType::Scenery;
+    constexpr ObjectType kCritter = ObjectType::Critter;
+    constexpr ObjectType kItem = ObjectType::Item;
+    constexpr ObjectType kMisc = ObjectType::Misc;
     constexpr uint32_t kHidden = static_cast<uint32_t>(geck::Pro::ObjectFlags::OBJECT_HIDDEN);
     constexpr uint32_t kNoBlock = static_cast<uint32_t>(geck::Pro::ObjectFlags::OBJECT_NO_BLOCK);
 
@@ -42,23 +41,7 @@ TEST_CASE("blocksMovementByInstance mirrors the engine's instance-flag rule", "[
     CHECK_FALSE(reachability::blocksMovementByInstance(kScenery, kNoBlock));
 }
 
-TEST_CASE("hexNeighbors yields parity-correct, symmetric neighbours", "[reachability]") {
-    // An interior hex has all six neighbours.
-    const std::vector<int> around = reachability::hexNeighbors(kCenter);
-    CHECK(around.size() == 6);
-
-    // Neighbour-ness is symmetric: the centre is a neighbour of each of its neighbours.
-    for (const int n : around) {
-        const std::vector<int> back = reachability::hexNeighbors(n);
-        CHECK(std::find(back.begin(), back.end(), kCenter) != back.end());
-    }
-
-    // Off-grid positions have no neighbours.
-    CHECK(reachability::hexNeighbors(-1).empty());
-    CHECK(reachability::hexNeighbors(kCount).empty());
-}
-
-TEST_CASE("hexComponents: an open grid is a single walkable region", "[reachability]") {
+TEST_CASE("hexComponents finds an open grid to be one walkable region", "[reachability]") {
     const std::vector<char> blocked(kCount, 0);
     std::vector<int> sizes;
     std::vector<int> samples;
@@ -70,11 +53,11 @@ TEST_CASE("hexComponents: an open grid is a single walkable region", "[reachabil
     CHECK(component[kCenter] == 0);
 }
 
-TEST_CASE("hexComponents: sealing all six neighbours isolates a hex", "[reachability]") {
+TEST_CASE("hexComponents isolates a hex whose six neighbours are sealed", "[reachability]") {
     // Block the full ring around the centre — in a hex grid the six neighbours fully enclose it, so
     // the centre must become its own one-hex component (this also proves the neighbour ring is correct).
     std::vector<char> blocked(kCount, 0);
-    for (const int n : reachability::hexNeighbors(kCenter)) {
+    for (const int n : hexgrid::neighbors(kCenter)) {
         blocked[n] = 1;
     }
 
@@ -92,12 +75,12 @@ TEST_CASE("hexComponents: sealing all six neighbours isolates a hex", "[reachabi
     CHECK(samples[centreId] == kCenter);
 
     // The blocked ring hexes belong to no component.
-    for (const int n : reachability::hexNeighbors(kCenter)) {
+    for (const int n : hexgrid::neighbors(kCenter)) {
         CHECK(component[n] == -1);
     }
 }
 
-TEST_CASE("entryHexes: player start counts only on its own elevation; every exit grid always counts", "[reachability]") {
+TEST_CASE("entryHexes counts the player start only on its own elevation but every exit grid always", "[reachability]") {
     const std::vector<std::shared_ptr<MapObject>> noObjects;
 
     // The player start seeds the flood only on the elevation the player spawns on.
@@ -108,8 +91,7 @@ TEST_CASE("entryHexes: player start counts only on its own elevation; every exit
     // arrive there when entering from the adjacent map).
     auto exitGrid = std::make_shared<MapObject>();
     exitGrid->position = 777;
-    exitGrid->pro_pid = (static_cast<uint32_t>(Pro::OBJECT_TYPE::MISC) << FileFormat::TYPE_MASK_SHIFT)
-        | MapObject::EXIT_GRID_PID_INDEX_FIRST;
+    exitGrid->pro_pid = ProtoId(MiscProtoTypeId::FirstExitGrid).pid();
     REQUIRE(exitGrid->isExitGridMarker());
     const std::vector<std::shared_ptr<MapObject>> objects{ exitGrid };
 
@@ -118,10 +100,10 @@ TEST_CASE("entryHexes: player start counts only on its own elevation; every exit
     CHECK(reachability::entryHexes(1, 555, 1, objects) == std::vector<int>{ 555, 777 });
 }
 
-TEST_CASE("unreachableWalkableHexes: shades the walkable hexes cut off from every entry", "[reachability]") {
+TEST_CASE("unreachableWalkableHexes shades the walkable hexes cut off from every entry", "[reachability]") {
     // Seal the ring around the centre so it is a walkable one-hex pocket disconnected from the rest.
     std::vector<char> blocked(kCount, 0);
-    for (const int n : reachability::hexNeighbors(kCenter)) {
+    for (const int n : hexgrid::neighbors(kCenter)) {
         blocked[n] = 1;
     }
     std::vector<int> sizes;
@@ -147,12 +129,12 @@ TEST_CASE("unreachableWalkableHexes: shades the walkable hexes cut off from ever
     // The seeded region is reachable, and the blocked ring hexes are impassable (not walkable), so
     // neither is shaded.
     CHECK(std::find(unreachable.begin(), unreachable.end(), 0) == unreachable.end());
-    for (const int n : reachability::hexNeighbors(kCenter)) {
+    for (const int n : hexgrid::neighbors(kCenter)) {
         CHECK(std::find(unreachable.begin(), unreachable.end(), n) == unreachable.end());
     }
 }
 
-TEST_CASE("unreachableWalkableHexes: shades nothing when the elevation has no entry point", "[reachability]") {
+TEST_CASE("unreachableWalkableHexes shades nothing when the elevation has no entry point", "[reachability]") {
     // With no player start and no exit grid here, reachability is undetermined — shade nothing rather
     // than flagging the whole (unreachable-by-this-model) elevation.
     reachability::ElevationResult result;

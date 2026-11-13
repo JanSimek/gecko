@@ -11,13 +11,33 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Use the tracked git hooks (.githooks/pre-commit clang-formats the lines a commit changes). Leaves
+# a hooksPath the developer already set alone.
+option(GECK_INSTALL_GIT_HOOKS "Point this checkout's core.hooksPath at .githooks" ON)
+find_package(Git QUIET)
+if(GECK_INSTALL_GIT_HOOKS AND GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" config --get core.hooksPath
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE _geck_hooks_path
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(_geck_hooks_path STREQUAL "")
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" config core.hooksPath .githooks
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        message(STATUS "Git hooks: core.hooksPath set to .githooks")
+    elseif(NOT _geck_hooks_path STREQUAL ".githooks")
+        message(STATUS "Git hooks: keeping core.hooksPath=${_geck_hooks_path}; .githooks not installed")
+    endif()
+endif()
+
 if(NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-    # Single owner of the build-tree resource staging. The editor and qt_tests both run from
-    # this shared CMAKE_RUNTIME_OUTPUT_DIRECTORY, and each used to POST_BUILD-copy
+    # Single owner of the build-tree resource staging. The editor runs from this shared
+    # CMAKE_RUNTIME_OUTPUT_DIRECTORY, and it and qt_tests each used to POST_BUILD-copy
     # ${CMAKE_SOURCE_DIR}/resources into the same ${CMAKE_BINARY_DIR}/resources — which raced under
     # parallel builds (intermittent "Error copying directory ..." on Windows CI). One ALL target now
     # owns the copy and consumers depend on it instead of duplicating it. (Single-config only;
@@ -62,7 +82,8 @@ option(GECK_BUILD_CLI "Build the headless gecko-cli tool" ON)
 # Needs the CLI lib; pulls in header-only nlohmann/json. Default ON, but opts out independently.
 option(GECK_BUILD_MCP "Build the MCP server (gecko-mcp)" ON)
 # Tier-2 scripting (embeds Luau + LuaBridge3). OFF by default so a normal build never
-# downloads or compiles Luau; CI builds it ON. See PLAN.md "Optional, compile-flag-gated".
+# downloads or compiles Luau; CI builds it ON. Design record: `git show edf773d:PLAN.md`,
+# "Optional, compile-flag-gated".
 option(GECK_ENABLE_SCRIPTING "Build the optional Luau scripting runtime" OFF)
 
 ##################################################
@@ -74,30 +95,15 @@ function(geck_disable_target_warnings)
             continue()
         endif()
 
-        get_property(_is_alias TARGET ${_target} PROPERTY ALIASED_TARGET SET)
-        if(_is_alias)
-            get_property(_resolved TARGET ${_target} PROPERTY ALIASED_TARGET)
-        else()
-            set(_resolved ${_target})
-        endif()
-
-        if(NOT _resolved)
-            continue()
-        endif()
-
-        get_target_property(_target_type ${_resolved} TYPE)
-        if(NOT _target_type)
-            continue()
-        endif()
-
-        if(_target_type MATCHES "INTERFACE")
+        get_target_property(_target_type ${_target} TYPE)
+        if(_target_type STREQUAL "INTERFACE_LIBRARY")
             continue()
         endif()
 
         if(MSVC)
-            target_compile_options(${_resolved} PRIVATE /w)
+            target_compile_options(${_target} PRIVATE /w)
         else()
-            target_compile_options(${_resolved} PRIVATE -w)
+            target_compile_options(${_target} PRIVATE -w)
         endif()
     endforeach()
 endfunction()
@@ -127,16 +133,15 @@ endif()
 
 if(MSVC)
     add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
-    # Suppress deprecation warning for stdext::checked_array_iterator in debug builds
-    add_compile_definitions(_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING)
 endif()
 
 # Targets
 add_subdirectory(src)
 
 if(GECK_BUILD_TESTS AND TARGET Catch2::Catch2WithMain)
-    add_subdirectory(tests)
+    # Before add_subdirectory: tests/ inherits the enabled state its add_test() calls need.
     enable_testing()
+    add_subdirectory(tests)
 endif()
 
 # Windows: one target stages the runtime DLLs into the shared output dir. Each executable used to
@@ -147,7 +152,7 @@ endif()
 if(WIN32)
     set(_runtime_dll_targets ${PROJECT_NAME})
     if(GECK_BUILD_TESTS AND TARGET general_tests)
-        list(APPEND _runtime_dll_targets general_tests performance_tests qt_tests)
+        list(APPEND _runtime_dll_targets general_tests qt_tests)
     endif()
     set(_runtime_dll_genexprs "")
     foreach(_t IN LISTS _runtime_dll_targets)

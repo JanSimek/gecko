@@ -1,8 +1,13 @@
 #pragma once
 
 #include <QString>
+#include <filesystem>
+#include <map>
 #include <memory>
+#include <optional>
 #include <string>
+
+#include "resource/ScriptLint.h"
 
 QT_BEGIN_NAMESPACE
 class QWidget;
@@ -35,10 +40,26 @@ public:
     /// Open the .ssl source behind the 0-based scripts.lst `programIndex` in the user's editor.
     void editScriptSource(int programIndex);
 
+    /// Where the script at `programIndex` stands, looked up the way editScriptSource looks but with
+    /// no dialogs, so it can be shown next to an attached script.
+    struct ScriptStatus {
+        bool resolved = false; // scripts.lst names it
+        bool compiled = false; // scripts/<name>.int is in the mounted data
+        int localVarCount = 0; // the `# local_vars=N` scripts.lst gives it
+        /// What the .ssl source (with its #includes) does, or without one what the compiled .int shows
+        /// (ScriptReport::fromBytecode); null when neither was found.
+        std::shared_ptr<const resource::ScriptReport> report;
+        /// The lint's errors and warnings for it (see resource::ScriptLinter); empty without a report.
+        std::vector<resource::ScriptFinding> findings;
+    };
+    ScriptStatus scriptStatus(int programIndex);
+
 private:
     /// The scripts.lst entry at `programIndex` reduced to its bare program name ("artemple"),
     /// or an empty string (with an error dialog shown) when it can't be resolved.
     std::string resolveBaseName(int programIndex);
+    /// resolveBaseName without the dialog.
+    std::string baseNameOf(int programIndex) const;
 
     /// Open `<baseName>.ssl` from a marked script-source tree (with the tree as the editor's
     /// workspace) when one is configured and holds it. Returns true when it handled the request
@@ -49,6 +70,16 @@ private:
     std::shared_ptr<Settings> _settings;
     ExternalEditorLauncher& _editorLauncher;
     QWidget* _dialogParent;
+    // <name> -> its .ssl under the script-source roots. Only hits are kept: finding one walks the trees.
+    std::map<std::string, std::filesystem::path, std::less<>> _sourceRootHits;
+    // A source file's facts, kept until the file changes: preprocessing reads every header it includes.
+    struct CachedReport {
+        std::filesystem::file_time_type modified;
+        std::shared_ptr<const resource::ScriptReport> report;
+    };
+    std::map<std::filesystem::path, CachedReport> _reportsByFile;
+    std::shared_ptr<const resource::ScriptReport> diskReport(const std::filesystem::path& file);
+    void lint(int programIndex, ScriptStatus& status);
 };
 
 } // namespace geck

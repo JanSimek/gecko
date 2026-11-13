@@ -175,19 +175,6 @@ void ProTabWidget::createSpinBoxArray(QSpinBox** array, int count,
     }
 }
 
-void ProTabWidget::createCompactSpinBoxArray(QSpinBox** array, int count,
-    int min, int max, int fixedWidth,
-    const QString& tooltipTemplate,
-    const QStringList& labels) {
-    createSpinBoxArray(array, count, min, max, tooltipTemplate, labels);
-
-    for (int i = 0; i < count; ++i) {
-        if (array[i]) {
-            array[i]->setFixedWidth(fixedWidth);
-        }
-    }
-}
-
 void ProTabWidget::onFieldChanged() {
     Q_EMIT fieldChanged();
 }

@@ -1,4 +1,9 @@
 #include "CritterFrmResolver.h"
+
+#include "format/frm/FrmId.h"
+#include "reader/TextParsing.h"
+#include "resource/FrmResolver.h"
+
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <unordered_map>
@@ -6,14 +11,13 @@
 namespace geck {
 
 std::string CritterFrmResolver::generateCritterFrmName(const std::string& baseName, uint32_t frmPid) {
-    // Extract components from FRM PID (based on legacy mapper logic)
-    uint32_t index = frmPid & 0x00000FFF;
-    uint32_t id1 = (frmPid & 0x0000F000) >> 12;
-    uint32_t id2 = (frmPid & 0x00FF0000) >> 16;
-    uint32_t id3 = (frmPid & 0x70000000) >> 28;
+    const FrmId fid{ frmPid };
+    const uint32_t id1 = fid.weaponAnimation();
+    const uint32_t id2 = fid.animationType();
+    const Rotation rotation = fid.rotation();
 
-    spdlog::debug("CritterFrmResolver: Generating FRM name for PID 0x{:08X} - index={}, id1={}, id2={}, id3={}",
-        frmPid, index, id1, id2, id3);
+    spdlog::debug("CritterFrmResolver: Generating FRM name for FID 0x{:08X} - index={}, weapon={}, animation={}, rotation={}",
+        frmPid, fid.frameId(), id1, id2, static_cast<int>(rotation));
 
     char suffix1, suffix2;
     if (!getSuffixes(id1, id2, suffix1, suffix2)) {
@@ -26,15 +30,14 @@ std::string CritterFrmResolver::generateCritterFrmName(const std::string& baseNa
     filename += suffix1;
     filename += suffix2;
     filename += ".fr";
-    filename += (id3 && id3 <= 5) ? char('0' + id3 - 1) : 'm';
+    // Rotation NE (0) is the multi-direction .frm; NE+n is the single-direction .fr(n-1).
+    filename += (rotation > Rotation::NE) ? char('0' + static_cast<int>(rotation) - 1) : 'm';
 
     spdlog::debug("CritterFrmResolver: Generated filename: {}", filename);
     return filename;
 }
 
-uint32_t CritterFrmResolver::deriveCritterFrmPid(const std::string& /* baseName */,
-    const std::string& frmFilename,
-    uint32_t baseIndex) {
+uint32_t CritterFrmResolver::deriveCritterFrmPid(const std::string& frmFilename, uint32_t baseIndex) {
     char suffix1, suffix2, direction;
     if (!parseAnimationSuffixes(frmFilename, suffix1, suffix2, direction)) {
         return 0;
@@ -45,18 +48,16 @@ uint32_t CritterFrmResolver::deriveCritterFrmPid(const std::string& /* baseName 
         return 0;
     }
 
-    uint32_t id3 = 0;
+    // The inverse of generateCritterFrmName's rotation rule; '5' encodes past Rotation::NW, which
+    // FrmId carries as raw bits.
+    Rotation rotation = Rotation::NE;
     if (direction >= '0' && direction <= '5') {
-        id3 = (direction - '0') + 1;
-    } else if (direction == 'm') {
-        id3 = 0;
-    } else {
+        rotation = static_cast<Rotation>((direction - '0') + 1);
+    } else if (direction != 'm') {
         return 0;
     }
 
-    uint32_t frmPid = (id3 << 28) | (1 << 24) | (id2 << 16) | (id1 << 12) | baseIndex;
-
-    return frmPid;
+    return FrmId(ObjectType::Critter, baseIndex, id2, id1, rotation).fid();
 }
 
 std::string CritterFrmResolver::getAnimationTypeName(const std::string& frmFilename) {
@@ -103,8 +104,7 @@ std::string CritterFrmResolver::getAnimationTypeName(const std::string& frmFilen
         { "ra", "Rotation" },
     };
 
-    std::string suffixKey = std::string(1, suffix1) + std::string(1, suffix2);
-    std::transform(suffixKey.begin(), suffixKey.end(), suffixKey.begin(), ::tolower);
+    const std::string suffixKey = text::toLower(std::string{ suffix1, suffix2 });
 
     auto it = animationNames.find(suffixKey);
     if (it != animationNames.end()) {
@@ -127,18 +127,14 @@ bool CritterFrmResolver::matchesCritterBase(const std::string& baseName, const s
 
     size_t dotPos = filename.find_last_of('.');
     if (dotPos != std::string::npos) {
-        std::string extension = filename.substr(dotPos + 1);
-        if (extension == "frm" || (extension.length() == 3 && extension.substr(0, 2) == "fr")) {
-            filename.erase(dotPos);
-        } else {
+        if (!resource::hasFrmExtension(filename.substr(dotPos))) {
             return false;
         }
+        filename.erase(dotPos);
     }
 
-    std::string lowerFilename = filename;
-    std::string lowerBaseName = baseName;
-    std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(), ::tolower);
-    std::transform(lowerBaseName.begin(), lowerBaseName.end(), lowerBaseName.begin(), ::tolower);
+    const std::string lowerFilename = text::toLower(filename);
+    const std::string lowerBaseName = text::toLower(baseName);
 
     if (lowerFilename.length() != lowerBaseName.length() + 2) {
         return false;
@@ -252,28 +248,20 @@ bool CritterFrmResolver::parseAnimationSuffixes(const std::string& frmFilename,
         filename = filename.substr(lastSlash + 1);
     }
 
-    std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
+    filename = text::toLower(filename);
 
     size_t dotPos = filename.find_last_of('.');
     if (dotPos == std::string::npos || dotPos < 2) {
         return false;
     }
 
-    std::string extension = filename.substr(dotPos + 1);
-    filename.erase(dotPos);
-
-    if (extension == "frm") {
-        direction = 'm';
-    } else if (extension.length() == 3 && extension.substr(0, 2) == "fr") {
-        char dirChar = extension[2];
-        if (dirChar >= '0' && dirChar <= '5') {
-            direction = dirChar;
-        } else {
-            return false;
-        }
-    } else {
+    const std::string extension = filename.substr(dotPos + 1);
+    if (!resource::hasFrmExtension(filename.substr(dotPos))) {
         return false;
     }
+    filename.erase(dotPos);
+    // .frm holds every direction; a directional .fr0-.fr5 names its one.
+    direction = extension == "frm" ? 'm' : extension[2];
 
     if (filename.length() < 2) {
         return false;

@@ -1,61 +1,26 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <QDir>
-#include <QFile>
-#include <QStandardPaths>
-#include <QTemporaryDir>
-
 #include <algorithm>
 #include <filesystem>
 
+#include "support/TempFile.h"
 #include "ui/Settings.h"
 
 namespace fs = std::filesystem;
 
-namespace {
-
-// Settings persists to the (test-mode) ConfigLocation; scrub it so this test neither inherits
-// another test's file nor leaves one behind.
-void removeSettingsFile() {
-    const QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
-    QFile::remove(QDir(configPath).filePath("gecko/settings.json"));
-    QFile::remove(QDir(configPath).filePath("settings.json"));
-}
-
-} // namespace
-
-TEST_CASE("Settings save-location marker: resolution, invariant, persistence", "[settings][writableroot]") {
-    QTemporaryDir temp;
-    REQUIRE(temp.isValid());
-    const fs::path dirA = fs::path(temp.path().toStdString()) / "a";
-    const fs::path dirB = fs::path(temp.path().toStdString()) / "b";
+TEST_CASE("Settings keeps its save-location marker listed and persists it", "[settings]") {
+    const geck::test::TempDir temp("settings-paths");
+    const fs::path dirA = temp.path() / "a";
+    const fs::path dirB = temp.path() / "b";
     fs::create_directories(dirA);
     fs::create_directories(dirB);
-
-    removeSettingsFile();
-
-    SECTION("marker overrides the positional fallback; clearing restores it") {
-        geck::Settings settings;
-        settings.setDataPaths({ dirA, dirB });
-        REQUIRE(settings.resolveWritableDataPath().has_value());
-        CHECK(*settings.resolveWritableDataPath() == dirB); // positional rule: last directory wins
-
-        settings.setWritableDataPath(dirA);
-        CHECK(settings.getWritableDataPath() == dirA);
-        REQUIRE(settings.resolveWritableDataPath().has_value());
-        CHECK(*settings.resolveWritableDataPath() == dirA);
-
-        settings.setWritableDataPath({});
-        REQUIRE(settings.resolveWritableDataPath().has_value());
-        CHECK(*settings.resolveWritableDataPath() == dirB);
-    }
 
     SECTION("the marker never dangles: it clears when its folder leaves the data paths") {
         geck::Settings settings;
         settings.setDataPaths({ dirA, dirB });
         settings.setWritableDataPath(dirA);
 
-        settings.removeDataPath(dirA);
+        settings.setDataPaths({ dirB });
         CHECK(settings.getWritableDataPath().empty());
         REQUIRE(settings.resolveWritableDataPath().has_value());
         CHECK(*settings.resolveWritableDataPath() == dirB);
@@ -120,19 +85,14 @@ TEST_CASE("Settings save-location marker: resolution, invariant, persistence", "
         REQUIRE(reloaded.resolveWritableDataPath().has_value());
         CHECK(*reloaded.resolveWritableDataPath() == dirB);
     }
-
-    removeSettingsFile();
 }
 
-TEST_CASE("Settings script-source markers: subset invariant and persistence", "[settings][ssl]") {
-    QTemporaryDir temp;
-    REQUIRE(temp.isValid());
-    const fs::path dirA = fs::path(temp.path().toStdString()) / "a";
-    const fs::path dirB = fs::path(temp.path().toStdString()) / "b";
+TEST_CASE("Settings keeps its script-source markers among the data paths and persists them", "[settings]") {
+    const geck::test::TempDir temp("settings-paths");
+    const fs::path dirA = temp.path() / "a";
+    const fs::path dirB = temp.path() / "b";
     fs::create_directories(dirA);
     fs::create_directories(dirB);
-
-    removeSettingsFile();
 
     SECTION("markers round-trip through save() and load(), de-duplicated") {
         {
@@ -161,7 +121,7 @@ TEST_CASE("Settings script-source markers: subset invariant and persistence", "[
         geck::Settings reloaded;
         reloaded.load(); // prune against the file's data paths -> dirB is dropped
         const auto sources = reloaded.getScriptSourcePaths();
-        CHECK(sources.size() == 1);
+        REQUIRE(sources.size() == 1);
         CHECK(sources.front() == dirA);
     }
 
@@ -175,6 +135,4 @@ TEST_CASE("Settings script-source markers: subset invariant and persistence", "[
         reloaded.load();
         CHECK(reloaded.getScriptSourcePaths().empty());
     }
-
-    removeSettingsFile();
 }

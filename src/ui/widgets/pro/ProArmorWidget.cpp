@@ -37,12 +37,12 @@ void ProArmorWidget::setupUI() {
     QWidget* leftColumn = new QWidget();
     QVBoxLayout* leftLayout = new QVBoxLayout(leftColumn);
     leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    leftLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     QWidget* rightColumn = new QWidget();
     QVBoxLayout* rightLayout = new QVBoxLayout(rightColumn);
     rightLayout->setContentsMargins(0, 0, 0, 0);
-    rightLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    rightLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     // === LEFT COLUMN: Protection Values ===
     QGroupBox* acGroup = new QGroupBox("Protection Values");
@@ -115,11 +115,11 @@ void ProArmorWidget::setupUI() {
     viewsGroup->setStyleSheet(ui::theme::styles::boldGroupBox());
     QVBoxLayout* viewsLayout = new QVBoxLayout(viewsGroup);
     viewsLayout->setContentsMargins(ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN_VERTICAL, ui::constants::GROUP_MARGIN, ui::constants::GROUP_MARGIN);
-    viewsLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    viewsLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     QHBoxLayout* previewsLayout = new QHBoxLayout();
     previewsLayout->setContentsMargins(0, 0, 0, 0);
-    previewsLayout->setSpacing(ui::constants::SPACING_NORMAL);
+    previewsLayout->setSpacing(ui::theme::spacing::NORMAL);
 
     _armorMalePreviewWidget = new ObjectPreviewWidget(_resources, this,
         ObjectPreviewWidget::ShowAnimationControls,
@@ -208,7 +208,7 @@ void ProArmorWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 }
 
 bool ProArmorWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
-    return pro && pro->type() == Pro::OBJECT_TYPE::ITEM && pro->itemType() == Pro::ITEM_TYPE::ARMOR;
+    return pro && pro->type() == ObjectType::Item && pro->itemType() == ItemType::Armor;
 }
 
 QString ProArmorWidget::getTabLabel() const {
@@ -297,7 +297,7 @@ void ProArmorWidget::selectArmorFid(ObjectPreviewWidget* previewWidget, int32_t&
     }
 
     FrmSelectorDialog dialog(_resources, this);
-    dialog.setObjectTypeFilter(Frm::FRM_TYPE::CRITTER);
+    dialog.setObjectTypeFilter(ObjectType::Critter);
     dialog.setInitialFrmPid(static_cast<uint32_t>(std::max(fid, 0)));
 
     if (dialog.exec() != QDialog::Accepted) {
@@ -312,16 +312,6 @@ void ProArmorWidget::selectArmorFid(ObjectPreviewWidget* previewWidget, int32_t&
     fid = static_cast<int32_t>(*selectedFrmPidOpt);
     updateArmorPreviews();
     Q_EMIT fieldChanged();
-}
-
-void ProArmorWidget::setArmorMaleFID(int32_t fid) {
-    _armorMaleFID = fid;
-    updateArmorPreviews();
-}
-
-void ProArmorWidget::setArmorFemaleFID(int32_t fid) {
-    _armorFemaleFID = fid;
-    updateArmorPreviews();
 }
 
 } // namespace geck

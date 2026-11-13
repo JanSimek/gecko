@@ -11,21 +11,10 @@ AnimationController::AnimationController(QObject* parent)
     connect(_timer, &QTimer::timeout, this, &AnimationController::onTick);
 }
 
-void AnimationController::loadFrames(const std::vector<QPixmap>& frames) {
-    stop();
-    _frameCache = frames;
-    _currentFrame = 0;
-    Q_EMIT framesLoaded(static_cast<int>(_frameCache.size()));
-    if (!_frameCache.empty()) {
-        Q_EMIT frameChanged(0);
-    }
-}
-
 void AnimationController::loadFrames(std::vector<QPixmap>&& frames) {
     stop();
     _frameCache = std::move(frames);
     _currentFrame = 0;
-    Q_EMIT framesLoaded(static_cast<int>(_frameCache.size()));
     if (!_frameCache.empty()) {
         Q_EMIT frameChanged(0);
     }
@@ -35,7 +24,6 @@ void AnimationController::clearFrames() {
     stop();
     _frameCache.clear();
     _currentFrame = 0;
-    Q_EMIT framesLoaded(0);
 }
 
 void AnimationController::play() {
@@ -67,14 +55,6 @@ void AnimationController::stop() {
     }
 }
 
-void AnimationController::toggle() {
-    if (_isPlaying) {
-        pause();
-    } else {
-        play();
-    }
-}
-
 void AnimationController::setFrame(int frame) {
     if (frame < 0 || frame >= static_cast<int>(_frameCache.size())) {
         return;
@@ -83,52 +63,6 @@ void AnimationController::setFrame(int frame) {
         _currentFrame = frame;
         Q_EMIT frameChanged(frame);
     }
-}
-
-void AnimationController::nextFrame() {
-    if (_frameCache.empty()) {
-        return;
-    }
-    int next = (_currentFrame + 1) % static_cast<int>(_frameCache.size());
-    setFrame(next);
-}
-
-void AnimationController::previousFrame() {
-    if (_frameCache.empty()) {
-        return;
-    }
-    int prev = (_currentFrame - 1 + static_cast<int>(_frameCache.size())) % static_cast<int>(_frameCache.size());
-    setFrame(prev);
-}
-
-void AnimationController::setDirection(int direction) {
-    if (direction < 0 || direction >= _totalDirections) {
-        return;
-    }
-    if (direction != _currentDirection) {
-        _currentDirection = direction;
-        Q_EMIT directionChanged(direction);
-    }
-}
-
-void AnimationController::setTotalDirections(int count) {
-    _totalDirections = qMax(1, count);
-    if (_currentDirection >= _totalDirections) {
-        setDirection(_totalDirections - 1);
-    }
-}
-
-void AnimationController::nextDirection() {
-    int next = (_currentDirection + 1) % _totalDirections;
-    setDirection(next);
-}
-
-void AnimationController::setInterval(int ms) {
-    _timer->setInterval(ms);
-}
-
-int AnimationController::interval() const {
-    return _timer->interval();
 }
 
 const QPixmap& AnimationController::frame(int index) const {
@@ -140,15 +74,11 @@ const QPixmap& AnimationController::frame(int index) const {
     return _frameCache[index];
 }
 
-const QPixmap& AnimationController::currentPixmap() const {
-    return frame(_currentFrame);
-}
-
 void AnimationController::onTick() {
     if (_frameCache.size() <= 1) {
         return;
     }
-    nextFrame();
+    setFrame((_currentFrame + 1) % static_cast<int>(_frameCache.size()));
 }
 
 } // namespace geck

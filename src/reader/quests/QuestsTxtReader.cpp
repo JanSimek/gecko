@@ -4,38 +4,19 @@
 
 #include <sstream>
 #include <string>
-#include <vector>
 
 namespace geck {
 
 namespace {
 
     using geck::text::intOr;
+    using geck::text::splitTokens;
     using geck::text::trim;
-
-    // Split on any of space/tab/comma (the engine's questInit delimiters), dropping empty tokens.
-    std::vector<std::string> tokenize(const std::string& s) {
-        std::vector<std::string> out;
-        std::string current;
-        for (const char c : s) {
-            if (c == ' ' || c == '\t' || c == ',') {
-                if (!current.empty()) {
-                    out.push_back(current);
-                    current.clear();
-                }
-            } else {
-                current += c;
-            }
-        }
-        if (!current.empty()) {
-            out.push_back(current);
-        }
-        return out;
-    }
 
 } // namespace
 
-QuestsTxt parseQuestsTxt(std::istream& in) {
+QuestsTxt parseQuestsTxt(const std::string& text) {
+    std::istringstream in(text);
     QuestsTxt out;
     std::string line;
     while (std::getline(in, line)) {
@@ -43,7 +24,7 @@ QuestsTxt parseQuestsTxt(std::istream& in) {
         if (content.empty()) {
             continue;
         }
-        const auto tokens = tokenize(content);
+        const auto tokens = splitTokens(content); // the engine's questInit delimiters
         if (tokens.size() < 5) {
             continue; // not a quest row
         }
@@ -56,11 +37,6 @@ QuestsTxt parseQuestsTxt(std::istream& in) {
         out.quests.push_back(quest);
     }
     return out;
-}
-
-QuestsTxt parseQuestsTxt(const std::string& text) {
-    std::istringstream in(text);
-    return parseQuestsTxt(in);
 }
 
 } // namespace geck

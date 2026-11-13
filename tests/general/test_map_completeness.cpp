@@ -8,30 +8,18 @@
 #include "resource/GameResources.h"
 #include "resource/MapCompleteness.h"
 #include "support/Fixtures.h"
+#include "support/MapObjectBuilder.h"
 
 using namespace geck;
 
-namespace {
-
-// f2_res.dat is the committed DAT fixture. It carries interface art but no tiles.lst,
+// The scans mount f2_res.dat, the committed DAT fixture. It carries interface art but no tiles.lst,
 // scripts.lst, or tile art, so every index-backed check degrades to its "not mounted" reason —
 // exactly the state the scan must report rather than throw on.
-void mountFixtureDat(resource::GameResources& resources) {
-    resources.files().addDataPath(geck::test::dataPath("f2_res.dat"));
-}
 
-std::unique_ptr<Map> emptyMap() {
-    auto map = std::make_unique<Map>("test.map");
-    map->setMapFile(std::make_unique<Map::MapFile>(Map::createEmptyMapFile()));
-    return map;
-}
-
-} // namespace
-
-TEST_CASE("scanMapCompleteness reports an empty map as complete", "[completeness]") {
+TEST_CASE("scanMapCompleteness reports an empty map as complete", "[map_completeness]") {
     resource::GameResources resources;
-    mountFixtureDat(resources);
-    auto map = emptyMap();
+    resources.files().addDataPath(test::f2ResDat());
+    auto map = test::mapOf();
 
     const auto report = resource::scanMapCompleteness(resources, *map);
 
@@ -47,10 +35,10 @@ TEST_CASE("scanMapCompleteness reports an empty map as complete", "[completeness
     CHECK(report.mounts.front().kind == resource::MountedSourceInfo::Kind::Dat);
 }
 
-TEST_CASE("scanMapCompleteness reports used tiles that no index can resolve", "[completeness]") {
+TEST_CASE("scanMapCompleteness reports used tiles that no index can resolve", "[map_completeness]") {
     resource::GameResources resources;
-    mountFixtureDat(resources);
-    auto map = emptyMap();
+    resources.files().addDataPath(test::f2ResDat());
+    auto map = test::mapOf();
     map->getMapFile().tiles.at(0)[100].setFloor(50);
     map->getMapFile().tiles.at(0)[200].setRoof(60);
     map->getMapFile().tiles.at(1)[300].setFloor(50); // same id on another elevation: still one entry
@@ -65,21 +53,15 @@ TEST_CASE("scanMapCompleteness reports used tiles that no index can resolve", "[
     CHECK_FALSE(report.complete());
 }
 
-TEST_CASE("scanMapCompleteness reports unresolvable object sprites, skipping inventory children", "[completeness]") {
+TEST_CASE("scanMapCompleteness reports unresolvable object sprites, skipping inventory children", "[map_completeness]") {
     resource::GameResources resources;
-    mountFixtureDat(resources);
-    auto map = emptyMap();
+    resources.files().addDataPath(test::f2ResDat());
+    auto map = test::mapOf();
 
-    auto placed = std::make_shared<MapObject>();
-    placed->position = 100;
-    placed->frm_pid = 0x0F000001u; // FID type 15 does not exist -> resolve() throws
-    auto duplicate = std::make_shared<MapObject>();
-    duplicate->position = 200;
-    duplicate->frm_pid = 0x0F000001u; // same FID: deduplicated
-    auto inventoryChild = std::make_shared<MapObject>();
-    inventoryChild->position = -1; // inside a container, never rendered
-    inventoryChild->frm_pid = 0x0F000002u;
-    map->getMapFile().map_objects[0] = { placed, duplicate, inventoryChild };
+    auto& mapFile = map->getMapFile();
+    test::addObject(mapFile, 0, 100)->frm_pid = 0x0F000001u; // FID type 15 does not exist -> resolve() throws
+    test::addObject(mapFile, 0, 200)->frm_pid = 0x0F000001u; // same FID: deduplicated
+    test::addObject(mapFile, 0, -1)->frm_pid = 0x0F000002u;  // inside a container, never rendered
 
     const auto report = resource::scanMapCompleteness(resources, *map);
 
@@ -89,10 +71,10 @@ TEST_CASE("scanMapCompleteness reports unresolvable object sprites, skipping inv
     CHECK(report.missingObjectArt[0].reason == "FID does not resolve");
 }
 
-TEST_CASE("scanMapCompleteness reports script references from the header and the script sections", "[completeness]") {
+TEST_CASE("scanMapCompleteness reports script references from the header and the script sections", "[map_completeness]") {
     resource::GameResources resources;
-    mountFixtureDat(resources);
-    auto map = emptyMap();
+    resources.files().addDataPath(test::f2ResDat());
+    auto map = test::mapOf();
     map->getMapFile().header.script_id = 42; // 1-based -> program index 41
     map->getMapFile().map_scripts[static_cast<int>(MapScript::ScriptType::CRITTER)].push_back(
         MapScript::makeObjectScript(MapScript::ScriptType::CRITTER, 0, 7, 1));

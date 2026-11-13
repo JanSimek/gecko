@@ -4,6 +4,7 @@
 #include "TileUtils.h"
 #include "format/lst/Lst.h"
 #include "format/map/Map.h"
+#include "resource/ResourcePaths.h"
 
 namespace geck {
 
@@ -26,7 +27,7 @@ sf::Sprite SpriteFactory::createEmptyTileSprite(
     int yOffset,
     const sf::Color& color) {
 
-    return createTileSprite(resources, BLANK_TILE_PATH, screenPos, yOffset, color);
+    return createTileSprite(resources, std::string(ResourcePaths::Frm::BLANK_TILE), screenPos, yOffset, color);
 }
 
 sf::Sprite SpriteFactory::createFloorTileSprite(

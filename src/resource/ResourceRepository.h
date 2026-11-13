@@ -41,8 +41,29 @@ public:
         return findLocked<T>(key);
     }
 
+    /// The resource at `path`, parsed and cached. Never null: throws IOException when no data path
+    /// holds the file, and the reader's exception when it doesn't parse. Use tryLoad() when a
+    /// missing file is an expected outcome.
     template <class T>
     [[nodiscard]] T* load(const std::filesystem::path& path) {
+        T* resource = loadImpl<T>(path);
+        if (resource == nullptr) {
+            throw IOException("Failed to open file from data paths", path);
+        }
+        return resource;
+    }
+
+    /// Like load(), but returns nullptr when no data path holds the file. A file that is present but
+    /// doesn't parse still throws.
+    template <class T>
+    [[nodiscard]] T* tryLoad(const std::filesystem::path& path) {
+        return loadImpl<T>(path);
+    }
+
+private:
+    // nullptr when the file is in no data path.
+    template <class T>
+    [[nodiscard]] T* loadImpl(const std::filesystem::path& path) {
         static_assert(std::is_base_of<IFile, T>::value, "Resource must derive from IFile");
 
         const std::string key = normalizeKey(path);
@@ -58,7 +79,7 @@ public:
         // not serialize concurrent loads of unrelated resources.
         auto rawData = _files.readRawBytes(path);
         if (!rawData) {
-            throw IOException("Failed to open file from data paths", path);
+            return nullptr;
         }
         auto resource = ReaderFactory::readFileFromMemory<T>(*rawData, key);
 
@@ -73,7 +94,6 @@ public:
         return resourcePtr;
     }
 
-private:
     // Caller must hold _mutex.
     template <class T>
     [[nodiscard]] T* findLocked(const std::string& key) const {

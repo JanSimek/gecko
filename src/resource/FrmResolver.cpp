@@ -3,13 +3,16 @@
 #include "ResourceRepository.h"
 
 #include "format/frm/Frm.h"
+#include "format/frm/FrmId.h"
 #include "format/lst/Lst.h"
+#include "reader/TextParsing.h"
 #include "util/Constants.h"
 #include "resource/CritterFrmResolver.h"
 #include "resource/ResourcePaths.h"
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
-#include <cctype>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -42,31 +45,22 @@ namespace {
         return std::string(text.substr(first, last - first + 1));
     }
 
-    bool equalsIgnoreCase(std::string_view a, std::string_view b) {
-        return a.size() == b.size()
-            && std::equal(a.begin(), a.end(), b.begin(), [](char lhs, char rhs) {
-                   return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
-               });
-    }
-
 } // namespace
 
 bool hasFrmExtension(std::string_view filename) {
     if (filename.size() < 4) {
         return false;
     }
-    std::string ext = trimmed(filename.substr(filename.size() - 4));
-    std::transform(ext.begin(), ext.end(), ext.begin(),
-        [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+    const std::string ext = text::toLower(trimmed(filename.substr(filename.size() - 4)));
     return ext == ".frm" || ext == ".fr0" || ext == ".fr1" || ext == ".fr2"
         || ext == ".fr3" || ext == ".fr4" || ext == ".fr5";
 }
 
-std::optional<Frm::FRM_TYPE> frmTypeForArtPath(std::string_view path) {
-    // frmTypeDescriptions is indexed in FRM_TYPE enum order, so the index is the type.
+std::optional<ObjectType> frmTypeForArtPath(std::string_view path) {
+    // frmTypeDescriptions is indexed in ObjectType order, so the index is the type.
     for (size_t i = 0; i < frmTypeDescriptions.size(); ++i) {
         if (path.find(frmTypeDescriptions[i].prefixPath) != std::string_view::npos) {
-            return static_cast<Frm::FRM_TYPE>(i);
+            return static_cast<ObjectType>(i);
         }
     }
     return std::nullopt;
@@ -77,33 +71,20 @@ FrmResolver::FrmResolver(ResourceRepository& repository)
 }
 
 std::string FrmResolver::resolve(uint32_t fid) {
-    auto baseId = fid & FileFormat::BASE_ID_MASK;
-    // Mask to the 4 type bits (engine FID_TYPE == (fid & 0x0F000000) >> 24); a bare
-    // shift would fold in the rotation bits (28-30) and misclassify rotated FIDs.
-    auto type = static_cast<Frm::FRM_TYPE>((fid & FileFormat::TYPE_MASK) >> FileFormat::TYPE_MASK_SHIFT);
+    const FrmId frmId{ fid };
+    const ObjectType type = frmId.objectType();
+    const uint32_t baseId = frmId.frameId();
 
-    if (type == Frm::FRM_TYPE::CRITTER) {
-        baseId = fid & FileFormat::CRITTER_ID_MASK;
-        type = static_cast<Frm::FRM_TYPE>((fid & FileFormat::TYPE_MASK) >> FileFormat::TYPE_MASK_SHIFT);
-    }
-
-    if (type == Frm::FRM_TYPE::MISC && baseId == WallBlockers::SCROLL_BLOCKER_BASE_ID) {
+    if (type == ObjectType::Misc && baseId == WallBlockers::SCROLL_BLOCKER_FID.frameId()) {
         return std::string(ResourcePaths::Frm::SCROLL_BLOCKER);
     }
 
-    if (type == Frm::FRM_TYPE::WALL && baseId == 620) {
-        return std::string(ResourcePaths::Frm::WALL_BLOCK);
-    }
-
-    if (type > Frm::FRM_TYPE::INVENTORY) {
-        throw std::runtime_error("Invalid FRM_TYPE");
+    if (type == ObjectType::Invalid || type > ObjectType::Inventory) {
+        throw std::runtime_error("Invalid FID object type");
     }
 
     const auto& typeDescription = frmTypeDescriptions[static_cast<size_t>(type)];
-    auto* lst = _repository.load<Lst>(typeDescription.lstFilePath);
-    if (!lst) {
-        throw std::runtime_error(std::string("Failed to load LST resource: ") + std::string(typeDescription.lstFilePath));
-    }
+    const auto* lst = _repository.load<Lst>(typeDescription.lstFilePath);
 
     if (baseId >= lst->list().size()) {
         throw std::runtime_error(
@@ -111,12 +92,33 @@ std::string FrmResolver::resolve(uint32_t fid) {
             + " <= frmID: " + std::to_string(baseId) + ", frmType: " + std::to_string(static_cast<unsigned>(type)));
     }
 
+    // The engine's art lists name a file by the text before the first " ,;\r\t\n" (art.cc artReadList);
+    // critters.lst carries an alias after the comma.
     std::string frmName = lst->list().at(baseId);
-    if (type == Frm::FRM_TYPE::CRITTER) {
-        return std::string(typeDescription.prefixPath) + frmName.substr(0, 6) + Frm::STANDING_ANIMATION_SUFFIX;
+    frmName.erase(std::min(frmName.find_first_of(" ,;\r\t\n"), frmName.size()));
+    const std::string prefix(typeDescription.prefixPath);
+    if (type == ObjectType::Critter) {
+        return prefix + critterFrmName(frmName, fid);
     }
 
-    return std::string(typeDescription.prefixPath) + frmName;
+    return prefix + frmName;
+}
+
+std::string FrmResolver::critterFrmName(const std::string& baseName, uint32_t fid) {
+    // The FID's weapon and animation codes pick the file (engine art.cc FrmId::buildPath): a critter
+    // placed holding a knife is "...da.frm" and a body placed dead "...ra.frm", not the standing art.
+    const std::string standing = baseName + Frm::STANDING_ANIMATION_SUFFIX;
+    const std::string named = CritterFrmResolver::generateCritterFrmName(baseName, fid);
+    if (named.empty() || named == standing) {
+        return standing;
+    }
+    if (const std::string prefix(frmTypeDescriptions[static_cast<size_t>(ObjectType::Critter)].prefixPath);
+        _repository.tryLoad<Frm>(prefix + named) != nullptr) {
+        return named;
+    }
+    // The engine draws nothing for missing art; showing the standing pose keeps the critter findable.
+    spdlog::debug("FrmResolver: {} is not in the data, drawing {} instead", named, standing);
+    return standing;
 }
 
 std::optional<uint32_t> FrmResolver::resolveFid(const std::string& artPath) {
@@ -143,20 +145,20 @@ std::optional<uint32_t> FrmResolver::resolveFid(const std::string& artPath) {
             continue;
         }
 
-        auto* lst = _repository.load<Lst>(std::string(description.lstFilePath));
+        const auto* lst = _repository.tryLoad<Lst>(std::string(description.lstFilePath));
         if (!lst) {
             return std::nullopt;
         }
 
-        const auto type = static_cast<Frm::FRM_TYPE>(typeIndex);
+        const auto type = static_cast<ObjectType>(typeIndex);
         const auto& entries = lst->list();
         for (size_t i = 0; i < entries.size(); ++i) {
-            if (type == Frm::FRM_TYPE::CRITTER) {
+            if (type == ObjectType::Critter) {
                 const auto commaPos = entries[i].find(',');
                 const std::string baseName = trimmed(
                     commaPos != std::string::npos ? std::string_view(entries[i]).substr(0, commaPos) : std::string_view(entries[i]));
                 if (!baseName.empty() && CritterFrmResolver::matchesCritterBase(baseName, filename)) {
-                    const uint32_t fid = CritterFrmResolver::deriveCritterFrmPid(baseName, filename, static_cast<uint32_t>(i));
+                    const uint32_t fid = CritterFrmResolver::deriveCritterFrmPid(filename, static_cast<uint32_t>(i));
                     if (fid != 0) {
                         return fid;
                     }
@@ -165,8 +167,12 @@ std::optional<uint32_t> FrmResolver::resolveFid(const std::string& artPath) {
             }
 
             const std::string entry = trimmed(entries[i]);
-            if (!entry.empty() && equalsIgnoreCase(entry, filename)) {
-                return (static_cast<uint32_t>(type) << FileFormat::TYPE_MASK_SHIFT) | static_cast<uint32_t>(i);
+            if (!entry.empty() && text::equalsIgnoreCase(entry, filename)) {
+                // A FID holds a 12-bit frame id, so a later entry has no FID that names it.
+                if (i > FrmId::MAX_FRAME_ID) {
+                    return std::nullopt;
+                }
+                return FrmId(type, static_cast<uint32_t>(i)).fid();
             }
         }
 

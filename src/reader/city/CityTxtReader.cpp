@@ -78,7 +78,8 @@ namespace {
 
 } // namespace
 
-CityTxt parseCityTxt(std::istream& in) {
+CityTxt parseCityTxt(const std::string& text) {
+    std::istringstream in(text);
     CityTxt out;
     CityArea current;
     bool inSection = false;
@@ -99,11 +100,6 @@ CityTxt parseCityTxt(std::istream& in) {
         [&](const std::string& key, const std::string& value) { applyField(current, key, value); });
     flush();
     return out;
-}
-
-CityTxt parseCityTxt(const std::string& text) {
-    std::istringstream in(text);
-    return parseCityTxt(in);
 }
 
 } // namespace geck

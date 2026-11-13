@@ -3,8 +3,13 @@
 #include <string_view>
 #include <vector>
 
+#include "editor/Object.h"
+#include "format/frm/Frm.h"
+#include "format/map/MapObject.h"
 #include "selection/SelectionState.h"
 #include "util/Types.h"
+
+#include "support/GraphicsTestEnv.h"
 
 using namespace geck;
 using namespace geck::selection;
@@ -13,14 +18,12 @@ using namespace geck::selection;
 // SECTION: SelectionState Tests
 //==============================================================================
 
-TEST_CASE("SelectionState basic functionality", "[selection_state]") {
+TEST_CASE("SelectionState adds, removes and clears typed items", "[selection_state]") {
     SelectionState state;
 
     SECTION("Initial state is empty") {
-        REQUIRE(state.isEmpty());
-        REQUIRE(state.count() == 0);
-        REQUIRE_FALSE(state.isDragging);
-        REQUIRE_FALSE(state.isAreaSelecting());
+        CHECK(state.isEmpty());
+        CHECK(state.count() == 0);
     }
 
     SECTION("Adding and removing tile items") {
@@ -28,33 +31,23 @@ TEST_CASE("SelectionState basic functionality", "[selection_state]") {
         SelectedItem floorTile{ SelectionType::FLOOR_TILE, 150 };
         state.addItem(floorTile);
 
-        REQUIRE_FALSE(state.isEmpty());
-        REQUIRE(state.count() == 1);
-        REQUIRE(state.hasItem(floorTile));
+        CHECK_FALSE(state.isEmpty());
+        CHECK(state.count() == 1);
+        CHECK(state.hasItem(floorTile));
 
         // Test roof tile selection
         SelectedItem roofTile{ SelectionType::ROOF_TILE, 250 };
         state.addItem(roofTile);
 
-        REQUIRE(state.count() == 2);
-        REQUIRE(state.hasItem(floorTile));
-        REQUIRE(state.hasItem(roofTile));
+        CHECK(state.count() == 2);
+        CHECK(state.hasItem(floorTile));
+        CHECK(state.hasItem(roofTile));
 
         // Test removing items
         state.removeItem(floorTile);
-        REQUIRE(state.count() == 1);
-        REQUIRE_FALSE(state.hasItem(floorTile));
-        REQUIRE(state.hasItem(roofTile));
-    }
-
-    SECTION("Hex selection") {
-        SelectedItem hexItem{ SelectionType::HEX, 2500 };
-        state.addItem(hexItem);
-
-        REQUIRE(state.count() == 1);
-        REQUIRE(state.hasItem(hexItem));
-        REQUIRE(hexItem.isHex());
-        REQUIRE(hexItem.getHexIndex() == 2500);
+        CHECK(state.count() == 1);
+        CHECK_FALSE(state.hasItem(floorTile));
+        CHECK(state.hasItem(roofTile));
     }
 
     SECTION("Clear functionality") {
@@ -66,84 +59,22 @@ TEST_CASE("SelectionState basic functionality", "[selection_state]") {
         REQUIRE(state.count() == 3);
 
         state.clear();
-        REQUIRE(state.isEmpty());
-        REQUIRE(state.count() == 0);
-        REQUIRE_FALSE(state.isDragging);
-        REQUIRE_FALSE(state.isAreaSelecting());
-    }
-}
-
-TEST_CASE("SelectionState area selection", "[selection_state]") {
-    SelectionState state;
-
-    SECTION("Area selection lifecycle") {
-        sf::Vector2f startPos(100.0f, 150.0f);
-
-        // Start area selection
-        state.startAreaSelection(startPos, SelectionMode::FLOOR_TILES);
-        REQUIRE(state.isAreaSelecting());
-        REQUIRE(state.mode == SelectionMode::FLOOR_TILES);
-        REQUIRE(state.dragStartPosition == startPos);
-
-        // Update area selection
-        sf::Vector2f currentPos(200.0f, 250.0f);
-        state.updateAreaSelection(currentPos);
-        REQUIRE(state.isAreaSelecting());
-
-        if (state.selectionArea.has_value()) {
-            const auto& area = state.selectionArea.value();
-            REQUIRE(area.position.x == 100.0f);
-            REQUIRE(area.position.y == 150.0f);
-            REQUIRE(area.size.x == 100.0f); // 200 - 100
-            REQUIRE(area.size.y == 100.0f); // 250 - 150
-        }
-
-        // Finish area selection
-        state.finishAreaSelection();
-        REQUIRE_FALSE(state.isAreaSelecting());
+        CHECK(state.isEmpty());
+        CHECK(state.count() == 0);
     }
 
-    SECTION("Cancel area selection") {
-        sf::Vector2f startPos(50.0f, 75.0f);
+    SECTION("floor, roof and hex items stay apart by type") {
+        // A floor and a roof tile share an index; the hex lies past the tile range (hexes run to 39,999).
+        state.addItem({ SelectionType::FLOOR_TILE, 1500 });
+        state.addItem({ SelectionType::ROOF_TILE, 1500 });
+        state.addItem({ SelectionType::HEX, 15000 });
 
-        state.startAreaSelection(startPos, SelectionMode::ROOF_TILES);
-        REQUIRE(state.isAreaSelecting());
-
-        state.cancelAreaSelection();
-        REQUIRE_FALSE(state.isAreaSelecting());
-        REQUIRE_FALSE(state.selectionArea.has_value());
-    }
-}
-
-TEST_CASE("SelectionState drag operations", "[selection_state]") {
-    SelectionState state;
-
-    SECTION("Drag lifecycle") {
-        sf::Vector2f startPos(300.0f, 400.0f);
-
-        // Start drag
-        state.startDrag(startPos);
-        REQUIRE(state.isDragging);
-        REQUIRE(state.dragStartPosition == startPos);
-
-        // Update drag position
-        sf::Vector2f currentPos(350.0f, 450.0f);
-        state.updateDrag(currentPos);
-        REQUIRE(state.isDragging);
-
-        // Finish drag
-        state.finishDrag();
-        REQUIRE_FALSE(state.isDragging);
-    }
-
-    SECTION("Cancel drag") {
-        sf::Vector2f startPos(100.0f, 200.0f);
-
-        state.startDrag(startPos);
-        REQUIRE(state.isDragging);
-
-        state.cancelDrag();
-        REQUIRE_FALSE(state.isDragging);
+        REQUIRE(state.count() == 3);
+        CHECK(state.getFloorTileIndices() == std::vector<int>{ 1500 });
+        CHECK(state.getRoofTileIndices() == std::vector<int>{ 1500 });
+        CHECK(state.getHexIndices() == std::vector<int>{ 15000 });
+        CHECK(state.hasItem({ SelectionType::HEX, 15000 }));
+        CHECK_FALSE(state.hasItem({ SelectionType::HEX, 1500 }));
     }
 }
 
@@ -151,60 +82,30 @@ TEST_CASE("SelectionState drag operations", "[selection_state]") {
 // SECTION: Selection Mode Tests
 //==============================================================================
 
-TEST_CASE("Selection mode enumeration", "[selection_modes]") {
-    SECTION("All selection modes are defined") {
-        // Test that all expected selection modes exist
-        std::vector<SelectionMode> allModes = {
-            SelectionMode::ALL,
-            SelectionMode::FLOOR_TILES,
-            SelectionMode::ROOF_TILES,
-            SelectionMode::ROOF_TILES_ALL,
-            SelectionMode::OBJECTS,
-            SelectionMode::HEXES,
-            SelectionMode::SCROLL_BLOCKER_RECTANGLE
-        };
-
-        // Verify string conversion works for all modes
-        for (auto mode : allModes) {
-            const std::string_view modeStr = selectionModeToString(mode);
-            REQUIRE_FALSE(modeStr.empty());
-            REQUIRE(modeStr != "Unknown");
-        }
-    }
-
-    SECTION("Selection mode string representations") {
-        CHECK(std::string_view(selectionModeToString(SelectionMode::ALL)) == "All");
-        CHECK(std::string_view(selectionModeToString(SelectionMode::FLOOR_TILES)) == "Floor Tiles");
-        CHECK(std::string_view(selectionModeToString(SelectionMode::ROOF_TILES)) == "Roof Tiles");
-        CHECK(std::string_view(selectionModeToString(SelectionMode::ROOF_TILES_ALL)) == "Roof Tiles + Empty");
-        CHECK(std::string_view(selectionModeToString(SelectionMode::OBJECTS)) == "Objects");
-        CHECK(std::string_view(selectionModeToString(SelectionMode::HEXES)) == "Hexes");
-        CHECK(std::string_view(selectionModeToString(SelectionMode::SCROLL_BLOCKER_RECTANGLE)) == "Scroll Blocker");
-    }
+TEST_CASE("selectionModeToString names every selection mode", "[selection_state]") {
+    CHECK(std::string_view(selectionModeToString(SelectionMode::ALL)) == "All");
+    CHECK(std::string_view(selectionModeToString(SelectionMode::FLOOR_TILES)) == "Floor Tiles");
+    CHECK(std::string_view(selectionModeToString(SelectionMode::ROOF_TILES)) == "Roof Tiles");
+    CHECK(std::string_view(selectionModeToString(SelectionMode::ROOF_TILES_ALL)) == "Roof Tiles + Empty");
+    CHECK(std::string_view(selectionModeToString(SelectionMode::OBJECTS)) == "Objects");
+    CHECK(std::string_view(selectionModeToString(SelectionMode::HEXES)) == "Hexes");
+    CHECK(std::string_view(selectionModeToString(SelectionMode::SCROLL_BLOCKER_RECTANGLE)) == "Scroll Blocker");
 }
 
 //==============================================================================
 // SECTION: SelectedItem Tests
 //==============================================================================
 
-TEST_CASE("SelectedItem functionality", "[selection_state]") {
+TEST_CASE("SelectedItem reports its type and data and compares by both", "[selection_state]") {
     SECTION("Item type checking") {
         SelectedItem floorTile{ SelectionType::FLOOR_TILE, 100 };
         SelectedItem roofTile{ SelectionType::ROOF_TILE, 200 };
         SelectedItem hexItem{ SelectionType::HEX, 300 };
 
         // Type checking methods
-        REQUIRE(floorTile.isTile());
-        REQUIRE_FALSE(floorTile.isObject());
-        REQUIRE_FALSE(floorTile.isHex());
-
-        REQUIRE(roofTile.isTile());
-        REQUIRE_FALSE(roofTile.isObject());
-        REQUIRE_FALSE(roofTile.isHex());
-
-        REQUIRE_FALSE(hexItem.isTile());
-        REQUIRE_FALSE(hexItem.isObject());
-        REQUIRE(hexItem.isHex());
+        CHECK_FALSE(floorTile.isObject());
+        CHECK_FALSE(roofTile.isObject());
+        CHECK_FALSE(hexItem.isObject());
     }
 
     SECTION("Data retrieval") {
@@ -212,8 +113,8 @@ TEST_CASE("SelectedItem functionality", "[selection_state]") {
         SelectedItem hexItem{ SelectionType::HEX, 2500 };
 
         // Data retrieval methods
-        REQUIRE(tileItem.getTileIndex() == 150);
-        REQUIRE(hexItem.getHexIndex() == 2500);
+        CHECK(tileItem.getTileIndex() == 150);
+        CHECK(hexItem.getHexIndex() == 2500);
     }
 
     SECTION("Equality comparison") {
@@ -223,12 +124,41 @@ TEST_CASE("SelectedItem functionality", "[selection_state]") {
         SelectedItem roof1{ SelectionType::ROOF_TILE, 100 };
 
         // Same type, same data should be equal
-        REQUIRE(tile1 == tile2);
+        CHECK(tile1 == tile2);
 
         // Same type, different data should not be equal
-        REQUIRE_FALSE(tile1 == tile3);
+        CHECK_FALSE(tile1 == tile3);
 
         // Different type, same data should not be equal
-        REQUIRE_FALSE(tile1 == roof1);
+        CHECK_FALSE(tile1 == roof1);
     }
+}
+
+TEST_CASE("remapSelectedItem carries objects across a wrapper rebuild and drops removed ones", "[selection_state]") {
+    GECK_SKIP_IF_HEADLESS_CI(); // an Object owns an sf::Texture
+    geck::Frm frm("test.frm");
+    geck::Direction direction;
+    direction.setFrames({ geck::Frame(1, 1) });
+    frm.setDirections({ direction });
+
+    auto kept = std::make_shared<geck::MapObject>();
+    auto removed = std::make_shared<geck::MapObject>();
+    auto oldKept = std::make_shared<geck::Object>(&frm);
+    oldKept->setMapObject(kept);
+    auto oldRemoved = std::make_shared<geck::Object>(&frm);
+    oldRemoved->setMapObject(removed);
+
+    // After an undo the map still draws `kept`, through a new wrapper, and no longer holds `removed`.
+    auto newKept = std::make_shared<geck::Object>(&frm);
+    newKept->setMapObject(kept);
+    const ObjectsByMapObject current{ { kept.get(), newKept } };
+
+    const auto remappedKept = remapSelectedItem(SelectedItem{ SelectionType::OBJECT, oldKept }, current, std::nullopt);
+    REQUIRE(remappedKept.has_value());
+    CHECK(remappedKept->getObject() == newKept);
+    CHECK_FALSE(remapSelectedItem(SelectedItem{ SelectionType::OBJECT, oldRemoved }, current, std::nullopt).has_value());
+
+    // Tiles stay put without a delta and shift with one.
+    CHECK(remapSelectedItem(SelectedItem{ SelectionType::FLOOR_TILE, 5 }, current, std::nullopt)->getTileIndex() == 5);
+    CHECK(remapSelectedItem(SelectedItem{ SelectionType::FLOOR_TILE, 5 }, current, std::pair{ 0, 1 })->getTileIndex() != 5);
 }

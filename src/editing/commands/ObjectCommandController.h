@@ -33,8 +33,16 @@ namespace resource {
     class GameResources;
 }
 
-// ExitGridCommandState and MapObjectInstanceState are defined in ObjectEditService.h
-// (the aggregate that owns exit-grid and per-instance editing) and re-exported here.
+// ExitGridCommandState and MapObjectInstanceState come from ObjectEditService.h (the aggregate
+// that owns exit-grid and per-instance editing).
+
+/// Whether a placement also gives the object its proto's script. A NEW object does: the engine's
+/// obj_new attaches it (objectSetScriptFromProto). A copy does only when its source was scripted
+/// (_obj_copy); a reinserted or restored object never does.
+enum class ProtoScript {
+    None,
+    Attach,
+};
 
 class ObjectCommandController {
 public:
@@ -51,12 +59,6 @@ public:
 
     void addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
-
-    /// Add/remove a MapObject in the map data only — no sprite, no MapSpriteLoader. The
-    /// headless counterpart to add/removePlacedObject: usable without a GL context (CLI,
-    /// scripts), since a MapObject is pure data the engine renders at load time.
-    void addObjectData(const std::shared_ptr<MapObject>& mapObject);
-    void removeObjectData(const std::shared_ptr<MapObject>& mapObject);
 
     /// Pushes a command onto the shared undo stack and notifies (the single owner
     /// of "a command was recorded"). All register*() helpers funnel through here.
@@ -83,11 +85,14 @@ public:
     /// True while at least one beginBatch() is open.
     bool isBatching() const { return _batcher.isBatching(); }
 
-    bool registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
+    /// Undoable placement. With ProtoScript::Attach, an object whose PRO names a script also gets
+    /// it (ScriptEditService::attachProtoScript), in the same undo entry as the placement.
+    bool registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object,
+        ProtoScript protoScript = ProtoScript::None);
     /// Undoable placement that records the MapObject data only (no sprite). For headless
     /// callers (gecko-cli, generation scripts run without a GL context); the GUI uses
     /// registerObjectPlacement so the object is also drawn.
-    bool registerObjectData(const std::shared_ptr<MapObject>& mapObject);
+    bool registerObjectData(const std::shared_ptr<MapObject>& mapObject, ProtoScript protoScript = ProtoScript::None);
     bool registerObjectDeletion(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& removedObjects);
     bool registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
     bool registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
@@ -103,7 +108,7 @@ public:
         const std::vector<std::shared_ptr<MapObject>>& after,
         const std::string& description);
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
-    bool registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath);
+    bool registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, uint32_t newFrmPid, const std::string& newFrmPath);
     bool registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation);
     bool registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
         const std::vector<ExitGridCommandState>& beforeStates,
@@ -145,11 +150,16 @@ public:
     /// undoable command, overwriting the destination. Scripts are not copied; the
     /// cloned objects are detached from any source scripts.
     bool copyElevation(int fromElevation, int toElevation);
+    /// Undoable header edit; see MapEditService::setHeader.
+    bool setMapHeader(const Map::MapHeader& after, const std::string& description, const std::string& mergeKey = {});
+    /// Undoable elevation add/remove; see MapEditService::setElevationPresent.
+    bool setElevationPresent(int elevation, bool present);
 
     /// Replaces the bound map with a fresh empty Fallout 2 map (default header, three
     /// empty elevations, no objects/scripts) and refreshes the view. This is a
-    /// destructive reset — like File > New, it is NOT recorded on the undo stack — so a
-    /// generation script can start from a blank slate regardless of what was loaded.
+    /// destructive reset — like File > New, it is NOT recorded on the undo stack and it clears
+    /// the history recorded against the old map — so a generation script can start from a
+    /// blank slate regardless of what was loaded.
     void newEmptyMap();
 
     // Script attachment (undoable). `scriptType` is the MapScript section/type
@@ -171,14 +181,11 @@ public:
     // (0=left,1=top,2=right,3=bottom). See EdgeEditService for details.
     int addEdgeZone(int elevation, const MapEdge::Rect& seed);
     bool deleteEdgeZone(int elevation, int zoneIndex);
-    bool setEdgeZoneSide(int elevation, int zoneIndex, EdgeEditService::Side side, int hexIndex);
     bool upgradeEdgeToVersion2();
-    bool setEdgeSquareSide(int elevation, EdgeEditService::Side side, int colOrRow);
     bool toggleEdgeClipSide(int elevation, EdgeEditService::Side side);
     bool resetEdgeSquare(int elevation);
     /// The current map-edge model (may be empty), for reading zone geometry to render/hit-test.
     const std::optional<MapEdge>& mapEdge() const;
-    int edgeZoneCount(int elevation) const;
     // Live side-drag: snapshot the edge at drag start, previewZoneSide each move (no undo), then either
     // commitEdgeEdit (records the whole gesture as one undo) or restoreEdge (cancel).
     std::optional<MapEdge> edgeSnapshot() const;
@@ -187,12 +194,11 @@ public:
     bool commitEdgeEdit(const std::string& description, std::optional<MapEdge> before);
 
 private:
+    // Attaches the proto's script after `place` succeeds, both in one undo entry; see ProtoScript.
+    bool placeWithProtoScript(const std::shared_ptr<MapObject>& mapObject, ProtoScript protoScript,
+        const std::function<bool()>& place);
+
     resource::GameResources& _resources;
-    std::unique_ptr<Map>& _map;
-    const HexagonGrid& _hexgrid;
-    MapSpriteLoader& _mapSpriteLoader;
-    std::vector<std::shared_ptr<Object>>& _objects;
-    std::vector<sf::Sprite>& _wallBlockerOverlays;
     CommandHost& _host;
     UndoBatcher _batcher;
     TileEditService _tileService;

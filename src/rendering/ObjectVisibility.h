@@ -21,14 +21,14 @@ namespace geck {
  */
 template <typename VisibilitySettingsT>
 bool isObjectVisible(const MapObject& object, const VisibilitySettingsT& visibility) {
-    // Scroll blockers are identified by their FRM (base id 1), not object type, so check first.
+    // Scroll blockers are a MISC proto, so check them before the type-based buckets.
     if (object.isScrollBlocker()) {
         return visibility.showScrollBlockers;
     }
     if (object.isWallObject()) {
         return visibility.showWalls;
     }
-    if (object.objectType() == 1u /* Pro::OBJECT_TYPE::CRITTER */) {
+    if (object.objectType() == ObjectType::Critter) {
         return visibility.showCritters;
     }
     return visibility.showObjects;

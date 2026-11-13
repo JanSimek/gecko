@@ -4,6 +4,8 @@
 #include <memory>
 #include <vector>
 #include <optional>
+#include <unordered_map>
+#include <utility>
 #include <variant>
 
 #include "util/Types.h"
@@ -29,10 +31,7 @@ struct SelectedItem {
     SelectionType type;
     std::variant<int, std::shared_ptr<Object>> data; // tile index or object
 
-    // Helper methods
-    bool isTile() const { return type == SelectionType::ROOF_TILE || type == SelectionType::FLOOR_TILE; }
     bool isObject() const { return type == SelectionType::OBJECT; }
-    bool isHex() const { return type == SelectionType::HEX; }
 
     int getTileIndex() const { return std::get<int>(data); }
     int getHexIndex() const { return std::get<int>(data); } // Same as tile index for data storage
@@ -61,23 +60,9 @@ public:
     SelectionState() = default;
     ~SelectionState() = default;
 
-    // Core selection data
     std::vector<SelectedItem> items;
-    SelectionMode mode = SelectionMode::ALL;
 
-    // Area selection support
-    std::optional<sf::FloatRect> selectionArea;
-    bool isDragging = false;
-    sf::Vector2f dragStartPosition;
-
-    // State management
-    void clear() {
-        items.clear();
-        selectionArea.reset();
-        isDragging = false;
-        // Note: Preserve the current selection mode when clearing
-        // This prevents unexpected behavior when using Ctrl+D
-    }
+    void clear() { items.clear(); }
 
     bool isEmpty() const { return items.empty(); }
     size_t count() const { return items.size(); }
@@ -104,50 +89,16 @@ public:
     std::vector<int> getFloorTileIndices() const;
     std::vector<std::shared_ptr<Object>> getObjects() const;
     std::vector<int> getHexIndices() const;
-
-    // Area selection state
-    void startAreaSelection(sf::Vector2f startPos, SelectionMode selectionMode) {
-        dragStartPosition = startPos;
-        mode = selectionMode;
-        selectionArea = sf::FloatRect({ startPos.x, startPos.y }, { 0.0f, 0.0f });
-    }
-
-    void updateAreaSelection(sf::Vector2f currentPos) {
-        if (selectionArea.has_value()) {
-            auto& area = selectionArea.value();
-            area.size.x = currentPos.x - dragStartPosition.x;
-            area.size.y = currentPos.y - dragStartPosition.y;
-        }
-    }
-
-    void finishAreaSelection() {
-        selectionArea.reset();
-    }
-
-    // Drag state
-    void startDrag(sf::Vector2f startPos) {
-        isDragging = true;
-        dragStartPosition = startPos;
-    }
-
-    void updateDrag(sf::Vector2f /*currentPos*/) {
-        // Drag position tracking could be added here if needed
-    }
-
-    void finishDrag() {
-        isDragging = false;
-    }
-
-    void cancelDrag() {
-        isDragging = false;
-    }
-
-    void cancelAreaSelection() {
-        selectionArea.reset();
-    }
-
-    // State queries
-    bool isAreaSelecting() const { return selectionArea.has_value(); }
 };
+
+/// The object wrappers of one elevation, keyed by the MapObject each draws. A refresh rebuilds every
+/// wrapper, so a selection is carried across one by MapObject identity.
+using ObjectsByMapObject = std::unordered_map<const MapObject*, std::shared_ptr<Object>>;
+
+/// One item's selection entry after the object wrappers were rebuilt: an object re-pointed at its new
+/// wrapper, a tile shifted by `tileDelta` (rows, columns) when one is given, a hex kept as is.
+/// nullopt drops the item: its object is no longer drawn on this elevation, or the tile left the grid.
+std::optional<SelectedItem> remapSelectedItem(const SelectedItem& item, const ObjectsByMapObject& objectsByMapObject,
+    const std::optional<std::pair<int, int>>& tileDelta);
 
 } // namespace geck::selection

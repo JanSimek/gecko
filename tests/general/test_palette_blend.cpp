@@ -71,7 +71,7 @@ constexpr uint8_t cube(int r, int g, int b) {
 
 } // namespace
 
-TEST_CASE("BlendTables mirrors the engine's palette conversions", "[palette]") {
+TEST_CASE("BlendTables mirrors the engine's palette conversions", "[palette_blend]") {
     const auto pal = makeCubePal();
     const BlendTables tables(*pal);
 
@@ -96,7 +96,7 @@ TEST_CASE("BlendTables mirrors the engine's palette conversions", "[palette]") {
     CHECK(tables.intensity(midGrey, 255) == cube(5, 5, 5));
 }
 
-TEST_CASE("commonGrayTable weights green and stays within the blend table's rows", "[palette]") {
+TEST_CASE("commonGrayTable weights green and stays within the blend table's rows", "[palette_blend]") {
     const auto pal = makeCubePal();
     const BlendTables tables(*pal);
 
@@ -113,7 +113,7 @@ TEST_CASE("commonGrayTable weights green and stays within the blend table's rows
     CHECK(tables.grayLevel(cube(5, 5, 5)) == 7); // white saturates
 }
 
-TEST_CASE("BlendTable interpolates the destination towards the tint", "[palette]") {
+TEST_CASE("BlendTable interpolates the destination towards the tint", "[palette_blend]") {
     const auto pal = makeCubePal();
     const BlendTables tables(*pal);
     const BlendTable green(tables, GREEN_RGB);
@@ -143,7 +143,7 @@ TEST_CASE("BlendTable interpolates the destination towards the tint", "[palette]
 // blend row is nothing more exotic than a linear interpolation towards the tint: _buildBlendTable
 // row j computes (tint*j + dest*(7-j)) / 7 per RGB555 channel. Pin that down, because it is what
 // lets a radial gradient stand in for the sprite without inventing colours.
-TEST_CASE("a blend row is a linear interpolation towards the tint", "[palette]") {
+TEST_CASE("a blend row is a linear interpolation towards the tint", "[palette_blend]") {
     const auto pal = makeCubePal();
     const BlendTables tables(*pal);
     const BlendTable green(tables, GREEN_RGB);
@@ -172,7 +172,7 @@ TEST_CASE("a blend row is a linear interpolation towards the tint", "[palette]")
     }
 }
 
-TEST_CASE("blendPixel reproduces the worldmap circle's translucent tint", "[palette]") {
+TEST_CASE("blendPixel reproduces the worldmap circle's translucent tint", "[palette_blend]") {
     const auto pal = makeCubePal();
     const BlendTables tables(*pal);
     const BlendTable green(tables, GREEN_RGB);

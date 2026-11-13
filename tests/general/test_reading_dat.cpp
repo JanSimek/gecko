@@ -15,10 +15,6 @@ using namespace geck;
 
 namespace {
 
-// f2_res.dat (the Fallout2-CE hi-res resource archive) is a valid DAT2 with 178
-// zlib-compressed entries (also pinned by the vfspp-based qt test).
-constexpr size_t F2_RES_ENTRY_COUNT = 178;
-
 const DatEntry* findBySuffix(const Dat& dat, std::string_view suffix) {
     for (const auto& [name, entry] : dat.getEntries()) {
         if (std::string_view(name).ends_with(suffix)) {
@@ -32,23 +28,23 @@ const DatEntry* findBySuffix(const Dat& dat, std::string_view suffix) {
 
 TEST_CASE("DatReader parses the f2_res.dat entry table", "[dat]") {
     DatReader reader;
-    const auto dat = reader.openFile(geck::test::dataPath("f2_res.dat"));
+    const auto dat = reader.openFile(geck::test::f2ResDat());
 
     REQUIRE(dat != nullptr);
-    CHECK(dat->getEntries().size() == F2_RES_ENTRY_COUNT);
+    CHECK(dat->getEntries().size() == geck::test::F2_RES_ENTRY_COUNT);
 }
 
 TEST_CASE("DatReader normalizes names and reads entry metadata", "[dat]") {
-    const size_t fileSize = std::filesystem::file_size(geck::test::dataPath("f2_res.dat"));
+    const size_t fileSize = std::filesystem::file_size(geck::test::f2ResDat());
 
     DatReader reader;
-    const auto dat = reader.openFile(geck::test::dataPath("f2_res.dat"));
+    const auto dat = reader.openFile(geck::test::f2ResDat());
     REQUIRE(dat != nullptr);
 
     // Names are normalized to lowercase, forward-slash, and key the entry map.
     const DatEntry* entry = findBySuffix(*dat, "hr_alltlk.frm");
     REQUIRE(entry != nullptr);
-    CHECK(entry->getFilename() == "art/intrface/hr_alltlk.frm");
+    CHECK(entry->getFilename() == geck::test::HR_ALLTLK);
     CHECK(entry->getCompressed());
     CHECK(entry->getDecompressedSize() > 0);
     CHECK(entry->getPackedSize() > 0);

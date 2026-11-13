@@ -10,7 +10,10 @@
 #include "cli/GlobalVars.h"
 #include "cli/Quests.h"
 #include "cli/Endings.h"
+#include "cli/Party.h"
+#include "cli/MapExamples.h"
 #include "cli/GvarRefs.h"
+#include "cli/HexSightline.h"
 #include "cli/FrmInspect.h"
 #include "cli/MapExport.h"
 #include "cli/ProtoExport.h"
@@ -19,24 +22,27 @@
 #include "cli/MapRender.h"
 #include "cli/PatternExtract.h"
 #include "cli/ResourceInspect.h"
+#include "cli/SaveInspect.h"
 #include "cli/ScriptIntrospect.h"
-#include "format/msg/Msg.h"
+#include "cli/ScriptLint.h"
+#include "cli/ScriptRefs.h"
+#include "cli/ProtoName.h"
 #include "scripting/ScriptApiReference.h"
 #include "format/pro/Pro.h"
+#include "reader/TextParsing.h"
 #include "resource/GameResources.h"
 #include "resource/MapNameResolver.h"
-#include "util/ProHelper.h"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <functional>
 #include <optional>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -135,9 +141,7 @@ namespace {
     // --- image embedding ----------------------------------------------------------
     // Formats sf::Image writes that are also embeddable as MCP image content (by out extension).
     std::string imageMimeType(const std::string& path) {
-        std::string ext = std::filesystem::path(path).extension().string();
-        std::ranges::transform(ext, ext.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        const std::string ext = text::toLower(std::filesystem::path(path).extension().string());
         if (ext == ".png") {
             return "image/png";
         }
@@ -192,17 +196,7 @@ namespace {
         json maps = json::array();
         try {
             const resource::MapNameResolver names(resources); // maps.txt + map.msg, for friendly names
-            std::vector<std::string> paths;
-            for (const auto& path : resources.files().list("*")) {
-                std::string ext = path.extension().string();
-                std::ranges::transform(ext, ext.begin(),
-                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-                if (ext == ".map") {
-                    paths.push_back(path.generic_string());
-                }
-            }
-            std::ranges::sort(paths);
-            for (const auto& path : paths) {
+            for (const auto& path : cli::listMapPaths(resources.files())) {
                 const int index = names.indexOf(std::filesystem::path(path).filename().string());
                 const std::string display = index >= 0 ? names.displayName(index, 0) : std::string{};
                 maps.push_back({ { "file", path },
@@ -237,22 +231,10 @@ namespace {
         opts.palette = paletteOnly;
         opts.maps = optMaps(args);
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::analyzeMaps(resources, opts, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("analyze failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::analyzeMaps(resources, opts, oss);
         return toolText(oss.str(), rc != 0); // rc != 0 e.g. when no maps are found
     }
 
-    json toolAnalyze(resource::GameResources& resources, const json& args) {
-        return runAnalyze(resources, args, /*paletteOnly*/ false);
-    }
-
-    json toolPalette(resource::GameResources& resources, const json& args) {
-        return runAnalyze(resources, args, /*paletteOnly*/ true);
-    }
 
     // A script selector: 'name' (unambiguous) or the 0-based 'programIndex'. One of the two is
     // required — defaulting to index 0 would silently describe obj_dude instead of erroring.
@@ -271,6 +253,8 @@ namespace {
         if (const std::string locale = optString(args, "locale"); !locale.empty()) {
             opts.locale = locale;
         }
+        opts.disassemble = optBool(args, "disassemble", false);
+        opts.analyze = optBool(args, "analyze", false);
         std::ostringstream oss;
         const int rc = cli::describeScript(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
@@ -293,6 +277,46 @@ namespace {
         opts.groupExits = optBool(args, "groupExits", true);
         std::ostringstream oss;
         const int rc = cli::exportEntities(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolFindExamples(resource::GameResources& resources, const json& args) {
+        cli::ExamplesOptions opts;
+        opts.kind = optString(args, "kind");
+        parsePidArray(args, "pids", opts.pids);
+        opts.name = optString(args, "name");
+        opts.script = optString(args, "script");
+        opts.scriptCalls = optString(args, "scriptCalls");
+        opts.carries = optString(args, "carries");
+        opts.nearName = optString(args, "near");
+        opts.nearRadius = static_cast<int>(optInt(args, "nearRadius", opts.nearRadius, 0, 20));
+        opts.maps = optMaps(args);
+        opts.contextRadius = static_cast<int>(optInt(args, "contextRadius", opts.contextRadius, 0, 10));
+        opts.limit = static_cast<int>(optInt(args, "limit", opts.limit, 1, 200));
+        std::ostringstream oss;
+        const int rc = cli::findExamples(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolDescribeSave(resource::GameResources& resources, const json& args) {
+        cli::DescribeSaveOptions opts;
+        opts.slotPath = requireString(args, "slot");
+        std::ostringstream oss;
+        const int rc = cli::describeSave(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolHexSightline(resource::GameResources& resources, const json& args) {
+        cli::HexSightlineOptions opts;
+        opts.fromHex = static_cast<int>(requireInt(args, "fromHex", 0, 39999));
+        opts.toHex = static_cast<int>(requireInt(args, "toHex", 0, 39999));
+        opts.mapPath = optString(args, "map");
+        opts.elevation = static_cast<int>(optInt(args, "elevation", 0, 0, 2));
+        opts.facing = static_cast<int>(optInt(args, "facing", -1, -1, 5));
+        opts.cameraHex = static_cast<int>(optInt(args, "cameraHex", -1, -1, 39999));
+        opts.shootThrough = optBool(args, "shootThrough", false);
+        std::ostringstream oss;
+        const int rc = cli::analyzeHexSightline(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -337,12 +361,7 @@ namespace {
         cli::ReachabilityOptions opts;
         opts.mapPath = requireString(args, "map");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::analyzeReachability(resources, opts, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("reachability failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::analyzeReachability(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -350,134 +369,151 @@ namespace {
         cli::DescribeMapOptions opts;
         opts.mapPath = requireString(args, "map");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::describeMap(resources, opts, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("describe_map failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::describeMap(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolDumpGrid(resource::GameResources& resources, const json& args) {
         cli::DumpGridOptions opts;
         opts.map = requireString(args, "map");
-        if (args.contains("elevation") && args.at("elevation").is_number_integer()) {
-            opts.elevation = args.at("elevation").get<int>();
-        }
-        if (args.contains("roof") && args.at("roof").is_boolean()) {
-            opts.roof = args.at("roof").get<bool>();
-        }
-        if (args.contains("floor") && args.at("floor").is_boolean()) {
-            opts.floor = args.at("floor").get<bool>();
-        }
-        if (args.contains("objects") && args.at("objects").is_boolean()) {
-            opts.objects = args.at("objects").get<bool>();
-        }
+        opts.elevation = static_cast<int>(optInt(args, "elevation", opts.elevation, -1, 2)); // -1 = every elevation
+        opts.roof = optBool(args, "roof", opts.roof);
+        opts.floor = optBool(args, "floor", opts.floor);
+        opts.objects = optBool(args, "objects", opts.objects);
+        opts.nameFilter = optString(args, "name");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::dumpMapGrid(resources, opts, oss);
-        } catch (const std::exception& e) { // NOSONAR: tool boundary — any failure is returned to the caller as an error result
-            return toolText(std::string("dump_grid failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::dumpMapGrid(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolMapGraph(resource::GameResources& resources, const json& args) {
         cli::MapGraphOptions opts;
         opts.maps = optMaps(args);
+        opts.scripts = optBool(args, "scripts", true);
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::buildMapGraph(resources, opts, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("map_graph failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::buildMapGraph(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolWorldMap(resource::GameResources& resources, const json& /*args*/) {
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::buildWorldMap(resources, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("world_map failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::buildWorldMap(resources, oss);
         return toolText(oss.str(), rc != 0);
     }
 
-    json toolWorldEncounters(resource::GameResources& resources, const json& /*args*/) {
-        std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::buildWorldEncounters(resources, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("world_encounters failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+    json toolWorldEncounters(resource::GameResources& resources, const json& args) {
+        const bool hasX = args.contains("x");
+        if (hasX != args.contains("y")) {
+            throw ToolError{ "arguments 'x' and 'y' go together" };
         }
+        std::ostringstream oss;
+        const int rc = hasX ? cli::describeWorldPosition(resources, static_cast<int>(requireInt(args, "x", 0, INT32_MAX)),
+                                  static_cast<int>(requireInt(args, "y", 0, INT32_MAX)), oss)
+                            : cli::buildWorldEncounters(resources, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolGlobalVars(resource::GameResources& resources, const json& /*args*/) {
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::buildGlobalVars(resources, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("gvars failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::buildGlobalVars(resources, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolQuests(resource::GameResources& resources, const json& /*args*/) {
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::buildQuests(resources, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("quests failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::buildQuests(resources, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolEndings(resource::GameResources& resources, const json& /*args*/) {
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::buildEndings(resources, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("endings failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
+        const int rc = cli::buildEndings(resources, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolParty(resource::GameResources& resources, const json& /*args*/) {
+        std::ostringstream oss;
+        const int rc = cli::buildParty(resources, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolScriptRefs(resource::GameResources& resources, const json& args) {
+        const cli::ScriptRefsOptions opts{ requireString(args, "kind"), requireString(args, "name") };
+        std::ostringstream oss;
+        const int rc = cli::findScriptRefs(resources, opts, oss);
+        return toolText(oss.str(), rc != 0);
+    }
+
+    json toolLintScript(resource::GameResources& resources, const json& args) {
+        cli::LintOptions opts;
+        opts.all = optBool(args, "all", false);
+        opts.map = optString(args, "map");
+        if (const std::string locale = optString(args, "locale"); !locale.empty()) {
+            opts.locale = locale;
         }
+        if (args.contains("files") && args["files"].is_array()) {
+            std::vector<std::filesystem::path> files;
+            for (const auto& file : args["files"]) {
+                if (file.is_string()) {
+                    files.emplace_back(file.get<std::string>());
+                }
+            }
+            std::ostringstream oss;
+            cli::lintFiles(resources, files, optBool(args, "notes", true), opts.locale, true, oss);
+            return toolText(oss.str(), false); // errors in the files are the answer, not a tool failure
+        }
+        if (!opts.all && opts.map.empty()) {
+            readScriptSelector(args, opts.name, opts.programIndex);
+        }
+        opts.includeNotes = optBool(args, "notes", !opts.all && opts.map.empty());
+        std::ostringstream oss;
+        const int rc = cli::lintScripts(resources, opts, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolFindGvar(resource::GameResources& resources, const json& args) {
         const std::string gvarName = requireString(args, "gvar");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::findGvarRefs(resources, gvarName, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("find_gvar failed: ") + e.what(), true);
-        }
+        const int rc = cli::findGvarRefs(resources, gvarName, oss);
         return toolText(oss.str(), rc != 0);
+    }
+
+    // A critter's stat as the engine reads it (critterGetStat) is base plus bonus, and base alone is
+    // badly misleading: a Turret reads 30 hit points there against the engine's 75, and a critter's
+    // resistances live entirely in the bonus block. Sums two export_protos stat blocks key by key.
+    nlohmann::ordered_json effectiveStats(const nlohmann::ordered_json& base, const nlohmann::ordered_json& bonus) {
+        if (!base.is_object()) {
+            return base.get<int64_t>() + bonus.get<int64_t>();
+        }
+        nlohmann::ordered_json sum;
+        for (const auto& [key, value] : base.items()) {
+            sum[key] = effectiveStats(value, bonus.at(key));
+        }
+        return sum;
     }
 
     json toolProtoInfo(resource::GameResources& resources, const json& args) {
         const auto pid = static_cast<uint32_t>(requireInt(args, "pid", 0, UINT32_MAX));
         try {
-            std::string name;
-            bool flat = false;
-            if (const Pro* pro = resources.loadPro(pid); pro != nullptr) {
-                flat = Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT);
-                if (Msg* msg = ProHelper::msgFile(resources, pro->type()); msg != nullptr) {
-                    name = msg->message(pro->header.message_id).text;
+            const Pro* pro = resources.tryLoadPro(pid);
+            nlohmann::ordered_json info{ { "pid", pid }, { "type", Pro::typeToString(ProtoId(pid).objectType()) },
+                { "name", cli::protoDisplayName(resources, pid) },
+                { "flat", pro != nullptr && Pro::hasFlag(pro->header.flags, Pro::ObjectFlags::OBJECT_FLAT) } };
+
+            // The numbers, not just the label: an item or critter also carries its export_protos row,
+            // decoded by loadPro() -- whose pid-to-file mapping is not the identity (00000010.pro holds
+            // pid 11) -- so a caller never has to parse the .pro itself.
+            if (const auto row = pro != nullptr ? cli::protoRow(resources, pid, *pro) : std::nullopt) {
+                for (const auto& [key, value] : row->items()) {
+                    if (!info.contains(key)) {
+                        info[key] = value;
+                    }
+                }
+                if (ProtoId(pid).objectType() == ObjectType::Critter) {
+                    info["effective"] = effectiveStats(info.at("base"), info.at("bonus"));
                 }
             }
-            const json info{ { "pid", pid }, { "type", Pro::typeToString(Pro::typeOfPid(pid)) },
-                { "name", name }, { "flat", flat } };
-            return toolText(info.dump());
+            return toolText(info.dump(-1, ' ', false, nlohmann::ordered_json::error_handler_t::replace));
         } catch (const std::exception& e) {
             return toolText(std::string("proto_info failed for pid ") + std::to_string(pid) + ": " + e.what(), true);
         }
@@ -490,6 +526,8 @@ namespace {
         opts.inPath = optString(args, "in");
         opts.elevation = static_cast<int>(optInt(args, "elevation", 0, 0, 2));
         opts.count = static_cast<int>(optInt(args, "count", 1, 1, 1000));
+        // The server handles one request at a time, so a runaway script must not stall it for good.
+        opts.timeBudgetMs = static_cast<unsigned>(optInt(args, "timeBudgetSeconds", 60, 1, 3600)) * 1000U;
         if (const auto it = args.find("args"); it != args.end() && it->is_object()) {
             for (const auto& [key, value] : it->items()) {
                 opts.args[key] = value.is_string() ? value.get<std::string>() : value.dump();
@@ -559,12 +597,7 @@ namespace {
     json toolFrmInfo(resource::GameResources& resources, const json& args) {
         const std::string target = requireString(args, "frm");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::frmInfo(resources, target, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("frm_info failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::frmInfo(resources, target, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -587,61 +620,116 @@ namespace {
     json toolResolveFid(resource::GameResources& resources, const json& args) {
         const std::string fid = requireString(args, "fid");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::resolveFidCommand(resources, fid, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("resolve_fid failed: ") + e.what(), true);
-        }
+        const int rc = cli::resolveFidCommand(resources, fid, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolListFrms(resource::GameResources& resources, const json& args) {
         const std::string glob = requireString(args, "glob");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::listFrms(resources, glob, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("list_frms failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::listFrms(resources, glob, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     // --- Resource / data-set inspection tools -----------------------------------
+    // Which RPU the mounted data actually is, read from the data rather than from a checkout.
+    // RPU substitutes the version into patchinf.msg when it packages a release, so a built .dat
+    // carries "v2.4.34" while an unpackaged source tree still carries the literal "v2.x.x" -- which
+    // is itself the answer worth having, because a source tree is a development line and not any
+    // release. Reading it through the VFS means it reports the copy that actually wins.
+    std::string mountedRpuVersion(resource::GameResources& resources) {
+        const auto bytes = resources.files().readRawBytes("text/english/dialog/patchinf.msg");
+        if (!bytes) {
+            return {};
+        }
+        const std::string text(bytes->begin(), bytes->end());
+        // Not [0-9.x]*: RPU's own line reads "RPU v2.4.34. based on ...", so a greedy class takes
+        // the sentence's full stop with it.
+        const std::regex re(R"(running RPU (v[0-9x]+(?:\.[0-9x]+)*))");
+        std::smatch match;
+        if (std::regex_search(text, match, re)) {
+            return match[1].str();
+        }
+        return {};
+    }
+
+    json toolMounts(resource::GameResources& resources, const json& args) {
+        (void)args;
+        json mounts = json::array();
+        // mounts() is in the order the paths were added; lookups probe the reverse, so the LAST
+        // entry that provides a path wins. Reported with that spelled out, because the whole point
+        // of this tool is telling which copy of a file an answer came from.
+        const auto list = resources.files().mounts();
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            const auto& m = list[i];
+            std::error_code ec;
+            json entry{
+                { "order", static_cast<int>(i) },
+                { "kind", m.kind == resource::MountedSourceInfo::Kind::Dat ? "dat" : "directory" },
+                { "path", m.sourcePath.string() },
+                { "label", m.displayLabel },
+            };
+            if (m.kind == resource::MountedSourceInfo::Kind::Dat) {
+                const auto size = std::filesystem::file_size(m.sourcePath, ec);
+                entry["bytes"] = ec ? 0 : static_cast<std::uint64_t>(size);
+            }
+            mounts.push_back(std::move(entry));
+        }
+
+        // Stated once rather than per entry: a per-mount "shadowed" flag reads as though that
+        // mount's data were overridden, which is only true for paths another mount also provides.
+        // resource_find answers that question for a specific file.
+        json result{
+            { "lookupOrder", "later mounts win: a file provided by two mounts is read from the one "
+                             "with the higher 'order'. resource_find <path> names the winner." },
+            { "mounts", std::move(mounts) },
+        };
+
+        // The headline answer: which RPU these mounts add up to.
+        if (const std::string version = mountedRpuVersion(resources); !version.empty()) {
+            result["rpuVersion"] = version;
+            if (version.find('x') != std::string::npos) {
+                result["rpuVersionNote"]
+                    = "a source tree, not a packaged release: RPU fills the version in when it "
+                      "builds a .dat, so this is a development line and not any released version. "
+                      "If a release .dat was meant to be mounted, it is not winning.";
+            }
+            if (const auto src = resources.files().sourceInfo("text/english/dialog/patchinf.msg")) {
+                result["rpuVersionFrom"] = src->sourcePath.string();
+            }
+        }
+
+        // Only present when something is wrong. A skipped mount is silent otherwise, and every
+        // answer afterwards is drawn from whatever did mount while reading as confident as a
+        // correct one.
+        json warnings = json::array();
+        for (const auto& f : resources.files().failedMounts()) {
+            warnings.push_back(json{ { "path", f.sourcePath.string() }, { "reason", f.reason } });
+        }
+        if (!warnings.empty()) {
+            result["failedMounts"] = std::move(warnings);
+        }
+        return toolText(result.dump(2, ' ', false, json::error_handler_t::replace), false);
+    }
+
     json toolResourceFind(resource::GameResources& resources, const json& args) {
         const std::string path = requireString(args, "path");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::resourceFind(resources, path, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("resource_find failed: ") + e.what(), true);
-        }
+        const int rc = cli::resourceFind(resources, path, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolResourceList(resource::GameResources& resources, const json& args) {
         const std::string glob = requireString(args, "glob");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::resourceList(resources, glob, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("resource_list failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::resourceList(resources, glob, oss);
         return toolText(oss.str(), rc != 0);
     }
 
     json toolResourceMissing(resource::GameResources& resources, const json& args) {
         const std::string map = requireString(args, "map");
         std::ostringstream oss;
-        int rc = 0;
-        try {
-            rc = cli::resourceMissing(resources, map, oss);
-        } catch (const std::exception& e) {
-            return toolText(std::string("resource_missing failed: ") + e.what() + " (is the Fallout 2 data mounted?)", true);
-        }
+        const int rc = cli::resourceMissing(resources, map, oss);
         return toolText(oss.str(), rc != 0);
     }
 
@@ -694,9 +782,11 @@ namespace {
             "programIndex to describe_script for the script's source and dialog. Each map also lists "
             "'scripts': every section's scripts (mirroring the editor's Scripts panel) as "
             "{section,programIndex,name,filename,ownerObject,localVars}, with spatialRadius on Spatial "
-            "scripts and timerMs on Timer scripts.",
+            "scripts and timerMs on Timer scripts. A saved map (a save slot's .SAV, gzip-compressed there) "
+            "also gives each critter its live 'combat' state: cid, hp, ap, damageLastTurn, maneuver and "
+            "results with engine flag names, and whoHitMeCid.",
             json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
-            [](resource::GameResources& r, const json& a) { return toolAnalyze(r, a); }, "" });
+            [](resource::GameResources& r, const json& a) { return runAnalyze(r, a, /*paletteOnly*/ false); }, "" });
         t.push_back({ "palette",
             "The weighted generation palette for the given maps (omit 'maps' for all), aggregated: "
             "{ floor:[{id,name,weight}], scenery:[{pid,number,name,weight}] }. Just what a generator "
@@ -704,9 +794,13 @@ namespace {
             "real placement count — without the full analyze report. scenery is scatter-eligible only "
             "(scenery type, non-flat).",
             json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
-            [](resource::GameResources& r, const json& a) { return toolPalette(r, a); }, "" });
+            [](resource::GameResources& r, const json& a) { return runAnalyze(r, a, /*paletteOnly*/ true); }, "" });
         t.push_back({ "proto_info",
-            "Resolve a proto PID to its type, engine display name and 'flat' flag.",
+            "Resolve a proto PID to its type, engine display name and 'flat' flag. An item or critter "
+            "proto also carries its decoded .pro record with the same keys as an export_protos row "
+            "(weapon/armor/... block, perk and damage-type names, a critter's base, bonus and skills), "
+            "and a critter adds 'effective': base plus bonus per stat, what the engine uses -- a "
+            "critter's resistances live entirely in the bonus block. Args: pid.",
             json({ { "type", "object" }, { "properties", { { "pid", { { "type", "integer" } } } } }, { "required", json::array({ "pid" }) } }),
             [](resource::GameResources& r, const json& a) { return toolProtoInfo(r, a); }, "" });
         t.push_back({ "describe_script",
@@ -721,8 +815,13 @@ namespace {
             "so SCRIPT_EPAC17 (1413) is programIndex 1412 — passing such a constant unadjusted names "
             "the NEXT script rather than failing. Every result echoes 'sslConstant' (= programIndex + "
             "1) so the two can be cross-checked. Optional 'locale' picks the dialog language subdir "
-            "(default english). Args: name or programIndex, optional locale.",
-            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } } } }, { "anyOf", json::array({ json{ { "required", json::array({ "name" }) } }, json{ { "required", json::array({ "programIndex" }) } } }) } }),
+            "(default english). Pass disassemble=true to also get the compiled scripts/<name>.int "
+            "disassembled (procedures, one line per instruction, literal global-variable indices named by "
+            "GVAR_*): what the engine actually runs, for when no source tree is mounted. Pass analyze=true "
+            "for 'analysis' from the parsed .ssl: its procedures (which run, which are engine entry points), "
+            "global and local variable reads/writes, the AI packet/team it sets on itself, and the "
+            "lint_script findings. Args: name or programIndex, optional locale, disassemble, analyze.",
+            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "locale", { { "type", "string" } } }, { "disassemble", { { "type", "boolean" } } }, { "analyze", { { "type", "boolean" } } } } }, { "anyOf", json::array({ json{ { "required", json::array({ "name" }) } }, json{ { "required", json::array({ "programIndex" }) } } }) } }),
             [](resource::GameResources& r, const json& a) { return toolDescribeScript(r, a); }, "" });
         t.push_back({ "find_script",
             "Find WHERE a script lives: resolve it by 'name' (or 0-based 'programIndex', same index "
@@ -751,17 +850,42 @@ namespace {
             "Args: optional maps (array; default every mounted map), includeScenery, groupExits.",
             json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } }, { "includeScenery", { { "type", "boolean" } } }, { "groupExits", { { "type", "boolean" } } } } } }),
             [](resource::GameResources& r, const json& a) { return toolExportEntities(r, a); }, "" });
+        t.push_back({ "find_examples", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
+            "Find shipped examples of a placement across every map — 'how do the shipped maps do X' in one "
+            "call. Returns each object (inventories included) matching ALL the given filters: 'kind' (item, "
+            "critter, scenery, wall, misc, exitgrid), 'pids', 'name' (proto name substring), 'script' "
+            "(substring of the attached script's name or description, e.g. 'shopkeeper'), 'scriptCalls' (the attached script's live code "
+            "calls this opcode or procedure, e.g. gdialog_mod_barter for shopkeepers or use_obj_on_p_proc — "
+            "needs a script-source tree mounted), 'carries' (holds an item whose name contains this), "
+            "'near' (an object whose name contains this stands within 'nearRadius' hexes, default 5). "
+            "Each match: map + displayName, elevation, hex/col/row, kind, pid, name, 'script' "
+            "{programIndex,name,description}, 'holder' when carried, 'critter' {team, aiPacket, "
+            "aiPacketName}, its 'inventory', and 'neighbours' — what stands within 'contextRadius' hexes "
+            "(default 3), one row per proto {kind,pid,name,count,nearest,scripts}, nearest first. 'total' "
+            "counts every match and 'byMap' how they spread over maps; 'limit' (default 20, max 200) caps "
+            "the detailed matches. At least one of kind/pids/name/script/scriptCalls/carries is required. "
+            "Scans every map (about two seconds); 'maps' limits it.",
+            json({ { "type", "object" },
+                { "properties",
+                    { { "kind", { { "type", "string" } } }, { "pids", { { "type", "array" }, { "items", { { "type", "integer" } } } } },
+                        { "name", { { "type", "string" } } }, { "script", { { "type", "string" } } },
+                        { "scriptCalls", { { "type", "string" } } }, { "carries", { { "type", "string" } } },
+                        { "near", { { "type", "string" } } }, { "nearRadius", { { "type", "integer" } } },
+                        { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } },
+                        { "contextRadius", { { "type", "integer" } } }, { "limit", { { "type", "integer" } } } } } }),
+            [](resource::GameResources& r, const json& a) { return toolFindExamples(r, a); }, "" });
         t.push_back({ "export_protos", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
             "Emit EVERY item and critter proto the game can load — each entry of proto/items/items.lst "
             "and proto/critters/critters.lst — with the full stats its .pro stores, decoded the way "
             "fallout2-ce reads them. Unlike export_entities this is not limited to what a map places, so "
             "a weapon that only appears in a script-stocked shop is included. Every proto has "
-            "{pid,kind,file,name,description,fid,flags,extendedFlags,sid,script}. Items add itemType, "
-            "attackModes {primary,secondary} (the extended-flags nibbles, each {index,type,animation}), "
+            "{pid,kind,file,name,description,fid,flags,extendedFlags,sid,script}. Items decode "
+            "extendedFlags as {raw,bigGun,twoHanded,energyWeapon,hiddenItem} (energyWeapon is sfall's "
+            "bit; fallout2-ce ignores it) and add itemType, attackModes {primary,secondary} (the extended-flags nibbles, each {index,type,animation}), "
             "material, size, weight, cost, inventoryFid, soundId, and one object named after the item "
             "type: weapon {animationCode,damage{min,max},damageType,range{primary,secondary},"
             "projectilePid,minStrength,apCost{primary,secondary},criticalFail,perk,burstRounds,caliber,"
-            "ammoPid,ammoCapacity,soundId,weaponFlags}; ammo {caliber,quantity,acModifier,drModifier,"
+            "ammoPid,ammoCapacity,soundId}; ammo {caliber,quantity,acModifier,drModifier,"
             "damageMultiplier,damageDivisor}; armor {ac,dr,dt (keyed normal/laser/fire/plasma/"
             "electrical/emp/explosion),perk,maleFid,femaleFid}; drug; container; misc; key. Critters "
             "add headFid, aiPacket, team, critterFlags, base and bonus stat blocks (special, derived "
@@ -802,14 +926,51 @@ namespace {
         t.push_back({ "describe_map",
             "One structured digest for a single map, composed from analyze + reachability: the header "
             "(elevations, darkness, player start, map script, map variables), floor usage (biome), "
-            "object 'clusters' (structures), the 'critters' roster with ai.txt-resolved AI and each "
-            "one's attached {programIndex,name} script, the 'exits' graph, and a 'reachability' field "
+            "object 'clusters' (structures), the 'critters' roster with ai.txt-resolved AI, a 'hidden' flag "
+            "(OBJECT_HIDDEN) and each one's attached {programIndex,name} script, the 'exits' graph, and a "
+            "'reachability' field "
             "(per-elevation walkable/reachable hexes + entry-orphaned objects). Gathers the engine's "
             "own semantic evidence in one call — join keys (pid, script_id, ai_packet) are preserved — "
             "so you can infer the map's purpose and follow up with describe_script on any roster entry. "
-            "Args: map.",
+            "On a saved map (including a save slot's gzip .SAV) each roster entry also carries its live "
+            "'combat' state; its whoHitMe resolves the way combatLoad relinks it, among the non-hidden "
+            "critters of the same elevation. Args: map.",
             json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
             [](resource::GameResources& r, const json& a) { return toolDescribeMap(r, a); }, "" });
+        t.push_back({ "describe_save", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
+            "Decode a Fallout 2 CE save slot (SAVE.DAT) the way the engine loads it: the header (character, "
+            "game date, current map), global variables that differ from their vault13.gam defaults (by GVAR_* "
+            "name), the maps stored in the slot, the player (hex, hp, ap, maneuver/result flags, sneak state, "
+            "experience, and stat/skill arrays indexed by engine STAT_*/SKILL_*), kills by type, tagged "
+            "skills, perks, and the combat block. A save made in combat lists every critter in the engine's "
+            "combat list in turn order, split into combatants and non-combatants, joined to the slot's current "
+            "map for each one's live state (team, hp, ap, maneuver, whoHitMeCid, script programIndex) and AI "
+            "info (last target, friendly dead). The join follows combatLoad, which looks a combat id up only among "
+            "the non-hidden critters on the save's elevation: 'reloadedListLength'/'listLengthMatches' say whether "
+            "the load accepts the list, and 'outsideCombatList' names the critters it leaves out (hidden, or on "
+            "another elevation). Their whoHitMe is not relinked on load; 'whoHitMeReadOnCombatSave' marks the ones "
+            "the next in-combat save reads it for. The mounted vault13.gam and party.txt must be the ones the save "
+            "was written with, because their lengths frame two blocks; a mismatch is reported, not misread. "
+            "Args: slot (a save slot directory such as .../SAVEGAME/SLOT10, or its SAVE.DAT).",
+            json({ { "type", "object" }, { "properties", { { "slot", { { "type", "string" } } } } }, { "required", json::array({ "slot" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolDescribeSave(r, a); }, "" });
+        t.push_back({ "hex_sightline", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
+            "Engine-exact geometry between two hexes, ported from fallout2-ce's tile math rather than the "
+            "editor's cube coordinates: 'distance' (tile_dist), 'rotationFromTo'/'rotationToFrom' (tile_dir, "
+            "as ROTATION_* names), the _can_see frontal-arc test when 'facing' is given, and 'sightline': the "
+            "make_straight_path pixel walk ('tilesEntered') with its 'firstBlocker' under _obj_blocking_at "
+            "rules when a map is given (hidden and NoBlock objects skipped; critters, scenery and walls block; "
+            "multihex objects also block their neighbouring hexes; the critter on fromHex is the watcher and "
+            "is skipped). obj_can_see_obj sees its target only when that first blocker stands on the target "
+            "('standsOnTarget') and the target is within perception range, which this tool does not compute. "
+            "Screen-space results depend on the view centre, as in the engine; 'cameraHex' sets it (default "
+            "fromHex). 'map' may be a VFS path or a file on disk, including a save slot's gzip .SAV; the "
+            "player is not stored in any map (its record is in SAVE.DAT, see describe_save), so nothing stands "
+            "on the player's hex in a saved map. Args: "
+            "fromHex, toHex, optional map, elevation, facing (0-5), cameraHex, shootThrough (the sfall "
+            "ObjCanSeeObj_ShootThru_Fix behaviour).",
+            json({ { "type", "object" }, { "properties", { { "fromHex", { { "type", "integer" } } }, { "toHex", { { "type", "integer" } } }, { "map", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "facing", { { "type", "integer" } } }, { "cameraHex", { { "type", "integer" } } }, { "shootThrough", { { "type", "boolean" } } } } }, { "required", json::array({ "fromHex", "toHex" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolHexSightline(r, a); }, "" });
         t.push_back({ "dump_grid", // NOSONAR: braced-init of the tool descriptor; emplace_back would need C++20 paren-aggregate-init
             "The RAW spatial layout of one map, the per-cell data behind analyze's digested "
             "adjacency/clusters. Per elevation: the floor (and, with roof=true, roof) tile-id grid as a "
@@ -818,8 +979,8 @@ namespace {
             "for every object (filter flat=true / type to separate scenery from structural exit grids "
             "and blockers). Use it to learn exact tile placement, transition masks and real scatter "
             "density/positions from shipped maps before generating terrain. Args: map (required), "
-            "optional elevation (-1/all), roof, floor, objects (booleans).",
-            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "roof", { { "type", "boolean" } } }, { "floor", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } } } }, { "required", json::array({ "map" }) } }),
+            "optional elevation (-1/all), roof, floor, objects (booleans), and name — a case-insensitive REGEX keeping only objects whose name matches. A whole map is ~2700 objects and mostly scroll blockers, so this is the difference between three records and all of them; note a plain \"locker\" also matches \"Scroll Blocker\", so anchor it (\"^Locker\") when that matters. Pair with floor=false to ask purely where something is.",
+            json({ { "type", "object" }, { "properties", { { "map", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "roof", { { "type", "boolean" } } }, { "floor", { { "type", "boolean" } } }, { "objects", { { "type", "boolean" } } }, { "name", { { "type", "string" } } } } }, { "required", json::array({ "map" }) } }),
             [](resource::GameResources& r, const json& a) { return toolDumpGrid(r, a); }, "" });
         t.push_back({ "map_graph",
             "The EXIT-GRID connectivity graph — how maps link via exit grids: within a location "
@@ -840,9 +1001,19 @@ namespace {
             "destination wasn't analysed, or a return might run through another elevation — "
             "stairs are not traced). 'stats' "
             "flags 'deadEnds' (no outgoing map edge), 'noIncoming' (no map exits to it — a "
-            "location's entry points or orphans) and 'oneWayEdges' ({from,to,reason}). Omit 'maps' "
-            "for every map, or pass it to scope (e.g. one town's maps).",
-            json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } } } } }),
+            "location's entry points or orphans) and 'oneWayEdges' ({from,to,reason}). SCRIPT "
+            "TRANSITIONS: with a script-source tree mounted (e.g. FRP scripts_src), 'scriptEdges' "
+            "({from,to,calls:[{script,file?,line,procedure,entrance,text}]}) adds the load_map calls "
+            "that move the player between maps — caravans, escorts, dialogue outcomes — which no "
+            "exit grid shows; 'from' is each map placing the script (its own script or a map_scripts "
+            "entry). They are conditional: read the procedure (describe_script) for when it runs; "
+            "'entrance' is the value stored in GVAR_LOAD_MAP_INDEX that the target's map script "
+            "reads to pick the arrival point. 'unplacedScriptCalls' lists calls whose script no map "
+            "places (attached at runtime or by proto). 'stats' adds 'scriptsRead' (0 = no sources, "
+            "so no script edges) and 'noIncomingExceptScript' (maps no exit grid enters but a "
+            "script does). Omit 'maps' for every map, or pass it to scope (e.g. one town's maps); "
+            "'scripts': false skips the script layer.",
+            json({ { "type", "object" }, { "properties", { { "maps", { { "type", "array" }, { "items", { { "type", "string" } } } } }, { "scripts", { { "type", "boolean" } } } } } }),
             [](resource::GameResources& r, const json& a) { return toolMapGraph(r, a); }, "" });
         t.push_back({ "world_map",
             "The WORLDMAP layer from city.txt — the inter-city travel layer that map_graph does not "
@@ -861,13 +1032,25 @@ namespace {
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolWorldMap(r, a); }, "" });
         t.push_back({ "world_encounters",
-            "The worldmap's terrain types and random-encounter group tables, from worldmap.txt. "
-            "'terrains' (name, shortName, 'difficulty' — the terrain's per-step travel cost) and "
-            "'encounters' — each [Encounter: NAME] group with its spawn 'entries' ({pid, ratioPercent, "
-            "dead, script, items}). The shipped encounter names are region-prefixed (ARRO_*, KLA_*, …), "
-            "so they map to areas. Critter pids are raw — resolve them with proto_info. (Per-position "
-            "encounter placement is not parsed; terrain-at-position is in world_map.) No arguments.",
-            json({ { "type", "object" }, { "properties", json::object() } }),
+            "The worldmap's random-encounter data, from worldmap.txt. With no arguments: 'terrains' "
+            "(name, shortName, 'difficulty' — the terrain's per-step travel cost), 'frequencies' (the "
+            "percent each frequency name rolls), 'encounters' — each [Encounter: NAME] group with its "
+            "spawn 'entries' ({pid, ratioPercent, dead, script, items}) — and 'encounterTables' — each "
+            "[Encounter Table N] with its 'lookupName', 'maps' ({map, mapFile}: the maps.txt name and its "
+            ".map file, as in world_map), weighted 'entries' ({chance, counter, special, map, groups: "
+            "[{name, minCount, maxCount, situation}], scenery, condition, conditionGvars, description — the "
+            "worldmap.msg text the game shows when it offers the encounter, null where the message is "
+            "missing and the game shows 'Error'}) and "
+            "'skippedEntries' (enc_NN lines past a numbering gap, which the engine never reads). A group "
+            "name is an [Encounter: NAME] group or 'Player'. The shipped names are region-prefixed "
+            "(ARRO_*, KLA_*, …), so they map to areas. Critter pids are raw — resolve them with "
+            "proto_info. With 'x' and 'y' (worldmap pixels, as world_map positions): the sub-tile there — "
+            "terrain, fill, the encounter 'chances' per part of the day (morning 6:00-11:59, afternoon "
+            "12:00-17:59, night) as frequency + percent, and the 'encounterTable' rolled there. The engine "
+            "rolls that percent (easy/hard difficulty shift it by percent/15), then picks among the table "
+            "entries whose condition holds and whose counter isn't 0, weighted by 'chance' plus luck, perks "
+            "and difficulty.",
+            json({ { "type", "object" }, { "properties", { { "x", { { "type", "integer" } } }, { "y", { { "type", "integer" } } } } } }),
             [](resource::GameResources& r, const json& a) { return toolWorldEncounters(r, a); }, "" });
         t.push_back({ "quests",
             "The quest registry from quests.txt — what the player has to DO. Each quest: 'area' (the "
@@ -881,28 +1064,85 @@ namespace {
         t.push_back({ "gvars",
             "The global-variable dictionary from vault13.gam: every GVAR by 'index' -> 'name' (GVAR_*) "
             "+ 'default'. Global variables are the engine's progression state machine, so this decodes "
-            "a gvar index (from quests, or a script) to a human-readable name. No arguments.",
+            "a gvar index (from quests, or a script) to a human-readable name. A gvar the data files give "
+            "a meaning also carries 'roles': 'quest' (quests.txt: description + display/completed "
+            "thresholds), 'ending' (an endgame slide shown at 'value'), 'deathEnding' (a death narration "
+            "dropped once the gvar reaches 'droppedAt'), 'karma' (a character-screen karma title shown "
+            "while non-zero) and 'holodisk' (a Pip-Boy holodisk owned while non-zero). No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolGlobalVars(r, a); }, "" });
         t.push_back({ "endings",
             "The endgame slideshow's win-condition table from endgame.txt: each ending slide with the "
             "global variable + value that triggers it ('gvar' + 'gvarName' via vault13.gam + a readable "
-            "'condition'), the slide 'art', and the 'narrator' subtitle base name. Slides sharing a gvar "
-            "at different values are a location's branching outcomes — so this answers 'what world state "
-            "produces each ending'. With quests + gvars it closes the start->objectives->ending loop. "
-            "No arguments.",
+            "'condition'), the slide 'art', the 'narrator' base name and its narration 'subtitles'. "
+            "Slides sharing a gvar at different values are a location's branching outcomes — so this "
+            "answers 'what world state produces each ending'. 'deathEndings' (enddeath.txt) are the "
+            "narrations played when the player dies: the engine keeps the lines whose 'condition' (gvar "
+            "below 'value'), 'areaKnown'/'areaNotKnown' (city.txt areas) and 'minLevel' hold and picks "
+            "one weighted by 'percentage'; 'forcedWhen' marks the one played instead on that gvar "
+            "(death in combat, not the timeout). With quests + gvars it closes the "
+            "start->objectives->ending loop. No arguments.",
             json({ { "type", "object" }, { "properties", json::object() } }),
             [](resource::GameResources& r, const json& a) { return toolEndings(r, a); }, "" });
+        t.push_back({ "party",
+            "The companions from party.txt: each party member's proto 'pid' + 'name', its 'options' (the "
+            "combat settings the player may pick for it: areaAttackMode, attackWho, bestWeapon, chemUse, "
+            "distance, runAwayMode, disposition), and its level-ups: once the player reaches "
+            "'levelMinimum' it may level every 'levelUpEvery' player levels, swapping to the next proto in "
+            "'levels'. Resolve pids further with proto_info. No arguments.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolParty(r, a); }, "" });
         t.push_back({ "find_gvar",
-            "Find where a global variable is used in the mounted .ssl / .h script sources: every script "
-            "that reads or writes 'gvar', with line, source text, and kind 'set' (set_global_var — the "
-            "action that advances/gates a quest) or 'get' (a check). Headers are scanned too, since many "
-            "gvars are only touched via macro aliases there (e.g. caravan.h). The causal link: a quest's "
-            "gvar (from quests) -> the scripts that change it -> describe_script for the logic. An empty "
+            "Find where a global variable is used in the mounted .ssl script sources: every read or write "
+            "of 'gvar' in code a compiled script actually runs, as {script, procedure, line, kind, text}, "
+            "with kind 'set' (set_global_var — the action that advances/gates a quest) or 'get' (a check). "
+            "Scripts are preprocessed and parsed, so an access through a header macro alias (e.g. "
+            "caravan.h) is reported in the script that uses it, with 'via' naming the alias and 'file' "
+            "the header when the code is written there; commented-out code, unused macros, procedures "
+            "nothing calls and branches on a constant are left out. The causal link: a quest's gvar "
+            "(from quests) -> the scripts that change it -> describe_script for the logic. An empty "
             "result means the gvar is genuinely unused (not an error). Needs a script-source tree (e.g. "
             "FRP scripts_src) mounted. Args: gvar (the GVAR_* name).",
             json({ { "type", "object" }, { "properties", { { "gvar", { { "type", "string" } } } } }, { "required", json::array({ "gvar" }) } }),
             [](resource::GameResources& r, const json& a) { return toolFindGvar(r, a); }, "" });
+        t.push_back({ "script_refs",
+            "Find every use of a name in code the compiled scripts actually run, across all mounted .ssl "
+            "sources (preprocessed and parsed, so macro aliases resolve and comments, unused macros, "
+            "procedures nothing calls and branches on a constant don't count). 'kind' picks what 'name' "
+            "is: 'gvar' (reads/writes of a GVAR_*, as find_gvar), 'call' (an opcode or procedure called "
+            "with parentheses, e.g. load_map, create_object_sid, critter_add_trait), 'procedure' (every "
+            "reference to a procedure: calls, `call x`, x passed as a value, @x), 'macro' (code a macro "
+            "produced, e.g. set_self_ai), 'pid' (a constant PID — number, 0x hex or PID_* — passed where an "
+            "opcode takes one, e.g. create_object_sid, obj_is_carrying_obj_pid, party_member_obj, or "
+            "compared with obj_pid(): which scripts create, look for or test that object; adds via, pid, "
+            "name), 'map' (load_map calls sending the player to a map, by file name such as arcaves.map or "
+            "maps.txt index, however the script names it: the script-driven transitions the exit-grid "
+            "graph lacks; adds map, mapIndex, entrance = the value stored in GVAR_LOAD_MAP_INDEX). "
+            "name '*' lists every pid or map use. Each ref: {script, file? (a header or template), line, "
+            "procedure, text}. Needs a script-source tree (e.g. FRP scripts_src) mounted. Args: kind, name.",
+            json({ { "type", "object" }, { "properties", { { "kind", { { "type", "string" }, { "enum", json::array({ "gvar", "call", "procedure", "macro", "pid", "map" }) } } }, { "name", { { "type", "string" } } } } }, { "required", json::array({ "kind", "name" }) } }),
+            [](resource::GameResources& r, const json& a) { return toolScriptRefs(r, a); }, "" });
+        t.push_back({ "lint_script",
+            "Check scripts for problems the compiler doesn't catch, each {severity, check, message, "
+            "file, line, procedure}: 'local-vars' (a local variable number past the count scripts.lst gives "
+            "the script — the engine reads/writes the next script's variables), 'messages' (a message number "
+            "missing from the dialog .msg it names — the player sees \"Error\"), 'gvars' (a global variable "
+            "past vault13.gam's; with all=true also one some script reads but no script sets, so it never "
+            "leaves its start value), 'timers' (add_timer_event without timed_event_p_proc), 'objects' "
+            "(create_object_sid with a missing proto or a script number that isn't a scripts.lst line), "
+            "'tiles' (a constant hex outside 0-39999 or elevation outside 0-2), 'syntax'; as notes "
+            "'unused-procedure' and unused local variables. Select one script by 'name' or 0-based "
+            "'programIndex'; or 'map' (a map path) for every script it places plus checks on how it places "
+            "them (map script using local variables, spatial script without spatial_p_proc, overlapping "
+            "local variable blocks); or all=true for every script in scripts.lst; or 'files' (paths of .ssl "
+            "files on disk, e.g. ones being edited). Notes are on for one script or files, off otherwise "
+            "unless notes=true. Reads the .ssl source when a script-source tree is mounted; without one it "
+            "checks the compiled .int (results say fromBytecode: true): the same checks except syntax and "
+            "unused-procedure notes, with no line numbers (the procedure is given), and an argument computed "
+            "through control flow stays unknown. Needs game text, vault13.gam and protos for those checks. Args: name|programIndex|map|all|files, optional "
+            "notes, locale.",
+            json({ { "type", "object" }, { "properties", { { "name", { { "type", "string" } } }, { "programIndex", { { "type", "integer" } } }, { "map", { { "type", "string" } } }, { "all", { { "type", "boolean" } } }, { "files", { { "type", "array" }, { "items", { { "type", "string" } } } } }, { "notes", { { "type", "boolean" } } }, { "locale", { { "type", "string" } } } } } }),
+            [](resource::GameResources& r, const json& a) { return toolLintScript(r, a); }, "" });
         t.push_back({ "frm_info",
             "FRM sprite metadata as JSON, so art can be MEASURED instead of inferred from PID "
             "arithmetic. Accepts an art name (ext2grd1 or art/misc/ext2grd1.frm) or a FID (as a string, "
@@ -924,6 +1164,15 @@ namespace {
             "(e.g. all exit-grid pieces) and feed an artPath/fid to frm_info or render_frm. Args: glob.",
             json({ { "type", "object" }, { "properties", { { "glob", { { "type", "string" } } } } }, { "required", json::array({ "glob" }) } }),
             [](resource::GameResources& r, const json& a) { return toolListFrms(r, a); }, "frms" });
+        t.push_back({ "mounts",
+            "Which data sources are actually mounted, in order, and which of them wins when two "
+            "provide the same file. Answers 'what am I reading?' -- the failure this exists for is a "
+            "mount that was asked for and did not happen: nothing else reports it, and every answer "
+            "afterwards comes from whatever did mount while looking exactly like a correct one. Each "
+            "entry: {order, kind (dat|directory), path, label}, plus 'bytes' for a DAT. A 'failedMounts' "
+            "key appears only when something did not mount. No args.",
+            json({ { "type", "object" }, { "properties", json::object() } }),
+            [](resource::GameResources& r, const json& a) { return toolMounts(r, a); }, "" });
         t.push_back({ "resource_find",
             "Locate a VFS path in the mounted data and report WHICH source provides it: JSON {path, "
             "found, source:{kind (dat|directory), path, label}|null}. kind/label identify master.dat vs a "
@@ -973,8 +1222,10 @@ namespace {
             "batches: the script runs once per map against a fresh copy, writing <out>_1.map .. "
             "<out>_N.map with consecutive seeds so the maps differ yet reproduce from one args.seed), "
             "optional args (string map), optional stamps (name -> stamp .json path, placed by the "
-            "script with api:placeStamp(name, anchorHex, variant)). Scripting build required.",
-            json({ { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "in", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "count", { { "type", "integer" } } }, { "args", { { "type", "object" } } }, { "stamps", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } }),
+            "script with api:placeStamp(name, anchorHex, variant)), optional timeBudgetSeconds (1..3600, "
+            "default 60: a script still running after that per map is stopped with an error). "
+            "Scripting build required.",
+            json({ { "type", "object" }, { "properties", { { "script", { { "type", "string" } } }, { "out", { { "type", "string" } } }, { "in", { { "type", "string" } } }, { "elevation", { { "type", "integer" } } }, { "count", { { "type", "integer" } } }, { "timeBudgetSeconds", { { "type", "integer" } } }, { "args", { { "type", "object" } } }, { "stamps", { { "type", "object" } } } } }, { "required", json::array({ "script", "out" }) } }),
             [](resource::GameResources& r, const json& a) { return toolGenerate(r, a); } });
         t.push_back({ "render_map",
             "Render a map to a PNG so it can be seen, not just measured. Args: map (.map path), out "
@@ -1053,6 +1304,14 @@ namespace {
             // Bad arguments are a tool-result error (the call was well-formed; the input wasn't),
             // not a JSON-RPC protocol error.
             return toolText(e.message, /*isError*/ true);
+        } catch (const std::exception& e) { // NOSONAR: tool boundary — any failure is returned to the caller as an error result
+            // Anything else the tool raised (missing data, an unwritable path) is a result the model can
+            // read and act on, not an internal error of the server.
+            std::string message = name + " failed: " + e.what();
+            if (resources.files().mounts().empty()) {
+                message += " (no Fallout 2 data is mounted)";
+            }
+            return toolText(message, /*isError*/ true);
         }
     }
 
@@ -1114,9 +1373,6 @@ json McpServer::handleMessage(const json& request) {
         }
         return dispatchRequest(_resources, request, id);
     } catch (const std::exception& e) {
-        if (isNotification) {
-            return json(nullptr);
-        }
         return errorMessage(id, -32603, std::string("internal error: ") + e.what());
     }
 }

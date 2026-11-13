@@ -30,7 +30,7 @@ private:
     QComboBox* _materialIdCombo;
 
     // Data
-    ProTileData _tileData;
+    Pro::TileData _tileData;
 };
 
 } // namespace geck

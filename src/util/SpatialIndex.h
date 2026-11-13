@@ -31,37 +31,24 @@ public:
 
     // Item management
     ItemId addItem(const T& item, sf::FloatRect bounds);
-    void updateItem(ItemId id, sf::FloatRect newBounds);
-    void removeItem(ItemId id);
     void clear();
 
     // Spatial queries
     std::vector<T> queryArea(sf::FloatRect area) const;
-    std::vector<T> queryPoint(sf::Vector2f point) const;
-    std::vector<T> queryRadius(sf::Vector2f center, float radius) const;
 
-    // Optimized queries with callbacks (avoid allocations)
+    // Optimized query with a callback (avoids allocations)
     void queryArea(sf::FloatRect area, QueryCallback callback) const;
-    void queryPoint(sf::Vector2f point, QueryCallback callback) const;
-    void queryRadius(sf::Vector2f center, float radius, QueryCallback callback) const;
-
-    // Statistics
-    size_t getItemCount() const { return _items.size(); }
-    size_t getCellCount() const { return _cells.size(); }
-    float getAverageItemsPerCell() const;
 
 private:
     struct Item {
         T data;
         sf::FloatRect bounds;
-        std::vector<int> cellIndices; // Which cells this item occupies
 
         Item(const T& d, sf::FloatRect b)
             : data(d)
             , bounds(b) { }
     };
 
-    using CellIndex = int;
     using CellKey = std::pair<int, int>; // (x, y) grid coordinates
 
     // Hash function for cell keys
@@ -79,9 +66,6 @@ private:
     // Helper methods
     CellKey worldToCell(sf::Vector2f worldPos) const;
     std::vector<CellKey> boundsToKeys(sf::FloatRect bounds) const;
-    void addItemToCell(ItemId id, CellKey key);
-    void removeItemFromCell(ItemId id, CellKey key);
-    void updateItemCells(ItemId id, sf::FloatRect newBounds);
 };
 
 /**
@@ -100,14 +84,6 @@ public:
 
     // Fast tile queries
     std::vector<int> getTilesInArea(sf::FloatRect area, bool roof = false) const;
-    std::vector<int> getTilesInRadius(sf::Vector2f center, float radius, bool roof = false) const;
-
-    // Get tiles along a line (useful for line-based selection)
-    std::vector<int> getTilesAlongLine(sf::Vector2f start, sf::Vector2f end, bool roof = false) const;
-
-    // Optimized for common selection patterns
-    std::vector<int> getTilesInRectangle(sf::FloatRect rect, bool roof = false) const;
-    std::vector<int> getTilesInCircle(sf::Vector2f center, float radius, bool roof = false) const;
 
     // Performance stats
     size_t getIndexedTileCount() const { return _indexedTiles; }
@@ -116,10 +92,6 @@ private:
     SpatialIndex<int> _floorIndex;
     SpatialIndex<int> _roofIndex;
     size_t _indexedTiles = 0;
-
-    // Helper methods
-    sf::FloatRect getTileBounds(int tileIndex, bool roof) const;
-    bool isValidTileIndex(int index) const;
 };
 
 // Template implementation
@@ -137,58 +109,12 @@ typename SpatialIndex<T>::ItemId SpatialIndex<T>::addItem(const T& item, sf::Flo
     auto itemPtr = std::make_unique<Item>(item, bounds);
 
     // Add to spatial cells
-    auto cellKeys = boundsToKeys(bounds);
-    for (const auto& key : cellKeys) {
-        addItemToCell(id, key);
-        itemPtr->cellIndices.push_back(key.first * 10000 + key.second); // Simple encoding
+    for (const auto& key : boundsToKeys(bounds)) {
+        _cells[key].push_back(id);
     }
 
     _items[id] = std::move(itemPtr);
     return id;
-}
-
-template <typename T>
-void SpatialIndex<T>::updateItem(ItemId id, sf::FloatRect newBounds) {
-    auto it = _items.find(id);
-    if (it == _items.end())
-        return;
-
-    auto& item = it->second;
-
-    // Remove from old cells
-    for (int cellIndex : item->cellIndices) {
-        int x = cellIndex / 10000;
-        int y = cellIndex % 10000;
-        removeItemFromCell(id, { x, y });
-    }
-
-    // Update bounds and add to new cells
-    item->bounds = newBounds;
-    item->cellIndices.clear();
-
-    auto cellKeys = boundsToKeys(newBounds);
-    for (const auto& key : cellKeys) {
-        addItemToCell(id, key);
-        item->cellIndices.push_back(key.first * 10000 + key.second);
-    }
-}
-
-template <typename T>
-void SpatialIndex<T>::removeItem(ItemId id) {
-    auto it = _items.find(id);
-    if (it == _items.end())
-        return;
-
-    auto& item = it->second;
-
-    // Remove from all cells
-    for (int cellIndex : item->cellIndices) {
-        int x = cellIndex / 10000;
-        int y = cellIndex % 10000;
-        removeItemFromCell(id, { x, y });
-    }
-
-    _items.erase(it);
 }
 
 template <typename T>
@@ -262,39 +188,6 @@ std::vector<typename SpatialIndex<T>::CellKey> SpatialIndex<T>::boundsToKeys(sf:
     }
 
     return keys;
-}
-
-template <typename T>
-void SpatialIndex<T>::addItemToCell(ItemId id, CellKey key) {
-    _cells[key].push_back(id);
-}
-
-template <typename T>
-void SpatialIndex<T>::removeItemFromCell(ItemId id, CellKey key) {
-    auto cellIt = _cells.find(key);
-    if (cellIt == _cells.end())
-        return;
-
-    auto& cellItems = cellIt->second;
-    cellItems.erase(std::remove(cellItems.begin(), cellItems.end(), id), cellItems.end());
-
-    // Remove empty cells to save memory
-    if (cellItems.empty()) {
-        _cells.erase(cellIt);
-    }
-}
-
-template <typename T>
-float SpatialIndex<T>::getAverageItemsPerCell() const {
-    if (_cells.empty())
-        return 0.0f;
-
-    size_t totalItems = 0;
-    for (const auto& cell : _cells) {
-        totalItems += cell.second.size();
-    }
-
-    return static_cast<float>(totalItems) / static_cast<float>(_cells.size());
 }
 
 } // namespace geck

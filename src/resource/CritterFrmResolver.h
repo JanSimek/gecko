@@ -22,14 +22,11 @@ public:
 
     /**
      * @brief Derive FRM PID from critter FRM filename
-     * @param baseName Base critter name from LST
      * @param frmFilename Complete FRM filename
      * @param baseIndex Index in the LST file
      * @return FRM PID that can be used for map storage
      */
-    static uint32_t deriveCritterFrmPid(const std::string& baseName,
-        const std::string& frmFilename,
-        uint32_t baseIndex);
+    static uint32_t deriveCritterFrmPid(const std::string& frmFilename, uint32_t baseIndex);
 
     /**
      * @brief Get animation type name from FRM filename

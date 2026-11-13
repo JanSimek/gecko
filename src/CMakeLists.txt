@@ -40,11 +40,8 @@ set(GECK_APP_SOURCES
     util/Exceptions.h
 
     # Qt6 UI Common
-    ui/common/BaseWidget.h
-    ui/common/BaseWidget.cpp
     ui/common/BaseDialog.h
     ui/common/BaseDialog.cpp
-    ui/common/BasePanel.h
     ui/palette/PaletteModel.h
     ui/palette/PaletteView.h
     ui/palette/PaletteView.cpp
@@ -55,7 +52,6 @@ set(GECK_APP_SOURCES
     # Qt6 UI Core
     ui/core/MainWindow.h
     ui/core/MainWindow.cpp
-    editor/TileChange.h
     ui/core/VisibilitySettings.h
     ui/core/EditorWidget.h
     ui/core/EditorWidget.cpp
@@ -79,6 +75,8 @@ set(GECK_APP_SOURCES
     ui/panels/ScriptsPanel.cpp
     ui/panels/SelectionPanel.h
     ui/panels/SelectionPanel.cpp
+    ui/panels/ObjectScriptSection.h
+    ui/panels/ObjectScriptSection.cpp
     ui/panels/FileBrowserPanel.h
     ui/panels/FileBrowserPanel.cpp
     ui/panels/LogPanel.h
@@ -105,8 +103,6 @@ set(GECK_APP_SOURCES
     ui/dialogs/SettingsDialog.cpp
     ui/dialogs/ProEditorDialog.h
     ui/dialogs/ProEditorDialog.cpp
-    ui/dialogs/InventoryViewerDialog.h
-    ui/dialogs/InventoryViewerDialog.cpp
     ui/dialogs/MessageSelectorDialog.h
     ui/dialogs/MessageSelectorDialog.cpp
     ui/dialogs/ExitGridPropertiesDialog.h
@@ -148,8 +144,14 @@ set(GECK_APP_SOURCES
     ui/widgets/SFMLWidget.cpp
     ui/widgets/LoadingWidget.h
     ui/widgets/LoadingWidget.cpp
+    ui/widgets/CollapsibleSection.h
+    ui/widgets/CollapsibleSection.cpp
+    ui/widgets/ElidedLabel.h
+    ui/widgets/ElidedLabel.cpp
     ui/widgets/DataPathsWidget.h
     ui/widgets/DataPathsWidget.cpp
+    ui/widgets/KeybindingsWidget.h
+    ui/widgets/KeybindingsWidget.cpp
     ui/widgets/IntCellDelegate.h
     ui/widgets/IntCellDelegate.cpp
     ui/widgets/GameLocationWidget.h
@@ -199,7 +201,7 @@ set(GECK_APP_SOURCES
     ui/widgets/pro/ProMiscItemWidget.h
     ui/widgets/pro/ProMiscItemWidget.cpp
 
-    # Qt6 UI Constants
+    # Engine enum labels and offscreen thumbnails
     ui/GameEnums.h
     ui/GameEnums.cpp
     ui/rendering/ThumbnailRenderer.h
@@ -207,8 +209,10 @@ set(GECK_APP_SOURCES
     ui/rendering/MapThumbnail.h
     ui/rendering/MapThumbnail.cpp
 
-    ui/input/InputHandler.h
-    ui/input/InputHandler.cpp
+    ui/input/ActionSpec.h
+    ui/input/ActionSpec.cpp
+    ui/input/KeyBindingRegistry.h
+    ui/input/KeyBindingRegistry.cpp
     ui/dragdrop/DragDropContext.h
     ui/dragdrop/DragDropManager.h
     ui/dragdrop/DragDropManager.cpp
@@ -218,12 +222,7 @@ set(GECK_APP_SOURCES
     ui/tools/ExitGridContext.h
     ui/tools/ExitGridPlacementManager.h
     ui/tools/ExitGridPlacementManager.cpp
-    ui/tools/FillBrushTool.h
-    ui/tools/ITool.h
-    ui/tools/PluginToolHost.h
-    ui/tools/ToolRegistry.h
-    ui/tools/ToolRegistry.cpp
-    # Loaders (kept from state system)
+    # Background loaders
     state/loader/Loader.h
     state/loader/MapLoader.cpp
     state/loader/MapLoader.h
@@ -233,10 +232,6 @@ set(GECK_APP_SOURCES
     # Game launch service
     state/GameLauncher.cpp
     state/GameLauncher.h
-
-    # Map save service (Qt-free MapWriter + proto-resolver core)
-    state/MapSaveService.cpp
-    state/MapSaveService.h
 
     # Qt Resource files
     ${CMAKE_SOURCE_DIR}/resources/icons.qrc
@@ -260,19 +255,19 @@ if(WIN32)
     # Add Windows resource file for icon
     target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/resources/gecko.rc)
 elseif(APPLE)
-    # Add icon to bundle
-    set(MACOSX_BUNDLE_ICON_FILE gecko.icns)
+    # gecko.icns is the Dock/Finder icon (CFBundleIconFile)
     set(APP_ICON_MACOSX ${CMAKE_SOURCE_DIR}/resources/gecko.icns)
     set_source_files_properties(${APP_ICON_MACOSX} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
     add_executable(${PROJECT_NAME} MACOSX_BUNDLE main.cpp ${APP_ICON_MACOSX})
-    
-    # Set bundle properties
+
+    # Substituted into the resources/Info.plist template
     set_target_properties(${PROJECT_NAME} PROPERTIES
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/resources/Info.plist
         MACOSX_BUNDLE_BUNDLE_NAME "Gecko"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.gecko.editor"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
-        MACOSX_BUNDLE_BUNDLE_VERSION "1"
+        MACOSX_BUNDLE_ICON_FILE gecko.icns
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     )
 else()
     add_executable(${PROJECT_NAME} main.cpp)
@@ -288,6 +283,41 @@ add_library(vault STATIC
     #
 
     format/IFile.h
+    format/ObjTypes.h
+
+    # SSL script source front end
+    ssl/Source.h
+    ssl/Source.cpp
+    ssl/Lexer.h
+    ssl/Lexer.cpp
+    ssl/Preprocessor.h
+    ssl/Preprocessor.cpp
+    ssl/Ast.h
+    ssl/AstWalk.h
+    ssl/AstWalk.cpp
+    ssl/Parser.h
+    ssl/Parser.cpp
+    ssl/ConstantFolder.h
+    ssl/ConstantFolder.cpp
+    ssl/CallGraph.h
+    ssl/CallGraph.cpp
+    ssl/MessageRefs.h
+    ssl/MessageRefs.cpp
+    ssl/CallRefs.h
+    ssl/CallRefs.cpp
+    ssl/ObjectRefs.h
+    ssl/ObjectRefs.cpp
+    ssl/VariableRefs.h
+    ssl/VariableRefs.cpp
+    ssl/Corpus.h
+    ssl/Corpus.cpp
+    ssl/ScriptUnit.h
+    ssl/ScriptUnit.cpp
+    ssl/ScriptFacts.h
+    ssl/ScriptFacts.cpp
+    ssl/IntProgram.h
+    ssl/IntProgram.cpp
+    ssl/IntOpcodes.inc
 
     # DAT
     format/dat/Dat.h
@@ -297,6 +327,7 @@ add_library(vault STATIC
 
     # FRM
     format/frm/Frm.h
+    format/frm/FrmId.h
     format/frm/Frm.cpp
     format/frm/Direction.h
     format/frm/Direction.cpp
@@ -341,11 +372,18 @@ add_library(vault STATIC
     # Quests (quests.txt — the quest registry)
     format/quests/QuestsTxt.h
 
-    # Endgame (endgame.txt — the ending slideshow win-condition table)
+    # Endgame (endgame.txt slides, enddeath.txt death endings)
     format/endgame/EndgameTxt.h
+    format/endgame/EndDeathTxt.h
+
+    # Pip-Boy holodisks, karma titles and companions (holodisk.txt, karmavar.txt, party.txt)
+    format/holodisk/HolodiskTxt.h
+    format/karma/KarmaVarTxt.h
+    format/party/PartyTxt.h
 
     # PRO
     format/pro/Pro.h
+    format/pro/ProtoTypes.h
     format/pro/Pro.cpp
 
     # GAM
@@ -379,9 +417,6 @@ add_library(vault STATIC
 
     reader/dat/DatReader.h
     reader/dat/DatReader.cpp
-
-#    writer/dat/DatWriter.h
-#    writer/dat/DatWriter.cpp
 
     reader/frm/FrmReader.h
     reader/frm/FrmReader.cpp
@@ -425,6 +460,17 @@ add_library(vault STATIC
 
     reader/endgame/EndgameTxtReader.h
     reader/endgame/EndgameTxtReader.cpp
+    reader/endgame/EndDeathTxtReader.h
+    reader/endgame/EndDeathTxtReader.cpp
+
+    reader/holodisk/HolodiskTxtReader.h
+    reader/holodisk/HolodiskTxtReader.cpp
+
+    reader/karma/KarmaVarTxtReader.h
+    reader/karma/KarmaVarTxtReader.cpp
+
+    reader/party/PartyTxtReader.h
+    reader/party/PartyTxtReader.cpp
 
     reader/pro/ProReader.h
     reader/pro/ProReader.cpp
@@ -440,8 +486,6 @@ add_library(vault STATIC
     reader/StreamBuffer.cpp
     reader/StreamBuffer.h
 
-    util/AmmoCaliberNames.h
-    util/AmmoCaliberNames.cpp
     util/MessageEnumUtils.h
     util/MessageEnumUtils.cpp
 
@@ -450,15 +494,20 @@ add_library(vault STATIC
 
     util/PaletteBlend.h
     util/PaletteBlend.cpp
+
+    util/Inflate.h
+    util/Inflate.cpp
 )
 
 target_include_directories(vault PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+find_package(Threads REQUIRED) # ssl/Corpus loads scripts on worker threads
+# spdlog is PUBLIC: the reader/writer base headers (FileParser.h, BinaryUtils.h, FileWriter.h, ...) include it.
 target_link_libraries(vault PUBLIC
     ZLIB::ZLIB
-PRIVATE
+    Threads::Threads
     gecko::spdlog
 )
 
@@ -471,8 +520,8 @@ PRIVATE
 add_library(gecko_resource STATIC
     vfs/Dat2File.hpp
     vfs/Dat2FileSystem.hpp
+    vfs/UndefWindowsFileMacros.h
 
-    resource/PathUtils.h
     resource/CritterFrmResolver.h
     resource/CritterFrmResolver.cpp
 
@@ -503,6 +552,13 @@ add_library(gecko_resource STATIC
     resource/MapNameEditor.cpp
     resource/ScriptSourceLocator.h
     resource/ScriptSourceLocator.cpp
+    resource/VfsSourceProvider.h
+    resource/VfsSourceProvider.cpp
+    resource/GameVarsLoader.h
+    resource/ScriptLint.h
+    resource/ScriptLint.cpp
+    resource/MapFileIO.h
+    resource/MapFileIO.cpp
 )
 add_library(gecko::resource ALIAS gecko_resource)
 
@@ -528,7 +584,6 @@ add_library(gecko_core STATIC
     util/ProHelper.cpp
     util/Coordinates.h
     util/FileIo.h
-    util/Coordinates.cpp
     util/SpatialIndex.h
     util/SpatialIndex.cpp
 
@@ -546,6 +601,7 @@ add_library(gecko_core STATIC
     editor/Object.h
     editor/Object.cpp
     editor/HexagonGrid.h
+    editor/TileChange.h
     editor/HexagonGrid.cpp
     editor/HexGeometry.h
     editor/FloorSynth.h
@@ -584,7 +640,7 @@ target_link_libraries(gecko_core PUBLIC
 # Map mutation that is heavier than the core model but still Qt-free: the undoable command
 # controller, the sprite/object builders and the scripting host API (plus the optional Luau
 # runtime). Sits on gecko_core so the Qt UI (gecko_app) and headless frontends (gecko-cli,
-# a future MCP server) drive the same editing code without any of them pulling in Qt.
+# gecko-mcp) drive the same editing code without any of them pulling in Qt.
 add_library(gecko_editing STATIC
     util/SpriteFactory.h
     util/SpriteFactory.cpp
@@ -614,6 +670,18 @@ add_library(gecko_editing STATIC
     rendering/RenderingEngine.cpp
     rendering/MapRenderer.h
     rendering/MapRenderer.cpp
+    # The canvas's tool-mode state machine (InputHandler) and the pluggable-tool seam it dispatches to
+    # (ITool/ToolRegistry, FillBrushTool): SFML events in, callbacks out, no Qt.
+    editing/EditorMode.h
+    editing/input/InputHandler.h
+    editing/input/InputHandler.cpp
+    editing/tools/ITool.h
+    editing/tools/ToolRegistry.h
+    editing/tools/ToolRegistry.cpp
+    editing/tools/FillBrushTool.h
+    editing/tools/AddBlockerTool.h
+    editing/tools/RemoveBlockerTool.h
+    editing/tools/BlackEdgeTool.h
     editing/commands/CommandHost.h
     editing/commands/ObjectCommandController.h
     editing/commands/ObjectCommandController.cpp
@@ -635,6 +703,8 @@ add_library(gecko_editing STATIC
     scripting/MapScriptApi.cpp
     scripting/ScriptApiReference.h
     scripting/ScriptApiReference.cpp
+    scripting/ScriptSeed.h
+    scripting/ScriptSeed.cpp
 )
 add_library(gecko::editing ALIAS gecko_editing)
 
@@ -707,6 +777,12 @@ if(GECK_BUILD_CLI)
         cli/PatternExtract.cpp
         cli/ScriptIntrospect.h
         cli/ScriptIntrospect.cpp
+        cli/ScriptLookup.h
+        cli/ScriptLookup.cpp
+        cli/ScriptRefs.h
+        cli/ScriptRefs.cpp
+        cli/ScriptLint.h
+        cli/ScriptLint.cpp
         cli/MapReachability.h
         cli/MapReachability.cpp
         cli/MapDescribe.h
@@ -723,10 +799,29 @@ if(GECK_BUILD_CLI)
         cli/Quests.cpp
         cli/Endings.h
         cli/Endings.cpp
+        cli/GameText.h
+        cli/JsonText.h
+        cli/GameText.cpp
+        cli/GvarRoles.h
+        cli/GvarRoles.cpp
+        cli/Party.h
+        cli/Party.cpp
+        cli/MapExamples.h
+        cli/MapExamples.cpp
         cli/GvarRefs.h
         cli/GvarRefs.cpp
         cli/MapEditTools.h
-        cli/MapEditTools.cpp)
+        cli/MapEditTools.cpp
+        cli/CritterCombatFlags.h
+        cli/EngineTile.h
+        cli/IntDisassembler.h
+        cli/IntDisassembler.cpp
+        cli/ProtoName.h
+        cli/ProtoName.cpp
+        cli/HexSightline.h
+        cli/HexSightline.cpp
+        cli/SaveInspect.h
+        cli/SaveInspect.cpp)
     target_link_libraries(gecko_cli PUBLIC gecko::editing nlohmann_json::nlohmann_json)
 
     add_executable(gecko-cli cli/main.cpp)
@@ -768,11 +863,6 @@ if(APPLE)
         TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/resources
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/scripts $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/resources/scripts
-    )
-    # Also copy the main icon.png to Resources root for easy access
-    add_custom_command(
-        TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/resources/icon.png $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/icon.png
     )
 else()
     # For other platforms, stage resources next to the executable. Single-config builds share one

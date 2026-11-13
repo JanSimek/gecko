@@ -29,10 +29,6 @@ public:
     bool canHandle(const std::shared_ptr<Pro>& pro) const override;
     QString getTabLabel() const override;
 
-    // Armor FID management
-    void setArmorMaleFID(int32_t fid);
-    void setArmorFemaleFID(int32_t fid);
-
 signals:
 
 private:
@@ -56,7 +52,7 @@ private:
     ObjectPreviewWidget* _armorFemalePreviewWidget;
 
     // Data
-    ProArmorData _armorData;
+    Pro::ArmorData _armorData;
     int32_t _armorMaleFID;
     int32_t _armorFemaleFID;
 

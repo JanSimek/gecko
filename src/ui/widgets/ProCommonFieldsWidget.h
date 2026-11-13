@@ -57,24 +57,12 @@ public:
     void saveToPro(std::shared_ptr<Pro>& pro);
 
     /**
-     * @brief Get current PID value
-     */
-    int32_t getPID() const;
-
-    /**
-     * @brief Set PID value
-     */
-    void setPID(int32_t pid);
-
-    /**
      * @brief Enable/disable item-specific fields based on object type
      * @param isItem True if this is an item type (armor, weapon, etc.)
      */
     void setItemFieldsVisible(bool isItem);
 
     // UI Constants (Data Type Limits and Documented Game Limits Only)
-    static constexpr int MAX_PID_VALUE = 0x5FFFFFF;    // 24-bit object ID
-    static constexpr int MAX_FID_VALUE = 0xFFFFFF;     // 24-bit frame ID
     static constexpr int MAX_LIGHT_RADIUS = 8;         // Wiki: "0..8 (hexes)"
     static constexpr int MAX_LIGHT_INTENSITY = 65536;  // Wiki: "0..65536 (0x0000FFFF)"
     static constexpr int MAX_FLAGS_VALUE = 0xFFFFFFFF; // 32-bit flags
@@ -100,7 +88,9 @@ private:
     void loadObjectFlags(uint32_t flags);
     void loadExtendedFlags(uint32_t flagsExt);
     uint32_t saveObjectFlags() const;
-    uint32_t saveExtendedFlags() const;
+    // Replaces only the attack-mode nibbles of `flagsExt`; its other bits (big gun, two-handed,
+    // sfall energy, ...) are kept for the tabs that edit them.
+    uint32_t saveExtendedFlags(uint32_t flagsExt) const;
 
     QSpinBox* createSpinBox(int min, int max, const QString& tooltip = QString());
     QComboBox* createMaterialComboBox(const QString& tooltip = QString());

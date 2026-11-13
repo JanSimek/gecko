@@ -12,16 +12,8 @@ uint16_t Frame::width() const {
     return _width;
 }
 
-void Frame::setWidth(const uint16_t& width) {
-    _width = width;
-}
-
 uint16_t Frame::height() const {
     return _height;
-}
-
-void Frame::setHeight(const uint16_t& height) {
-    _height = height;
 }
 
 int16_t Frame::offsetX() const {

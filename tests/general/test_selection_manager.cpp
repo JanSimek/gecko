@@ -13,6 +13,7 @@
 
 #include "support/GraphicsTestEnv.h"
 
+#include <cmath>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -21,6 +22,10 @@
 
 using namespace geck;
 using namespace geck::selection;
+
+namespace {
+constexpr int kTileCount = static_cast<int>(Map::TILES_PER_ELEVATION);
+}
 
 //==============================================================================
 // Mock provider for SelectionManager tests.
@@ -88,13 +93,13 @@ public:
 
     // --- Test setup helpers ---
 
-    // Seed an elevation with a full TILES_PER_ELEVATION-sized tile vector.
+    // Seed an elevation with a full Map::TILES_PER_ELEVATION-sized tile vector.
     // Every floor is set; every roof defaults to EMPTY_TILE so callers can mark
     // specific roof tiles as present per elevation.
     void seedElevation(int elevation) {
         std::vector<Tile> tiles;
-        tiles.reserve(TILES_PER_ELEVATION);
-        for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
+        tiles.reserve(kTileCount);
+        for (int i = 0; i < kTileCount; ++i) {
             // floor = arbitrary non-empty texture id, roof = EMPTY_TILE.
             tiles.emplace_back(static_cast<uint16_t>(2), static_cast<uint16_t>(Map::EMPTY_TILE));
         }
@@ -108,63 +113,6 @@ public:
 };
 
 //==============================================================================
-// SECTION: Mock provider hit-test sanity checks
-//==============================================================================
-
-TEST_CASE("Mock provider position-based tile hit tests", "[selection_manager][mock_provider]") {
-    SECTION("Single click tile selection behavior") {
-        MockEditorWidget mockEditor;
-
-        // Test different world positions and verify correct tile selection.
-        // Per the mock formula (col = x/32, row = y/24):
-        sf::Vector2f testPos1(64.0f, 48.0f);  // -> col 2, row 2
-        sf::Vector2f testPos2(128.0f, 96.0f); // -> col 4, row 4
-
-        // Verify the mock returns reasonable tile indices
-        auto tile1 = mockEditor.getTileAtPosition(testPos1, false);
-        auto tile2 = mockEditor.getTileAtPosition(testPos2, false);
-
-        REQUIRE(tile1.has_value());
-        REQUIRE(tile2.has_value());
-        REQUIRE(tile1.value() != tile2.value()); // Different positions should give different tiles
-
-        // Verify tiles are within valid range
-        REQUIRE(tile1.value() >= 0);
-        REQUIRE(tile1.value() < TILES_PER_ELEVATION);
-        REQUIRE(tile2.value() >= 0);
-        REQUIRE(tile2.value() < TILES_PER_ELEVATION);
-    }
-
-    SECTION("Roof vs floor selection at same position") {
-        MockEditorWidget mockEditor;
-        sf::Vector2f testPos(100.0f, 75.0f);
-
-        auto floorTile = mockEditor.getTileAtPosition(testPos, false);
-        auto roofTile = mockEditor.getTileAtPosition(testPos, true);
-
-        // Both should return the same tile index (same logical position)
-        REQUIRE(floorTile.has_value());
-        REQUIRE(roofTile.has_value());
-        REQUIRE(floorTile.value() == roofTile.value());
-    }
-
-    SECTION("Invalid position handling") {
-        MockEditorWidget mockEditor;
-
-        // Test positions outside map bounds
-        sf::Vector2f invalidPos1(-10.0f, -10.0f);     // Negative coordinates
-        sf::Vector2f invalidPos2(10000.0f, 10000.0f); // Way outside map
-
-        auto tile1 = mockEditor.getTileAtPosition(invalidPos1, false);
-        auto tile2 = mockEditor.getTileAtPosition(invalidPos2, false);
-
-        // Should return nullopt for invalid positions
-        REQUIRE_FALSE(tile1.has_value());
-        REQUIRE_FALSE(tile2.has_value());
-    }
-}
-
-//==============================================================================
 // SECTION: Real SelectionManager construction through the mock provider
 //
 // These tests close the testability gap: previously MockEditorWidget only
@@ -175,7 +123,7 @@ TEST_CASE("Mock provider position-based tile hit tests", "[selection_manager][mo
 // HEXES mode dereferences it (would segfault).
 //==============================================================================
 
-TEST_CASE("SelectionManager drives provider-backed selection paths", "[selection_manager_real]") {
+TEST_CASE("SelectionManager selects from the data provider's tiles, objects and hex grid", "[selection_manager]") {
     MockEditorWidget mockWidget;
 
     // Construct a REAL SelectionManager through the mock interface.
@@ -184,15 +132,15 @@ TEST_CASE("SelectionManager drives provider-backed selection paths", "[selection
     SECTION("clearSelection on an empty manager keeps it empty") {
         REQUIRE_FALSE(mgr.hasSelection());
         mgr.clearSelection();
-        REQUIRE_FALSE(mgr.hasSelection());
-        REQUIRE(mgr.getCurrentSelection().count() == 0);
+        CHECK_FALSE(mgr.hasSelection());
+        CHECK(mgr.getCurrentSelection().count() == 0);
     }
 
     SECTION("selectAll(OBJECTS) reflects the provider's (empty) object list") {
         // Provider returns no objects; selectAll must read getObjects() and select none.
         mgr.selectAll(SelectionMode::OBJECTS, mockWidget.currentElevation);
-        REQUIRE(mgr.getCurrentSelection().getObjects().size() == 0);
-        REQUIRE_FALSE(mgr.hasSelection());
+        CHECK(mgr.getCurrentSelection().getObjects().size() == 0);
+        CHECK_FALSE(mgr.hasSelection());
     }
 
     SECTION("selectAll(ROOF_TILES) reads per-elevation tile data from the provider") {
@@ -207,25 +155,41 @@ TEST_CASE("SelectionManager drives provider-backed selection paths", "[selection
         // Only the three present roofs should be selected (provider-backed read of
         // getMapFile().tiles.at(elevation), filtering EMPTY_TILE).
         auto roofs = mgr.getCurrentSelection().getRoofTileIndices();
-        REQUIRE(roofs.size() == 3);
-        REQUIRE_THAT(roofs, Catch::Matchers::UnorderedEquals(std::vector<int>{ 10, 250, 9999 }));
+        CHECK(roofs.size() == 3);
+        CHECK_THAT(roofs, Catch::Matchers::UnorderedEquals(std::vector<int>{ 10, 250, 9999 }));
     }
 
-    SECTION("selectArea(FLOOR_TILES) succeeds via the provider's spatial index") {
-        // The spatial index was never built, so it yields no tiles; the path must
-        // still run cleanly through the provider and produce an (empty) selection.
+    SECTION("selectArea(FLOOR_TILES) selects nothing before the spatial index is built") {
+        // Floor area selection reads the sprite-backed spatial index, which initializeSpatialIndex()
+        // never populated here; the built-index path is covered by the elevation regression below.
         sf::FloatRect area({ 100.0f, 100.0f }, { 200.0f, 200.0f });
-        auto result = mgr.selectArea(area, SelectionMode::FLOOR_TILES, mockWidget.currentElevation);
-        REQUIRE(result.success);
-        REQUIRE(mgr.getCurrentSelection().getFloorTileIndices().empty());
+        auto result = mgr.selectArea(area, SelectionMode::FLOOR_TILES);
+        CHECK(result.success);
+        CHECK(mgr.getCurrentSelection().getFloorTileIndices().empty());
     }
 
-    SECTION("selectArea(HEXES) is safe with an empty hex grid") {
-        // getHexesInArea() iterates the provider's HexagonGrid; a default grid is empty.
-        sf::FloatRect area({ 0.0f, 0.0f }, { 500.0f, 500.0f });
-        auto result = mgr.selectArea(area, SelectionMode::HEXES, mockWidget.currentElevation);
-        REQUIRE(result.success);
-        REQUIRE(mgr.getCurrentSelection().getHexIndices().empty());
+    SECTION("selectArea(HEXES) selects the hexes whose centre box the area touches") {
+        // getHexesInArea walks the provider's full 200x200 grid with a 32x16 box around each centre.
+        const auto hex = mockWidget.hexGrid.getHexByPosition(20000);
+        REQUIRE(hex.has_value());
+        const float cx = static_cast<float>(hex->get().x());
+        const float cy = static_cast<float>(hex->get().y());
+        REQUIRE(mgr.selectArea(sf::FloatRect({ cx - 1.0f, cy - 1.0f }, { 2.0f, 2.0f }), SelectionMode::HEXES).success);
+        const auto hexes = mgr.getCurrentSelection().getHexIndices();
+        CHECK_THAT(hexes, Catch::Matchers::VectorContains(20000));
+        for (const int selected : hexes) {
+            const auto h = mockWidget.hexGrid.getHexByPosition(static_cast<uint32_t>(selected));
+            REQUIRE(h.has_value());
+            CHECK(std::abs(static_cast<float>(h->get().x()) - cx) < 17.0f);
+            CHECK(std::abs(static_cast<float>(h->get().y()) - cy) < 9.0f);
+        }
+    }
+
+    SECTION("selectArea(HEXES) off the hex diamond selects nothing") {
+        // The grid's screen diamond starts well below y = 500 at this x range, so no hex lies here.
+        auto result = mgr.selectArea(sf::FloatRect({ 0.0f, 0.0f }, { 500.0f, 500.0f }), SelectionMode::HEXES);
+        CHECK(result.success);
+        CHECK(mgr.getCurrentSelection().getHexIndices().empty());
     }
 }
 
@@ -235,7 +199,7 @@ TEST_CASE("SelectionManager drives provider-backed selection paths", "[selection
 // and a selected roof tile must only be a grab handle while the roof is shown.
 //==============================================================================
 
-TEST_CASE("isPointOnSelection gates the grab handle by layer visibility", "[selection_manager_real]") {
+TEST_CASE("isPointOnSelection gates the grab handle by layer visibility", "[selection_manager]") {
     MockEditorWidget mockWidget;
     mockWidget.seedElevation(0);
     geck::selection::SelectionManager mgr(mockWidget);
@@ -281,7 +245,7 @@ TEST_CASE("isPointOnSelection gates the grab handle by layer visibility", "[sele
 // provider (no spatial index / hit-test setup needed).
 //==============================================================================
 
-TEST_CASE("active selection layers gate ALL-mode selection", "[selection_manager_real]") {
+TEST_CASE("Active selection layers limit what ALL mode selects", "[selection_manager]") {
     MockEditorWidget mockWidget;
     mockWidget.seedElevation(0);
     mockWidget.setRoofPresent(0, 5);
@@ -291,7 +255,7 @@ TEST_CASE("active selection layers gate ALL-mode selection", "[selection_manager
     SECTION("floor only") {
         mgr.setActiveLayers({ .floorTiles = true, .roofTiles = false, .objects = false });
         mgr.selectAll(SelectionMode::ALL, 0);
-        CHECK(mgr.getCurrentSelection().getFloorTileIndices().size() == static_cast<size_t>(TILES_PER_ELEVATION));
+        CHECK(mgr.getCurrentSelection().getFloorTileIndices().size() == static_cast<size_t>(Map::TILES_PER_ELEVATION));
         CHECK(mgr.getCurrentSelection().getRoofTileIndices().empty());
     }
 
@@ -305,7 +269,7 @@ TEST_CASE("active selection layers gate ALL-mode selection", "[selection_manager
     SECTION("floor + roof combined") {
         mgr.setActiveLayers({ .floorTiles = true, .roofTiles = true, .objects = false });
         mgr.selectAll(SelectionMode::ALL, 0);
-        CHECK(mgr.getCurrentSelection().getFloorTileIndices().size() == static_cast<size_t>(TILES_PER_ELEVATION));
+        CHECK(mgr.getCurrentSelection().getFloorTileIndices().size() == static_cast<size_t>(Map::TILES_PER_ELEVATION));
         CHECK(mgr.getCurrentSelection().getRoofTileIndices().size() == 2);
     }
 }
@@ -328,7 +292,7 @@ std::optional<TileChange> findTileChange(const std::vector<TileChange>& changes,
 }
 } // namespace
 
-TEST_CASE("planSelectionTileMove moves selected floor and roof tiles as a block", "[selection_manager_real][roof_move]") {
+TEST_CASE("planSelectionTileMove moves selected floor and roof tiles as a block", "[selection_manager]") {
     MockEditorWidget mockWidget;
     geck::selection::SelectionManager mgr(mockWidget);
     mockWidget.seedElevation(0);
@@ -357,7 +321,7 @@ TEST_CASE("planSelectionTileMove moves selected floor and roof tiles as a block"
         mgr.getMutableSelection().items.emplace_back(SelectionType::FLOOR_TILE, 10);
 
         const auto changes = mgr.planSelectionTileMove(1, 0); // -> tile 110
-        REQUIRE(changes.size() == 2);
+        CHECK(changes.size() == 2);
 
         const auto source = findTileChange(changes, 10);
         const auto target = findTileChange(changes, 110);
@@ -373,14 +337,14 @@ TEST_CASE("planSelectionTileMove moves selected floor and roof tiles as a block"
     SECTION("a zero delta is a no-op") {
         mockWidget.setRoofPresent(0, 10, 7);
         mgr.selectAll(SelectionMode::ROOF_TILES, 0);
-        REQUIRE(mgr.planSelectionTileMove(0, 0).empty());
+        CHECK(mgr.planSelectionTileMove(0, 0).empty());
     }
 
     SECTION("a move that would leave the map is rejected as a whole") {
         mockWidget.setRoofPresent(0, 9999, 7); // tile 9999 = (row 99, col 99)
         mgr.selectAll(SelectionMode::ROOF_TILES, 0);
-        REQUIRE(mgr.planSelectionTileMove(1, 0).empty()); // row 100 is off the map
-        REQUIRE(mgr.planSelectionTileMove(0, 1).empty()); // col 100 is off the map
+        CHECK(mgr.planSelectionTileMove(1, 0).empty()); // row 100 is off the map
+        CHECK(mgr.planSelectionTileMove(0, 1).empty()); // col 100 is off the map
     }
 
     SECTION("overlapping moves are block-safe: a source that is another's target keeps the moved roof") {
@@ -395,14 +359,14 @@ TEST_CASE("planSelectionTileMove moves selected floor and roof tiles as a block"
         REQUIRE(t10.has_value());
         REQUIRE(t11.has_value());
         REQUIRE(t12.has_value());
-        REQUIRE(t10->after == Map::EMPTY_TILE);
-        REQUIRE(t11->after == 7); // block-safe: not emptied by tile 10's vacate
-        REQUIRE(t12->after == 8);
+        CHECK(t10->after == Map::EMPTY_TILE);
+        CHECK(t11->after == 7); // block-safe: not emptied by tile 10's vacate
+        CHECK(t12->after == 8);
     }
 
     SECTION("with nothing selected there is nothing to move") {
         mgr.selectAll(SelectionMode::ROOF_TILES, 0); // none present -> empty selection
-        REQUIRE(mgr.planSelectionTileMove(1, 1).empty());
+        CHECK(mgr.planSelectionTileMove(1, 1).empty());
     }
 }
 
@@ -410,12 +374,12 @@ TEST_CASE("planSelectionTileMove moves selected floor and roof tiles as a block"
 // (coordinatesToScreenPosition / nearest-centre hit-test), which the abstract mock deliberately
 // does not replicate (see test_viewport_controller.cpp for that). So the positional mapping is
 // covered there and by visual checks; here we only pin the projection-independent contract.
-TEST_CASE("planSelectionMoveForTranslation with nothing selected is a no-op", "[selection_manager_real][roof_move]") {
+TEST_CASE("planSelectionMoveForTranslation with nothing selected is a no-op", "[selection_manager]") {
     MockEditorWidget mockWidget;
     geck::selection::SelectionManager mgr(mockWidget);
     mockWidget.seedElevation(0);
     mgr.selectAll(SelectionMode::ROOF_TILES, 0); // none present -> empty selection
-    REQUIRE(mgr.planSelectionMoveForTranslation(sf::Vector2f(32.0f, 0.0f)).empty());
+    CHECK(mgr.planSelectionMoveForTranslation(sf::Vector2f(32.0f, 0.0f)).empty());
 }
 
 //==============================================================================
@@ -426,7 +390,7 @@ TEST_CASE("planSelectionMoveForTranslation with nothing selected is a no-op", "[
 // No objects are placed (Object needs a graphics context), so the stack is the
 // always-present roof -> floor pair the mock fabricates, then empty.
 //==============================================================================
-TEST_CASE("ALL-mode click cycles the stack then deselects", "[selection_manager_real][regression]") {
+TEST_CASE("ALL-mode click cycles the stack then deselects", "[selection_manager]") {
     MockEditorWidget mockWidget;
     geck::selection::SelectionManager mgr(mockWidget);
 
@@ -435,18 +399,18 @@ TEST_CASE("ALL-mode click cycles the stack then deselects", "[selection_manager_
     const int tileIndex = 1 * MAP_WIDTH + 1;
 
     // 1st click: nothing selected -> top of the stack (roof).
-    mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
+    mgr.selectAtPosition(clickPos, SelectionMode::ALL);
     REQUIRE(mgr.getCurrentSelection().count() == 1);
     REQUIRE(mgr.getCurrentSelection().getRoofTileIndices() == std::vector<int>{ tileIndex });
 
     // 2nd click: advances to the item underneath (floor).
-    mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
+    mgr.selectAtPosition(clickPos, SelectionMode::ALL);
     REQUIRE(mgr.getCurrentSelection().count() == 1);
     REQUIRE(mgr.getCurrentSelection().getRoofTileIndices().empty());
     REQUIRE(mgr.getCurrentSelection().getFloorTileIndices() == std::vector<int>{ tileIndex });
 
     // 3rd click: nothing left underneath -> deselect.
-    mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
+    mgr.selectAtPosition(clickPos, SelectionMode::ALL);
     REQUIRE_FALSE(mgr.hasSelection());
 }
 
@@ -455,7 +419,7 @@ TEST_CASE("ALL-mode click cycles the stack then deselects", "[selection_manager_
 // edit interior objects still selected the invisible roof tile under the cursor instead of the
 // object/floor below. The floor stands in for "the layer beneath the roof": objects rank above the
 // floor in the same cycle, so skipping the hidden roof lets an object beneath it win the click too.
-TEST_CASE("A hidden roof does not shadow a click on what is beneath it", "[selection_manager_real][regression]") {
+TEST_CASE("A hidden roof does not shadow a click on what is beneath it", "[selection_manager]") {
     MockEditorWidget mockWidget;
     geck::selection::SelectionManager mgr(mockWidget);
 
@@ -464,13 +428,13 @@ TEST_CASE("A hidden roof does not shadow a click on what is beneath it", "[selec
 
     SECTION("roof shown: the click selects the roof drawn on top") {
         mockWidget.roofVisible = true;
-        mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
+        mgr.selectAtPosition(clickPos, SelectionMode::ALL);
         CHECK(mgr.getCurrentSelection().getRoofTileIndices() == std::vector<int>{ tileIndex });
     }
 
     SECTION("roof hidden: the click falls through to the layer beneath, not the invisible roof") {
         mockWidget.roofVisible = false;
-        mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
+        mgr.selectAtPosition(clickPos, SelectionMode::ALL);
         CHECK(mgr.getCurrentSelection().getRoofTileIndices().empty());
         CHECK(mgr.getCurrentSelection().getFloorTileIndices() == std::vector<int>{ tileIndex });
     }
@@ -478,7 +442,7 @@ TEST_CASE("A hidden roof does not shadow a click on what is beneath it", "[selec
 
 // Ctrl+drag is deselect-only: it removes already-selected covered items but never adds.
 // Uses HEXES mode (the hex grid is pure geometry — no graphics context needed).
-TEST_CASE("deselectArea removes only selected covered items (Ctrl+drag)", "[selection_manager_real][regression]") {
+TEST_CASE("deselectArea removes only selected covered items (Ctrl+drag)", "[selection_manager]") {
     MockEditorWidget mockWidget;
     geck::selection::SelectionManager mgr(mockWidget);
 
@@ -489,26 +453,26 @@ TEST_CASE("deselectArea removes only selected covered items (Ctrl+drag)", "[sele
         { 80.0f, 80.0f });
 
     SECTION("deselect over an empty selection adds nothing") {
-        mgr.deselectArea(area, SelectionMode::HEXES, 0);
+        mgr.deselectArea(area, SelectionMode::HEXES);
         CHECK(mgr.getCurrentSelection().getHexIndices().empty());
     }
 
     SECTION("deselect over an already-selected area removes those items") {
-        mgr.selectArea(area, SelectionMode::HEXES, 0);
+        mgr.selectArea(area, SelectionMode::HEXES);
         REQUIRE_FALSE(mgr.getCurrentSelection().getHexIndices().empty());
 
-        mgr.deselectArea(area, SelectionMode::HEXES, 0);
+        mgr.deselectArea(area, SelectionMode::HEXES);
         CHECK(mgr.getCurrentSelection().getHexIndices().empty());
     }
 
     SECTION("itemsToDeselectInArea previews exactly what a deselect would remove") {
         // Drives the live Ctrl+drag preview: it must report the covered selected items
         // (and nothing when the area covers no selection) without mutating state.
-        CHECK(mgr.itemsToDeselectInArea(area, SelectionMode::HEXES, 0).empty());
+        CHECK(mgr.itemsToDeselectInArea(area, SelectionMode::HEXES).empty());
 
-        mgr.selectArea(area, SelectionMode::HEXES, 0);
+        mgr.selectArea(area, SelectionMode::HEXES);
         const auto selectedCount = mgr.getCurrentSelection().getHexIndices().size();
-        const auto toRemove = mgr.itemsToDeselectInArea(area, SelectionMode::HEXES, 0);
+        const auto toRemove = mgr.itemsToDeselectInArea(area, SelectionMode::HEXES);
         CHECK(toRemove.size() == selectedCount);
         // Querying the preview must not change the selection.
         CHECK(mgr.getCurrentSelection().getHexIndices().size() == selectedCount);
@@ -516,7 +480,7 @@ TEST_CASE("deselectArea removes only selected covered items (Ctrl+drag)", "[sele
 }
 
 // Alt+drag adds the covered items to the selection without clearing what is already selected.
-TEST_CASE("addArea accumulates into the selection (Alt+drag)", "[selection_manager_real][regression]") {
+TEST_CASE("addArea accumulates into the selection (Alt+drag)", "[selection_manager]") {
     MockEditorWidget mockWidget;
     geck::selection::SelectionManager mgr(mockWidget);
 
@@ -527,12 +491,12 @@ TEST_CASE("addArea accumulates into the selection (Alt+drag)", "[selection_manag
     const sf::FloatRect areaA({ static_cast<float>(hexA->get().x()) - 40.0f, static_cast<float>(hexA->get().y()) - 40.0f }, { 80.0f, 80.0f });
     const sf::FloatRect areaB({ static_cast<float>(hexB->get().x()) - 40.0f, static_cast<float>(hexB->get().y()) - 40.0f }, { 80.0f, 80.0f });
 
-    mgr.selectArea(areaA, SelectionMode::HEXES, 0);
+    mgr.selectArea(areaA, SelectionMode::HEXES);
     const auto afterA = mgr.getCurrentSelection().getHexIndices();
     REQUIRE_FALSE(afterA.empty());
 
     // Alt+drag over a second area keeps the first selection and adds the new hexes.
-    mgr.addArea(areaB, SelectionMode::HEXES, 0);
+    mgr.addArea(areaB, SelectionMode::HEXES);
     const auto afterAdd = mgr.getCurrentSelection().getHexIndices();
     CHECK(afterAdd.size() > afterA.size());
     for (int hex : afterA) {
@@ -540,7 +504,7 @@ TEST_CASE("addArea accumulates into the selection (Alt+drag)", "[selection_manag
     }
 
     // Re-adding the same area is idempotent (no duplicates).
-    mgr.addArea(areaB, SelectionMode::HEXES, 0);
+    mgr.addArea(areaB, SelectionMode::HEXES);
     CHECK(mgr.getCurrentSelection().getHexIndices().size() == afterAdd.size());
 }
 
@@ -551,71 +515,68 @@ TEST_CASE("addArea accumulates into the selection (Alt+drag)", "[selection_manag
 // user, "Ctrl+click does nothing". It now removes whichever VISIBLE layer under the cursor is
 // actually selected. The mock fabricates a roof+floor pair at every position, so the ALL-mode
 // floor case reproduces "floor selected with a roof above it" exactly.
-TEST_CASE("Ctrl+click deselects the selected layer only (single click)", "[selection_manager_real][regression]") {
+TEST_CASE("Ctrl+click deselects the selected layer only (single click)", "[selection_manager]") {
     MockEditorWidget mockWidget;
     geck::selection::SelectionManager mgr(mockWidget);
 
     const sf::Vector2f clickPos{ 32.0f, 24.0f };
 
     SECTION("FLOOR_TILES: Ctrl+click on the selected tile deselects it") {
-        mgr.selectAtPosition(clickPos, SelectionMode::FLOOR_TILES, 0);
+        mgr.selectAtPosition(clickPos, SelectionMode::FLOOR_TILES);
         REQUIRE(mgr.getCurrentSelection().count() == 1);
 
-        mgr.deselectAtPosition(clickPos, SelectionMode::FLOOR_TILES, 0);
+        mgr.deselectAtPosition(clickPos, SelectionMode::FLOOR_TILES);
         CHECK_FALSE(mgr.hasSelection());
     }
 
     SECTION("FLOOR_TILES: Ctrl+click outside the selection adds nothing") {
         // Nothing selected -> a deselect click must stay a no-op (no add).
-        mgr.deselectAtPosition(clickPos, SelectionMode::FLOOR_TILES, 0);
+        mgr.deselectAtPosition(clickPos, SelectionMode::FLOOR_TILES);
         CHECK_FALSE(mgr.hasSelection());
     }
 
     SECTION("ALL: Ctrl+click on the selected roof deselects it") {
-        mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0); // selects roof (top of stack)
+        mgr.selectAtPosition(clickPos, SelectionMode::ALL); // selects roof (top of stack)
         REQUIRE(mgr.getCurrentSelection().getRoofTileIndices().size() == 1);
 
-        mgr.deselectAtPosition(clickPos, SelectionMode::ALL, 0);
+        mgr.deselectAtPosition(clickPos, SelectionMode::ALL);
         CHECK_FALSE(mgr.hasSelection());
     }
 
     SECTION("ALL: Ctrl+click deselects a selected floor even with a roof above it") {
         // Cycle to the floor underneath (1st click roof, 2nd click floor).
-        mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
-        mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0);
+        mgr.selectAtPosition(clickPos, SelectionMode::ALL);
+        mgr.selectAtPosition(clickPos, SelectionMode::ALL);
         REQUIRE(mgr.getCurrentSelection().getFloorTileIndices().size() == 1);
         REQUIRE(mgr.getCurrentSelection().getRoofTileIndices().empty());
 
-        mgr.deselectAtPosition(clickPos, SelectionMode::ALL, 0);
+        mgr.deselectAtPosition(clickPos, SelectionMode::ALL);
         // Must remove the floor, NOT add the roof on top of it.
         CHECK_FALSE(mgr.hasSelection());
     }
 
     SECTION("ALL: a hidden roof stays selected; only the visible floor is removed") {
         // Select both layers (roof while visible, then the floor underneath).
-        mgr.selectAtPosition(clickPos, SelectionMode::ALL, 0); // roof
+        mgr.selectAtPosition(clickPos, SelectionMode::ALL);    // roof
         mockWidget.roofVisible = false;                        // hide the roof, re-select adds floor
-        mgr.addToSelection(clickPos, SelectionMode::FLOOR_TILES, 0);
+        mgr.addToSelection(clickPos, SelectionMode::FLOOR_TILES);
         REQUIRE(mgr.getCurrentSelection().getRoofTileIndices().size() == 1);
         REQUIRE(mgr.getCurrentSelection().getFloorTileIndices().size() == 1);
 
         // Ctrl+click with the roof hidden must only drop the visible floor; the
         // hidden roof stays selected (deselecting a roof you can see is covered above).
-        mgr.deselectAtPosition(clickPos, SelectionMode::ALL, 0);
+        mgr.deselectAtPosition(clickPos, SelectionMode::ALL);
         CHECK(mgr.getCurrentSelection().getFloorTileIndices().empty());
         CHECK(mgr.getCurrentSelection().getRoofTileIndices().size() == 1);
     }
 }
 
 //==============================================================================
-// SECTION: Elevation regression for finishAreaSelection()
+// SECTION: Elevation regression for area selection
 //
-// REGRESSION TEST for the elevation bug fixed in the manager-decoupling work:
-// SelectionManager::finishAreaSelection() used to call selectArea(area, mode, 0)
-// with a HARDCODED elevation of 0, which broke area selection on every elevation
-// other than the ground floor. It now calls selectArea(area, mode,
-// _provider.getCurrentElevation()), and the roof-content filter in getTilesInArea()
-// reads getMapFile().tiles.at(_provider.getCurrentElevation()).
+// REGRESSION TEST: area selection once used a HARDCODED elevation of 0, which broke it on
+// every elevation other than the ground floor. The roof-content filter in getTilesInArea()
+// now reads getMapFile().tiles.at(_provider.getCurrentElevation()).
 //
 // This test builds a populated spatial index and per-elevation roof data so that a
 // ROOF area selection over a known tile yields the tile ONLY when the host reports
@@ -627,26 +588,22 @@ TEST_CASE("Ctrl+click deselects the selected layer only (single click)", "[selec
 // skipped in headless CI exactly like the other graphics tests in this suite.
 //==============================================================================
 
-TEST_CASE("SelectionManager area selection honors host elevation (regression)", "[selection_manager_real][regression]") {
+TEST_CASE("SelectionManager area selection reads the host's current elevation", "[selection_manager]") {
     GECK_SKIP_IF_HEADLESS_CI();
 
     // The roof tile we will both place a sprite for and mark present on elevation 2.
     constexpr int TARGET_ROOF_TILE = 4242;
 
     // 1x1 texture shared by every tile sprite (bounds are what the spatial index uses).
-    sf::Texture texture;
-    sf::Image image{ sf::Vector2u{ 1, 1 }, sf::Color::White };
-    if (!texture.loadFromImage(image)) {
-        FAIL("Failed to create test texture");
-    }
+    const sf::Texture texture = geck::test::whiteTexture();
 
     MockEditorWidget mockWidget;
 
     // Build full floor/roof sprite vectors positioned at their isometric screen
     // coordinates, so TileSpatialIndex::buildIndex() can index every tile.
-    mockWidget.floorSprites.reserve(TILES_PER_ELEVATION);
-    mockWidget.roofSprites.reserve(TILES_PER_ELEVATION);
-    for (int i = 0; i < TILES_PER_ELEVATION; ++i) {
+    mockWidget.floorSprites.reserve(kTileCount);
+    mockWidget.roofSprites.reserve(kTileCount);
+    for (int i = 0; i < kTileCount; ++i) {
         auto floorPos = indexToScreenPosition(i, false);
         sf::Sprite floorSprite(texture);
         floorSprite.setPosition({ static_cast<float>(floorPos.x), static_cast<float>(floorPos.y) });
@@ -674,50 +631,54 @@ TEST_CASE("SelectionManager area selection honors host elevation (regression)", 
     sf::Vector2f center(static_cast<float>(targetRoofPos.x), static_cast<float>(targetRoofPos.y));
     sf::Vector2f areaStart(center.x - 4.0f, center.y - 4.0f);
     sf::Vector2f areaEnd(center.x + 4.0f, center.y + 4.0f);
+    const sf::FloatRect area({ areaStart.x, areaStart.y }, { areaEnd.x - areaStart.x, areaEnd.y - areaStart.y });
 
     SECTION("area selection on elevation 2 picks up the elevation-2 roof tile") {
         mockWidget.currentElevation = 2;
 
-        mgr.startAreaSelection(areaStart, SelectionMode::ROOF_TILES);
-        mgr.updateAreaSelection(areaEnd);
-        // finishAreaSelection() forwards _provider.getCurrentElevation() (== 2) into
-        // selectArea(); the roof-content filter then reads tiles.at(2).
-        auto result = mgr.finishAreaSelection();
+        // The roof-content filter reads tiles.at(_provider.getCurrentElevation()) == tiles.at(2).
+        auto result = mgr.selectArea(area, SelectionMode::ROOF_TILES);
 
-        REQUIRE(result.success);
+        CHECK(result.success);
         auto roofs = mgr.getCurrentSelection().getRoofTileIndices();
         // The target roof exists on elevation 2, so it must be selected. Had the code
         // read elevation 0 (the old hardcoded-0 bug), tiles.at(0) has it EMPTY and the
         // selection would be empty.
-        REQUIRE_THAT(roofs, Catch::Matchers::VectorContains(TARGET_ROOF_TILE));
+        CHECK_THAT(roofs, Catch::Matchers::VectorContains(TARGET_ROOF_TILE));
+    }
+
+    SECTION("FLOOR_TILES area selection picks the indexed floor tile under the area") {
+        const auto floorPos = indexToScreenPosition(TARGET_ROOF_TILE, false);
+        const sf::FloatRect floorArea({ static_cast<float>(floorPos.x) - 4.0f, static_cast<float>(floorPos.y) - 4.0f },
+            { 8.0f, 8.0f });
+        REQUIRE(mgr.selectArea(floorArea, SelectionMode::FLOOR_TILES).success);
+        CHECK_THAT(mgr.getCurrentSelection().getFloorTileIndices(), Catch::Matchers::VectorContains(TARGET_ROOF_TILE));
+        CHECK(mgr.getCurrentSelection().getRoofTileIndices().empty());
     }
 
     SECTION("same area on elevation 0 finds nothing (proves elevation is honored)") {
         mockWidget.currentElevation = 0;
 
-        mgr.startAreaSelection(areaStart, SelectionMode::ROOF_TILES);
-        mgr.updateAreaSelection(areaEnd);
-        auto result = mgr.finishAreaSelection();
+        auto result = mgr.selectArea(area, SelectionMode::ROOF_TILES);
 
-        REQUIRE(result.success);
+        CHECK(result.success);
         // On elevation 0 the target roof is EMPTY, so the roof-content filter excludes
         // it. This is the control case: combined with the elevation-2 section above it
-        // proves finishAreaSelection() uses the host's elevation rather than a constant.
-        REQUIRE(mgr.getCurrentSelection().getRoofTileIndices().empty());
+        // proves selectArea() uses the host's elevation rather than a constant.
+        CHECK(mgr.getCurrentSelection().getRoofTileIndices().empty());
     }
 
     SECTION("ALL mode skips a hidden roof; explicit ROOF_TILES still selects it (visibility parity)") {
         mockWidget.currentElevation = 2;
         mockWidget.roofVisible = false;
-        const sf::FloatRect area({ areaStart.x, areaStart.y }, { areaEnd.x - areaStart.x, areaEnd.y - areaStart.y });
 
         // ALL mode must not grab a roof whose layer is hidden (you can't see it).
-        REQUIRE(mgr.selectArea(area, SelectionMode::ALL, 2).success);
+        REQUIRE(mgr.selectArea(area, SelectionMode::ALL).success);
         auto allRoofs = mgr.getCurrentSelection().getRoofTileIndices();
         CHECK(std::find(allRoofs.begin(), allRoofs.end(), TARGET_ROOF_TILE) == allRoofs.end());
 
         // The explicit roof mode is a deliberate roof-editing mode, unaffected by the toggle.
-        REQUIRE(mgr.selectArea(area, SelectionMode::ROOF_TILES, 2).success);
+        REQUIRE(mgr.selectArea(area, SelectionMode::ROOF_TILES).success);
         auto roofModeRoofs = mgr.getCurrentSelection().getRoofTileIndices();
         CHECK(std::find(roofModeRoofs.begin(), roofModeRoofs.end(), TARGET_ROOF_TILE) != roofModeRoofs.end());
     }
@@ -733,7 +694,7 @@ TEST_CASE("SelectionManager area selection honors host elevation (regression)", 
 // elsewhere and shares the same hit-tester.
 //==============================================================================
 
-TEST_CASE("SelectionManager::pickAt honours roof-visible priority and never mutates selection", "[selection_manager_real][pick]") {
+TEST_CASE("SelectionManager::pickAt honours roof-visible priority and never mutates selection", "[selection_manager]") {
     MockEditorWidget mockWidget;
     geck::selection::SelectionManager mgr(mockWidget);
 
@@ -743,35 +704,35 @@ TEST_CASE("SelectionManager::pickAt honours roof-visible priority and never muta
 
     SECTION("roof visible: picks the roof tile under the cursor") {
         mockWidget.roofVisible = true;
-        auto pick = mgr.pickAt(pos, 0);
+        auto pick = mgr.pickAt(pos);
         REQUIRE(pick.roofTile.has_value());
-        REQUIRE(pick.roofTile.value() == expectedTile);
-        REQUIRE_FALSE(pick.floorTile.has_value());
-        REQUIRE(pick.object == nullptr);
+        CHECK(pick.roofTile.value() == expectedTile);
+        CHECK_FALSE(pick.floorTile.has_value());
+        CHECK(pick.object == nullptr);
     }
 
     SECTION("roof hidden: falls through to the floor tile") {
         mockWidget.roofVisible = false;
-        auto pick = mgr.pickAt(pos, 0);
+        auto pick = mgr.pickAt(pos);
         REQUIRE(pick.floorTile.has_value());
-        REQUIRE(pick.floorTile.value() == expectedTile);
-        REQUIRE_FALSE(pick.roofTile.has_value());
-        REQUIRE(pick.object == nullptr);
+        CHECK(pick.floorTile.value() == expectedTile);
+        CHECK_FALSE(pick.roofTile.has_value());
+        CHECK(pick.object == nullptr);
     }
 
     SECTION("an out-of-bounds cursor picks nothing") {
-        auto pick = mgr.pickAt(sf::Vector2f(-10.0f, -10.0f), 0);
-        REQUIRE_FALSE(pick.roofTile.has_value());
-        REQUIRE_FALSE(pick.floorTile.has_value());
-        REQUIRE(pick.object == nullptr);
+        auto pick = mgr.pickAt(sf::Vector2f(-10.0f, -10.0f));
+        CHECK_FALSE(pick.roofTile.has_value());
+        CHECK_FALSE(pick.floorTile.has_value());
+        CHECK(pick.object == nullptr);
     }
 
     SECTION("pickAt never mutates the current selection") {
         REQUIRE_FALSE(mgr.hasSelection());
-        mgr.pickAt(pos, 0); // roof-visible path
+        mgr.pickAt(pos); // roof-visible path
         mockWidget.roofVisible = false;
-        mgr.pickAt(pos, 0); // floor path
-        REQUIRE_FALSE(mgr.hasSelection());
-        REQUIRE(mgr.getCurrentSelection().count() == 0);
+        mgr.pickAt(pos); // floor path
+        CHECK_FALSE(mgr.hasSelection());
+        CHECK(mgr.getCurrentSelection().count() == 0);
     }
 }

@@ -29,10 +29,25 @@
 #include "state/loader/DataPathLoader.h"
 #include "ui/panels/FileBrowserPanel.h"
 
+#include <clocale>
+
 namespace geck {
 
+namespace {
+
+    // Qt adopts the system locale (setlocale(LC_ALL, "")) as the application starts. A decimal-comma
+    // LC_NUMERIC (cs_CZ, de_DE, ...) then breaks C-level number parsing: Luau rejected `1.0` in the
+    // script console as a malformed number. Keep numbers in the C locale, before anything parses.
+    std::unique_ptr<QApplication> createQApplication(int& argc, char** argv) {
+        auto app = std::make_unique<QApplication>(argc, argv);
+        std::setlocale(LC_NUMERIC, "C");
+        return app;
+    }
+
+} // namespace
+
 Application::Application(int argc, char** argv)
-    : _qtApp(std::make_unique<QApplication>(argc, argv))
+    : _qtApp(createQApplication(argc, argv))
     , _settings(std::make_shared<Settings>())
     , _mainWindow(nullptr)
     , _resources(std::make_shared<resource::GameResources>()) {
@@ -89,7 +104,7 @@ void Application::loadMap(const std::filesystem::path& mapPath) {
     // MapLoader is Qt-free; LoadingWidget owns it once added, so the callback uses
     // a handle to read its error message and present it here on the main thread.
     auto loaderHandle = std::make_shared<MapLoader*>(nullptr);
-    auto mapLoader = std::make_unique<MapLoader>(_resources, mapPath, -1, true, [this, loaderHandle](auto map) {
+    auto mapLoader = std::make_unique<MapLoader>(_resources, mapPath, true, [this, loaderHandle](auto map) {
         if (map) {
             auto editorWidget = std::make_unique<EditorWidget>(*_resources, std::move(map));
             _mainWindow->setEditorWidget(std::move(editorWidget));
@@ -149,7 +164,7 @@ std::string Application::processCommandLineArgs() {
         spdlog::info("No data paths in settings, will use command line default: {}", dataPath.toStdString());
 
         // Expand a folder into the folder + its master.dat/critter.dat so the DATs are explicit,
-        // mounted entries (DataFileSystem no longer nested-mounts them). Add to settings, don't save/load yet.
+        // mounted entries (DataFileSystem does not nested-mount them). Add to settings, don't save/load yet.
         for (const auto& entry : util::expandDataPaths({ std::filesystem::path(dataPath.toStdString()) })) {
             settings.addDataPath(entry);
         }
@@ -256,7 +271,9 @@ void Application::checkDataConfiguration() {
 }
 
 bool Application::showStartupSettingsDialog() {
-    SettingsDialog dialog(_settings, _mainWindow.get());
+    // The first-run dialog has no registry to offer (the window's is built with it, and rebinding
+    // before any data path is configured is not the point of this dialog), so no shortcuts tab.
+    SettingsDialog dialog(_settings, nullptr, _mainWindow.get());
 
     bool dataPathsChanged = false;
     QObject::connect(&dialog, &SettingsDialog::settingsSaved, [&dataPathsChanged](bool changed) {

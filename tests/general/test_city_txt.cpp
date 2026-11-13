@@ -1,9 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstdlib>
-
 #include "format/city/CityTxt.h"
-#include "format/worldmap/WorldmapTxt.h"
 #include "reader/city/CityTxtReader.h"
 
 using namespace geck;
@@ -35,7 +32,7 @@ entrance_0=On,300,300,Den,-1,-1,2
 )";
 } // namespace
 
-TEST_CASE("parseCityTxt reads worldmap areas, positions and entrances", "[city]") {
+TEST_CASE("parseCityTxt reads worldmap areas, positions and entrances", "[city_txt]") {
     const CityTxt city = parseCityTxt(std::string{ kCityTxt });
 
     CHECK(city.areas.size() == 2);
@@ -71,42 +68,6 @@ TEST_CASE("parseCityTxt reads worldmap areas, positions and entrances", "[city]"
     CHECK(city.find(99) == nullptr);
 }
 
-// The single most load-bearing fact in drawing the worldmap. city.txt's world_pos is measured from
-// the engine's 640x480 interface window, but the map view starts at (WM_VIEW_X, WM_VIEW_Y) inside
-// it, so a marker's real place on the worldmap is world_pos minus that. fallout2-ce applies the bias
-// in both directions (wmInterfaceRefresh draws at city->x - offset into a buffer whose view begins
-// at WM_VIEW_X; wmMatchWorldPosToArea hit-tests worldPos + WM_VIEW_X against city->x).
-//
-// The engine pins it down: a new game starts the party at the hard-coded world position (173, 122)
-// (wmGenDataSetStartWorldPos), and that has to be inside Arroyo. Only the biased rectangle contains
-// it — and puts it within two pixels of the circle's centre.
-TEST_CASE("worldmap markers sit WM_VIEW_X/Y before their world_pos", "[city][worldmap]") {
-    const CityTxt city = parseCityTxt(std::string{ kCityTxt });
-    const CityArea* arroyo = city.find(0);
-    REQUIRE(arroyo != nullptr);
-
-    constexpr int MEDIUM_CIRCLE = 25; // art/intrface/wrldspr1.frm
-    constexpr int START_X = 173;
-    constexpr int START_Y = 122;
-
-    const int left = arroyo->worldX - WM_VIEW_X;
-    const int top = arroyo->worldY - WM_VIEW_Y;
-    CHECK(left == 162);
-    CHECK(top == 112);
-
-    CHECK(START_X >= left);
-    CHECK(START_X <= left + MEDIUM_CIRCLE);
-    CHECK(START_Y >= top);
-    CHECK(START_Y <= top + MEDIUM_CIRCLE);
-
-    // Within a couple of pixels of dead centre, which is what makes the bias more than a coincidence.
-    CHECK(std::abs(left + MEDIUM_CIRCLE / 2 - START_X) <= 2);
-    CHECK(std::abs(top + MEDIUM_CIRCLE / 2 - START_Y) <= 2);
-
-    // Without the bias the party would start outside Arroyo's circle entirely.
-    CHECK(START_X < arroyo->worldX);
-}
-
-TEST_CASE("parseCityTxt tolerates empty input", "[city]") {
+TEST_CASE("parseCityTxt tolerates empty input", "[city_txt]") {
     CHECK(parseCityTxt(std::string{}).areas.empty());
 }

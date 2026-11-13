@@ -2,9 +2,22 @@
 
 #include <QStringList>
 
+#include "ui/input/ActionSpec.h"
+
 namespace geck {
 
 namespace {
+
+    // "<key>: <what>" for an action's current key, or nothing when the action has been unbound —
+    // advertising a key that no longer does anything is the stale hint this lookup exists to
+    // prevent. The shipped name is used only when no lookup was supplied.
+    void addKeyHint(QStringList& parts, const HintKeyLookup& keyFor, const char* actionId,
+        const QString& shippedKey, const QString& what) {
+        const QString key = keyFor ? keyFor(QString::fromLatin1(actionId)) : shippedKey;
+        if (!key.isEmpty()) {
+            parts.append(key + QStringLiteral(": ") + what);
+        }
+    }
 
     QString joinHints(const QStringList& parts) {
         // A middle dot (U+00B7) flanked by spaces. Built from QChar so it's encoding-safe regardless
@@ -16,17 +29,22 @@ namespace {
 
 } // namespace
 
-QString hintForContext(EditorMode mode, bool hasSelection, const QString& activeToolHint) {
+QString hintForContext(EditorMode mode, bool hasSelection, const QString& activeToolHint,
+    const HintKeyLookup& keyFor) {
     using enum EditorMode;
 
     switch (mode) {
         case Select:
-            // Only the keys that genuinely act on a selection: Rotate's "R" toolbar
-            // shortcut (live whenever not stamping) and Delete/Backspace. With nothing
-            // selected neither does anything, so the hint is empty.
+            // Only the keys that genuinely act on a selection: Rotate's canvas "R" (live
+            // whenever not stamping), Enter to inspect it in the Selection panel, and
+            // Delete/Backspace. With nothing selected none of them does anything, so the hint
+            // is empty.
             if (hasSelection) {
-                return joinHints({ QStringLiteral("R: rotate"),
-                    QStringLiteral("Delete: remove") });
+                QStringList parts;
+                addKeyHint(parts, keyFor, actions::PANEL_SELECTION_REVEAL, QStringLiteral("Enter"), QStringLiteral("inspect"));
+                addKeyHint(parts, keyFor, actions::TOOL_ROTATE, QStringLiteral("R"), QStringLiteral("rotate"));
+                parts.append(QStringLiteral("Delete: remove"));
+                return joinHints(parts);
             }
             return QString();
 
@@ -52,6 +70,9 @@ QString hintForContext(EditorMode mode, bool hasSelection, const QString& active
         case StampPattern:
             // R cycles the prefab's orientation variants (the Rotate shortcut is disabled
             // while stamping so the key reaches the viewport); Esc cancels.
+            // R here is the viewport's own stamp key, not the Rotate binding — the Rotate shortcut
+            // stands down while stamping precisely so this one reaches InputHandler — so it is
+            // written out rather than looked up.
             return joinHints({ QStringLiteral("R: cycle variant"),
                 QStringLiteral("Esc: cancel") });
 

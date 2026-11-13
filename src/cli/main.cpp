@@ -8,6 +8,8 @@
 #include "cli/GlobalVars.h"
 #include "cli/Quests.h"
 #include "cli/Endings.h"
+#include "cli/Party.h"
+#include "cli/MapExamples.h"
 #include "cli/GvarRefs.h"
 #include "cli/MapEditTools.h"
 #include "cli/MapGenerator.h"
@@ -17,12 +19,17 @@
 #include "cli/ProtoExport.h"
 #include "cli/ResourceInspect.h"
 #include "cli/ScriptIntrospect.h"
+#include "cli/ScriptLint.h"
+#include "cli/ScriptRefs.h"
+#include "reader/TextParsing.h"
 #include "resource/GameResources.h"
 
 #include <spdlog/spdlog.h>
 
 #include <cstdint>
+#include <filesystem>
 #include <iostream>
+#include <map>
 #include <limits>
 #include <optional>
 #include <string>
@@ -43,9 +50,16 @@ struct CliArgs {
     bool gvars = false;
     bool quests = false;
     bool endings = false;
+    bool party = false;
+    bool examples = false;
     bool findGvar = false;
     bool dumpGrid = false;
+    bool lintScript = false;
+    bool scriptRefs = false;
     std::string findGvarName;
+    geck::cli::LintOptions lint;
+    bool lintNotes = false; // --notes: also for --all, where notes are off by default
+    geck::cli::ScriptRefsOptions refs;
     std::vector<std::string> dataPaths;
     geck::cli::AnalyzeOptions analyze;
     geck::cli::DumpGridOptions dumpOpts;
@@ -57,6 +71,9 @@ struct CliArgs {
     geck::cli::DescribeMapOptions describeMapOpts;
     geck::cli::MapGraphOptions graphOpts;
     geck::cli::WorldMapOptions worldOpts;
+    geck::cli::ExamplesOptions examplesOpts;
+    int encountersX = -1; ///< map encounters --x/--y: describe this worldmap position instead
+    int encountersY = -1;
 };
 
 void printUsage(const char* program) {
@@ -67,7 +84,7 @@ void printUsage(const char* program) {
               << "      --json emits machine-readable output (for the MCP) instead of the human report;\n"
               << "      --palette emits just the weighted floor + scenery palette a generator script needs.\n"
               << "  " << program << " map generate --script <file.luau> --out <file.map>\n"
-              << "      [--in <file.map>] [--elevation 0|1|2] [--count N]\n"
+              << "      [--in <file.map>] [--elevation 0|1|2] [--count N] [--time-budget SECONDS]\n"
               << "      [--arg key=value ...] [--stamp name=file.json ...]\n"
               << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      Runs a Luau generation script against a map and writes the result — a fresh\n"
@@ -77,6 +94,7 @@ void printUsage(const char* program) {
               << "      base (--arg seed=N, or a random base reported so the batch can reproduce).\n"
               << "      --arg passes parameters to the script (read as args.key); --stamp pre-loads a\n"
               << "      pattern stamp the script places with api:placeStamp(name, anchorHex, variant).\n"
+              << "      --time-budget stops a script that runs longer than SECONDS per map (default: none).\n"
               << "  " << program << " map render --map <file.map> --out <file.png>\n"
               << "      [--elevation 0|1|2] [--max-dim N] [--roof] [--schematic|--objects|--semantic]\n"
               << "      [--show-blockers] [--show-unreachable] [--full] [--crop-hex H [--crop-extent PX]]\n"
@@ -101,7 +119,7 @@ void printUsage(const char* program) {
               << "      --include-floor captures the ground; --include-roof captures the roof layer (a\n"
               << "      tent/building roof is tiles, not an object — without it the stamp is topless).\n"
               << "      Feed the .json to generate --stamp.\n"
-              << "  " << program << " map describe-script --index <n> [--locale english]\n"
+              << "  " << program << " map describe-script --index <n> [--locale english] [--analyze]\n"
               << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      Describe a script by its scripts.lst program index (the script_id analyze reports):\n"
               << "      filename, the .ssl source (if a source tree like FRP scripts_src is mounted via\n"
@@ -122,26 +140,55 @@ void printUsage(const char* program) {
               << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      Removes every exit-grid marker object from every elevation and writes the\n"
               << "      result; nothing else about the map (tiles, scripts, other objects) is touched.\n"
-              << "  " << program << " map graph [map ...] --data <dir-or-.dat> [--data <...>]\n"
+              << "  " << program << " map graph [map ...] [--no-scripts] --data <dir-or-.dat> [--data <...>]\n"
               << "      The exit-grid connectivity graph: how maps link via exit grids WITHIN a location\n"
               << "      (+ worldmap hand-off edges), named via maps.txt/map.msg. Not inter-city travel\n"
-              << "      (that's the world map / city.txt). No map arguments = every map.\n"
+              << "      (that's the world map / city.txt). No map arguments = every map. With an .ssl source\n"
+              << "      tree mounted it adds scriptEdges: load_map transitions (caravans, escorts, dialogue\n"
+              << "      outcomes) from the maps placing each script; --no-scripts skips them.\n"
               << "  " << program << " map world [--render <file.png>] [--no-markers]\n"
               << "      --data <dir-or-.dat> [--data <...>]\n"
               << "      The worldmap layer from city.txt: every area (location) with its world position,\n"
               << "      size, the maps it contains, and the straight-line distances between all areas.\n"
               << "      --render draws the worldmap itself to a PNG instead — the wrldmp tile grid with\n"
               << "      the area circles blended over it the way the engine does; --no-markers omits them.\n"
-              << "  " << program << " map encounters --data <dir-or-.dat> [--data <...>]\n"
-              << "      The worldmap terrain types and random-encounter group tables from worldmap.txt.\n"
+              << "  " << program << " map encounters [--x N --y N] --data <dir-or-.dat> [--data <...>]\n"
+              << "      The worldmap terrain types, encounter frequencies, groups and tables from worldmap.txt.\n"
+              << "      --x/--y (worldmap pixels) report the encounter odds at one position instead.\n"
               << "  " << program << " map gvars --data <dir-or-.dat> [--data <...>]\n"
-              << "      The global-variable dictionary (vault13.gam): each GVAR index -> name + default.\n"
+              << "      The global-variable dictionary (vault13.gam): each GVAR index -> name + default, plus the\n"
+              << "      roles the data files give it (quest, ending, death ending, karma, holodisk).\n"
               << "  " << program << " map quests --data <dir-or-.dat> [--data <...>]\n"
               << "      The quest registry (quests.txt): each quest's area, tracking gvar, thresholds, text.\n"
               << "  " << program << " map endings --data <dir-or-.dat> [--data <...>]\n"
-              << "      The endgame win-condition table (endgame.txt): each slide's gvar==value, art, narrator.\n"
+              << "      The endgame slides (endgame.txt) and death endings (enddeath.txt) with their conditions\n"
+              << "      and narration subtitles.\n"
+              << "  " << program << " map examples [--kind K] [--pid N ...] [--name S] [--script S] [--calls S]\n"
+              << "      [--carries S] [--near S [--near-radius N]] [--radius N] [--limit N] [map ...]\n"
+              << "      --data <dir-or-.dat> [--data <...>]\n"
+              << "      Shipped examples of a placement: every object matching all the filters, across the maps\n"
+              << "      (or the ones named), with its script, inventory and what stands within --radius hexes.\n"
+              << "      --calls keeps objects whose script calls that opcode/procedure (needs .ssl sources).\n"
+              << "  " << program << " map party --data <dir-or-.dat> [--data <...>]\n"
+              << "      The companions (party.txt): pid, combat options, level-up protos.\n"
               << "  " << program << " map find-gvar <GVAR_NAME> --data <dir-or-.dat> [--data <...>]\n"
               << "      Scripts that read/write a global variable (needs an .ssl source tree mounted): set vs get.\n"
+              << "  " << program << " map script-refs <gvar|call|procedure|macro|pid|map> <NAME> --data <dir-or-.dat> [--data <...>]\n"
+              << "      Every use of a gvar, an opcode or procedure call, a procedure reference, a macro, a constant\n"
+              << "      PID (pid: number, 0x hex or PID_*) or a load_map target (map: file name or maps.txt index)\n"
+              << "      in code the compiled scripts run (needs an .ssl source tree mounted); '*' lists all pid/map.\n"
+              << "  " << program << " map lint-script <name> | --index <n> | --map <map> | --all [--notes] [--locale english]\n"
+              << "      --data <dir-or-.dat> [--data <...>]\n"
+              << "      Problems the compiler misses: local variables past scripts.lst's count, messages missing\n"
+              << "      from the dialog .msg, global variables out of range (and, with --all, read but never set),\n"
+              << "      timers without a handler, objects created from missing protos or onto impossible hexes,\n"
+              << "      unreadable code. --map checks the scripts a map places, and how it places them. With\n"
+              << "      --notes (default for one script): procedures that never run, unused local variables.\n"
+              << "      A script without a mounted .ssl source is checked from its compiled .int (fromBytecode):\n"
+              << "      the same checks but syntax and unused procedures, by procedure rather than line.\n"
+              << "  " << program << " script lint <file.ssl> [file.ssl ...] [--data <dir-or-.dat> ...] [--notes] [--json]\n"
+              << "      The same checks on .ssl files on disk, printed as file:line: severity: message [check];\n"
+              << "      exits 1 when any file has an error. --data adds the checks that need game data.\n"
               << "  " << program << " frm info <name-or-fid> --data <dir-or-.dat> [--data <...>]\n"
               << "      FRM metadata as JSON: resolvedArtPath, fid, directionCount, framesPerDirection, and a\n"
               << "      per-frame array of {direction,frame,width,height,offsetX,offsetY}. Accepts an art name\n"
@@ -197,32 +244,17 @@ bool parseIntFlag(const std::string& flag, const std::string& value, int& out, c
     }
 }
 
-// Checked unsigned parse for `--flag <value>` (base 0: 0x.. hex, else decimal). Same rationale as
-// parseIntFlag: std::stoul throws on bad input and would terminate the CLI.
-bool parseUnsignedFlag(const std::string& flag, const std::string& value, unsigned long& out, const char* program) {
-    // Require a leading digit. This rejects a leading '+'/'-' and, crucially, leading
-    // whitespace: std::stoul skips whitespace and then accepts a sign, so " -1" would
-    // otherwise slip past a bare front()=='-' check and wrap to a huge value.
-    if (value.empty() || value.front() < '0' || value.front() > '9') {
+// Checked unsigned parse for `--flag <value>` (decimal or 0x-hex). Prints why and returns false on
+// anything else, a sign or whitespace included, rather than wrapping a negative to a huge value.
+bool parseUnsignedFlag(const std::string& flag, const std::string& value, std::uint64_t& out, const char* program) {
+    const auto parsed = geck::text::parseInteger(value);
+    if (!parsed || *parsed < 0) {
         std::cerr << "error: " << flag << " expects a non-negative integer, got: " << value << "\n";
         printUsage(program);
         return false;
     }
-    try {
-        std::size_t consumed = 0;
-        const unsigned long parsed = std::stoul(value, &consumed, 0);
-        if (consumed != value.size()) {
-            std::cerr << "error: " << flag << " expects a non-negative integer, got: " << value << "\n";
-            printUsage(program);
-            return false;
-        }
-        out = parsed;
-        return true;
-    } catch (const std::exception&) {
-        std::cerr << "error: " << flag << " expects a non-negative integer, got: " << value << "\n";
-        printUsage(program);
-        return false;
-    }
+    out = static_cast<std::uint64_t>(*parsed);
+    return true;
 }
 
 bool isKnownSubcommand(const std::vector<std::string>& args) {
@@ -230,8 +262,8 @@ bool isKnownSubcommand(const std::vector<std::string>& args) {
         && (args[1] == "analyze" || args[1] == "generate" || args[1] == "render" || args[1] == "extract-pattern"
             || args[1] == "describe-script" || args[1] == "reachability" || args[1] == "describe-map"
             || args[1] == "graph" || args[1] == "world" || args[1] == "encounters"
-            || args[1] == "gvars" || args[1] == "quests" || args[1] == "endings" || args[1] == "find-gvar"
-            || args[1] == "dump-grid");
+            || args[1] == "gvars" || args[1] == "quests" || args[1] == "endings" || args[1] == "party" || args[1] == "examples" || args[1] == "find-gvar"
+            || args[1] == "dump-grid" || args[1] == "lint-script" || args[1] == "script-refs");
 }
 
 bool generateMissingRequired(const CliArgs& cli) {
@@ -254,7 +286,7 @@ bool parsePids(const std::string& csv, std::vector<std::uint32_t>& out, const ch
         const std::size_t comma = csv.find(',', start);
         const std::string token = csv.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
         if (!token.empty()) {
-            unsigned long value = 0;
+            std::uint64_t value = 0;
             if (!parseUnsignedFlag("--pids", token, value, program)) {
                 return false;
             }
@@ -276,14 +308,81 @@ bool parsePids(const std::string& csv, std::vector<std::uint32_t>& out, const ch
 // Consume the argument(s) starting at args[i]. Returns how many tokens were consumed (1 for a
 // flag-less map/positional, 2 for a flag + its value), or 0 on error (after printing the reason).
 // Keeping the token count explicit lets the caller advance the index instead of mutating it here.
+// lint-script: --index <n>, --locale <l>, --all, --notes, or the script's name.
+int consumeLintArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out, const char* program) {
+    const std::string& arg = args[i];
+    if (arg == "--index") {
+        return parseIntFlag(arg, args[i + 1], out.lint.programIndex, program) ? 2 : 0;
+    }
+    if (arg == "--locale") {
+        out.lint.locale = args[i + 1];
+        return 2;
+    }
+    if (arg == "--map") {
+        out.lint.map = args[i + 1];
+        return 2;
+    }
+    if (arg == "--all") {
+        out.lint.all = true;
+        return 1;
+    }
+    if (arg == "--notes") {
+        out.lintNotes = true;
+        return 1;
+    }
+    if (arg.rfind("--", 0) == 0 || !out.lint.name.empty()) {
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
+    out.lint.name = arg;
+    return 1;
+}
+
+// One `map examples` argument (its value already checked to exist): a filter flag, or a map to limit to.
+int consumeExamplesArg(const std::vector<std::string>& args, std::size_t i, geck::cli::ExamplesOptions& out, const char* program) {
+    const std::string& arg = args[i];
+    const std::map<std::string, std::string*, std::less<>> texts{ { "--kind", &out.kind }, { "--name", &out.name },
+        { "--script", &out.script }, { "--calls", &out.scriptCalls }, { "--carries", &out.carries }, { "--near", &out.nearName } };
+    if (const auto text = texts.find(arg); text != texts.end()) {
+        *text->second = args[i + 1];
+        return 2;
+    }
+    const std::map<std::string, int*, std::less<>> numbers{ { "--near-radius", &out.nearRadius },
+        { "--radius", &out.contextRadius }, { "--limit", &out.limit } };
+    if (const auto number = numbers.find(arg); number != numbers.end()) {
+        return parseIntFlag(arg, args[i + 1], *number->second, program) ? 2 : 0;
+    }
+    if (arg == "--pid") {
+        int pid = 0;
+        if (!parseIntFlag(arg, args[i + 1], pid, program)) {
+            return 0;
+        }
+        out.pids.push_back(static_cast<uint32_t>(pid));
+        return 2;
+    }
+    if (arg.starts_with("--")) {
+        std::cerr << "error: unexpected argument: " << arg << "\n";
+        printUsage(program);
+        return 0;
+    }
+    out.maps.push_back(arg);
+    return 1;
+}
+
 int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out, const char* program) {
     const std::string& arg = args[i];
     const bool valueFlag = arg == "--data"
-        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--in" || arg == "--elevation" || arg == "--count" || arg == "--arg" || arg == "--stamp"))
+        || (out.generate && (arg == "--script" || arg == "--out" || arg == "--in" || arg == "--elevation" || arg == "--count" || arg == "--time-budget" || arg == "--arg" || arg == "--stamp"))
         || (out.render && (arg == "--map" || arg == "--out" || arg == "--elevation" || arg == "--max-dim" || arg == "--crop-hex" || arg == "--crop-extent"))
         || (out.extract && (arg == "--map" || arg == "--out" || arg == "--name" || arg == "--elevation" || arg == "--pids" || arg == "--anchor" || arg == "--radius"))
         || (out.describeScript && (arg == "--index" || arg == "--locale"))
+        || (out.lintScript && (arg == "--index" || arg == "--locale" || arg == "--map"))
         || (out.world && arg == "--render")
+        || (out.encounters && (arg == "--x" || arg == "--y"))
+        || (out.examples
+            && (arg == "--kind" || arg == "--pid" || arg == "--name" || arg == "--script" || arg == "--calls" || arg == "--carries"
+                || arg == "--near" || arg == "--near-radius" || arg == "--radius" || arg == "--limit"))
         || (out.reachability && arg == "--map")
         || (out.describeMap && arg == "--map")
         || (out.dumpGrid && (arg == "--map" || arg == "--elevation"));
@@ -315,6 +414,19 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
     }
     if (out.generate && arg == "--count") {
         return parseIntFlag(arg, args[i + 1], out.gen.count, program) ? 2 : 0;
+    }
+    if (out.generate && arg == "--time-budget") {
+        int seconds = 0;
+        if (!parseIntFlag(arg, args[i + 1], seconds, program)) {
+            return 0;
+        }
+        if (seconds < 0 || seconds > 24 * 60 * 60) {
+            std::cerr << "error: --time-budget expects 0..86400 seconds, got: " << args[i + 1] << "\n";
+            printUsage(program);
+            return 0;
+        }
+        out.gen.timeBudgetMs = static_cast<unsigned>(seconds) * 1000U;
+        return 2;
     }
     if (out.generate && arg == "--arg") {
         // key=value -> exposed to the script as args.key
@@ -357,7 +469,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         return parseIntFlag(arg, args[i + 1], out.ren.elevation, program) ? 2 : 0;
     }
     if (out.render && arg == "--max-dim") {
-        unsigned long maxDim = 0;
+        std::uint64_t maxDim = 0;
         if (!parseUnsignedFlag(arg, args[i + 1], maxDim, program)) {
             return 0;
         }
@@ -393,10 +505,7 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         out.ren.fullExtent = true;
         return 1;
     }
-    if (out.render && arg == "--exit-dots") {
-        out.ren.exitDots = true;
-        return 1;
-    }
+
     if (out.render && arg == "--show-unreachable") {
         out.ren.showUnreachable = true;
         return 1;
@@ -448,6 +557,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         std::cerr << "error: unexpected argument: " << arg << "\n";
         printUsage(program);
         return 0;
+    }
+    if (out.describeScript && arg == "--analyze") {
+        out.desc.analyze = true;
+        return 1;
     }
     if (out.describeScript && arg == "--index") {
         return parseIntFlag(arg, args[i + 1], out.desc.programIndex, program) ? 2 : 0;
@@ -503,6 +616,10 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
+    if (out.graph && arg == "--no-scripts") {
+        out.graphOpts.scripts = false;
+        return 1;
+    }
     if (out.graph) { // trailing positional args are the maps to include (empty = all)
         out.graphOpts.maps.push_back(arg);
         return 1;
@@ -520,15 +637,36 @@ int consumeArg(const std::vector<std::string>& args, std::size_t i, CliArgs& out
         printUsage(program);
         return 0;
     }
-    if (out.encounters) { // encounters takes no arguments beyond --data (handled above)
+    if (out.examples) {
+        return consumeExamplesArg(args, i, out.examplesOpts, program);
+    }
+    if (out.encounters && arg == "--x") {
+        return parseIntFlag(arg, args[i + 1], out.encountersX, program) ? 2 : 0;
+    }
+    if (out.encounters && arg == "--y") {
+        return parseIntFlag(arg, args[i + 1], out.encountersY, program) ? 2 : 0;
+    }
+    if (out.encounters) {
         std::cerr << "error: unexpected argument: " << arg << "\n";
         printUsage(program);
         return 0;
     }
-    if (out.gvars || out.quests || out.endings) { // these take no arguments beyond --data (handled above)
+    if (out.gvars || out.quests || out.endings || out.party) { // these take no arguments beyond --data (handled above)
         std::cerr << "error: unexpected argument: " << arg << "\n";
         printUsage(program);
         return 0;
+    }
+    if (out.lintScript) {
+        return consumeLintArg(args, i, out, program);
+    }
+    if (out.scriptRefs) { // two positionals: the kind, then the name
+        if (arg.rfind("--", 0) == 0 || !out.refs.name.empty()) {
+            std::cerr << "error: script-refs takes a kind and a name: " << arg << "\n";
+            printUsage(program);
+            return 0;
+        }
+        (out.refs.kind.empty() ? out.refs.kind : out.refs.name) = arg;
+        return 1;
     }
     if (out.findGvar) { // a single positional: the GVAR_* name to search for
         if (arg.rfind("--", 0) == 0 || !out.findGvarName.empty()) {
@@ -569,8 +707,12 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     out.gvars = args[1] == "gvars";
     out.quests = args[1] == "quests";
     out.endings = args[1] == "endings";
+    out.party = args[1] == "party";
+    out.examples = args[1] == "examples";
     out.findGvar = args[1] == "find-gvar";
     out.dumpGrid = args[1] == "dump-grid";
+    out.lintScript = args[1] == "lint-script";
+    out.scriptRefs = args[1] == "script-refs";
 
     for (std::size_t i = 2; i < args.size();) {
         const int consumed = consumeArg(args, i, out, program);
@@ -597,6 +739,17 @@ std::optional<int> parseArgs(const std::vector<std::string>& args, const char* p
     }
     if (extractMissingRequired(out)) {
         std::cerr << "error: extract-pattern requires --map, --out and --name\n";
+        printUsage(program);
+        return 2;
+    }
+    if (out.lintScript && !out.lint.all && out.lint.map.empty() && out.lint.name.empty() && out.lint.programIndex < 0) {
+        std::cerr << "error: lint-script requires a script name, --index <n>, --map <map> or --all\n";
+        printUsage(program);
+        return 2;
+    }
+    out.lint.includeNotes = (!out.lint.all && out.lint.map.empty()) || out.lintNotes;
+    if (out.scriptRefs && out.refs.name.empty()) {
+        std::cerr << "error: script-refs requires a kind (gvar, call, procedure, macro, pid, map) and a name\n";
         printUsage(program);
         return 2;
     }
@@ -687,16 +840,6 @@ bool parseFrmArgs(const std::vector<std::string>& args, const char* program, Frm
     return true;
 }
 
-// Mount the data paths plus the bundled fallback resources the way main() does for `map`.
-void mountData(geck::resource::GameResources& resources, const std::vector<std::string>& dataPaths, const char* argv0) {
-    for (const auto& path : dataPaths) {
-        resources.files().addDataPath(path);
-    }
-    if (const auto bundled = geck::cli::findBundledResources(argv0); !bundled.empty()) {
-        resources.files().addDataPath(bundled);
-    }
-}
-
 int dispatchFrm(geck::resource::GameResources& resources, const FrmArgs& fa) {
     if (fa.action == "info") {
         return geck::cli::frmInfo(resources, fa.target, std::cout);
@@ -741,7 +884,7 @@ int runFrmCommand(const std::vector<std::string>& args, const char* program) {
 
     spdlog::set_level(spdlog::level::off);
     geck::resource::GameResources resources;
-    mountData(resources, fa.dataPaths, program);
+    geck::cli::mountDataPaths(resources, fa.dataPaths, program);
     return dispatchFrm(resources, fa);
 }
 
@@ -819,8 +962,42 @@ int runResourceCommand(const std::vector<std::string>& args, const char* program
 
     spdlog::set_level(spdlog::level::off);
     geck::resource::GameResources resources;
-    mountData(resources, ra.dataPaths, program);
+    geck::cli::mountDataPaths(resources, ra.dataPaths, program);
     return dispatchResource(resources, ra);
+}
+
+// `script lint <files> [--data <path>]... [--notes] [--json] [--locale <l>]`
+int runScriptCommand(const std::vector<std::string>& args, const char* program) {
+    std::vector<std::filesystem::path> files;
+    std::vector<std::string> dataPaths;
+    bool notes = false;
+    bool json = false;
+    std::string locale = "english";
+    for (std::size_t i = 2; i < args.size(); ++i) {
+        const std::string& arg = args[i];
+        if ((arg == "--data" || arg == "--locale") && i + 1 < args.size()) {
+            (arg == "--data" ? dataPaths.emplace_back() : locale) = args[++i];
+        } else if (arg == "--notes") {
+            notes = true;
+        } else if (arg == "--json") {
+            json = true;
+        } else if (arg.rfind("--", 0) == 0) {
+            std::cerr << "error: unexpected argument: " << arg << "\n";
+            printUsage(program);
+            return 2;
+        } else {
+            files.emplace_back(arg);
+        }
+    }
+    if (files.empty()) {
+        std::cerr << "error: script lint needs at least one .ssl file\n";
+        printUsage(program);
+        return 2;
+    }
+    spdlog::set_level(spdlog::level::off);
+    geck::resource::GameResources resources;
+    geck::cli::mountDataPaths(resources, dataPaths, program);
+    return geck::cli::lintFiles(resources, files, notes, locale, json, std::cout);
 }
 
 // --- proto subcommand -------------------------------------------------------------------------
@@ -877,7 +1054,7 @@ int runProtoCommand(const std::vector<std::string>& args, const char* program) {
 
     spdlog::set_level(spdlog::level::off);
     geck::resource::GameResources resources;
-    mountData(resources, pa.dataPaths, program);
+    geck::cli::mountDataPaths(resources, pa.dataPaths, program);
     return geck::cli::exportProtos(resources, opts, std::cout);
 }
 
@@ -947,7 +1124,7 @@ int runMapEditCommand(const std::vector<std::string>& args, const char* program)
 
     spdlog::set_level(spdlog::level::off);
     geck::resource::GameResources resources;
-    mountData(resources, ma.dataPaths, program);
+    geck::cli::mountDataPaths(resources, ma.dataPaths, program);
 
     geck::cli::StripExitGridsOptions opts;
     opts.mapPath = ma.mapPath;
@@ -955,52 +1132,35 @@ int runMapEditCommand(const std::vector<std::string>& args, const char* program)
     return geck::cli::stripExitGrids(resources, opts, std::cout);
 }
 
-} // namespace
-
-int main(int argc, char** argv) {
-    const std::vector<std::string> args(argv + 1, argv + argc);
-
+// The command families that parse their own arguments; nullopt when `args` names none of them.
+std::optional<int> runCommandFamily(const std::vector<std::string>& args, const char* program) {
+    if (args.size() < 2) {
+        return std::nullopt;
+    }
     // The `mapedit` actions live under the `map` prefix but are parsed on their own path (--map/
-    // --out flags, not the shared CliArgs), checked before the general `map` parser below sees them.
-    if (args.size() >= 2 && args[0] == "map" && isMapEditAction(args[1])) {
-        return runMapEditCommand(args, argv[0]);
+    // --out flags, not the shared CliArgs), checked before the general `map` parser sees them.
+    if (args[0] == "map" && isMapEditAction(args[1])) {
+        return runMapEditCommand(args, program);
     }
-
     // The `frm` family is parsed and run on its own path (its own positional + flags), separate from
-    // the `map` subcommands below.
-    if (args.size() >= 2 && args[0] == "frm" && isFrmAction(args[1])) {
-        return runFrmCommand(args, argv[0]);
+    // the `map` subcommands below; so is the `resource` family (data inspection).
+    if (args[0] == "frm" && isFrmAction(args[1])) {
+        return runFrmCommand(args, program);
     }
-
-    // The `resource` family (data-inspection) is likewise parsed and run on its own path.
-    if (args.size() >= 2 && args[0] == "resource" && isResourceAction(args[1])) {
-        return runResourceCommand(args, argv[0]);
+    if (args[0] == "resource" && isResourceAction(args[1])) {
+        return runResourceCommand(args, program);
     }
-
-    if (args.size() >= 2 && args[0] == "proto" && args[1] == "export") {
-        return runProtoCommand(args, argv[0]);
+    if (args[0] == "proto" && args[1] == "export") {
+        return runProtoCommand(args, program);
     }
-
-    CliArgs cli;
-    if (const auto exitCode = parseArgs(args, argv[0], cli); exitCode.has_value()) {
-        return *exitCode;
+    if (args[0] == "script" && args[1] == "lint") {
+        return runScriptCommand(args, program);
     }
+    return std::nullopt;
+}
 
-    // Keep stdout clean: the resource/reader layers log to the default (stderr) sink, including
-    // an [error] for every unknown script PID encountered while parsing maps — expected noise
-    // here, so silence all levels.
-    spdlog::set_level(spdlog::level::off);
-
-    geck::resource::GameResources resources;
-    for (const auto& path : cli.dataPaths) {
-        resources.files().addDataPath(path);
-    }
-    // Mount the bundled resources (blank.frm, scripts, …) the way the editor does, so e.g. the
-    // natural map render finds art/tiles/blank.frm even though it isn't in master.dat.
-    if (const auto bundled = geck::cli::findBundledResources(argv[0]); !bundled.empty()) {
-        resources.files().addDataPath(bundled);
-    }
-
+// The map subcommands that write files or read scripts; nullopt for the analysis ones.
+std::optional<int> runProducingCommand(geck::resource::GameResources& resources, const CliArgs& cli) {
     if (cli.generate) {
         return geck::cli::generateMap(resources, cli.gen, std::cout);
     }
@@ -1013,6 +1173,17 @@ int main(int argc, char** argv) {
     if (cli.describeScript) {
         return geck::cli::describeScript(resources, cli.desc, std::cout);
     }
+    if (cli.lintScript) {
+        return geck::cli::lintScripts(resources, cli.lint, std::cout);
+    }
+    if (cli.scriptRefs) {
+        return geck::cli::findScriptRefs(resources, cli.refs, std::cout);
+    }
+    return std::nullopt;
+}
+
+// The map and world analysis subcommands; analyze is the default.
+int runAnalysisCommand(geck::resource::GameResources& resources, const CliArgs& cli) {
     if (cli.reachability) {
         return geck::cli::analyzeReachability(resources, cli.reach, std::cout);
     }
@@ -1029,6 +1200,13 @@ int main(int argc, char** argv) {
         return geck::cli::buildWorldMap(resources, std::cout);
     }
     if (cli.encounters) {
+        if ((cli.encountersX < 0) != (cli.encountersY < 0)) {
+            std::cerr << "error: encounters needs both --x and --y\n";
+            return 2;
+        }
+        if (cli.encountersX >= 0) {
+            return geck::cli::describeWorldPosition(resources, cli.encountersX, cli.encountersY, std::cout);
+        }
         return geck::cli::buildWorldEncounters(resources, std::cout);
     }
     if (cli.gvars) {
@@ -1039,6 +1217,12 @@ int main(int argc, char** argv) {
     }
     if (cli.endings) {
         return geck::cli::buildEndings(resources, std::cout);
+    }
+    if (cli.party) {
+        return geck::cli::buildParty(resources, std::cout);
+    }
+    if (cli.examples) {
+        return geck::cli::findExamples(resources, cli.examplesOpts, std::cout);
     }
     if (cli.findGvar) {
         if (cli.findGvarName.empty()) {
@@ -1051,4 +1235,43 @@ int main(int argc, char** argv) {
         return geck::cli::dumpMapGrid(resources, cli.dumpOpts, std::cout);
     }
     return geck::cli::analyzeMaps(resources, cli.analyze, std::cout);
+}
+
+int runCli(int argc, char** argv) {
+    const std::vector<std::string> args(argv + 1, argv + argc);
+    if (const auto exitCode = runCommandFamily(args, argv[0]); exitCode.has_value()) {
+        return *exitCode;
+    }
+
+    CliArgs cli;
+    if (const auto exitCode = parseArgs(args, argv[0], cli); exitCode.has_value()) {
+        return *exitCode;
+    }
+
+    // Keep stdout clean: the resource/reader layers log to the default (stderr) sink, including
+    // an [error] for every unknown script PID encountered while parsing maps — expected noise
+    // here, so silence all levels.
+    spdlog::set_level(spdlog::level::off);
+
+    geck::resource::GameResources resources;
+    // The bundled resources (blank.frm, scripts, …) let e.g. the natural map render find
+    // art/tiles/blank.frm, which isn't in master.dat.
+    geck::cli::mountDataPaths(resources, cli.dataPaths, argv[0]);
+    if (const auto exitCode = runProducingCommand(resources, cli); exitCode.has_value()) {
+        return *exitCode;
+    }
+    return runAnalysisCommand(resources, cli);
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    // A bad --data path or an unreadable map raises from deep in the resource layer; report it
+    // instead of letting it reach std::terminate.
+    try {
+        return runCli(argc, argv);
+    } catch (const std::exception& e) {
+        std::cerr << "error: " << e.what() << "\n";
+        return 1;
+    }
 }

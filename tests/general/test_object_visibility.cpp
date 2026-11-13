@@ -1,36 +1,32 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
+#include <vector>
+
 #include "format/map/MapObject.h"
 #include "format/pro/Pro.h"
 #include "ui/core/VisibilitySettings.h"
+#include "rendering/ObjectDrawOrder.h"
 #include "rendering/ObjectVisibility.h"
 #include "util/Constants.h"
 
 using namespace geck;
 
-namespace {
-
-uint32_t typePid(Pro::OBJECT_TYPE type, uint32_t baseId) {
-    return (static_cast<uint32_t>(type) << FileFormat::TYPE_MASK_SHIFT) | baseId;
-}
-
-} // namespace
-
 // Selection routes through isObjectVisible (the same rule renderObjects draws by), so a click
 // can never select an object the user can't see. Regression guard for selecting a scroll blocker
 // while its layer is hidden, which produced an invisible selection.
-TEST_CASE("isObjectVisible follows the layer toggles that decide what is drawn", "[visibility]") {
+TEST_CASE("isObjectVisible follows the layer toggles that decide what is drawn", "[object_visibility]") {
     // A plain item: neither a wall (PRO type) nor a scroll blocker (FRM base id 1).
     MapObject regular;
-    regular.pro_pid = typePid(Pro::OBJECT_TYPE::ITEM, 100);
+    regular.pro_pid = ProtoId(ObjectType::Item, 100).pid();
     regular.frm_pid = 100;
 
     MapObject wall;
-    wall.pro_pid = typePid(Pro::OBJECT_TYPE::WALL, 5);
+    wall.pro_pid = ProtoId(ObjectType::Wall, 5).pid();
     wall.frm_pid = 5;
 
     MapObject critter;
-    critter.pro_pid = typePid(Pro::OBJECT_TYPE::CRITTER, 50);
+    critter.pro_pid = ProtoId(ObjectType::Critter, 50).pid();
     critter.frm_pid = 50;
 
     // A scroll blocker is proto 0x0500000C and nothing else — the exact pid the engine matches in
@@ -91,18 +87,18 @@ TEST_CASE("isObjectVisible follows the layer toggles that decide what is drawn",
     }
 }
 
-TEST_CASE("A scroll blocker is the engine's proto, not whatever uses scrblk art", "[rendering][visibility]") {
+TEST_CASE("A scroll blocker is the engine's proto, not whatever uses scrblk art", "[map_object]") {
     // The engine's rule, from _obj_scroll_blocking_at(): `obj->pid == 0x500000C`, art irrelevant.
     // Testing the FRM's low 24 bits instead made every object drawn with art index 1 a blocker -
     // art/items/ammo.frm is FID 0x00000001 - so ammo boxes vanished from the editor while loading,
     // saving and rendering in game perfectly well.
     MapObject ammo;
-    ammo.pro_pid = typePid(Pro::OBJECT_TYPE::ITEM, 29);
+    ammo.pro_pid = ProtoId(ObjectType::Item, 29).pid();
     ammo.frm_pid = 0x00000001; // art/items/ammo.frm
 
     MapObject blocker;
-    blocker.pro_pid = WallBlockers::SCROLL_BLOCKER_PID;
-    blocker.frm_pid = WallBlockers::SCROLL_BLOCKER_FRM_PID;
+    blocker.pro_pid = WallBlockers::SCROLL_BLOCKER_PID.pid();
+    blocker.frm_pid = WallBlockers::SCROLL_BLOCKER_FID.fid();
 
     CHECK(blocker.pro_pid == 0x0500000Cu); // the literal the engine compares against
     CHECK_FALSE(ammo.isScrollBlocker());
@@ -111,16 +107,16 @@ TEST_CASE("A scroll blocker is the engine's proto, not whatever uses scrblk art"
     // Every other art type that collides on index 1 in shipped maps.
     for (const uint32_t artType : { 0u, 1u, 2u, 3u, 4u }) {
         MapObject other;
-        other.pro_pid = typePid(Pro::OBJECT_TYPE::SCENERY, 7);
-        other.frm_pid = (artType << 24) | 1u;
+        other.pro_pid = ProtoId(ObjectType::Scenery, 7).pid();
+        other.frm_pid = FrmId(static_cast<ObjectType>(artType), 1).fid();
         CHECK_FALSE(other.isScrollBlocker());
     }
 
     // Proto 24 is "Flare": drawing it with blocker art does not make it one, and the editor must
     // not write it for the Scroll Blocker Rectangle tool.
     MapObject flare;
-    flare.pro_pid = 0x05000000 | WallBlockers::GENERIC_PROTO_ID;
-    flare.frm_pid = WallBlockers::SCROLL_BLOCKER_FRM_PID;
+    flare.pro_pid = 0x05000018; // MISC proto 24, "Flare"
+    flare.frm_pid = WallBlockers::SCROLL_BLOCKER_FID.fid();
     CHECK_FALSE(flare.isScrollBlocker());
 
     VisibilitySettings vis;
@@ -131,4 +127,47 @@ TEST_CASE("A scroll blocker is the engine's proto, not whatever uses scrblk art"
 
     CHECK(isObjectVisible(ammo, vis)); // stays drawn with the blocker layer off
     CHECK_FALSE(isObjectVisible(blocker, vis));
+}
+
+namespace {
+
+// The list indices of @p objects in the order forEachInDrawOrder visits them.
+std::vector<std::ptrdiff_t> drawOrder(const std::vector<MapObject>& objects) {
+    std::vector<std::ptrdiff_t> order;
+    forEachInDrawOrder(
+        objects, [](const MapObject& object) -> const MapObject& { return object; },
+        [&order, &objects](const MapObject& object) { order.push_back(&object - objects.data()); });
+    return order;
+}
+
+} // namespace
+
+TEST_CASE("Flat objects draw under standing ones whatever the map-file order", "[object_draw_order]") {
+    // fallout2-ce _obj_render_pre_roof draws every OBJECT_FLAT object before any standing one. An
+    // exit grid listed after a wall must still be covered by it, as in the shipped caves; drawing
+    // in file order put a generated cave's exits on top of the rock in front of them.
+    const auto flat = static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_FLAT);
+    std::vector<MapObject> objects(4);
+    objects[0].position = 500; // wall
+    objects[1].position = 500; // exit grid on the wall's hex, after it
+    objects[1].flags = flat;
+    objects[2].position = 900; // exit grid
+    objects[2].flags = flat | static_cast<uint32_t>(Pro::ObjectFlags::OBJECT_NO_BLOCK);
+    objects[3].position = 100; // wall
+
+    CHECK(drawOrder(objects) == std::vector<std::ptrdiff_t>{ 1, 2, 3, 0 });
+}
+
+TEST_CASE("Standing objects draw by ascending hex, a hex's objects in list order", "[object_draw_order]") {
+    // Each engine pass walks hexes in _orderTable order, sorted by tile number, and a hex's object
+    // list keeps insertion order (_obj_insert). A rock a script appends after the wall in front of
+    // it must still be drawn under that wall.
+    std::vector<MapObject> objects(5);
+    objects[0].position = 10200; // wall in front (later hex row)
+    objects[1].position = 10000; // rock behind it, appended after the wall
+    objects[2].position = 10200; // second object on the wall's hex
+    objects[3].position = 10001;
+    objects[4].position = 10000; // second object on the rock's hex
+
+    CHECK(drawOrder(objects) == std::vector<std::ptrdiff_t>{ 1, 4, 3, 0, 2 });
 }

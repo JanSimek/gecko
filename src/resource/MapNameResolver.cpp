@@ -39,7 +39,7 @@ std::string MapNameResolver::displayName(int mapIndex, int elevation) const {
         return {};
     }
     try {
-        if (Msg* msg = _resources.repository().load<Msg>("text/english/game/map.msg"); msg != nullptr) {
+        if (Msg* msg = _resources.repository().tryLoad<Msg>("text/english/game/map.msg"); msg != nullptr) {
             return msg->message(mapIndex * 3 + elevation + 200).text;
         }
     } catch (const std::exception& e) {
@@ -53,7 +53,7 @@ std::string MapNameResolver::areaName(int areaIndex) const {
         return {};
     }
     try {
-        if (Msg* msg = _resources.repository().load<Msg>("text/english/game/map.msg"); msg != nullptr) {
+        if (Msg* msg = _resources.repository().tryLoad<Msg>("text/english/game/map.msg"); msg != nullptr) {
             return msg->message(1500 + areaIndex).text;
         }
     } catch (const std::exception& e) {

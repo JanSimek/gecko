@@ -1,5 +1,7 @@
 #pragma once
 
+#include <nlohmann/json.hpp>
+
 #include <iosfwd>
 #include <string>
 #include <vector>
@@ -53,6 +55,10 @@ struct AnalyzeOptions {
 // TextureManager. Shared by the gecko-cli frontend (and, later, the MCP server).
 int analyzeMaps(resource::GameResources& resources, const AnalyzeOptions& options, std::ostream& out);
 
+// The JSON report analyzeMaps writes with `json` set, as a value: { maps: [per-map report], aggregate }.
+// A map that cannot be read is left out of `maps`.
+nlohmann::ordered_json analyzeMapsJson(resource::GameResources& resources, const std::vector<std::string>& mapPaths);
+
 struct DumpGridOptions {
     // The single map to dump (VFS path, e.g. "maps/desert6.map"), required.
     std::string map;
@@ -61,6 +67,10 @@ struct DumpGridOptions {
     bool floor = true;   // emit the floor-tile id grid
     bool roof = false;   // emit the roof-tile id grid
     bool objects = true; // emit one record per object: pid, number, type, name, hex, col, row, dir, flat
+    // Keep only objects whose name contains this, case-insensitively. A whole map is ~2700 objects
+    // and mostly scroll blockers, so asking "where is the locker" without this means reading all of
+    // them to find three.
+    std::string nameFilter;
 };
 
 // Dump the RAW spatial layout of one map as JSON: per elevation, the floor (and optionally roof)

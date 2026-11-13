@@ -9,20 +9,9 @@
 #include <SFML/Graphics.hpp>
 
 #include "editor/Hex.h"
+#include "format/ObjTypes.h"
 
 namespace geck {
-
-/**
- * @brief Object facing directions in the Fallout 2 hex grid system
- */
-enum class ObjectDirection : int {
-    NORTH_EAST = 0, ///< Facing North-East (default)
-    EAST = 1,       ///< Facing East
-    SOUTH_EAST = 2, ///< Facing South-East
-    SOUTH_WEST = 3, ///< Facing South-West
-    WEST = 4,       ///< Facing West
-    NORTH_WEST = 5  ///< Facing North-West
-};
 
 struct MapObject;
 class Frm;
@@ -54,7 +43,6 @@ public:
     [[nodiscard]] const sf::Sprite& getSprite() const noexcept;
     [[nodiscard]] sf::Sprite& getSprite() noexcept;
 
-    void setFrm(const Frm* frm);
     [[nodiscard]] const Frm* getFrm() const noexcept { return _frm; }
 
     void setHexPosition(const Hex& hex);
@@ -63,7 +51,7 @@ public:
     /// The MapObject's own pixel offset (x/y), drawn as the engine draws it.
     [[nodiscard]] int offsetX() const;
     [[nodiscard]] int offsetY() const;
-    void setDirection(ObjectDirection direction);
+    void setDirection(Rotation direction);
     [[nodiscard]] int getDirection() const noexcept { return _direction; }
     void rotate();
 
@@ -81,8 +69,10 @@ public:
     [[nodiscard]] int width() const;
     [[nodiscard]] int height() const;
 
+    // A shared 1x1 transparent texture for sprites with nothing to draw yet (and empty tiles).
+    static const sf::Texture& blankTexture();
+
 private:
-    static sf::Texture& createBlankTexture();
     void placeSprite();
 };
 

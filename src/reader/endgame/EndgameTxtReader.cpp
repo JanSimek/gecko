@@ -13,7 +13,8 @@ namespace {
     using geck::text::trim;
 } // namespace
 
-EndgameTxt parseEndgameTxt(std::istream& in) {
+EndgameTxt parseEndgameTxt(const std::string& text) {
+    std::istringstream in(text);
     EndgameTxt out;
     std::string line;
     while (std::getline(in, line)) {
@@ -36,11 +37,6 @@ EndgameTxt parseEndgameTxt(std::istream& in) {
         out.endings.push_back(ending);
     }
     return out;
-}
-
-EndgameTxt parseEndgameTxt(const std::string& text) {
-    std::istringstream in(text);
-    return parseEndgameTxt(in);
 }
 
 } // namespace geck

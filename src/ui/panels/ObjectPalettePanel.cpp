@@ -5,10 +5,8 @@
 #include "format/pro/Pro.h"
 #include "resource/GameResources.h"
 #include "util/Constants.h"
-#include "util/ColorUtils.h"
 #include "util/ProHelper.h"
 #include "ui/FrmThumbnailGenerator.h"
-#include "ui/common/BaseWidget.h"
 #include "ui/dragdrop/MimeTypes.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -24,7 +22,7 @@
 namespace geck {
 
 ObjectPalettePanel::ObjectPalettePanel(resource::GameResources& resources, QWidget* parent)
-    : BasePanel("Objects", parent)
+    : QWidget(parent)
     , _resources(resources) {
     setupUI();
     spdlog::debug("ObjectPalettePanel: Created object palette panel");
@@ -54,7 +52,7 @@ const std::vector<std::unique_ptr<ObjectInfo>>& ObjectPalettePanel::getObjectLis
 
 void ObjectPalettePanel::setupUI() {
     _mainLayout = new QVBoxLayout(this);
-    _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);
+    _mainLayout->setSpacing(ui::theme::spacing::TIGHT);
     _mainLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
 
     setupCategoryTabs();
@@ -394,8 +392,6 @@ void ObjectPalettePanel::onObjectClicked(int objectIndex) {
     // themselves.
     _selectedObjectIndex = objectIndex;
 
-    Q_EMIT objectSelected(objectIndex, _currentCategory);
-
     spdlog::debug("ObjectPalettePanel: Selected object {} in category {}",
         objectIndex, static_cast<int>(_currentCategory));
 }
@@ -426,20 +422,20 @@ void ObjectPalettePanel::clearObjectSelection() {
 
 std::optional<std::pair<int, ObjectCategory>> ObjectPalettePanel::revealProto(uint32_t pid) {
     ObjectCategory category;
-    switch (Pro::typeOfPid(pid)) {
-        case Pro::OBJECT_TYPE::ITEM:
+    switch (ProtoId(pid).objectType()) {
+        case ObjectType::Item:
             category = ObjectCategory::ITEMS;
             break;
-        case Pro::OBJECT_TYPE::CRITTER:
+        case ObjectType::Critter:
             category = ObjectCategory::CRITTERS;
             break;
-        case Pro::OBJECT_TYPE::SCENERY:
+        case ObjectType::Scenery:
             category = ObjectCategory::SCENERY;
             break;
-        case Pro::OBJECT_TYPE::WALL:
+        case ObjectType::Wall:
             category = ObjectCategory::WALLS;
             break;
-        case Pro::OBJECT_TYPE::MISC:
+        case ObjectType::Misc:
             category = ObjectCategory::MISC;
             break;
         default:
@@ -489,7 +485,6 @@ std::optional<std::pair<int, ObjectCategory>> ObjectPalettePanel::revealProto(ui
     clearObjectSelection();
     _selectedObjectIndex = index;
     selectRowForObject(index);
-    Q_EMIT objectSelected(index, _currentCategory);
     return std::make_pair(index, category);
 }
 

@@ -2,19 +2,16 @@
 
 #include "resource/DataFileSystem.h"
 #include "resource/ScriptSourceLocator.h"
-#include "util/FileIo.h"
+
+#include "support/TempFile.h"
 
 #include <filesystem>
 
-#ifndef GECK_TEST_TMP_DIR
-#error "GECK_TEST_TMP_DIR must be defined for this test target (see tests/CMakeLists.txt)"
-#endif
-
 using namespace geck;
-using geck::io::writeFile;
+using geck::test::writeFile;
 namespace fs = std::filesystem;
 
-TEST_CASE("scriptBaseName strips extension, whitespace and comments and lowercases", "[ssl]") {
+TEST_CASE("scriptBaseName strips extension, whitespace and comments and lowercases", "[script_source_locator]") {
     CHECK(resource::scriptBaseName("ARTEMPLE.INT") == "artemple");
     CHECK(resource::scriptBaseName("  obj_dude.int \r") == "obj_dude");
     CHECK(resource::scriptBaseName("ACBRAHMN.int ; brahmin in Arroyo") == "acbrahmn");
@@ -22,9 +19,9 @@ TEST_CASE("scriptBaseName strips extension, whitespace and comments and lowercas
     CHECK(resource::scriptBaseName("   ") == "");
 }
 
-TEST_CASE("locateScriptSource resolves loose files to disk paths", "[ssl]") {
-    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "ssl_locator";
-    fs::remove_all(base);
+TEST_CASE("locateScriptSource resolves loose files to disk paths", "[script_source_locator]") {
+    const test::TempDir baseDir{ "ssl_locator" };
+    const fs::path& base = baseDir.path();
     const fs::path dataRoot = base / "mod";
     writeFile(dataRoot / "scripts" / "test1.ssl", "procedure start begin end");
     writeFile(dataRoot / "scripts" / "source" / "test2.ssl", "procedure start begin end");
@@ -51,13 +48,11 @@ TEST_CASE("locateScriptSource resolves loose files to disk paths", "[ssl]") {
         CHECK_FALSE(resource::locateScriptSource(files, "test3").has_value());
         CHECK_FALSE(resource::locateScriptSource(files, "").has_value());
     }
-
-    fs::remove_all(base);
 }
 
-TEST_CASE("findScriptSourceInRoots matches by stem across an RP-style area tree", "[ssl]") {
-    const fs::path base = fs::path{ GECK_TEST_TMP_DIR } / "ssl_source_roots";
-    fs::remove_all(base);
+TEST_CASE("findScriptSourceInRoots matches by stem across an RP-style area tree", "[script_source_locator]") {
+    const test::TempDir baseDir{ "ssl_source_roots" };
+    const fs::path& base = baseDir.path();
     const fs::path root = base / "scripts_src";
     // RP layout: sources grouped by area, compiled .int are flat elsewhere. Base name is the key.
     writeFile(root / "modoc" / "mcrat.ssl", "procedure start begin end");
@@ -102,6 +97,4 @@ TEST_CASE("findScriptSourceInRoots matches by stem across an RP-style area tree"
         REQUIRE(match.has_value());
         CHECK(fs::equivalent(match->sourceRoot, root2));
     }
-
-    fs::remove_all(base);
 }

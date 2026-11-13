@@ -36,7 +36,8 @@ public:
     void setMap(std::unique_ptr<Map> map) { _map = std::move(map); }
 
     /// Replaces the open map with a fresh empty one and clears all per-map session state
-    /// (objects, floor/roof sprites, wall-blocker overlays, elevation). The view-side concerns
+    /// (objects, floor/roof sprites, wall-blocker overlays, elevation, undo history — its commands
+    /// hold the old map's objects and tiles). The view-side concerns
     /// — sprite reload, selection, camera, MainWindow refresh — remain the caller's (File > New).
     void resetToEmptyMap() {
         setMap(std::make_unique<Map>(std::filesystem::path("newmap.map")));
@@ -47,6 +48,7 @@ public:
         _roofSprites.clear();
         _wallBlockerOverlays.clear();
         _selectedSpatialScriptSid = MapScript::NONE;
+        _undoStack.clear();
     }
 
     [[nodiscard]] VisibilitySettings& visibility() { return _visibility; }

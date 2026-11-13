@@ -57,7 +57,7 @@ void ProMiscItemWidget::saveToPro(std::shared_ptr<Pro>& pro) {
 }
 
 bool ProMiscItemWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
-    return pro && pro->type() == Pro::OBJECT_TYPE::ITEM && pro->itemType() == Pro::ITEM_TYPE::MISC;
+    return pro && pro->type() == ObjectType::Item && pro->itemType() == ItemType::Misc;
 }
 
 QString ProMiscItemWidget::getTabLabel() const {

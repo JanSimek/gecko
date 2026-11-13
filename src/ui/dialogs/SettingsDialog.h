@@ -21,6 +21,8 @@ QT_END_NAMESPACE
 
 namespace geck {
 class DataPathsWidget;
+class KeyBindingRegistry;
+class KeybindingsWidget;
 class GameLocationWidget;
 class TextEditorWidget;
 class Settings;
@@ -40,8 +42,15 @@ class SettingsDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit SettingsDialog(std::shared_ptr<Settings> settings, QWidget* parent = nullptr);
+    /// `registry` may be null (a bare-constructed dialog in a test): the Keyboard Shortcuts tab
+    /// is then simply omitted rather than half-built.
+    explicit SettingsDialog(std::shared_ptr<Settings> settings, KeyBindingRegistry* registry = nullptr,
+        QWidget* parent = nullptr);
     ~SettingsDialog() = default;
+
+    /// Open on the tab with this title (no-op when there is none, e.g. Keyboard Shortcuts in a
+    /// dialog built without a registry).
+    void selectTab(const QString& title);
 
 signals:
     void settingsSaved(bool dataPathsChanged);
@@ -62,6 +71,7 @@ private:
     void setupViewportTab();
     void setupEditorTab();
     void setupColorsTab();
+    void setupKeybindingsTab();
     void setupModToolsTab();
     /// Runs the mod tools' `info` with what is typed now (saved or not) and shows the answer.
     void checkModTools();
@@ -91,6 +101,10 @@ private:
     QWidget* _editorTab;
     QVBoxLayout* _editorTabLayout;
     TextEditorWidget* _textEditorWidget;
+
+    // Keyboard shortcuts tab
+    KeyBindingRegistry* _keyBindingRegistry = nullptr;
+    KeybindingsWidget* _keybindingsWidget = nullptr;
 
     // Selection colours tab
     QWidget* _colorsTab = nullptr;

@@ -13,6 +13,7 @@ private:
 public:
     static constexpr int HEX_WIDTH = 16;  // Logical hex coordinate spacing
     static constexpr int HEX_HEIGHT = 12; // Logical hex coordinate spacing
+    static constexpr int SPRITE_BASELINE_OFFSET = 4; // the hex grid sprite sits this far below its baseline
 
     static constexpr uint32_t HEX_OUT_OF_MAP = UINT32_MAX;
 

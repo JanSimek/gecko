@@ -26,6 +26,9 @@ public:
     /// `repository().load<Pro>(ProHelper::basePath(*this, pid))` idiom; returns the cached
     /// pointer and propagates load failures exactly as the underlying repository does.
     [[nodiscard]] Pro* loadPro(uint32_t pid);
+    /// Like loadPro(), but nullptr when the PID names no proto the mounted data holds: no proto list
+    /// for its type, an index past the list, or no .pro file. A .pro that doesn't parse still throws.
+    [[nodiscard]] Pro* tryLoadPro(uint32_t pid);
 
     [[nodiscard]] FrmResolver& frmResolver();
 

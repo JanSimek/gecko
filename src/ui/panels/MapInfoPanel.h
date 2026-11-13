@@ -14,6 +14,7 @@
 #include <QComboBox>
 #include <QPushButton>
 #include "format/gam/Gam.h"
+#include "format/map/Map.h"
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -25,7 +26,6 @@
 
 namespace geck {
 
-class Map;
 class Settings;
 namespace resource {
     class GameResources;
@@ -40,8 +40,21 @@ public:
     explicit MapInfoPanel(resource::GameResources& resources, std::shared_ptr<Settings> settings, QWidget* parent = nullptr);
     ~MapInfoPanel() override; // out-of-line for the unique_ptr<MapNameResolver> member
 
+    /// Everything a global-variable edit changes: the panel's lossless .gam document, the rows built
+    /// from it, and the .map's mirrored MVAR block. Captured around an edit so it can be undone.
+    struct GlobalVarsState {
+        std::optional<Gam> gam;
+        std::vector<std::pair<std::string, int>> vars;
+        std::vector<int32_t> mapVars;
+    };
+
     void setMap(Map* map);
+    /// Requests the player start (one undoable header edit) from a hex picked on the map.
     void setPlayerPosition(int hexPosition, int elevation);
+    /// Re-reads the header widgets and elevation checkboxes from the map, e.g. after an undo/redo.
+    void refreshHeaderFields();
+    /// Restores a captured global-variable state (the undo/redo half of globalVarsEdited).
+    void applyGlobalVarsState(const GlobalVarsState& state);
 
     /// Refresh the "Map Edges" group from the editor's current edge state (driven by MainWindow, which
     /// owns the current elevation and the selected zone). `version` is 0 when the map has no `.edg`,
@@ -64,21 +77,21 @@ public:
     QSize minimumSizeHint() const override;
 
 signals:
-    void playerPositionChanged(int position);
-    void playerElevationChanged(int elevation);
-    void playerOrientationChanged(int orientation);
+    /// A header field was edited. The panel writes nothing itself: the editor applies `after` as an
+    /// undoable command, and edits sharing a non-empty `mergeKey` fold into one undo step.
+    void headerEditRequested(const Map::MapHeader& after, const QString& description, const QString& mergeKey);
+    /// An elevation checkbox was toggled (and, for a removal, confirmed); applied as an undoable command.
+    void elevationPresenceRequested(int elevation, bool present);
+    /// A global variable was edited, added or removed. The panel already applied `after`; the host
+    /// records the pair so the edit can be undone.
+    void globalVarsEdited(const GlobalVarsState& before, const GlobalVarsState& after, const QString& description);
     void selectPlayerPositionRequested();
     void centerViewOnPlayerPositionRequested();
-    void mapScriptIdChanged(int scriptId);
     /// "Edit Source..." on the map-script row: open the SSL source of the script at this
     /// 0-based scripts.lst program index (the header's 1-based script_id minus one).
     void mapScriptSourceEditRequested(int programIndex);
-    void darknessChanged(int darkness);
-    void timestampChanged(int timestamp);
     void mapNamesChanged();     // a Map name / Lookup name field was edited -> mark the map modified
     void mapVariablesChanged(); // a global variable value was edited -> mark the map modified
-    void elevationAdded(int elevation);
-    void elevationRemoved(int elevation);
     /// Bulk map operations, routed to the editor's ObjectCommandController so they
     /// are undoable. The confirmation dialog lives here in the panel.
     void clearElevationRequested(int elevation);
@@ -114,6 +127,10 @@ private:
     void setupUI();
     void updateMapInfo();
     void loadScriptVars();
+    void resolveMapScriptName();
+    [[nodiscard]] GlobalVarsState captureGlobalVars() const;
+    // After an in-place edit: emits globalVarsEdited with `before` and the state now held.
+    void commitGlobalVarsEdit(const GlobalVarsState& before, const QString& description);
     // (Re)build the global-variables tree from _mvars; guarded by _suppressVarEdit so the setText calls
     // don't fire onGlobalVarChanged. Shared by the initial map load and the add/remove handlers.
     void populateGlobalVars();

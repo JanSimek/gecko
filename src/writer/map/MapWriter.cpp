@@ -1,5 +1,7 @@
 #include "MapWriter.h"
 
+#include <algorithm>
+
 #include <spdlog/spdlog.h>
 
 #include "format/pro/Pro.h"
@@ -9,29 +11,6 @@
 #include "format/map/Tile.h"
 
 namespace geck {
-namespace {
-
-    const char* objectTypeName(uint32_t objectTypeId) {
-        switch (static_cast<Pro::OBJECT_TYPE>(objectTypeId)) {
-            case Pro::OBJECT_TYPE::ITEM:
-                return "ITEM";
-            case Pro::OBJECT_TYPE::CRITTER:
-                return "CRITTER";
-            case Pro::OBJECT_TYPE::SCENERY:
-                return "SCENERY";
-            case Pro::OBJECT_TYPE::WALL:
-                return "WALL";
-            case Pro::OBJECT_TYPE::TILE:
-                return "TILE";
-            case Pro::OBJECT_TYPE::MISC:
-                return "MISC";
-            default:
-                return "unknown";
-        }
-    }
-
-} // namespace
-
 bool MapWriter::write(const Map::MapFile& map) {
     try {
         if (!isOpen()) {
@@ -164,11 +143,6 @@ bool MapWriter::write(const Map::MapFile& map) {
             }
         }
 
-        // (probably not relevant anymore) FIXME: some maps (artemple.map, kladwtwn.map, all?) contain 2x extra 0x000000 at the end of the file
-        // without them kladwtnwn.map crashes Fallout 2; however F2_Dims_Mapper doesn't seem to add them (?)
-        // utils.writeBE32(0);
-        // utils.writeBE32(0);
-
         utils.flush();
         spdlog::debug("Successfully wrote map file: {} ({} bytes)", getPath().filename().string(), getBytesWritten());
         return true;
@@ -203,7 +177,7 @@ void MapWriter::writeScript(const MapScript& script) {
             break;
         default:
             throw ValidationException("Unknown script PID type", getPath(),
-                "script PID " + std::to_string((script.pid & 0xFF000000) >> 24));
+                "script PID " + std::to_string(MapScript::sidSection(script.pid)));
     }
 
     // Fixed trailer (layout shared with MapReader via the visitor); each field is emitted as a
@@ -217,49 +191,51 @@ void MapWriter::writeObject(const MapObject& object) {
     auto& utils = getBinaryUtils();
 
     // Write the common-field block (layout shared with MapReader via the visitor).
-    // Every field is emitted as a big-endian 32-bit word.
+    // Every field is emitted as a big-endian 32-bit word. The inventory count is the number of
+    // records written after this object, so it comes from the inventory itself: a stale stored
+    // count would make the reader take the wrong number and misread every object after this one.
     // A container's capacity is written as at least what it holds: the engine allocates
     // max_inventory_size slots and then reads objects_in_inventory items into them (fallout2-ce
     // object.cc objectLoadAllInternal), so a container filled in the inventory editor, which only
     // counts its items, corrupted the heap and crashed the game on entering the map.
-    visitMapObjectCommonFields(object, [&utils, &object](const auto& field) {
-        uint32_t value = static_cast<uint32_t>(field);
-        if (static_cast<const void*>(&field) == static_cast<const void*>(&object.max_inventory_size)
-            && value < object.objects_in_inventory) {
-            value = object.objects_in_inventory;
+    const auto inventoryCount = static_cast<uint32_t>(object.inventory.size());
+    visitMapObjectCommonFields(object, [&utils, &object, inventoryCount](const auto& field) {
+        if (static_cast<const void*>(&field) == static_cast<const void*>(&object.objects_in_inventory)) {
+            utils.writeBE32(inventoryCount);
+        } else if (static_cast<const void*>(&field) == static_cast<const void*>(&object.max_inventory_size)) {
+            utils.writeBE32(std::max(object.max_inventory_size, inventoryCount));
+        } else {
+            utils.writeBE32(static_cast<uint32_t>(field));
         }
-        utils.writeBE32(value);
     });
 
-    uint32_t objectTypeId = object.objectType();
+    const ObjectType objectType = object.objectType();
 
-    spdlog::debug("Writing object type: {}", objectTypeName(objectTypeId));
+    spdlog::debug("Writing object type: {}", Pro::typeToString(objectType));
 
-    auto object_type = static_cast<Pro::OBJECT_TYPE>(objectTypeId);
-
-    switch (object_type) {
-        case Pro::OBJECT_TYPE::ITEM: {
+    switch (objectType) {
+        case ObjectType::Item: {
             auto pro = _loadProCallback(object.pro_pid);
             if (!pro) {
                 throw ValidationException("Cannot load PRO file for object", getPath(), "pro_pid " + std::to_string(object.pro_pid));
             }
 
             uint32_t subtype_id = pro->objectSubtypeId();
-            switch (static_cast<Pro::ITEM_TYPE>(subtype_id)) {
-                case Pro::ITEM_TYPE::AMMO:
-                case Pro::ITEM_TYPE::MISC:
+            switch (static_cast<ItemType>(subtype_id)) {
+                case ItemType::Ammo:
+                case ItemType::Misc:
                     utils.writeBE32(object.ammo); // bullets/charges
                     break;
-                case Pro::ITEM_TYPE::KEY:
+                case ItemType::Key:
                     utils.writeBE32(object.keycode);
                     break;
-                case Pro::ITEM_TYPE::WEAPON:
+                case ItemType::Weapon:
                     utils.writeBE32(object.ammo);     // ammo count
                     utils.writeBE32(object.ammo_pid); // ammo type PID
                     break;
-                case Pro::ITEM_TYPE::ARMOR:
-                case Pro::ITEM_TYPE::CONTAINER:
-                case Pro::ITEM_TYPE::DRUG:
+                case ItemType::Armor:
+                case ItemType::Container:
+                case ItemType::Drug:
                     // No additional data for these item types
                     break;
                 default:
@@ -267,29 +243,29 @@ void MapWriter::writeObject(const MapObject& object) {
                         "item subtype " + std::to_string(subtype_id));
             }
         } break;
-        case Pro::OBJECT_TYPE::CRITTER:
-            utils.writeBE32(object.player_reaction); // reaction to player - saves only
-            utils.writeBE32(object.current_mp);      // current mp - saves only
-            utils.writeBE32(object.combat_results);  // combat results - saves only
-            utils.writeBE32(object.dmg_last_turn);   // damage last turn - saves only
-            utils.writeBE32(object.ai_packet);       // AI packet
-            utils.writeBE32(object.group_id);        // team/group ID
-            utils.writeBE32(object.who_hit_me);      // who hit me - saves only
-            utils.writeBE32(object.current_hp);      // current hit points
-            utils.writeBE32(object.current_rad);     // current radiation
-            utils.writeBE32(object.current_poison);  // current poison level
+        case ObjectType::Critter:
+            utils.writeBE32(object.damage_last_turn); // engine CritterCombatData.damageLastTurn
+            utils.writeBE32(object.maneuver);         // engine CritterCombatData.maneuver
+            utils.writeBE32(object.current_ap);       // engine CritterCombatData.ap
+            utils.writeBE32(object.combat_results);   // engine CritterCombatData.results
+            utils.writeBE32(object.ai_packet);        // AI packet
+            utils.writeBE32(object.group_id);         // team/group ID
+            utils.writeBE32(object.who_hit_me);       // who hit me - saves only
+            utils.writeBE32(object.current_hp);       // current hit points
+            utils.writeBE32(object.current_rad);      // current radiation
+            utils.writeBE32(object.current_poison);   // current poison level
             break;
 
-        case Pro::OBJECT_TYPE::SCENERY: {
+        case ObjectType::Scenery: {
             auto pro = _loadProCallback(object.pro_pid);
             if (!pro) {
                 throw ValidationException("Cannot load PRO file for scenery object", getPath(), "pro_pid " + std::to_string(object.pro_pid));
             }
 
             uint32_t subtype_id = pro->objectSubtypeId();
-            switch (static_cast<Pro::SCENERY_TYPE>(subtype_id)) {
-                case Pro::SCENERY_TYPE::LADDER_TOP:
-                case Pro::SCENERY_TYPE::LADDER_BOTTOM:
+            switch (static_cast<SceneryType>(subtype_id)) {
+                case SceneryType::LadderDown:
+                case SceneryType::LadderUp:
                     if (_mapVersion == 19) {
                         utils.writeBE32(object.elevhex); // Fallout 1: destination only
                         break;
@@ -297,19 +273,19 @@ void MapWriter::writeObject(const MapObject& object) {
                     utils.writeBE32(object.map);
                     utils.writeBE32(object.elevhex);
                     break;
-                case Pro::SCENERY_TYPE::STAIRS:
+                case SceneryType::Stairs:
                     // Note: for ladders and stairs, map and elev+hex fields are in different order
                     utils.writeBE32(object.elevhex);
                     utils.writeBE32(object.map);
                     break;
-                case Pro::SCENERY_TYPE::ELEVATOR:
+                case SceneryType::Elevator:
                     utils.writeBE32(object.elevtype);  // elevator type
                     utils.writeBE32(object.elevlevel); // current level
                     break;
-                case Pro::SCENERY_TYPE::DOOR:
+                case SceneryType::Door:
                     utils.writeBE32(object.walkthrough);
                     break;
-                case Pro::SCENERY_TYPE::GENERIC:
+                case SceneryType::Generic:
                     // No additional data for generic scenery
                     break;
                 default:
@@ -317,10 +293,10 @@ void MapWriter::writeObject(const MapObject& object) {
                         "scenery subtype " + std::to_string(subtype_id));
             }
         } break;
-        case Pro::OBJECT_TYPE::WALL:
-        case Pro::OBJECT_TYPE::TILE:
+        case ObjectType::Wall:
+        case ObjectType::Tile:
             break;
-        case Pro::OBJECT_TYPE::MISC:
+        case ObjectType::Misc:
             if (object.isExitGridMarker()) {
                 utils.writeBE32(object.exit_map);
                 utils.writeBE32(object.exit_position);
@@ -335,15 +311,12 @@ void MapWriter::writeObject(const MapObject& object) {
             break;
     }
 
-    // Write inventory objects if any
-    if (object.objects_in_inventory > 0) {
-        for (const auto& invobj : object.inventory) {
-            if (!invobj) {
-                throw CorruptDataException("Null inventory object", getPath(), "inventory");
-            }
-            utils.writeBE32(invobj->amount);
-            writeObject(*invobj); // Recursive call for inventory objects
+    for (const auto& invobj : object.inventory) {
+        if (!invobj) {
+            throw CorruptDataException("Null inventory object", getPath());
         }
+        utils.writeBE32(invobj->amount);
+        writeObject(*invobj); // Recursive call for inventory objects
     }
 }
 

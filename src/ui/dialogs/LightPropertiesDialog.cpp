@@ -23,8 +23,9 @@ LightPropertiesDialog::LightPropertiesDialog(uint32_t lightRadius, uint32_t ligh
     _intensitySpin = new QSpinBox(this);
     _intensitySpin->setRange(0, MAX_PERCENT);
     // Raw intensity -> percentage. Clamp to the engine's 100% ceiling.
-    uint32_t clampedRaw = std::min<uint32_t>(lightIntensity, LIGHT_SCALE);
-    int percent = static_cast<int>((static_cast<uint64_t>(clampedRaw) * MAX_PERCENT) / LIGHT_SCALE);
+    const uint32_t clampedRaw = std::min<uint32_t>(lightIntensity, LIGHT_SCALE);
+    // Round both ways: truncation stored 10% as 6553, which read back as 9%.
+    auto percent = static_cast<int>((static_cast<uint64_t>(clampedRaw) * MAX_PERCENT + LIGHT_SCALE / 2) / LIGHT_SCALE);
     _intensitySpin->setValue(percent);
     _intensitySpin->setSuffix(" %");
     formLayout->addRow("Light intensity:", _intensitySpin);
@@ -40,7 +41,7 @@ uint32_t LightPropertiesDialog::getLightRadius() const {
 
 uint32_t LightPropertiesDialog::getLightIntensity() const {
     // Percentage -> raw, matching the engine scale. 100% maps exactly to LIGHT_SCALE.
-    return static_cast<uint32_t>((static_cast<uint64_t>(_intensitySpin->value()) * LIGHT_SCALE) / MAX_PERCENT);
+    return static_cast<uint32_t>((static_cast<uint64_t>(_intensitySpin->value()) * LIGHT_SCALE + MAX_PERCENT / 2) / MAX_PERCENT);
 }
 
 } // namespace geck

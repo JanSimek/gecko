@@ -11,8 +11,7 @@ namespace geck::resource {
 class DataFileSystem;
 
 /// Thrown by ensureWritableCopy when the source can't be read from the mounted data or the
-/// loose copy can't be written. Derives from std::runtime_error, so pre-existing callers that
-/// catch the base type keep working; new callers can catch this specifically.
+/// loose copy can't be written.
 class WritableCopyError : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;

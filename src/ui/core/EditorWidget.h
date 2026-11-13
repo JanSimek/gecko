@@ -25,20 +25,20 @@
 #include "format/pro/Pro.h"
 #include "selection/SelectionManager.h"
 #include "selection/SelectionDataProvider.h"
+#include "ui/core/EditorHints.h"
 #include "util/Constants.h"
 #include "util/UndoStack.h"
 #include "rendering/RenderingEngine.h"
 #include "rendering/ToolPreview.h"
 #include "ui/tiles/TilePlacementContext.h"
-#include "ui/input/InputHandler.h"
-#include "ui/core/EditorMode.h"
+#include "editing/input/InputHandler.h"
+#include "editing/EditorMode.h"
 #include "ui/core/EditorController.h"
 #include "ui/core/EditorSession.h"
 #include "pattern/Pattern.h"
 #include "pattern/FillPlan.h"
 #include "scripting/EditArea.h"
 #include "ui/tools/ExitGridContext.h"
-#include "ui/tools/PluginToolHost.h"
 #include "ui/dragdrop/DragDropContext.h"
 #include "editor/TileChange.h"
 #include "VisibilitySettings.h"
@@ -64,8 +64,9 @@ class ViewportController;
 class SFMLWidget;
 struct ToolMouseEvent;
 struct ObjectInfo;
+enum class ObjectCategory;
 
-class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext, public ExitGridContext, public DragDropContext, public PluginToolHost {
+class EditorWidget : public QWidget, public selection::SelectionDataProvider, public TilePlacementContext, public ExitGridContext, public DragDropContext {
     Q_OBJECT
 
     friend class TilePlacementManager;
@@ -136,7 +137,6 @@ public:
     // Edge scrolling: when enabled, parking the cursor near a viewport edge auto-pans the view that
     // way (parity with the reference mappers). Editor UX only — touches no map data.
     void setEdgeScrollEnabled(bool enabled) { _edgeScrollEnabled = enabled; }
-    bool isEdgeScrollEnabled() const { return _edgeScrollEnabled; }
 
     // Whether the mod tools are set up (Preferences > Mod Tools): only then does the right-click
     // menu offer copies and names for the selected object (modAssetActionRequested).
@@ -146,19 +146,13 @@ public:
     void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
 
     Map* getMap() const override { return _session.map(); }
-    Map* map() const override { return _session.map(); }
-    const HexagonGrid& hexgrid() const override { return _session.hexgrid(); }
-    ViewportController& viewport() const override { return _controller.viewport(); }
-    selection::SelectionManager* selectionManager() const override { return _session.selectionManager(); }
-    ObjectCommandController& commandController() override { return _controller.commandController(); }
+    ViewportController& viewport() const { return _controller.viewport(); }
 
     // Qt6 toolbar actions
     void setSelectionMode(SelectionMode mode);
-    SelectionMode getCurrentSelectionMode() const { return _currentSelectionMode; }
     // Combinable-layer selection: pick which layers a mixed (ALL-mode) selection considers
     // (floor / roof / objects). Switches to ALL mode and keeps the current selection intact.
     void setActiveSelectionLayers(SelectionLayers layers);
-    SelectionLayers getActiveSelectionLayers() const;
     void rotateSelectedObject();
     // Bring the selected objects forward/backward in gecko's draw order (undoable). In game the
     // order only matters between objects on the same hex; see editor/helper/ObjectOrder.h.
@@ -169,8 +163,6 @@ public:
     void changeElevation(int elevation);
     void toggleScrollBlockerRectangleMode();
 
-    // Player position selection
-    void enterPlayerPositionSelectionMode();
     void centerViewOnPlayerPosition();
 
     // One-shot "click a hex" mode: the next left-click passes its hex to `onFinished`, Escape passes
@@ -180,18 +172,19 @@ public:
     // Find the object owning the script with this SID, switch to its elevation, select and centre on
     // it. False (selection untouched) when no object owns it.
     bool revealScriptObject(int sid);
-
-    // Tile placement
-    void placeTileAtPosition(int tileIndex, sf::Vector2f worldPos, bool isRoof);
-    void fillAreaWithTile(int tileIndex, const sf::FloatRect& area, bool isRoof);
-    void replaceSelectedTiles(int newTileIndex);
+    // Bring a spatial script's marker into view: switch to its elevation and centre on its hex.
+    // False when `sid` is no spatial script of this map.
+    bool revealSpatialScript(uint32_t sid);
 
     // Object placement functionality
     void placeObjectAtPosition(sf::Vector2f worldPos) override;
 
-    // Eyedropper (P): sample the topmost object/tile under the cursor and load it into its palette.
+    // Eyedropper: sample the topmost object/tile under the cursor and load it into its palette.
     // A tile arms tile painting; an object arms click-to-place via beginObjectPlacement().
     void pickAtCursor(sf::Vector2f worldPos);
+    // Eyedropper, driven by its canvas shortcut: sample whatever sits under the last known cursor
+    // position into the matching palette, then hand focus back to the viewport.
+    void pickAtLastCursor();
     // Activate the registered object-placement tool for the given proto: reveal it in the palette
     // and show a cursor ghost whose left-click drops a copy (runs as EditorMode::PluginTool).
     void beginObjectPlacement(uint32_t pid, sf::Vector2f worldPos);
@@ -199,6 +192,10 @@ public:
     // The status-bar hint for the current mode/selection, including the active registered
     // tool's own hint while one runs. The same text hintChanged carries.
     [[nodiscard]] QString currentHintText() const;
+    // How the hint names a rebindable key. MainWindow feeds this from the KeyBindingRegistry, so
+    // the hint advertises the key that actually works rather than the shipped one; unset, the
+    // shipped names are used.
+    void setHintKeyLookup(HintKeyLookup lookup);
 
     // Load the freehand fill brush with the palette's tile and activate it. False when the brush is
     // unavailable or no tile is selected.
@@ -224,8 +221,8 @@ public:
     void cancelDragPreview();
 
     // Efficient tile update
-    void updateTileSprite(int hexIndex, bool isRoof) override;
-    void updateTileSprite(int hexIndex, bool isRoof, int elevation) override;
+    void updateTileSprite(int tileIndex, bool isRoof) override;
+    void updateTileSprite(int tileIndex, bool isRoof, int elevation) override;
 
     // Single tool-mode entry point: activates `mode` and exits all others.
     void setMode(EditorMode mode, int tileIndex = -1, bool isRoof = false);
@@ -233,8 +230,6 @@ public:
 
     // Tile placement mode control
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool isRoof = false);
-    void setTilePlacementAreaFill(bool enabled);
-    void setTilePlacementReplaceMode(bool enabled);
 
     // Exit grid placement mode control
     void setExitGridPlacementMode(bool enabled);
@@ -291,13 +286,18 @@ public:
     // Access to SFML widget for main window
     SFMLWidget* getSFMLWidget() const override { return _sfmlWidget; }
 
-    // Set main window reference for accessing palette panels
-    void setMainWindow(class MainWindow* mainWindow) { _mainWindow = mainWindow; }
-    class MainWindow* getMainWindow() const { return _mainWindow; }
+    /// How the editor reaches the object palette, which its host owns: look an entry up (drag-and-drop),
+    /// and reveal a proto for Pick (P), selecting it, showing the palette and returning the entry.
+    struct ObjectPaletteHooks {
+        std::function<const ObjectInfo*(int objectIndex, ObjectCategory category)> objectInfo;
+        std::function<std::optional<std::pair<int, ObjectCategory>>(uint32_t pid)> revealProto;
+    };
+    void setObjectPaletteHooks(ObjectPaletteHooks hooks) { _objectPalette = std::move(hooks); }
+    /// The host's app-wide copy/paste clipboard, shared by every open map.
+    void setMapClipboard(MapClipboard* clipboard) { _mapClipboard = clipboard; }
 
     // Access to internal components for extracted managers
     selection::SelectionManager* getSelectionManager() const override { return _session.selectionManager(); }
-    TilePlacementManager* getTilePlacementManager() const { return _tilePlacementManager.get(); }
     ExitGridPlacementManager* getExitGridPlacementManager() const { return _exitGridPlacementManager.get(); }
     ViewportController* getViewportController() const override { return &_controller.viewport(); }
     int& getCurrentHoverHex() override { return _currentHoverHex; }
@@ -312,7 +312,6 @@ public:
 
     // SelectionManager helpers
     std::vector<std::shared_ptr<Object>> getObjectsAtPosition(sf::Vector2f worldPos) override;
-    bool isSpriteClicked(sf::Vector2f worldPos, const sf::Sprite& sprite);
 
     // Tile hit testing methods
     std::optional<int> getTileAtPosition(sf::Vector2f worldPos, bool isRoof) override;
@@ -346,15 +345,14 @@ public:
     // Ensure tile storage exists for an elevation
     std::vector<Tile>& ensureElevationTiles(int elevation) override;
     void registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
-    void registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath);
+    void registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, uint32_t newFrmPid, const std::string& newFrmPath);
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
 
     // Exit grid undo support
-    using ExitGridState = ExitGridCommandState;
     void registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation) override;
     void registerExitGridEdit(const std::vector<std::shared_ptr<MapObject>>& exitGrids,
-        const std::vector<ExitGridState>& beforeStates,
-        const std::vector<ExitGridState>& afterStates) override;
+        const std::vector<ExitGridCommandState>& beforeStates,
+        const std::vector<ExitGridCommandState>& afterStates) override;
 
     // Per-instance property (flags / light / scenery destination / critter) undo
     // support. The before/after snapshots come from SelectionPanel's editors.
@@ -366,6 +364,10 @@ public:
     // Map-wide operations (undoable). The confirmation dialog lives in MapInfoPanel.
     void clearElevationObjects(int elevation);
     void copyElevation(int fromElevation, int toElevation);
+    void editMapHeader(const Map::MapHeader& after, const std::string& description, const std::string& mergeKey);
+    void setElevationPresent(int elevation, bool present);
+    /// Records an edit whose state lives outside the map (e.g. the Map Info panel's .gam document).
+    void pushUndoCommand(UndoCommand command);
 
     // Inventory edit (undoable). Snapshots come from SelectionPanel.
     void registerInventoryEdit(const std::shared_ptr<MapObject>& container,
@@ -404,7 +406,6 @@ public:
     void upgradeMapEdgeToVersion2();
     void resetMapEdgeSquare();
     [[nodiscard]] int selectedEdgeZone() const { return _selectedEdgeZone; }
-    [[nodiscard]] int currentElevation() const override;
     [[nodiscard]] const std::optional<MapEdge>& mapEdge() const;
 
 signals:
@@ -423,10 +424,20 @@ signals:
     void selectionChanged(const selection::SelectionState& selection, int elevation);
     void mapLoadRequested(const std::string& mapPath);
     void hexHoverChanged(int hexIndex);
-    void playerPositionSelected(int hexPosition);
     void statusMessageRequested(const QString& message);
     void statusMessageClearRequested();
     void undoStackChanged();
+    /// A change the undo stack doesn't record (a Console script, an applied fill) altered the map, so
+    /// the host refreshes Map Info and the other per-map panels.
+    void mapInfoRefreshRequested();
+    /// Tile placement was cancelled; the host clears the tile palette's selection.
+    void tilePaletteDeselectRequested();
+    /// Mark Exits mode was left from the canvas; the host unchecks its toolbar action.
+    void markExitsModeCancelled();
+    /// Pick (P) on a tile: the host selects this tile in the tile palette and shows the palette.
+    void tilePicked(int tileId, bool isRoof);
+    /// The map header changed, including which elevations are present: an edit or its undo/redo.
+    void mapHeaderChanged();
     /// A Console script changed the map through a path that records no undo command (e.g.
     /// setPlayerStart/newMap), so the host must flag the map modified explicitly.
     void mapModifiedByScript();
@@ -439,7 +450,6 @@ signals:
     void modAssetActionRequested(int action, quint32 pid);
 
 public slots:
-    void onObjectFrmChanged(std::shared_ptr<Object> object, uint32_t newFrmPid);
     void onObjectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath);
 
     // Sprite loading methods (public for MainWindow access)
@@ -466,12 +476,11 @@ private:
     // saveMap (direct write) and saveMapAs (after the dialog). Reports errors and returns success.
     bool writeMapTo(const std::string& destination);
 
-    // One item's new selection entry after a drag-move: objects re-pointed to their refreshed
-    // wrapper (by MapObject identity), tiles shifted by the whole-tile delta; nullopt to drop it.
-    std::optional<selection::SelectedItem> remapSelectedItemAfterMove(
-        const selection::SelectedItem& item,
-        const std::unordered_map<const MapObject*, std::shared_ptr<Object>>& objectsByMapObject,
-        const std::optional<std::pair<int, int>>& tileDelta) const;
+    // The current elevation's object wrappers, keyed by the MapObject each one draws.
+    [[nodiscard]] selection::ObjectsByMapObject objectsByMapObjectIdentity() const;
+    // After an undo/redo: re-point selected objects at their rebuilt wrappers and drop the ones the
+    // map no longer holds on this elevation.
+    void reconcileSelectionWithMap();
 
     // If a spatial marker sits on the clicked hex, select that script and return true; a second quick
     // click also fires spatialScriptEditActivated. A miss clears the selection and returns false.
@@ -494,8 +503,7 @@ private:
     void updateEdgeHoverCursor(sf::Vector2f worldPos);
     void resetEdgeHoverCursor();
 
-    // Handles a click in SetPlayerPosition mode: routes to an armed beginHexPick callback (one-shot)
-    // or, failing that, emits playerPositionSelected (legacy player-start pick).
+    // Handles a click in SetPlayerPosition mode: hands its hex to the armed beginHexPick callback.
     void handlePositionPickClick(sf::Vector2f worldPos);
 
     // Object management
@@ -537,16 +545,7 @@ private:
     // Object selection methods (moved to public)
     bool isDoubleClick(sf::Vector2f worldPos);
 
-    // Selection modifiers for multi-selection
-    enum class SelectionModifier {
-        NONE,   // Normal single selection (clear and select)
-        ADD,    // Alt+Click / Alt+Drag - add to selection
-        TOGGLE, // Ctrl+Click / Ctrl+Drag - remove from selection
-        RANGE   // Shift+Click - range selection for tiles
-    };
-
-    bool selectAtPosition(sf::Vector2f worldPos);
-    bool selectAtPosition(sf::Vector2f worldPos, SelectionModifier modifier);
+    bool selectAtPosition(sf::Vector2f worldPos, InputHandler::SelectionModifier modifier);
     selection::SelectionResult handleRangeSelection(sf::Vector2f worldPos);
 
     void clearDragPreview();
@@ -560,7 +559,6 @@ private:
     // the live cursor, tinted by the tool's destination kind.
     void updateMarkExitsLinePreview(const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide);
     void clearMarkExitsLinePreview();
-    void updateTileAreaFillPreview(sf::Vector2f startWorldPos, sf::Vector2f currentWorldPos);
     // Commit a finished drag rectangle to the selection (replace/deselect/additive), or build
     // scroll blockers when in that mode. Extracted from the onDragSelection callback.
     void commitDragAreaSelection(sf::Vector2f startPos, sf::Vector2f endPos, bool isDeselect, bool isAdditive);
@@ -600,7 +598,8 @@ private:
     QVBoxLayout* _layout;
     SFMLWidget* _sfmlWidget;
     std::optional<black_edge::Shapes> _blackEdgeShapes; // BLACK002/003 frame sizes, once loaded
-    class MainWindow* _mainWindow;
+    ObjectPaletteHooks _objectPalette;
+    MapClipboard* _mapClipboard = nullptr; // the host's app-wide clipboard (setMapClipboard)
 
     // Owns the editor's per-map state and the Qt-free helpers acting on it. Declared before the
     // managers below so it outlives them - several hold references into it.
@@ -611,6 +610,7 @@ private:
 
     // Input + drag/drop + tile/exit-grid placement systems (the Qt-coupled managers).
     std::unique_ptr<InputHandler> _inputHandler;
+    HintKeyLookup _hintKeyLookup;
     // RenderingEngine, MapSpriteLoader, ObjectCommandController and ViewportController now live
     // in _controller (the Qt-free editor core).
     std::unique_ptr<DragDropManager> _dragDropManager;
@@ -642,8 +642,6 @@ private:
     // Drag preview state (for palette drag and drop)
     bool _isDraggingFromPalette = false;
     std::shared_ptr<Object> _dragPreviewObject;     // Preview object being dragged from palette
-    int _previewObjectIndex = -1;                   // Index of object in palette
-    int _previewObjectCategory = 0;                 // Category of preview object (as int)
     const ObjectInfo* _previewObjectInfo = nullptr; // Object info from palette
 
     int _currentHoverHex = -1;
@@ -725,11 +723,8 @@ private:
     pattern::FillPlan _fillPlan;
     void buildFillGhosts();
 
-    // Player position selection state
-    bool _playerPositionSelectionMode = false;
-
-    // When set, the SetPlayerPosition mode is being used as a generic one-shot hex picker (see
-    // beginHexPick): the next click routes here instead of emitting playerPositionSelected.
+    // The armed one-shot hex pick (see beginHexPick): the next click in SetPlayerPosition mode
+    // routes here.
     std::function<void(std::optional<int>)> _hexPickCallback;
 
     // Exit-grid "Draw edge" state: _exitGridLineActive gates the renderer, the vertices and cursor

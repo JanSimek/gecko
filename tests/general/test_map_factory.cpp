@@ -6,7 +6,7 @@
 
 using namespace geck;
 
-TEST_CASE("Map::createEmptyElevation fills every cell with EMPTY_TILE", "[map_factory]") {
+TEST_CASE("Map::createEmptyElevation fills every cell with EMPTY_TILE", "[map]") {
     const auto tiles = Map::createEmptyElevation();
 
     REQUIRE(tiles.size() == Map::TILES_PER_ELEVATION);
@@ -16,7 +16,7 @@ TEST_CASE("Map::createEmptyElevation fills every cell with EMPTY_TILE", "[map_fa
     }
 }
 
-TEST_CASE("Map::createEmptyMapFile builds a blank Fallout 2 map", "[map_factory]") {
+TEST_CASE("Map::createEmptyMapFile builds a blank Fallout 2 map", "[map]") {
     const auto mapFile = Map::createEmptyMapFile();
 
     CHECK(mapFile.header.version == static_cast<uint32_t>(FileFormat::FALLOUT2_MAP_VERSION));

@@ -139,11 +139,11 @@ void ProSceneryWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
         _soundIdEdit->setValue(static_cast<int>(pro->sceneryData.soundId));
     }
 
-    const auto sceneryType = static_cast<Pro::SCENERY_TYPE>(pro->objectSubtypeId());
+    const auto sceneryType = static_cast<SceneryType>(pro->objectSubtypeId());
     setComboIndexSafe(_typeCombo, static_cast<uint32_t>(sceneryType));
 
     switch (sceneryType) {
-        case Pro::SCENERY_TYPE::DOOR:
+        case SceneryType::Door:
             if (_doorWalkThroughCheck) {
                 _doorWalkThroughCheck->setChecked(pro->sceneryData.doorData.walkThroughFlag != 0);
             }
@@ -151,7 +151,7 @@ void ProSceneryWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
                 _doorUnknownEdit->setValue(static_cast<int>(pro->sceneryData.doorData.unknownField));
             }
             break;
-        case Pro::SCENERY_TYPE::STAIRS:
+        case SceneryType::Stairs:
             if (_stairsDestTileEdit) {
                 _stairsDestTileEdit->setValue(static_cast<int>(pro->sceneryData.stairsData.destTile));
             }
@@ -159,7 +159,7 @@ void ProSceneryWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
                 _stairsDestElevationEdit->setValue(static_cast<int>(pro->sceneryData.stairsData.destElevation));
             }
             break;
-        case Pro::SCENERY_TYPE::ELEVATOR:
+        case SceneryType::Elevator:
             if (_elevatorTypeEdit) {
                 _elevatorTypeEdit->setValue(static_cast<int>(pro->sceneryData.elevatorData.elevatorType));
             }
@@ -167,16 +167,18 @@ void ProSceneryWidget::loadFromPro(const std::shared_ptr<Pro>& pro) {
                 _elevatorLevelEdit->setValue(static_cast<int>(pro->sceneryData.elevatorData.elevatorLevel));
             }
             break;
-        case Pro::SCENERY_TYPE::LADDER_BOTTOM:
-        case Pro::SCENERY_TYPE::LADDER_TOP:
+        case SceneryType::LadderUp:
+        case SceneryType::LadderDown:
             if (_ladderDestTileElevationEdit) {
                 _ladderDestTileElevationEdit->setValue(static_cast<int>(pro->sceneryData.ladderData.destTileAndElevation));
             }
             break;
-        case Pro::SCENERY_TYPE::GENERIC:
+        case SceneryType::Generic:
             if (_genericUnknownEdit) {
                 _genericUnknownEdit->setValue(static_cast<int>(pro->sceneryData.genericData.unknownField));
             }
+            break;
+        default:
             break;
     }
 
@@ -199,7 +201,7 @@ void ProSceneryWidget::saveToPro(std::shared_ptr<Pro>& pro) {
     pro->setObjectSubtypeId(static_cast<unsigned>(sceneryType));
 
     switch (sceneryType) {
-        case Pro::SCENERY_TYPE::DOOR:
+        case SceneryType::Door:
             if (_doorWalkThroughCheck) {
                 pro->sceneryData.doorData.walkThroughFlag = _doorWalkThroughCheck->isChecked() ? 1U : 0U;
             }
@@ -207,7 +209,7 @@ void ProSceneryWidget::saveToPro(std::shared_ptr<Pro>& pro) {
                 pro->sceneryData.doorData.unknownField = static_cast<uint32_t>(_doorUnknownEdit->value());
             }
             break;
-        case Pro::SCENERY_TYPE::STAIRS:
+        case SceneryType::Stairs:
             if (_stairsDestTileEdit) {
                 pro->sceneryData.stairsData.destTile = static_cast<uint32_t>(_stairsDestTileEdit->value());
             }
@@ -215,7 +217,7 @@ void ProSceneryWidget::saveToPro(std::shared_ptr<Pro>& pro) {
                 pro->sceneryData.stairsData.destElevation = static_cast<uint32_t>(_stairsDestElevationEdit->value());
             }
             break;
-        case Pro::SCENERY_TYPE::ELEVATOR:
+        case SceneryType::Elevator:
             if (_elevatorTypeEdit) {
                 pro->sceneryData.elevatorData.elevatorType = static_cast<uint32_t>(_elevatorTypeEdit->value());
             }
@@ -223,22 +225,24 @@ void ProSceneryWidget::saveToPro(std::shared_ptr<Pro>& pro) {
                 pro->sceneryData.elevatorData.elevatorLevel = static_cast<uint32_t>(_elevatorLevelEdit->value());
             }
             break;
-        case Pro::SCENERY_TYPE::LADDER_BOTTOM:
-        case Pro::SCENERY_TYPE::LADDER_TOP:
+        case SceneryType::LadderUp:
+        case SceneryType::LadderDown:
             if (_ladderDestTileElevationEdit) {
                 pro->sceneryData.ladderData.destTileAndElevation = static_cast<uint32_t>(_ladderDestTileElevationEdit->value());
             }
             break;
-        case Pro::SCENERY_TYPE::GENERIC:
+        case SceneryType::Generic:
             if (_genericUnknownEdit) {
                 pro->sceneryData.genericData.unknownField = static_cast<uint32_t>(_genericUnknownEdit->value());
             }
+            break;
+        default:
             break;
     }
 }
 
 bool ProSceneryWidget::canHandle(const std::shared_ptr<Pro>& pro) const {
-    return pro && pro->type() == Pro::OBJECT_TYPE::SCENERY;
+    return pro && pro->type() == ObjectType::Scenery;
 }
 
 QString ProSceneryWidget::getTabLabel() const {
@@ -248,33 +252,33 @@ QString ProSceneryWidget::getTabLabel() const {
 void ProSceneryWidget::updateTypeSpecificGroups() {
     const auto sceneryType = currentSceneryType();
     if (_doorGroup) {
-        _doorGroup->setVisible(sceneryType == Pro::SCENERY_TYPE::DOOR);
+        _doorGroup->setVisible(sceneryType == SceneryType::Door);
     }
     if (_stairsGroup) {
-        _stairsGroup->setVisible(sceneryType == Pro::SCENERY_TYPE::STAIRS);
+        _stairsGroup->setVisible(sceneryType == SceneryType::Stairs);
     }
     if (_elevatorGroup) {
-        _elevatorGroup->setVisible(sceneryType == Pro::SCENERY_TYPE::ELEVATOR);
+        _elevatorGroup->setVisible(sceneryType == SceneryType::Elevator);
     }
-    const bool isLadder = sceneryType == Pro::SCENERY_TYPE::LADDER_BOTTOM
-        || sceneryType == Pro::SCENERY_TYPE::LADDER_TOP;
+    const bool isLadder = sceneryType == SceneryType::LadderUp
+        || sceneryType == SceneryType::LadderDown;
     if (_ladderGroup) {
         _ladderGroup->setVisible(isLadder);
     }
     if (_genericGroup) {
-        _genericGroup->setVisible(sceneryType == Pro::SCENERY_TYPE::GENERIC);
+        _genericGroup->setVisible(sceneryType == SceneryType::Generic);
     }
 }
 
-Pro::SCENERY_TYPE ProSceneryWidget::currentSceneryType() const {
+SceneryType ProSceneryWidget::currentSceneryType() const {
     if (!_typeCombo) {
-        return Pro::SCENERY_TYPE::GENERIC;
+        return SceneryType::Generic;
     }
     const int currentIndex = _typeCombo->currentIndex();
     if (currentIndex < 0) {
-        return Pro::SCENERY_TYPE::GENERIC;
+        return SceneryType::Generic;
     }
-    return static_cast<Pro::SCENERY_TYPE>(currentIndex);
+    return static_cast<SceneryType>(currentIndex);
 }
 
 } // namespace geck

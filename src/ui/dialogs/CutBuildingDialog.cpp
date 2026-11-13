@@ -71,8 +71,8 @@ CutBuildingDialog::CutBuildingDialog(ModToolsRunner* runner, QWidget* parent)
 
 void CutBuildingDialog::setupUI() {
     auto* main = new QVBoxLayout(this);
-    main->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
-    main->setSpacing(SPACING_LOOSE);
+    main->setContentsMargins(ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE, ui::theme::spacing::LOOSE);
+    main->setSpacing(ui::theme::spacing::LOOSE);
 
     auto* pictureRow = new QHBoxLayout();
     pictureRow->addWidget(new QLabel("Render:"));
@@ -86,7 +86,7 @@ void CutBuildingDialog::setupUI() {
     main->addLayout(pictureRow);
 
     auto* panes = new QHBoxLayout();
-    panes->setSpacing(SPACING_LOOSE);
+    panes->setSpacing(ui::theme::spacing::LOOSE);
 
     auto* sourceBox = new QGroupBox("Click the foot of the walls, left to right");
     auto* sourceLayout = new QVBoxLayout(sourceBox);
@@ -147,7 +147,7 @@ void CutBuildingDialog::setupUI() {
     main->addLayout(panes, 1);
 
     auto* form = new QFormLayout();
-    form->setSpacing(SPACING_NORMAL);
+    form->setSpacing(ui::theme::spacing::NORMAL);
 
     auto* namesRow = new QHBoxLayout();
     _prefixEdit = new QLineEdit();

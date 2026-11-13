@@ -40,8 +40,8 @@ public:
 
     explicit LogModel(QObject* parent = nullptr);
 
-    /// Thread-safe append. When called off the model's thread the record is queued to it; the
-    /// row appears once that thread's event loop runs.
+    /// Thread-safe append. The record is buffered and the row appears once the model's thread
+    /// runs its event loop, so a burst from any thread becomes one batched insert.
     void appendRecord(Level level, const QString& message, const QDateTime& time = QDateTime::currentDateTime());
 
     void clear();
@@ -64,8 +64,8 @@ private:
 
     QList<Record> _records;
 
-    // Cross-thread records buffer here; the first record of a burst schedules one queued
-    // drain on the model's thread, so a logging flood coalesces into batched row inserts.
+    // Records buffer here; the first record of a burst schedules one queued drain on the
+    // model's thread, so a logging flood coalesces into batched row inserts.
     std::mutex _pendingMutex;
     QList<Record> _pending;
     bool _drainQueued = false;

@@ -88,12 +88,6 @@ inline float mapEdgeDistanceToBorder(sf::Vector2f p, const sf::FloatRect& r) {
     return std::min({ d[0], d[1], d[2], d[3] });
 }
 
-/// The side of rect `r` (0=left,1=top,2=right,3=bottom) whose segment is nearest `p`.
-inline int mapEdgeNearestSide(sf::Vector2f p, const sf::FloatRect& r) {
-    const auto d = mapEdgeSideDistances(p, r);
-    return static_cast<int>(std::distance(d.begin(), std::min_element(d.begin(), d.end())));
-}
-
 /// The zone `tileRect` covering the whole hex grid — the seed the engine's mapper uses for a newly
 /// added zone (fallout2-ce map_edge_setup.cc `fullGridTileRect`). Corners are the grid's four extreme
 /// hex indices; `left`/`right` take the hexes with the max/min world X (X is stored inverted, matching

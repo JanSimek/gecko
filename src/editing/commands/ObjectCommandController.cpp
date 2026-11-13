@@ -1,6 +1,8 @@
 #include "ObjectCommandController.h"
 
 #include "editing/commands/CommandHost.h"
+#include "editor/helper/ObjectQueries.h"
+#include "format/map/MapObject.h"
 
 // ObjectCommandController is a thin facade: its constructor wires up the editing
 // services and every method delegates to one of them, so only the service/param
@@ -19,20 +21,16 @@ ObjectCommandController::ObjectCommandController(resource::GameResources& resour
     UndoStack& undoStack,
     CommandHost& host)
     : _resources(resources)
-    , _map(map)
-    , _hexgrid(hexgrid)
-    , _mapSpriteLoader(mapSpriteLoader)
-    , _objects(objects)
-    , _wallBlockerOverlays(wallBlockerOverlays)
     , _host(host)
     , _batcher(undoStack, [this] { _host.undoStackChanged(); })
-    , _tileService(map, _batcher, [this](int elevation) -> std::vector<Tile>& { return _host.ensureElevationTiles(elevation); }, [this] { return _host.getCurrentElevation(); }, [this](int hexIndex, bool isRoof, int elevation) { _host.updateTileSprite(hexIndex, isRoof, elevation); })
+    , _tileService(map, _batcher, [this](int elevation) -> std::vector<Tile>& { return _host.ensureElevationTiles(elevation); }, [this] { return _host.getCurrentElevation(); }, [this](int tileIndex, bool isRoof, int elevation) { _host.updateTileSprite(tileIndex, isRoof, elevation); })
     , _inventoryService(_batcher)
     , _scriptService(map, _batcher)
     , _edgeService(map, _batcher)
     , _refreshObjects([this] { _host.refreshObjects(); })
     , _reloadTiles([this] { _host.reloadTiles(); })
-    , _mapService(map, objects, wallBlockerOverlays, _scriptService, _batcher, _refreshObjects, _reloadTiles)
+    , _mapService(map, objects, wallBlockerOverlays, _scriptService, _batcher,
+          { .refreshObjects = _refreshObjects, .reloadTiles = _reloadTiles, .headerChanged = [this] { _host.mapHeaderChanged(); } })
     , _objectService(resources, map, hexgrid, mapSpriteLoader, objects, wallBlockerOverlays, _batcher, _refreshObjects) {
 }
 
@@ -48,14 +46,6 @@ void ObjectCommandController::applyTileEdit(const std::string& description, cons
     _tileService.applyTileEdit(description, changes);
 }
 
-void ObjectCommandController::addObjectData(const std::shared_ptr<MapObject>& mapObject) {
-    _objectService.addObjectData(mapObject);
-}
-
-void ObjectCommandController::removeObjectData(const std::shared_ptr<MapObject>& mapObject) {
-    _objectService.removeObjectData(mapObject);
-}
-
 void ObjectCommandController::addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
     _objectService.addPlacedObject(mapObject, object);
 }
@@ -64,12 +54,31 @@ void ObjectCommandController::removePlacedObject(const std::shared_ptr<MapObject
     _objectService.removePlacedObject(mapObject, object);
 }
 
-bool ObjectCommandController::registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object) {
-    return _objectService.registerObjectPlacement(mapObject, object);
+bool ObjectCommandController::placeWithProtoScript(const std::shared_ptr<MapObject>& mapObject,
+    ProtoScript protoScript, const std::function<bool()>& place) {
+    const int32_t sid = (protoScript == ProtoScript::Attach && mapObject)
+        ? object_query::protoSid(*mapObject, _resources)
+        : -1;
+    if (sid == -1) {
+        return place();
+    }
+    ScopedUndoBatch batch(*this, "Place Object");
+    if (!place()) {
+        return false;
+    }
+    _scriptService.attachProtoScript(mapObject, static_cast<uint32_t>(sid));
+    return true;
 }
 
-bool ObjectCommandController::registerObjectData(const std::shared_ptr<MapObject>& mapObject) {
-    return _objectService.registerObjectData(mapObject);
+bool ObjectCommandController::registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject,
+    const std::shared_ptr<Object>& object, ProtoScript protoScript) {
+    return placeWithProtoScript(mapObject, protoScript,
+        [&] { return _objectService.registerObjectPlacement(mapObject, object); });
+}
+
+bool ObjectCommandController::registerObjectData(const std::shared_ptr<MapObject>& mapObject, ProtoScript protoScript) {
+    return placeWithProtoScript(mapObject, protoScript,
+        [&] { return _objectService.registerObjectData(mapObject); });
 }
 
 bool ObjectCommandController::registerObjectDeletion(
@@ -108,10 +117,9 @@ void ObjectCommandController::applyFrmToObject(const std::shared_ptr<Object>& ob
 
 bool ObjectCommandController::registerObjectFrmChange(const std::shared_ptr<Object>& object,
     uint32_t oldFrmPid,
-    const std::string& oldFrmPath,
     uint32_t newFrmPid,
     const std::string& newFrmPath) {
-    return _objectService.registerObjectFrmChange(object, oldFrmPid, oldFrmPath, newFrmPid, newFrmPath);
+    return _objectService.registerObjectFrmChange(object, oldFrmPid, newFrmPid, newFrmPath);
 }
 
 bool ObjectCommandController::registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation) {
@@ -144,6 +152,14 @@ bool ObjectCommandController::registerInventoryEdit(const std::shared_ptr<MapObj
     std::vector<std::shared_ptr<MapObject>> before,
     std::vector<std::shared_ptr<MapObject>> after) {
     return _inventoryService.registerInventoryEdit(container, std::move(before), std::move(after));
+}
+
+bool ObjectCommandController::setMapHeader(const Map::MapHeader& after, const std::string& description, const std::string& mergeKey) {
+    return _mapService.setHeader(after, description, mergeKey);
+}
+
+bool ObjectCommandController::setElevationPresent(int elevation, bool present) {
+    return _mapService.setElevationPresent(elevation, present);
 }
 
 void ObjectCommandController::newEmptyMap() {
@@ -194,16 +210,8 @@ bool ObjectCommandController::deleteEdgeZone(int elevation, int zoneIndex) {
     return _edgeService.deleteZone(elevation, zoneIndex);
 }
 
-bool ObjectCommandController::setEdgeZoneSide(int elevation, int zoneIndex, EdgeEditService::Side side, int hexIndex) {
-    return _edgeService.setZoneSide(elevation, zoneIndex, side, hexIndex);
-}
-
 bool ObjectCommandController::upgradeEdgeToVersion2() {
     return _edgeService.upgradeToVersion2();
-}
-
-bool ObjectCommandController::setEdgeSquareSide(int elevation, EdgeEditService::Side side, int colOrRow) {
-    return _edgeService.setSquareSide(elevation, side, colOrRow);
 }
 
 bool ObjectCommandController::toggleEdgeClipSide(int elevation, EdgeEditService::Side side) {
@@ -216,10 +224,6 @@ bool ObjectCommandController::resetEdgeSquare(int elevation) {
 
 const std::optional<MapEdge>& ObjectCommandController::mapEdge() const {
     return _edgeService.edge();
-}
-
-int ObjectCommandController::edgeZoneCount(int elevation) const {
-    return _edgeService.zoneCount(elevation);
 }
 
 std::optional<MapEdge> ObjectCommandController::edgeSnapshot() const {

@@ -1,5 +1,8 @@
 #include "cli/GlobalVars.h"
 
+#include "cli/GvarRoles.h"
+#include "resource/GameVarsLoader.h"
+
 #include "format/gam/Gam.h"
 #include "resource/GameResources.h"
 
@@ -14,29 +17,21 @@ namespace {
     using ordered_json = nlohmann::ordered_json;
 }
 
-Gam* loadGameGam(resource::GameResources& resources) {
-    for (const char* path : { "data/vault13.gam", "vault13.gam" }) {
-        try {
-            if (Gam* gam = resources.repository().load<Gam>(path); gam != nullptr) {
-                return gam;
-            }
-        } catch (const std::exception&) {
-            // try the next candidate path
-        }
-    }
-    return nullptr;
-}
-
 int buildGlobalVars(resource::GameResources& resources, std::ostream& out) {
-    Gam* gam = loadGameGam(resources);
+    Gam* gam = resource::loadVault13Gam(resources);
     if (gam == nullptr || gam->gvarCount() == 0) {
         out << "{\"gvars\":[],\"stats\":{\"count\":0}}\n";
         return 1;
     }
 
+    const auto roles = buildGvarRoles(resources);
     auto gvars = ordered_json::array();
     for (std::size_t i = 0; i < gam->gvarCount(); ++i) {
-        gvars.push_back({ { "index", i }, { "name", gam->gvarKey(i) }, { "default", gam->gvarValue(i) } });
+        ordered_json gvar = { { "index", i }, { "name", gam->gvarKey(i) }, { "default", gam->gvarValue(i) } };
+        if (const auto it = roles.find(static_cast<int>(i)); it != roles.end()) {
+            gvar["roles"] = it->second;
+        }
+        gvars.push_back(std::move(gvar));
     }
 
     ordered_json root;
