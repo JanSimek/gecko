@@ -35,6 +35,7 @@
 #include "ui/dialogs/MapBrowserDialog.h"
 #include "ui/dialogs/PatternBrowserDialog.h"
 #include "ui/dialogs/AddSceneryDialog.h"
+#include "ui/dialogs/CutBuildingDialog.h"
 #include "ui/assets/ModAssetAction.h"
 #include "ui/assets/ModToolsRunner.h"
 #include "ui/theme/ThemeManager.h"
@@ -782,6 +783,8 @@ void MainWindow::setupMenuBar() {
     _toolsMenu = _menuBar->addMenu("&Tools");
     addMenuAction(_toolsMenu, QString(), "Add &Scenery from Picture...", &MainWindow::showAddSceneryDialog,
         QKeySequence(), "Turn a render or photo into a new scenery piece");
+    addMenuAction(_toolsMenu, QString(), "Cut &Building into Walls...", &MainWindow::showCutBuildingDialog,
+        QKeySequence(), "Cut a building render into wall pieces, one per hex, and a stamp that lays them down");
     addMenuAction(_toolsMenu, QString(), "&Apply New Art...", &MainWindow::applyNewArt, QKeySequence(),
         "Save the map, close gecko, deploy the mod with the new art, and open gecko again on this map");
     _toolsMenu->addSeparator();
@@ -2880,6 +2883,20 @@ void MainWindow::showAddSceneryDialog() {
     dialog.exec();
     if (dialog.piecesMade() > 0) {
         showStatusMessage(QString("%1 new piece(s) made. %2").arg(dialog.piecesMade()).arg(AFTER_APPLY));
+    }
+}
+
+void MainWindow::showCutBuildingDialog() {
+    auto runner = makeModToolsRunner();
+    if (!runner) {
+        return;
+    }
+    CutBuildingDialog dialog(runner.get(), this);
+    dialog.exec();
+    if (dialog.buildingsMade() > 0) {
+        showStatusMessage(QString("%1 building(s) cut into walls. Tools > Apply New Art puts them in the game; "
+                                  "then Edit > Stamp Pattern > Custom.")
+                              .arg(dialog.buildingsMade()));
     }
 }
 

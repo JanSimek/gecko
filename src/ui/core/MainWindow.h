@@ -170,6 +170,7 @@ private slots:
     /// A runner for the configured mod folder, or nullptr after explaining how to set one up.
     std::unique_ptr<ModToolsRunner> makeModToolsRunner();
     void showAddSceneryDialog();
+    void showCutBuildingDialog();
     /// Save the map, start the deploy in its own console (it waits for gecko to exit and opens
     /// gecko again on the map), and close gecko.
     void applyNewArt();
