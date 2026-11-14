@@ -56,12 +56,12 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=30)
     ap.add_argument("-o", "--out", type=Path, required=True)
     a = ap.parse_args()
-    a.stamps = [inside(p) for p in a.stamps]
-    a.sheet = inside(a.sheet) if a.sheet else None
-    a.out = inside(a.out)
+    stamps = [inside(p) for p in a.stamps]
+    sheet = inside(a.sheet) if a.sheet else None
+    out = inside(a.out)
     gi = GameIndex(pristine=False)
-    if a.sheet:
-        paths = sorted(a.sheet.rglob("*.json"))[: a.limit]
+    if sheet:
+        paths = sorted(sheet.rglob("*.json"))[: a.limit]
         cw, ch, cols = 420, 300, 5
         s = Image.new("RGB", (cw * cols, ch * ((len(paths) + cols - 1) // cols)), (20, 20, 20))
         dr = ImageDraw.Draw(s)
@@ -71,10 +71,10 @@ def main() -> int:
             x, y = (i % cols) * cw, (i // cols) * ch
             s.paste(im, (x + 4, y + 2))
             dr.text((x + 4, y + ch - 16), p.stem, fill=(255, 220, 60))
-        s.save(a.out)
+        s.save(out)
     else:
-        for p in a.stamps:
-            stamp_image(gi, p).save(a.out if len(a.stamps) == 1 else a.out.with_name(p.stem + ".png"))
+        for p in stamps:
+            stamp_image(gi, p).save(out if len(stamps) == 1 else out.with_name(p.stem + ".png"))
     return 0
 
 
