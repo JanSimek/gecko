@@ -519,7 +519,7 @@ def plan_critters(zips: Zips, idx: art_index.ArtIndex, base_lst: list[str]):
     new_bases: dict[str, tuple[str, bool]] = {}
     for full in sorted(groups):
         mem = sorted(groups[full])
-        exact = [m for m in mem if hashlib.md5(zips.read("OldCritters", m)).digest() in idx.crit]
+        exact = [m for m in mem if hashlib.md5(zips.read("OldCritters", m), usedforsecurity=False).digest() in idx.crit]
         if len(exact) == len(mem):
             rows.append(("critters", full, "REPEAT", f"all {len(mem)} files already exist", "", len(mem), ""))
             continue

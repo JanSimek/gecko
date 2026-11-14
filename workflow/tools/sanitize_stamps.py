@@ -32,6 +32,8 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from foclib.paths import inside
+
 PICK_TYPE = {  # keep order: earlier types are preferred
     3: 0,   # wall
     2: 1,   # scenery
@@ -70,12 +72,12 @@ def sanitize_one(path: Path) -> tuple[int, int, int]:
                 if typ == (other["proPid"] >> 24) & 0xFF:
                     flagged += 1
         v["objects"] = out
-    path.write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")
+    path.write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")  # NOSONAR - the stamp goes back to the file it was read from
     return kept, dropped, flagged
 
 
 def main() -> int:
-    paths = [Path(p) for p in sys.argv[1:]]
+    paths = [inside(p) for p in sys.argv[1:]]
     if not paths:
         print("usage: python tools/sanitize_stamps.py <stamp.json> ...")
         return 1

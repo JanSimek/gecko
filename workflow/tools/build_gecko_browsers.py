@@ -131,7 +131,7 @@ def write_edit_profile() -> Path:
                           "windowMaximized": True})
     cur["version"] = cur.get("version", "1.1")
     cur["dataPaths"] = foc_data_paths(base)
-    sp.write_text(json.dumps(cur, indent=2) + "\n", encoding="utf-8")
+    sp.write_text(json.dumps(cur, indent=2) + "\n", encoding="utf-8")  # NOSONAR - gecko's own settings file, updated in place
     return sp
 
 

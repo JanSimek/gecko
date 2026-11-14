@@ -56,6 +56,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from foclib.paths import inside  # noqa: E402
 from foclib import (  # noqa: E402
     OBJ_TYPE_CRITTER,
     GameIndex,
@@ -239,7 +240,7 @@ def main() -> int:
     args = ap.parse_args()
 
     gi = GameIndex()
-    path = (ROOT / args.map) if not Path(args.map).is_absolute() else Path(args.map)
+    path = inside(ROOT / args.map)
     if not path.is_file():
         sys.exit(f"map not found: {path}")
     raw = path.read_bytes()
@@ -316,8 +317,7 @@ def main() -> int:
             x, y = rmod.hex_xy_screen(p[1] * 200 + p[0])
             cx2, cy2 = x + 16 - minx, y + 8 - miny
             dr.ellipse([cx2 - 3, cy2 - 3, cx2 + 3, cy2 + 3], fill=(60, 255, 90))
-        out = (ROOT / args.render) if not Path(args.render).is_absolute() \
-            else Path(args.render)
+        out = inside(ROOT / args.render)
         out.parent.mkdir(parents=True, exist_ok=True)
         scale = 4 if max(img.size) > 3000 else 1
         if scale > 1:

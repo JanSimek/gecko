@@ -40,6 +40,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from foclib.paths import bare_name, inside  # noqa: E402
 from foclib import GameIndex, parse_lst  # noqa: E402
 from foclib.formats import MapFile  # noqa: E402
 
@@ -236,7 +237,7 @@ def main() -> int:
             sys.exit("close gecko and the game first")
     gi = GameIndex(pristine=False)
     tiles = parse_lst(gi.vfs.read("art\\tiles\\tiles.lst"))
-    for name in args.maps:
+    for name in map(bare_name, args.maps):
         if (DEPL / name).read_bytes() != (AUTH / name).read_bytes():
             sys.exit(f"{name}: the deployed copy differs from mod/data/maps; run tools/sync_maps.py first")
         data, report, box = plan(name, gi, tiles)
@@ -244,7 +245,7 @@ def main() -> int:
         for r in report:
             print(r)
         if args.preview:
-            d = Path(args.preview)
+            d = inside(args.preview)
             d.mkdir(parents=True, exist_ok=True)
             (d / f"new_{name}").write_bytes(data)
             render(AUTH / name, d / f"{Path(name).stem}_before.png", box)

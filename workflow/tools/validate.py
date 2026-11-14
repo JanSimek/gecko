@@ -40,6 +40,7 @@ import ids as ids_mod  # noqa: E402
 import lists  # noqa: E402
 import questlog  # noqa: E402
 import worldmap  # noqa: E402
+from foclib.paths import inside  # noqa: E402
 from foclib import (  # noqa: E402
     GameIndex,
     TYPE_NAME,
@@ -633,8 +634,9 @@ def main() -> int:
     ap.add_argument("--base", type=Path, default=None)
     args = ap.parse_args()
 
-    gi = GameIndex(args.base)
-    gi_full = GameIndex(args.base, pristine=False)
+    base = inside(args.base) if args.base else None
+    gi = GameIndex(base)
+    gi_full = GameIndex(base, pristine=False)
     rep = Report(args.verbose)
 
     check_id_space(gi, rep)

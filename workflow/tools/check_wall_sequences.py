@@ -18,6 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from foclib.paths import bare_name, inside  # noqa: E402
 from foclib import GameIndex, parse_lst  # noqa: E402
 from foclib.formats import MapFile  # noqa: E402
 
@@ -25,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def main() -> int:
-    path, fam = Path(sys.argv[1]), sys.argv[2]
+    path, fam = inside(sys.argv[1]), bare_name(sys.argv[2])
     ref = json.loads((ROOT / "build" / "wall_sequences" / f"{fam}.json").read_text(encoding="utf-8"))
     gi = GameIndex(pristine=False)
     walls = [x.split(",")[0].lower()[:-4] for x in parse_lst(gi.vfs.read("art\\walls\\walls.lst"))]

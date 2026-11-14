@@ -55,6 +55,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from foclib.paths import bare_name, inside  # noqa: E402
 from foclib import GameIndex  # noqa: E402
 from foclib.formats import MapFile  # noqa: E402
 from mapbuild import MapBuilder, MapObjectSpec  # noqa: E402
@@ -366,7 +367,7 @@ def main() -> int:
     if not args.preview and ("gecko" in running or "fallout2" in running):
         sys.exit("close gecko and the game first")
     gi = GameIndex(pristine=False)
-    names = args.maps or sorted(p.name for p in AUTH.iterdir() if p.suffix.lower() == ".map" and (DEPL / p.name).exists())
+    names = [bare_name(n) for n in args.maps] or sorted(p.name for p in AUTH.iterdir() if p.suffix.lower() == ".map" and (DEPL / p.name).exists())
     arr = arrivals_by_map(gi, names)
     results, bad = {}, False
     for name in names:
@@ -380,7 +381,7 @@ def main() -> int:
             bad = True
         results[name] = data
     if args.preview:
-        d = Path(args.preview)
+        d = inside(args.preview)
         d.mkdir(parents=True, exist_ok=True)
         for name, data in results.items():
             info = MapInfo(name, gi)

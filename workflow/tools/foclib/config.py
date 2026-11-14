@@ -18,7 +18,9 @@ Everything machine-specific lives in one file, workflow/config.json, which
       "games": {                            other games to borrow from, keyed as in
         "sonora": "C:/Games/Fallout Sonora",    tools/sources.json. Any you do not own: leave out.
         "nevada": "C:/Games/Fallout Nevada"
-      }
+      },
+      "extra_paths": []                     more folders the tools may read and write (see
+                                            allowed_roots() below)
     }
 
 Paths may use / or \\, ~ and %ENV% variables.
@@ -131,6 +133,21 @@ def games() -> dict[str, Path]:
         if p and p.is_dir():
             out[k] = p
     return out
+
+
+def allowed_roots() -> list[Path]:
+    """The folders the tools may read and write when a path comes from the command line or a
+    plan, recipe or stamp list: this kit, the gecko checkout it lives in, the working copy,
+    the stamp libraries, gecko's settings folder, the Fallout 2 install, the other games, and
+    any folder listed under "extra_paths" in config.json (see foclib/paths.py)."""
+    cfg = load()
+    roots = [KIT, REPO, base_dir(), gecko_settings_dir(), *stamp_libraries()]
+    fo2 = fallout2_dir()
+    if fo2:
+        roots.append(fo2)
+    roots.extend(games().values())
+    roots.extend(p for p in map(_path, cfg.get("extra_paths", [])) if p)
+    return roots
 
 
 def apply_sources(srcs: dict[str, dict]) -> dict[str, dict]:

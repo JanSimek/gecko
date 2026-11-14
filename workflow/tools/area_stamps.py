@@ -269,13 +269,13 @@ def placeholder_art(foc: GameIndex, sc: list[str]) -> set[int]:
     import render
     pal = render.load_palette(foc)
     out = set()
-    unused = hashlib.sha1(foc.vfs.read("art/scenery/mstr69.frm")).hexdigest()
+    unused = hashlib.sha1(foc.vfs.read("art/scenery/mstr69.frm"), usedforsecurity=False).hexdigest()
     for i, n in enumerate(sc):
         try:
             raw = foc.vfs.read(f"art/scenery/{n}")
         except Exception:
             continue
-        if hashlib.sha1(raw).hexdigest() == unused:
+        if hashlib.sha1(raw, usedforsecurity=False).hexdigest() == unused:
             out.add(i)
             continue
         try:
@@ -342,7 +342,7 @@ def write(sources, out: Path, native: bool = False, portable: bool = False) -> N
                         counts["foc_only"] += 1
                         continue
                     key = hashlib.sha1(json.dumps(sorted((o["dxHex"], o["dyHex"], o["proPid"], o["frmPid"])
-                                                         for o in objs)).encode()).hexdigest()
+                                                         for o in objs)).encode(), usedforsecurity=False).hexdigest()
                     if key in seen:
                         counts["duplicate"] += 1
                         continue

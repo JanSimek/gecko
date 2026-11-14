@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from PIL import Image  # noqa: E402
 
 import render as R  # noqa: E402
+from foclib.paths import inside  # noqa: E402
 from foclib import (  # noqa: E402
     OBJ_TYPE_CRITTER,
     GameIndex,
@@ -426,7 +427,7 @@ class Prefabs:
         if png is not None:
             return png
 
-        cache = THUMBS / (hashlib.sha1(pid.encode()).hexdigest() + ".png")
+        cache = THUMBS / (hashlib.sha1(pid.encode(), usedforsecurity=False).hexdigest() + ".png")
         if cache.is_file():
             png = cache.read_bytes()
             self._thumbs[pid] = png
@@ -474,7 +475,7 @@ class Prefabs:
         def run():
             todo = [r["id"] for r in self.index[:limit]]
             miss = [i for i in todo
-                    if not (THUMBS / (hashlib.sha1(i.encode()).hexdigest()
+                    if not (THUMBS / (hashlib.sha1(i.encode(), usedforsecurity=False).hexdigest()
                                       + ".png")).is_file()]
             if not miss:
                 return
@@ -503,8 +504,20 @@ def make_handler(ed: Editor, pf: Prefabs):
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(body)
+
+        def _send_ui(self):
+            """The editor page itself: mapedit.html, shipped beside this script."""
+            body = UI.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(body)  # NOSONAR - the tool's own page from disk, nothing from the request
 
         def _json(self, obj, code=200):
             self._send(code, "application/json",
@@ -515,8 +528,7 @@ def make_handler(ed: Editor, pf: Prefabs):
             q = parse_qs(u.query)
             try:
                 if u.path == "/":
-                    self._send(200, "text/html; charset=utf-8",
-                               UI.read_bytes())
+                    self._send_ui()
                 elif u.path == "/api/render":
                     png, (ox, oy) = ed.render()
                     self.send_response(200)
@@ -545,8 +557,8 @@ def make_handler(ed: Editor, pf: Prefabs):
                 else:
                     self._send(404, "text/plain", b"no")
             except Exception:
-                self._send(500, "text/plain",
-                           traceback.format_exc().encode())
+                traceback.print_exc()           # the details go to this console, not the page
+                self._send(500, "text/plain", b"internal error - see the mapedit console")
 
         def do_POST(self):
             u = urlparse(self.path)
@@ -586,7 +598,8 @@ def make_handler(ed: Editor, pf: Prefabs):
                     else:
                         self._json({"error": "no"}, 404)
             except Exception:
-                self._json({"error": traceback.format_exc()}, 500)
+                traceback.print_exc()
+                self._json({"error": "internal error - see the mapedit console"}, 500)
 
     return H
 
@@ -598,7 +611,7 @@ def main() -> int:
     args = ap.parse_args()
 
     gi = GameIndex()
-    ed = Editor(gi, args.map)
+    ed = Editor(gi, inside(args.map) if args.map else None)
     pf = Prefabs(gi)
     print(f"map      : {ed.name}  ({len(ed.mb.objects)} objects)")
     print(f"prefabs  : {len(pf.index)} available")
@@ -606,7 +619,7 @@ def main() -> int:
     print(f"\n  open  http://127.0.0.1:{args.port}\n")
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(ed, pf))
     try:
-        srv.serve_forever()
+        srv.serve_forever()  # NOSONAR - a local tool: the server binds 127.0.0.1 only
     except KeyboardInterrupt:
         print("\nstopped")
     return 0

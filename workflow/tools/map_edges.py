@@ -58,6 +58,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from foclib.paths import bare_name, inside  # noqa: E402
 from foclib import GameIndex  # noqa: E402
 from foclib.formats import MapFile  # noqa: E402
 
@@ -370,7 +371,8 @@ def main() -> int:
     args = ap.parse_args()
     global AUTH, DEPL
     if args.dir:
-        AUTH, DEPL = args.dir, args.dir / "_no_deployed_copy"
+        AUTH = inside(args.dir)
+        DEPL = AUTH / "_no_deployed_copy"
     if not args.preview and not args.dir:
         running = subprocess.run(["tasklist"], capture_output=True, text=True).stdout.lower()
         if "gecko" in running or "fallout2" in running:
@@ -378,9 +380,9 @@ def main() -> int:
     gi = GameIndex(pristine=False)
     from foclib import parse_lst
     TILE_NAMES.extend(parse_lst(gi.vfs.read(r"art\tiles\tiles.lst")))
-    names = args.maps or sorted(p.name for p in AUTH.iterdir()
+    names = [bare_name(n) for n in args.maps] or sorted(p.name for p in AUTH.iterdir()
                                 if p.suffix.lower() == ".map" and (DEPL / p.name).exists())
-    work = Path(args.preview) if args.preview else ROOT / "build" / "edges"
+    work = inside(args.preview) if args.preview else ROOT / "build" / "edges"
     work.mkdir(parents=True, exist_ok=True)
     results = {}
     for name in names:

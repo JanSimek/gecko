@@ -1892,10 +1892,13 @@ namespace {
         };
         const sf::Image& imageA = imageOf(a);
         const sf::Image& imageB = imageOf(b);
-        const float right = overlap->position.x + overlap->size.x;
-        const float bottom = overlap->position.y + overlap->size.y;
-        for (float y = overlap->position.y + 0.5f; y < bottom; y += 1.f) {
-            for (float x = overlap->position.x + 0.5f; x < right; x += 1.f) {
+        // Sample each pixel centre of the overlap; integer steps keep the count exact.
+        const int columns = static_cast<int>(std::ceil(overlap->size.x - 0.5f));
+        const int rows = static_cast<int>(std::ceil(overlap->size.y - 0.5f));
+        for (int row = 0; row < rows; ++row) {
+            const float y = overlap->position.y + 0.5f + static_cast<float>(row);
+            for (int column = 0; column < columns; ++column) {
+                const float x = overlap->position.x + 0.5f + static_cast<float>(column);
                 if (spriteOpaqueAt(a, imageA, { x, y }) && spriteOpaqueAt(b, imageB, { x, y })) {
                     return true;
                 }

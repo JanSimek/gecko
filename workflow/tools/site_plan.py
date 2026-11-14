@@ -41,6 +41,7 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 ROOT = Path(__file__).resolve().parent.parent
+from foclib.paths import inside  # noqa: E402
 from foclib import config as _config  # noqa: E402
 STAMPS = _config.stamps_dir()
 OUT = ROOT / "docs" / "plans"
@@ -247,6 +248,8 @@ def draw_plan(plan: dict, out: Path) -> list[str]:
     S = 0.5                                     # half the game's pixel scale
     pa = plan["play_area"]
     view = plan.get("view", [pa[0] - 6, pa[1] - 6, pa[2] + 6, pa[3] + 6])
+    # The floor grid is 100 x 100 squares; keeping the view near it also bounds the loops below.
+    view = [min(max(int(v), -20), 120) for v in view]
     corners = [proj(x, y) for x in (view[0], view[2] + 1) for y in (view[1], view[3] + 1)]
     minx = min(c[0] for c in corners) * S
     miny = min(c[1] for c in corners) * S
@@ -431,11 +434,9 @@ def draw_plan(plan: dict, out: Path) -> list[str]:
             if not info:
                 continue
             dr.rectangle((lx, y + 2, lx + 16, y + 16), fill=col)
-            first = True
             for line in wrap(f"{ri}. {info}", 66):
-                dr.text((lx + 24, y + 2), line, fill=(30, 20, 10), font=f_s if not first else f_s)
+                dr.text((lx + 24, y + 2), line, fill=(30, 20, 10), font=f_s)
                 y += 16
-                first = False
             y += 4
         rest = [str(ri) for ri, info, _ in room_list if not info]
         if rest:
@@ -534,7 +535,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("plan")
     args = ap.parse_args()
-    p = Path(args.plan)
+    p = inside(args.plan)
     plan = json.loads(p.read_text(encoding="utf-8"))
     for b in plan.get("buildings", []):
         place_building(b)

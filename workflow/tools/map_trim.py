@@ -67,6 +67,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import render  # noqa: E402
+from foclib.paths import bare_name, inside  # noqa: E402
 from foclib import GameIndex, parse_lst  # noqa: E402
 from foclib.formats import MapFile, hex_xy, is_exit_grid, pid_type  # noqa: E402
 
@@ -728,12 +729,13 @@ def main() -> int:
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
 
-    a, d = AUTHORED / args.map, DEPLOYED / args.map
+    name = bare_name(args.map)
+    a, d = AUTHORED / name, DEPLOYED / name
     raw = a.read_bytes()
     if d.is_file() and d.read_bytes() != raw:
         sys.exit(f"{args.map}: the mod/data and base/mods/foc copies differ (an unsynced gecko save?) - stopping")
     if args.source:
-        raw = Path(args.source).read_bytes()
+        raw = inside(args.source).read_bytes()
     gi = GameIndex(pristine=False)
     m = MapFile.parse(raw, gi.proto)
     arrivals = [(s.split("=")[0], int(s.split("=")[1])) for s in args.arrive]

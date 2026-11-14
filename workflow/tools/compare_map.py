@@ -26,6 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from foclib.paths import inside  # noqa: E402
 from foclib import (  # noqa: E402
     OBJ_TYPE_CRITTER,
     OBJ_TYPE_SCENERY,
@@ -96,8 +97,8 @@ def measure(m: MapFile, label: str) -> dict:
 
 
 def main() -> int:
-    target = Path(sys.argv[1] if len(sys.argv) > 1
-                  else "mod/data/maps/REDWELL.MAP")
+    target = inside(sys.argv[1] if len(sys.argv) > 1
+                    else "mod/data/maps/REDWELL.MAP")
     gi = GameIndex()
 
     rows = []

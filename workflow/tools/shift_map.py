@@ -39,6 +39,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from foclib.paths import bare_name, inside  # noqa: E402
 from foclib import GameIndex, parse_lst  # noqa: E402
 from foclib.formats import MapFile  # noqa: E402
 
@@ -277,6 +278,7 @@ def main() -> int:
     g.add_argument("--preview", metavar="DIR")
     g.add_argument("--write", action="store_true")
     args = ap.parse_args()
+    args.map = bare_name(args.map)
     if args.dx % 2 or args.dy % 2:
         sys.exit("--dx and --dy must be even")
     if args.write:
@@ -304,7 +306,7 @@ def main() -> int:
             print(f"  {other}: {n} exit grids into {args.map} retargeted")
     print(f"  script constants naming hexes on {args.map}: add {args.dy * W + args.dx}")
     if args.preview:
-        d = Path(args.preview)
+        d = inside(args.preview)
         d.mkdir(parents=True, exist_ok=True)
         for n, b in changed.items():
             (d / f"new_{n}").write_bytes(b)

@@ -36,13 +36,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import port  # noqa: E402  (reuses open_source / cmd_proto / ROOT)
+from foclib.paths import inside  # noqa: E402
 from foclib import GameIndex, TYPE_NAME, parse_lst  # noqa: E402
 
 TYPE_BY_NAME = {v: k for k, v in TYPE_NAME.items()}  # "critters" -> 1, etc.
 
 
 def sha1_bytes(data: bytes) -> str:
-    return hashlib.sha1(data).hexdigest()
+    return hashlib.sha1(data, usedforsecurity=False).hexdigest()
 
 
 def hash_all_art(vfs, art_dir: str) -> set[str]:
@@ -153,8 +154,9 @@ def main() -> int:
             port.cmd_proto(ns)
 
     if args.log:
-        Path(args.log).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.log).write_text(log_buf.getvalue(), encoding="utf-8")
+        log = inside(args.log)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text(log_buf.getvalue(), encoding="utf-8")
         print(f"per-item log: {args.log}")
 
     print("\nRun tools/gen_ids.py, tools/validate.py, then tools/deploy.py next.")

@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from PIL import Image, ImageDraw  # noqa: E402
 
 import render  # noqa: E402
+from foclib.paths import inside  # noqa: E402
 from foclib import GameIndex, MapFile  # noqa: E402
 from foclib.formats import pid_type  # noqa: E402
 from mapbuild import HEX_W, MapBuilder, MapObjectSpec, extras_for  # noqa: E402
@@ -55,6 +56,9 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=30)
     ap.add_argument("-o", "--out", type=Path, required=True)
     a = ap.parse_args()
+    a.stamps = [inside(p) for p in a.stamps]
+    a.sheet = inside(a.sheet) if a.sheet else None
+    a.out = inside(a.out)
     gi = GameIndex(pristine=False)
     if a.sheet:
         paths = sorted(a.sheet.rglob("*.json"))[: a.limit]

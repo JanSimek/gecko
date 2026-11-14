@@ -205,7 +205,7 @@ def _index_one(args):
             continue
         nfile += 1
         if adir == "critters":
-            crit.setdefault(hashlib.md5(data).digest(), []).append((key, n))
+            crit.setdefault(hashlib.md5(data, usedforsecurity=False).digest(), []).append((key, n))
             continue
         try:
             for _d, _f, w, h, idx in frm_frames(data):

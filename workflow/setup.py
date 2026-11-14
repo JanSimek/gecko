@@ -183,8 +183,12 @@ def build_base(fo2: Path, base: Path, yes: bool) -> bool:
         say("  skipped. Later:  python setup.py --build-base")
         return False
     ps1 = KIT / "tools" / "make-base.ps1"
+    src, dst = fo2.resolve(), base.resolve()
+    if not src.is_dir():
+        say(f"  {src} is not a folder")
+        return False
     r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ps1),
-                        "-Src", str(fo2), "-Dst", str(base)])
+                        "-Src", str(src), "-Dst", str(dst)])
     return r.returncode == 0 and (base / "master.dat").is_file()
 
 

@@ -35,6 +35,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -53,6 +54,9 @@ MAX_NAME = 12   # the engine keeps 12 characters of an art .lst name
 
 HEADER = ("# New floor and roof tiles in spare lines of the base tiles.lst (tools/tile_slots.py).\n"
           "# <tile id>,<file in art/tiles>. Never reorder or reuse a line: maps and stamps hold these ids.\n")
+
+
+TILE_FILE = re.compile(r"[A-Za-z0-9_-]+\.frm", re.IGNORECASE)   # a file in art/tiles
 
 
 def read_slots() -> dict[int, str]:
@@ -113,7 +117,7 @@ def spare_slots(gi: GameIndex | None = None) -> list[int]:
         if i <= 1:
             continue
         try:
-            h = hashlib.sha1(gi.vfs.read("art\\tiles\\" + name)).hexdigest()
+            h = hashlib.sha1(gi.vfs.read("art\\tiles\\" + name), usedforsecurity=False).hexdigest()
         except FileNotFoundError:
             spare.append(i)                     # a line with no art
             continue
@@ -165,6 +169,8 @@ def main() -> int:
         src = port.open_source(source)
         spare = spare_slots()
         for n in names:
+            if not TILE_FILE.fullmatch(n):
+                sys.exit(f"{n!r}: give a tile file name, like ADB2000.FRM")
             print(f"{n} -> {port_tile(source, src, n, spare)}")
         return 0
     ap.print_help()

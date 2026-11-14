@@ -85,6 +85,7 @@ from PIL import Image  # noqa: E402
 import lists  # noqa: E402
 import port  # noqa: E402
 import tile_slots  # noqa: E402
+from foclib.paths import inside  # noqa: E402
 from foclib import GameIndex, TYPE_NAME, parse_lst, parse_pro, pid_index, pid_type  # noqa: E402
 from render import Frm, load_palette  # noqa: E402
 
@@ -111,7 +112,7 @@ EMPTY_TILE = 1  # CLAUDE.md 4c: an empty square is tile id 1
 
 
 def sha(b: bytes) -> str:
-    return hashlib.sha1(b).hexdigest()
+    return hashlib.sha1(b, usedforsecurity=False).hexdigest()
 
 
 def art_mask(art_dir: str) -> int:
@@ -644,7 +645,7 @@ def main() -> int:
                     p = folder / name
             if not p.is_file():
                 sys.exit(f"no such stamp: {s}")
-            paths.append(p)
+            paths.append(inside(p))
     elif args.all:
         paths = sorted(own_stamps(), key=lambda p: p.stat().st_mtime)
     else:
@@ -744,7 +745,7 @@ def main() -> int:
             "tilesPorted": conv.ported_tiles,
             "objectsDropped": n_obj - n_new,
         }
-        p.write_text(json.dumps(new, separators=(",", ":")) + "\n", encoding="utf-8")
+        p.write_text(json.dumps(new, separators=(",", ":")) + "\n", encoding="utf-8")  # NOSONAR - the stamp goes back to the file it was read from
         converted += 1
 
     if converted:

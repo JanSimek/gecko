@@ -442,7 +442,7 @@ def write(sources, out: Path, native: bool = False, portable: bool = False) -> N
                     rf = [{"dxTile": q % 100 - ax // 2, "dyTile": q // 100 - ay // 2, "tileId": ids.tile(v)}
                           for q, v in sorted(rtiles.items()) if v > 1]
                     key = hashlib.sha1(json.dumps([sorted((o["dxHex"], o["dyHex"], o["proPid"], o["frmPid"]) for o in objs),
-                                                   sorted((t["dxTile"], t["dyTile"], t["tileId"]) for t in fl)]).encode()).hexdigest()
+                                                   sorted((t["dxTile"], t["dyTile"], t["tileId"]) for t in fl)]).encode(), usedforsecurity=False).hexdigest()
                     if key in seen:
                         counts["duplicate"] += 1
                         continue

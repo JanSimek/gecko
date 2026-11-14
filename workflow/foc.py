@@ -41,8 +41,8 @@ def run_tool(name: str, args: list[str]) -> int:
     script = ALIASES.get(name, name)
     if not script.endswith(".py"):
         script += ".py"
-    path = TOOLS / script
-    if not path.is_file():
+    path = TOOLS / Path(script).name
+    if Path(script).name != script or not path.is_file():
         print(f"No tool called '{name}'. `python foc.py tools` lists them.")
         return 2
     if script in ("validate.py", "deploy.py"):
@@ -52,7 +52,8 @@ def run_tool(name: str, args: list[str]) -> int:
         if r.returncode:
             print(r.stdout + r.stderr)
             return r.returncode
-    return subprocess.call([sys.executable, str(path), *args], cwd=str(KIT))
+    # the arguments are the tool's own: they follow the script, so Python never reads them
+    return subprocess.call([sys.executable, str(path), *args], cwd=str(KIT))  # NOSONAR
 
 
 # ------------------------------------------------------------------------------ doctor

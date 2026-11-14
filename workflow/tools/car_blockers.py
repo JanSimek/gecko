@@ -43,6 +43,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from foclib.paths import inside  # noqa: E402
 from foclib import (  # noqa: E402
     OBJ_TYPE_CRITTER,
     GameIndex,
@@ -398,7 +399,7 @@ def main() -> int:
     args = ap.parse_args()
 
     gi = GameIndex()
-    path = (ROOT / args.map) if not Path(args.map).is_absolute() else Path(args.map)
+    path = inside(ROOT / args.map)
     if not path.is_file():
         sys.exit(f"map not found: {path}")
     raw = path.read_bytes()
@@ -419,8 +420,7 @@ def main() -> int:
     print(f"  blocking hexes to add: {total}")
 
     if args.render:
-        out = (ROOT / args.render) if not Path(args.render).is_absolute() \
-            else Path(args.render)
+        out = inside(ROOT / args.render)
         out.parent.mkdir(parents=True, exist_ok=True)
         render_overlay(path, new_blockers, out, gi)
         return 0

@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from PIL import Image  # noqa: E402
 
+from foclib.paths import inside  # noqa: E402
 from foclib import (  # noqa: E402
     OBJ_TYPE_CRITTER,
     OBJ_TYPE_SCENERY,
@@ -419,9 +420,9 @@ def main() -> int:
             sys.exit(f"unknown source {args.source}")
         gi = GameIndex(Path(srcs[args.source]["path"]), pristine=False)
     else:
-        gi = GameIndex(args.base)
+        gi = GameIndex(inside(args.base) if args.base else None)
 
-    out = Path(args.out)
+    out = inside(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
 
     if args.fragment:
@@ -435,7 +436,7 @@ def main() -> int:
     else:
         if not args.map:
             sys.exit("give a .map, or --art / --sheet")
-        data = Path(args.map).read_bytes()
+        data = inside(args.map).read_bytes()
         m = MapFile.parse(data, gi.proto)
         render_map(gi, m, args.elevation, not args.no_objects).save(out)
 

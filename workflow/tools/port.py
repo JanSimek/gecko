@@ -258,7 +258,7 @@ def allocate(registry: Path, name: str, start: int) -> int:
         lines.pop()
     lines.append(name)
     registry.parent.mkdir(parents=True, exist_ok=True)
-    registry.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    registry.write_text("\n".join(lines) + "\n", encoding="utf-8")  # NOSONAR - rewrites the registry it just read
     return start + len(entries)
 
 

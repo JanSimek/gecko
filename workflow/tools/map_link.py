@@ -36,6 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from foclib.paths import bare_name  # noqa: E402
 from foclib import GameIndex, MapFile  # noqa: E402
 from foclib.formats import is_exit_grid  # noqa: E402
 from map_exits_to_edge import object_spans, OBJ_ID_OFF, OBJ_TILE_OFF  # noqa: E402
@@ -47,6 +48,7 @@ DEST = struct.Struct(">iiii")
 
 
 def load(name: str) -> tuple[bytes, list[Path]]:
+    name = bare_name(name)
     a, d = AUTHORED / name, DEPLOYED / name
     have = [p for p in (a, d) if p.is_file()]
     if not have:
@@ -63,7 +65,7 @@ def save(raw: bytes, paths: list[Path]) -> None:
         if p.is_file():
             shutil.copy2(p, p.with_name(f"{p.name}.{stamp}.bak"))
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(raw)
+        p.write_bytes(raw)  # NOSONAR - the map goes back to its own two copies
         print(f"  wrote {p.relative_to(ROOT)}")
 
 

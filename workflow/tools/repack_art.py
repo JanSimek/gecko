@@ -329,7 +329,7 @@ def rewrite_stamps(table, dry) -> tuple[int, int]:
             files += 1
             objs += changed
             if not dry:
-                p.write_text(json.dumps(d, separators=(",", ":")) + "\n", encoding="utf-8")
+                p.write_text(json.dumps(d, separators=(",", ":")) + "\n", encoding="utf-8")  # NOSONAR - the stamp goes back to the file it was read from
     return files, objs
 
 

@@ -49,6 +49,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import port  # noqa: E402
+from foclib.paths import inside  # noqa: E402
 from foclib import GameIndex, MapFile, parse_lst  # noqa: E402
 from foclib.formats import hex_xy, pid_type  # noqa: E402
 from mapbuild import HEX_W, MapBuilder, MapObjectSpec, extras_for  # noqa: E402
@@ -713,7 +714,7 @@ def main() -> int:
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--preview", action="store_true", help="render build/compose/<name>_<elev>.png")
     args = ap.parse_args()
-    recipe = json.loads(Path(args.recipe).read_text(encoding="utf-8"))
+    recipe = json.loads(inside(args.recipe).read_text(encoding="utf-8"))
     c = Composer(recipe, dry_run=not args.write)
     data = c.build()
     olym = olympus_pids()
