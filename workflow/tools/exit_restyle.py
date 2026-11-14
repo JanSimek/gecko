@@ -353,7 +353,7 @@ def render(path, out, crops):
             D += ["--data", str(ROOT / d)]
     g = str(_config.gecko_cli())
     for i, c in enumerate(crops):
-        subprocess.run([g, "map", "render", "--map", str(path), "--elevation", "0", "--out", f"{out}_{i}.png",  # NOSONAR - paths checked by foclib.paths.inside() and bare_name()
+        subprocess.run([g, "map", "render", "--map", str(path), "--elevation", "0", "--out", f"{out}_{i}.png",
                         "--max-dim", "900", "--crop-hex", str(c), "--crop-extent", "420"] + D,
                        capture_output=True, check=False)
 
@@ -382,11 +382,11 @@ def main() -> int:
         results[name] = data
     if args.preview:
         d = inside(args.preview)
-        d.mkdir(parents=True, exist_ok=True)  # NOSONAR - path checked by foclib.paths.inside()
+        d.mkdir(parents=True, exist_ok=True)
         for name, data in results.items():
             info = MapInfo(name, gi)
             crops = [tiles[len(tiles) // 2] for _, tiles in patches(info.exits)]
-            (d / f"new_{name}").write_bytes(data)  # NOSONAR - path checked by foclib.paths.inside()
+            (d / f"new_{name}").write_bytes(data)
             render(AUTH / name, d / f"{Path(name).stem}_before", crops)
             render(d / f"new_{name}", d / f"{Path(name).stem}_after", crops)
         print(f"--preview: test copies and before/after renders in {d}; nothing written")

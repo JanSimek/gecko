@@ -714,7 +714,7 @@ def main() -> int:
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--preview", action="store_true", help="render build/compose/<name>_<elev>.png")
     args = ap.parse_args()
-    recipe = json.loads(inside(args.recipe).read_text(encoding="utf-8"))  # NOSONAR - path checked by foclib.paths.inside()
+    recipe = json.loads(inside(args.recipe).read_text(encoding="utf-8"))
     c = Composer(recipe, dry_run=not args.write)
     data = c.build()
     olym = olympus_pids()

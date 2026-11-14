@@ -60,7 +60,7 @@ class Dat2:
 
     def _load_tree(self) -> None:
         size = self.path.stat().st_size
-        with self.path.open("rb") as f:  # NOSONAR - an archive under a base that the tools check with foclib.paths.inside()
+        with self.path.open("rb") as f:
             if size < 8:
                 raise Dat2Error(f"{self.path.name}: too small to be a DAT2")
             f.seek(size - 8)

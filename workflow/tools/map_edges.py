@@ -114,7 +114,7 @@ def data_args():
 
 
 def render(path, elev, out, maxdim, style=()):
-    r = subprocess.run([str(GECKO), "map", "render", "--map", str(path), "--elevation", str(elev),  # NOSONAR - paths checked by foclib.paths.inside() and bare_name()
+    r = subprocess.run([str(GECKO), "map", "render", "--map", str(path), "--elevation", str(elev),
                         "--out", str(out), "--max-dim", str(maxdim), "--full"] + list(style) + data_args(),
                        capture_output=True, text=True)
     m = re.search(r"origin=(-?\d+),(-?\d+) scale=([\d.]+)", r.stdout + r.stderr)
@@ -383,11 +383,11 @@ def main() -> int:
     names = [bare_name(n) for n in args.maps] or sorted(p.name for p in AUTH.iterdir()
                                 if p.suffix.lower() == ".map" and (DEPL / p.name).exists())
     work = inside(args.preview) if args.preview else ROOT / "build" / "edges"
-    work.mkdir(parents=True, exist_ok=True)  # NOSONAR - path checked by foclib.paths.inside()
+    work.mkdir(parents=True, exist_ok=True)
     results = {}
     for name in names:
         path = AUTH / name
-        raw = path.read_bytes()  # NOSONAR - path checked by foclib.paths.inside()
+        raw = path.read_bytes()
         if (DEPL / name).exists() and (DEPL / name).read_bytes() != raw:
             sys.exit(f"{name}: the deployed copy differs from mod/data/maps; run tools/sync_maps.py first")
         m = MapFile.parse(raw, gi.proto)

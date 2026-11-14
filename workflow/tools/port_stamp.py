@@ -682,7 +682,7 @@ def main() -> int:
 
     converted = 0
     for p in paths:
-        d = json.loads(p.read_text(encoding="utf-8"))  # NOSONAR - path checked by foclib.paths.inside()
+        d = json.loads(p.read_text(encoding="utf-8"))
         prior = d.get("focConverted")
         if prior and not args.redo:
             print(f"{p.stem}: already converted from {prior.get('source')} - skipped")

@@ -307,7 +307,7 @@ def main() -> int:
     print(f"  script constants naming hexes on {args.map}: add {args.dy * W + args.dx}")
     if args.preview:
         d = inside(args.preview)
-        d.mkdir(parents=True, exist_ok=True)  # NOSONAR - path checked by foclib.paths.inside()
+        d.mkdir(parents=True, exist_ok=True)
         for n, b in changed.items():
             (d / f"new_{n}").write_bytes(b)
         print(f"--preview: test copies in {d}; nothing written")

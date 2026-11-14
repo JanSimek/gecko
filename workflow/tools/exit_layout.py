@@ -312,7 +312,7 @@ def draw_debug(path, out, box, exits, blocks, outside, arrivals):
     for dd in ["base/master.dat", "base/critter.dat"] + [f"base/mods/{n}" for n in order] + ["base/mods/foc"]:
         if (ROOT / dd).exists():
             D += ["--data", str(ROOT / dd)]
-    r = subprocess.run([str(_config.gecko_cli()), "map", "render", "--map", str(path),  # NOSONAR - paths checked by foclib.paths.inside() and bare_name()
+    r = subprocess.run([str(_config.gecko_cli()), "map", "render", "--map", str(path),
                         "--elevation", "0", "--out", str(out), "--max-dim", "2400", "--full"] + D, capture_output=True, text=True)
     m = re.search(r"origin=(-?\d+),(-?\d+) scale=([\d.]+)", r.stdout + r.stderr)
     ox, oy, sc = int(m.group(1)), int(m.group(2)), float(m.group(3))
@@ -448,14 +448,14 @@ def main() -> int:
             print(line)
     if args.preview:
         d = inside(args.preview)
-        d.mkdir(parents=True, exist_ok=True)  # NOSONAR - path checked by foclib.paths.inside()
+        d.mkdir(parents=True, exist_ok=True)
         for key, (mp, new_exits, blocks) in results.items():
             out = write_map(mp, gi, new_exits, blocks)
             if key in new_start:
                 struct.pack_into(">i", out, 0x14, new_start[key][0])
                 struct.pack_into(">i", out, 0x1C, new_start[key][1])
             MapFile.parse(bytes(out), gi.proto)
-            (d / f"new_{mp.name}").write_bytes(bytes(out))  # NOSONAR - path checked by foclib.paths.inside()
+            (d / f"new_{mp.name}").write_bytes(bytes(out))
             draw_debug(d / f"new_{mp.name}", d / f"{Path(mp.name).stem}.png", mp.box, new_exits, blocks,
                        debug[key]["outside"], debug[key]["arrivals"])
         print(f"--preview: test copies and renders in {d}; nothing written")

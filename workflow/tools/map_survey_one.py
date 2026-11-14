@@ -35,7 +35,7 @@ def main() -> int:
     town = summary["ALL"]["town"]
     cols = []
     for p in sys.argv[1:]:
-        m = MapFile.parse(inside(p).read_bytes(), gi.proto)  # NOSONAR - path checked by foclib.paths.inside()
+        m = MapFile.parse(inside(p).read_bytes(), gi.proto)
         r = ms.survey_elev(m, 0, art, tiles) or {}
         scroll = sum(1 for o in m.objects if o.pid == 0x500000C)
         r["scroll_blockers"] = scroll

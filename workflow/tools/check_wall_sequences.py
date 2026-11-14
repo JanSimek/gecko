@@ -30,7 +30,7 @@ def main() -> int:
     ref = json.loads((ROOT / "build" / "wall_sequences" / f"{fam}.json").read_text(encoding="utf-8"))
     gi = GameIndex(pristine=False)
     walls = [x.split(",")[0].lower()[:-4] for x in parse_lst(gi.vfs.read("art\\walls\\walls.lst"))]
-    m = MapFile.parse(path.read_bytes(), gi.proto)  # NOSONAR - path checked by foclib.paths.inside()
+    m = MapFile.parse(path.read_bytes(), gi.proto)
     pat = re.compile(rf"^{re.escape(fam)}\d+[a-z]?$")
     cells = defaultdict(dict)
     for o in m.objects:

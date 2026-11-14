@@ -44,7 +44,7 @@ PICK_TYPE = {  # keep order: earlier types are preferred
 
 
 def sanitize_one(path: Path) -> tuple[int, int, int]:
-    d = json.loads(path.read_text(encoding="utf-8"))  # NOSONAR - path checked by foclib.paths.inside()
+    d = json.loads(path.read_text(encoding="utf-8"))
     kept = dropped = flagged = 0
     for v in d.get("variants", []):
         objs = v.get("objects", [])

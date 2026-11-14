@@ -28,7 +28,7 @@ from mapbuild import HEX_W, MapBuilder, MapObjectSpec, extras_for  # noqa: E402
 
 
 def stamp_image(gi: GameIndex, path: Path) -> Image.Image:
-    d = json.loads(path.read_text(encoding="utf-8"))  # NOSONAR - path checked by foclib.paths.inside()
+    d = json.loads(path.read_text(encoding="utf-8"))
     v = d["variants"][0]
     ax, ay = 100, 100            # stamp in the middle of the grid, on even parity
     mb = MapBuilder("STAMP.MAP", elevations=(0,), map_id=0)

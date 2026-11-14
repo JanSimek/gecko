@@ -75,7 +75,7 @@ def add_slot(tid: int, name: str) -> None:
     text = SLOTS.read_text(encoding="utf-8") if SLOTS.is_file() else HEADER
     if not text.endswith("\n"):
         text += "\n"
-    SLOTS.write_text(text + f"{tid},{name}\n", encoding="utf-8")  # NOSONAR - name checked against TILE_FILE in main()
+    SLOTS.write_text(text + f"{tid},{name}\n", encoding="utf-8")
 
 
 def _ids_in_maps(gi: GameIndex) -> set[int]:
@@ -170,7 +170,7 @@ def main() -> int:
         spare = spare_slots()
         for n in names:
             if not TILE_FILE.fullmatch(n):
-                sys.exit(f"{n!r}: give a tile file name, like ADB2000.FRM")
+                raise SystemExit(f"{n!r}: give a tile file name, like ADB2000.FRM")
             print(f"{n} -> {port_tile(source, src, n, spare)}")
         return 0
     ap.print_help()

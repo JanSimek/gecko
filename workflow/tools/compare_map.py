@@ -102,7 +102,7 @@ def main() -> int:
     gi = GameIndex()
 
     rows = []
-    rows.append(measure(MapFile.parse(target.read_bytes(), gi.proto), target.name))  # NOSONAR - path checked by foclib.paths.inside()
+    rows.append(measure(MapFile.parse(target.read_bytes(), gi.proto), target.name))
     for r in REFERENCE:
         try:
             rows.append(measure(gi.load_map(gi.vfs.read(r)), r.split("/")[-1]))

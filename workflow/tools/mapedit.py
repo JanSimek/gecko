@@ -117,7 +117,7 @@ class Editor:
     # -- map io ------------------------------------------------------------
 
     def _load(self, path: Path):
-        data = path.read_bytes()  # NOSONAR - path checked by foclib.paths.inside()
+        data = path.read_bytes()
         m = MapFile.parse(data, self.gi.proto)
         self.mb.floors[0] = list(m.floors[0])
         self.mb.roofs[0] = list(m.roofs[0])
