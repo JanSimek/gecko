@@ -56,7 +56,7 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=30)
     ap.add_argument("-o", "--out", type=Path, required=True)
     a = ap.parse_args()
-    stamps = [inside(p) for p in a.stamps]
+    stamps = [inside(arg) for arg in a.stamps]
     sheet = inside(a.sheet) if a.sheet else None
     out = inside(a.out)
     gi = GameIndex(pristine=False)
