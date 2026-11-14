@@ -1,0 +1,291 @@
+<!-- FOC prefab map editor. Served by tools/mapedit.py. -->
+<meta charset="utf-8">
+<title>FOC map editor</title>
+<style>
+  :root {
+    --bg:#101009; --panel:#191912; --panel2:#202017; --line:#32322a;
+    --ink:#ddd6c2; --dim:#8b8674; --hot:#d0a94f; --ok:#9ec27a; --bad:#d98b7a;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font:13px/1.45 "Segoe UI",system-ui,sans-serif; overflow:hidden; }
+  #app { display:grid; grid-template-columns:300px 1fr; height:100vh; }
+
+  /* ---- palette ---- */
+  #side { background:var(--panel); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; min-height:0; }
+  #tabs { display:flex; border-bottom:1px solid var(--line); }
+  #tabs button { flex:1; background:none; border:0; border-bottom:2px solid transparent;
+    color:var(--dim); padding:11px 4px; cursor:pointer; font:inherit;
+    font-size:12px; letter-spacing:.03em; }
+  #tabs button:hover { color:var(--ink); }
+  #tabs button.on { color:var(--hot); border-bottom-color:var(--hot); }
+  #ftr { padding:9px 10px; display:grid; gap:6px;
+    grid-template-columns:1fr auto; border-bottom:1px solid var(--line); }
+  input,select,button.b {
+    background:#26261c; color:var(--ink); border:1px solid var(--line);
+    border-radius:4px; padding:6px 9px; font:inherit; }
+  button.b { cursor:pointer; }
+  button.b:hover { border-color:var(--hot); }
+  button.b.on { background:var(--hot); color:#101009; border-color:var(--hot);
+    font-weight:600; }
+  #list { flex:1; overflow-y:auto; padding:8px; min-height:0; }
+  .card { border:1px solid transparent; border-radius:5px; padding:7px;
+    cursor:pointer; margin-bottom:5px; background:var(--panel2); }
+  .card:hover { border-color:#4a4a3c; }
+  .card.sel { border-color:var(--hot); box-shadow:0 0 0 1px var(--hot) inset; }
+  .card img { width:100%; height:104px; object-fit:contain; background:#0a0a07;
+    border-radius:3px; display:block; }
+  .card b { display:block; font-size:11px; font-weight:600; margin-top:5px;
+    word-break:break-all; }
+  .card small { color:var(--dim); font-size:11px; }
+  #count { color:var(--dim); padding:0 10px 8px; font-size:11px; }
+
+  /* ---- main ---- */
+  #main { display:flex; flex-direction:column; min-width:0; min-height:0; }
+  #bar { display:flex; gap:7px; align-items:center; padding:8px 12px;
+    background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  #bar .sp { flex:1; }
+  #stage { flex:1; overflow:hidden; position:relative; background:#0a0a07;
+    cursor:crosshair; }
+  #stage.pan { cursor:grab; } #stage.pan.down { cursor:grabbing; }
+  #stage.erase { cursor:cell; }
+  #canvas { position:absolute; transform-origin:0 0; }
+  #map { display:block; image-rendering:pixelated; }
+  #ghost { position:absolute; pointer-events:none; opacity:.55; display:none;
+    outline:2px solid var(--hot); outline-offset:2px; border-radius:2px; }
+  #status { display:flex; gap:16px; padding:6px 12px; background:var(--panel);
+    border-top:1px solid var(--line); font-size:12px; color:var(--dim); }
+  #status b { color:var(--ink); font-weight:600; }
+  #msg.ok { color:var(--ok); } #msg.err { color:var(--bad); }
+  #msg.warn { color:#e8b661; }
+  kbd { background:#26261c; border:1px solid var(--line); border-radius:3px;
+    padding:0 4px; font:11px monospace; color:var(--dim); }
+  #busy { position:absolute; inset:0; background:#000a; display:none;
+    align-items:center; justify-content:center; color:var(--hot);
+    letter-spacing:.1em; font-size:12px; text-transform:uppercase; }
+</style>
+
+<div id="app">
+  <aside id="side">
+    <div id="tabs">
+      <button data-k="building" class="on">Buildings</button>
+      <button data-k="stamp">Structures</button>
+      <button data-k="exterior">Terrain</button>
+      <button data-k="interior">Rooms</button>
+    </div>
+    <div id="ftr">
+      <label for="q" style="position:absolute;left:-9999px">Search prefabs</label>
+      <input id="q" placeholder="search…">
+      <label for="tag" style="position:absolute;left:-9999px">Prefab tag</label>
+      <select id="tag" style="width:106px">
+        <option value="">any</option>
+        <option value="door">door</option>
+        <option value="critters">people</option>
+        <option value="items">items</option>
+        <option value="stairs">stairs</option>
+        <option disabled>──────</option>
+        <option value="hut">hut (small)</option>
+        <option value="house">house</option>
+        <option value="block">block (big)</option>
+      </select>
+    </div>
+    <div id="list"></div>
+    <div id="count"></div>
+  </aside>
+
+  <main id="main">
+    <div id="bar">
+      <button class="b on" id="m-place">Place <kbd>P</kbd></button>
+      <button class="b" id="m-erase">Erase <kbd>E</kbd></button>
+      <button class="b" id="m-pan">Pan <kbd>space</kbd></button>
+      <button class="b" id="undo">Undo <kbd>ctrl-Z</kbd></button>
+      <span class="sp"></span>
+      <button class="b" id="zo">−</button>
+      <span id="zl" style="min-width:44px;text-align:center">100%</span>
+      <button class="b" id="zi">+</button>
+      <button class="b" id="fit">Fit</button>
+      <span class="sp"></span>
+      <label for="name" style="position:absolute;left:-9999px">Map file name</label>
+      <input id="name" style="width:170px">
+      <button class="b" id="save">Save <kbd>ctrl-S</kbd></button>
+    </div>
+
+    <div id="stage">
+      <div id="canvas"><img id="map" alt=""></div>
+      <img id="ghost">
+      <div id="busy">working…</div>
+    </div>
+
+    <div id="status">
+      <span>objects <b id="s-obj">–</b></span>
+      <span>density <b id="s-den">–</b> <span style="opacity:.6">(human ≈1.3)</span></span>
+      <span>hex <b id="s-hex">–</b></span>
+      <span id="msg">pick a prefab, then click the map</span>
+    </div>
+  </main>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let sel=null, selRec=null, mode="place", kind="building", busy=false;
+let zoom=1, panX=0, panY=0, dragging=false, dragged=false, sx0=0, sy0=0;
+
+const say=(t,c="")=>{ const m=$("#msg"); m.textContent=t; m.className=c; };
+const setBusy=b=>{ busy=b; $("#busy").style.display=b?"flex":"none"; };
+
+function applyView(){
+  $("#canvas").style.transform=`translate(${panX}px,${panY}px) scale(${zoom})`;
+  $("#zl").textContent=Math.round(zoom*100)+"%";
+}
+function fit(){
+  const img=$("#map"), st=$("#stage");
+  if(!img.naturalWidth) return;
+  zoom=Math.min(st.clientWidth/img.naturalWidth, st.clientHeight/img.naturalHeight)*0.96;
+  panX=(st.clientWidth-img.naturalWidth*zoom)/2;
+  panY=(st.clientHeight-img.naturalHeight*zoom)/2;
+  applyView();
+}
+
+async function refreshMap(keepView){
+  const r=await fetch("/api/render?t="+Date.now());
+  const b=await r.blob(), img=$("#map");
+  if(img.dataset.u) URL.revokeObjectURL(img.dataset.u);
+  const u=URL.createObjectURL(b); img.dataset.u=u;
+  await new Promise(res=>{ img.onload=res; img.src=u; });
+  if(!keepView) fit(); else applyView();
+  const st=await (await fetch("/api/state")).json();
+  $("#s-obj").textContent=st.objects;
+  $("#s-den").textContent=st.density;
+}
+
+async function loadPrefabs(){
+  const p=new URLSearchParams({q:$("#q").value, kind:kind, tag:$("#tag").value});
+  const rows=await (await fetch("/api/prefabs?"+p)).json();
+  const list=$("#list"); list.innerHTML="";
+  for(const r of rows){
+    const el=document.createElement("div");
+    el.className="card"+(sel===r.id?" sel":"");
+    el.innerHTML=`<img decoding="async" src="/api/thumb?id=${encodeURIComponent(r.id)}">
+      <b>${r.id.replace(/^(fo2:|bld:|stamp:)/,"")}</b>
+      <small>${r.w}×${r.h} squares · ${r.objects} objects</small><br>
+      <small>${(r.tags||[]).filter(t=>t!=="building").join(" · ")}</small>`;
+    el.onclick=()=>{
+      sel=r.id; selRec=r;
+      document.querySelectorAll(".card").forEach(n=>n.classList.remove("sel"));
+      el.classList.add("sel");
+      const g=$("#ghost"); g.src=`/api/thumb?id=${encodeURIComponent(r.id)}`;
+      say(`${r.id} selected — click to place`);
+    };
+    list.appendChild(el);
+  }
+  $("#count").textContent=`${rows.length} shown`;
+  if(!rows.length) say("nothing matches that filter","err");
+}
+
+// ---- map interaction
+const stage=$("#stage");
+function toImg(ev){
+  const img=$("#map"), r=img.getBoundingClientRect();
+  return { x:Math.round((ev.clientX-r.left)/zoom), y:Math.round((ev.clientY-r.top)/zoom) };
+}
+stage.addEventListener("mousedown",ev=>{
+  if(mode==="pan"||ev.button===1){ dragging=true; dragged=false;
+    sx0=ev.clientX-panX; sy0=ev.clientY-panY; stage.classList.add("down"); }
+});
+addEventListener("mousemove",ev=>{
+  if(dragging){ panX=ev.clientX-sx0; panY=ev.clientY-sy0; dragged=true; applyView(); return; }
+  if(mode==="place"&&sel){
+    const g=$("#ghost"); g.style.display="block";
+    g.style.left=(ev.clientX-60)+"px"; g.style.top=(ev.clientY-45)+"px";
+    g.style.width="120px";
+  } else $("#ghost").style.display="none";
+});
+addEventListener("mouseup",()=>{ dragging=false; stage.classList.remove("down"); });
+
+stage.addEventListener("wheel",ev=>{
+  ev.preventDefault();
+  const f=ev.deltaY<0?1.15:1/1.15, nz=Math.min(4,Math.max(0.05,zoom*f));
+  panX=ev.clientX-(ev.clientX-panX)*(nz/zoom);
+  panY=ev.clientY-(ev.clientY-panY)*(nz/zoom);
+  zoom=nz; applyView();
+},{passive:false});
+
+stage.addEventListener("click",async ev=>{
+  if(busy||mode==="pan"||dragged) { dragged=false; return; }
+  const {x,y}=toImg(ev);
+  setBusy(true);
+  try{
+    if(mode==="erase"){
+      const r=await (await fetch("/api/erase",{method:"POST",
+        body:JSON.stringify({x,y,r:3})})).json();
+      say(`erased ${r.removed}`, r.removed?"ok":"");
+    }else{
+      if(!sel){ say("pick a prefab first","err"); setBusy(false); return; }
+      const r=await (await fetch("/api/place",{method:"POST",
+        body:JSON.stringify({x,y,id:sel})})).json();
+      if(r.error) say(r.error,"err");
+      else { say(`placed ${r.placed} objects` +
+                 (r.clipped ? ` (${r.clipped} could not resolve)` : "") +
+                 (r.outside ? ` — grew the map by ${r.outside} squares (it now juts past the terrain edge; ctrl-Z if that's wrong)` : ""),
+                 r.outside ? "warn" : (r.placed?"ok":"err"));
+             $("#s-hex").textContent=r.tile; }
+    }
+    await refreshMap(true);
+  }catch(e){ say(String(e),"err"); }
+  setBusy(false);
+});
+
+// ---- toolbar
+function setMode(m){
+  mode=m;
+  for(const [id,k] of [["#m-place","place"],["#m-erase","erase"],["#m-pan","pan"]])
+    $(id).classList.toggle("on", k===m);
+  stage.classList.toggle("pan", m==="pan");
+  stage.classList.toggle("erase", m==="erase");
+  if(m!=="place") $("#ghost").style.display="none";
+}
+$("#m-place").onclick=()=>setMode("place");
+$("#m-erase").onclick=()=>setMode("erase");
+$("#m-pan").onclick=()=>setMode("pan");
+$("#zi").onclick=()=>{ zoom=Math.min(4,zoom*1.25); applyView(); };
+$("#zo").onclick=()=>{ zoom=Math.max(0.05,zoom/1.25); applyView(); };
+$("#fit").onclick=fit;
+$("#undo").onclick=async()=>{
+  setBusy(true);
+  const r=await (await fetch("/api/undo",{method:"POST",body:"{}"})).json();
+  say(r.msg); await refreshMap(true); setBusy(false);
+};
+$("#save").onclick=async()=>{
+  setBusy(true); say("saving…");
+  const r=await (await fetch("/api/save",{method:"POST",
+    body:JSON.stringify({name:$("#name").value})})).json();
+  say(r.error?r.error:`saved ${r.path} — ${r.objects} objects, ${r.density}/sq`,
+      r.error?"err":"ok");
+  setBusy(false);
+};
+
+for(const b of document.querySelectorAll("#tabs button"))
+  b.onclick=()=>{ kind=b.dataset.k;
+    document.querySelectorAll("#tabs button").forEach(n=>n.classList.remove("on"));
+    b.classList.add("on"); loadPrefabs(); };
+for(const id of ["#q","#tag"]) $(id).addEventListener("input",loadPrefabs);
+
+addEventListener("keydown",ev=>{
+  if(ev.target.tagName==="INPUT") return;
+  if(ev.key==="p") setMode("place");
+  else if(ev.key==="e") setMode("erase");
+  else if(ev.key===" "){ ev.preventDefault(); setMode("pan"); }
+  else if(ev.ctrlKey&&ev.key==="z"){ ev.preventDefault(); $("#undo").click(); }
+  else if(ev.ctrlKey&&ev.key==="s"){ ev.preventDefault(); $("#save").click(); }
+  else if(ev.key==="f") fit();
+});
+
+(async()=>{
+  const st=await (await fetch("/api/state")).json();
+  $("#name").value=st.name;
+  await loadPrefabs();
+  await refreshMap(false);
+  say(`${st.name} loaded`);
+})();
+</script>

@@ -96,3 +96,11 @@ TEST_CASE("PluginTool hint renders the active tool's own items when provided", "
     REQUIRE(hint.contains("Esc / right-click: cancel"));
     REQUIRE(hint.count(QString::fromUtf8("·")) == 2);
 }
+
+TEST_CASE("PasteClipboard hint advertises click to paste and how to leave", "[hints]") {
+    const QString hint = hintForContext(EditorMode::PasteClipboard, false);
+    REQUIRE(hint.contains("Click"));
+    REQUIRE(hint.contains("paste"));
+    REQUIRE(hint.contains("Esc"));
+    REQUIRE(hint.contains("right-click"));
+}

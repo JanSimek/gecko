@@ -27,7 +27,9 @@
 #endif
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
+#include "editing/tools/BlackEdgeTool.h"
 #include "editing/tools/FillBrushTool.h"
+#include "util/Constants.h"
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/dialogs/AboutDialog.h"
 #include "ui/dialogs/FillDialog.h"
@@ -35,6 +37,10 @@
 #include "ui/dialogs/ScriptSelectorDialog.h"
 #include "ui/dialogs/MapBrowserDialog.h"
 #include "ui/dialogs/PatternBrowserDialog.h"
+#include "ui/dialogs/AddSceneryDialog.h"
+#include "ui/dialogs/CutBuildingDialog.h"
+#include "ui/assets/ModAssetAction.h"
+#include "ui/assets/ModToolsRunner.h"
 #include "ui/theme/ThemeManager.h"
 #include "resource/GameResources.h"
 #include "state/loader/MapLoader.h"
@@ -81,10 +87,42 @@
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
+#include <QCheckBox>
+#include <QCoreApplication>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QLineEdit>
+#include <QPlainTextEdit>
+#include <QSpinBox>
 #include <SFML/Window/Event.hpp>
 #include <spdlog/spdlog.h>
 
 namespace geck {
+
+namespace {
+    // The four operations the unified Add/Remove Blocker toolbar dropdown offers, shared by
+    // setupToolModeActions (builds the menu), applyBlockerTool (activates the chosen one) and
+    // syncToolModeActions (mirrors the active tool back into the button/menu state).
+    struct BlockerOp {
+        QString label;
+        QString icon;
+        std::string_view toolId;
+        bool checkedByDefault;
+    };
+
+    const std::array<BlockerOp, 4>& blockerOps() {
+        static const std::array<BlockerOp, 4> ops{ {
+            { "Add Wall Blocker", ":/icons/actions/add-wall-blocker.svg", BlockerTools::ADD_WALL_ID, true },
+            { "Remove Wall Blocker", ":/icons/actions/remove-wall-blocker.svg", BlockerTools::REMOVE_WALL_ID, false },
+            { "Add Scroll Blocker", ":/icons/actions/add-wall-blocker.svg", BlockerTools::ADD_SCROLL_ID, false },
+            { "Remove Scroll Blocker", ":/icons/actions/remove-wall-blocker.svg", BlockerTools::REMOVE_SCROLL_ID, false },
+        } };
+        return ops;
+    }
+} // namespace
 
 MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::shared_ptr<Settings> settings, QWidget* parent)
     : QMainWindow(parent)
@@ -152,6 +190,15 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
     _gameLauncher = std::make_unique<GameLauncher>(*_resourcesShared, _settings, this, [this](const QString& message) { showStatusMessage(message); }, nullptr);
 
     _externalEditorLauncher = std::make_unique<ExternalEditorLauncher>(*_resourcesShared, _settings, this);
+
+    if (_settings) {
+        const std::filesystem::path configured = _settings->getModToolsRoot();
+        const std::filesystem::path modTools = ModToolsRunner::resolveRoot(configured);
+        const std::u8string shown = modTools.u8string();
+        spdlog::info("Mod tools: {}", modTools.empty() ? std::string("not set up (Tools menu explains)")
+                                                      : std::string(reinterpret_cast<const char*>(shown.data()), shown.size())
+                    + (ModToolsRunner::isModToolsRoot(configured) ? " (Preferences)" : " (found above gecko.exe)"));
+    }
     _scriptSourceService = std::make_unique<ScriptSourceService>(*_resourcesShared, _settings, *_externalEditorLauncher, this);
 
     restoreDockWidgetState();
@@ -188,6 +235,7 @@ void MainWindow::setEditorWidget(std::unique_ptr<EditorWidget> editorWidget) {
     _centralStack->setCurrentWidget(_currentEditorWidget);
     clearWorldMapAction(); // the map replaced whatever page was showing, world map included
 
+    _currentEditorWidget->setMapClipboard(&_mapClipboard);
     // The editor reaches the palettes through these hooks and signals rather than a pointer back here.
     _currentEditorWidget->setObjectPaletteHooks({
         .objectInfo = [this](int objectIndex, ObjectCategory category) {
@@ -727,6 +775,22 @@ void MainWindow::setupMenuBar() {
     _fillSelectionAction = addMenuAction(_editMenu, ":/icons/actions/paint.svg", "&Fill Selection...", &MainWindow::showFillDialog, nullptr, "Fill the selected area with a Luau fill script");
 #endif
 
+    // Draw order, also on the viewport's right-click menu. The keys are handled by InputHandler while
+    // the viewport has focus, not as window shortcuts, so palette lists keep Home/End/PgUp/PgDown;
+    // the text after the tab only shows them in the menu.
+    _editMenu->addSeparator();
+    const auto addReorderAction = [this, &addMenuAction](const QString& text, object_order::Step step, const QString& statusTip) {
+        addMenuAction(_editMenu, QString(), text, [this, step]() {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->reorderSelectedObjects(step);
+            }
+        }, nullptr, statusTip);
+    };
+    addReorderAction("Bring to &Front\tHome", object_order::Step::BringToFront, "Draw the selected objects over everything else");
+    addReorderAction("Bring F&orward\tPgUp", object_order::Step::BringForward, "Draw the selected objects over the next object they overlap");
+    addReorderAction("Send &Backward\tPgDown", object_order::Step::SendBackward, "Draw the selected objects under the next object they overlap");
+    addReorderAction("Send to Bac&k\tEnd", object_order::Step::SendToBack, "Draw the selected objects under everything else");
+
     _editMenu->addSeparator();
 
     _undoAction = _editMenu->addAction("&Undo");
@@ -756,6 +820,27 @@ void MainWindow::setupMenuBar() {
             refreshMapEdgesPanel(); // and with a redone edge edit
         }
     });
+
+    _editMenu->addSeparator();
+
+    // The map view handles Ctrl+X/C/V itself (InputHandler) while it has focus, so these shortcuts are
+    // WidgetShortcut: listed in the menu, but never a window-wide shortcut that would take Ctrl+C away
+    // from a text field or the Log panel.
+    const auto addClipboardAction = [this](const QString& text, QKeySequence::StandardKey key,
+                                        const QString& statusTip, void (EditorWidget::*handler)()) {
+        QAction* action = _editMenu->addAction(text);
+        action->setShortcut(key);
+        action->setShortcutContext(Qt::WidgetShortcut);
+        action->setStatusTip(statusTip);
+        connect(action, &QAction::triggered, this, [this, handler]() {
+            if (_currentEditorWidget) {
+                (_currentEditorWidget->*handler)();
+            }
+        });
+    };
+    addClipboardAction("Cu&t", QKeySequence::Cut, "Copy the selection, then delete its objects", &EditorWidget::cutSelection);
+    addClipboardAction("&Copy", QKeySequence::Copy, "Copy the selected floor, roof and objects", &EditorWidget::copySelection);
+    addClipboardAction("&Paste", QKeySequence::Paste, "Click the map to place copies of what was copied", &EditorWidget::beginPaste);
 
     updateUndoRedoActions();
     updateFillSelectionAction();
@@ -934,6 +1019,18 @@ void MainWindow::setupMenuBar() {
         connect(action, &QAction::triggered, this, [this, elevation = spec.elevation]() { elevationChanged(elevation); });
         *spec.actionRef = action;
     }
+
+    // New art through the mod's own tools (Preferences > Mod Tools); see ui/assets/ModToolsRunner.h.
+    _toolsMenu = _menuBar->addMenu("&Tools");
+    addMenuAction(_toolsMenu, QString(), "Add &Scenery from Picture...", &MainWindow::showAddSceneryDialog,
+        nullptr, "Turn a render or photo into a new scenery piece");
+    addMenuAction(_toolsMenu, QString(), "Cut &Building into Walls...", &MainWindow::showCutBuildingDialog,
+        nullptr, "Cut a building render into wall pieces, one per hex, and a stamp that lays them down");
+    addMenuAction(_toolsMenu, QString(), "&Apply New Art...", &MainWindow::applyNewArt, nullptr,
+        "Save the map, close gecko, deploy the mod with the new art, and open gecko again on this map");
+    _toolsMenu->addSeparator();
+    addMenuAction(_toolsMenu, ":/icons/actions/settings.svg", "Mod Tools &Setup...", [this]() { showPreferences(QStringLiteral("Mod Tools")); },
+        nullptr, "Where the mod's tools are (Preferences > Mod Tools)");
 
     _helpMenu = _menuBar->addMenu("&Help");
     // The discoverability half of the keybinding work: one place that lists every shortcut, which
@@ -1170,6 +1267,61 @@ void MainWindow::setupToolModeActions() {
     connect(_fillBrushAction, &QAction::triggered, this, [this](bool checked) {
         applyFillBrushTool(checked);
     });
+
+    // Unified Add/Remove Blocker tool: one checkable button plus a dropdown choosing which of
+    // the four registered blocker tools it activates, mirroring the Exit-Grids button above.
+    _blockerAction = _mainToolBar->addAction(createIcon(":/icons/actions/add-wall-blocker.svg"), "Add Wall Blocker");
+    _blockerAction->setStatusTip("Click or drag over hexes to place/remove blockers (one stroke is one undo step)");
+    _blockerAction->setCheckable(true);
+
+    _blockerMenu = new QMenu(this);
+    for (const BlockerOp& op : blockerOps()) {
+        QAction* action = _blockerMenu->addAction(createIcon(op.icon), op.label);
+        action->setCheckable(true);
+        action->setChecked(op.checkedByDefault);
+        action->setData(QString::fromUtf8(op.toolId.data(), static_cast<int>(op.toolId.size())));
+        connect(action, &QAction::triggered, this, [this]() {
+            // Exclusive: tick the chosen op, untick the others, and (re)activate the tool —
+            // live-switching kind if the button is already on, same as Exit-Grids sub-modes.
+            auto* chosen = qobject_cast<QAction*>(sender());
+            for (QAction* item : _blockerMenu->actions()) {
+                const QSignalBlocker block(item);
+                item->setChecked(item == chosen);
+            }
+            const QSignalBlocker buttonBlock(_blockerAction);
+            _blockerAction->setChecked(true);
+            applyBlockerTool(true);
+        });
+    }
+
+    _blockerAction->setMenu(_blockerMenu);
+    if (auto* toolButton = qobject_cast<QToolButton*>(_mainToolBar->widgetForAction(_blockerAction))) {
+        toolButton->setPopupMode(QToolButton::MenuButtonPopup);
+    }
+
+    connect(_blockerAction, &QAction::triggered, this, [this](bool checked) {
+        applyBlockerTool(checked);
+    });
+
+    // Black edge: draw Fallout 2's black edge wall pieces as a line, like the exit grids' Draw edge.
+    _blackEdgeAction = _mainToolBar->addAction(createIcon(":/icons/actions/black-edge.svg"), "Black Edge");
+    _blackEdgeAction->setStatusTip("Click corners to line the map edge with black wall pieces (one line is one undo step)");
+    _blackEdgeAction->setCheckable(true);
+    connect(_blackEdgeAction, &QAction::triggered, this, [this](bool checked) {
+        if (!_currentEditorWidget) {
+            return;
+        }
+        if (!checked) {
+            _currentEditorWidget->setMode(EditorMode::Select);
+            return;
+        }
+        if (!_currentEditorWidget->activateBlackEdgeTool()) {
+            const QSignalBlocker blocker(_blackEdgeAction);
+            _blackEdgeAction->setChecked(false);
+            return;
+        }
+        updateModeDisplay("Mode: Black edge", ":/icons/actions/black-edge.svg");
+    });
 }
 
 void MainWindow::applyFillBrushTool(bool checked) {
@@ -1189,6 +1341,52 @@ void MainWindow::applyFillBrushTool(bool checked) {
         return;
     }
     updateModeDisplay("Mode: Fill brush", ":/icons/actions/paint.svg");
+}
+
+void MainWindow::applyBlockerTool(bool checked) {
+    if (!_currentEditorWidget) {
+        return;
+    }
+    if (!checked) {
+        _currentEditorWidget->setMode(EditorMode::Select);
+        return;
+    }
+
+    // Find the checked menu item; default to the first op if none is checked yet (first-ever
+    // activation before the user has touched the dropdown).
+    const BlockerOp* chosen = &blockerOps().front();
+    for (QAction* item : _blockerMenu->actions()) {
+        if (item->isChecked()) {
+            const std::string toolId = item->data().toString().toStdString();
+            for (const BlockerOp& op : blockerOps()) {
+                if (op.toolId == toolId) {
+                    chosen = &op;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    bool activated = false;
+    if (chosen->toolId == BlockerTools::ADD_WALL_ID) {
+        activated = _currentEditorWidget->activateAddWallBlockerTool();
+    } else if (chosen->toolId == BlockerTools::REMOVE_WALL_ID) {
+        activated = _currentEditorWidget->activateRemoveWallBlockerTool();
+    } else if (chosen->toolId == BlockerTools::ADD_SCROLL_ID) {
+        activated = _currentEditorWidget->activateAddScrollBlockerTool();
+    } else if (chosen->toolId == BlockerTools::REMOVE_SCROLL_ID) {
+        activated = _currentEditorWidget->activateRemoveScrollBlockerTool();
+    }
+
+    if (!activated) {
+        const QSignalBlocker blocker(_blockerAction);
+        _blockerAction->setChecked(false);
+        return;
+    }
+    _blockerAction->setText(chosen->label);
+    _blockerAction->setIcon(createIcon(chosen->icon));
+    updateModeDisplay("Mode: " + chosen->label, chosen->icon);
 }
 
 void MainWindow::applyExitGridsTool(bool checked) {
@@ -1226,6 +1424,36 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
         const QSignalBlocker blocker(_fillBrushAction);
         _fillBrushAction->setChecked(mode == EditorMode::PluginTool && _currentEditorWidget
             && _currentEditorWidget->activeToolId() == FillBrushTool::ID);
+    }
+    if (_blackEdgeAction) {
+        const QSignalBlocker blocker(_blackEdgeAction);
+        _blackEdgeAction->setChecked(mode == EditorMode::PluginTool && _currentEditorWidget
+            && _currentEditorWidget->activeToolId() == BlackEdgeTool::ID);
+    }
+    // The unified Blocker button is checked while any of its four tools is active; the dropdown
+    // shows which one, and the button label/icon track it — same pattern as Exit-Grids below.
+    if (_blockerAction) {
+        const std::string activeId = (mode == EditorMode::PluginTool && _currentEditorWidget)
+            ? _currentEditorWidget->activeToolId()
+            : std::string();
+        const BlockerOp* active = nullptr;
+        for (const BlockerOp& op : blockerOps()) {
+            if (op.toolId == activeId) {
+                active = &op;
+                break;
+            }
+        }
+
+        const QSignalBlocker blocker(_blockerAction);
+        _blockerAction->setChecked(active != nullptr);
+        if (active) {
+            _blockerAction->setText(active->label);
+            _blockerAction->setIcon(createIcon(active->icon));
+            for (QAction* item : _blockerMenu->actions()) {
+                const QSignalBlocker itemBlocker(item);
+                item->setChecked(item->data().toString().toStdString() == active->toolId);
+            }
+        }
     }
 
     // Unified Exit-Grids button is checked while in either sub-mode; the dropdown shows which one,
@@ -2169,6 +2397,8 @@ void MainWindow::connectToEditorWidget() {
     });
     connect(_currentEditorWidget, &EditorWidget::statusMessageRequested, this, &MainWindow::showStatusMessage);
     connect(_currentEditorWidget, &EditorWidget::statusMessageClearRequested, this, &MainWindow::clearStatusMessage);
+    _currentEditorWidget->setModToolsAvailable(modToolsConfigured());
+    connect(_currentEditorWidget, &EditorWidget::modAssetActionRequested, this, &MainWindow::onModAssetAction);
     // Keep the checkable tool-mode toolbar actions in sync with the active mode
     // (entering any mode exits the others via EditorWidget::setMode).
     connect(_currentEditorWidget, &EditorWidget::editorModeChanged, this, [this](EditorMode mode) {
@@ -2785,6 +3015,7 @@ void MainWindow::showPreferences(const QString& initialTab) {
         }
         if (_currentEditorWidget && _settings) {
             _currentEditorWidget->setEdgeScrollEnabled(_settings->getEdgeScrollEnabled());
+            _currentEditorWidget->setModToolsAvailable(modToolsConfigured());
         }
     });
 
@@ -2802,6 +3033,263 @@ void MainWindow::showPreferences(const QString& initialTab) {
 void MainWindow::showAbout() {
     AboutDialog dialog(this);
     dialog.exec();
+}
+
+// ------------------------------------------------------------------------------ mod tools
+
+namespace {
+
+    QString pidText(quint32 pid) {
+        return "0x" + QString::number(pid, 16).toUpper().rightJustified(8, u'0');
+    }
+
+    /// A mod-tools command, waited for under a wait cursor.
+    ModToolResult runWithWaitCursor(ModToolsRunner& runner, const QStringList& args) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        ModToolResult result = runner.runAndWait(args);
+        QApplication::restoreOverrideCursor();
+        return result;
+    }
+
+    const QString AFTER_APPLY = "Tools > Apply New Art puts it in the palette and the game.";
+
+} // namespace
+
+bool MainWindow::modToolsConfigured() const {
+    return _settings && !ModToolsRunner::resolveRoot(_settings->getModToolsRoot()).empty();
+}
+
+std::unique_ptr<ModToolsRunner> MainWindow::makeModToolsRunner() {
+    if (!modToolsConfigured()) {
+        const bool openPreferences = QtDialogs::showQuestion(this, "Mod Tools",
+            "The Tools menu runs your mod's own tools: tools/gecko_assets.py in the mod folder, "
+            "with Python.\n\nSet the mod folder in File > Preferences > Mod Tools. Open Preferences now?");
+        if (openPreferences) {
+            showPreferences(QStringLiteral("Mod Tools"));
+        }
+        if (!modToolsConfigured()) {
+            return nullptr;
+        }
+    }
+    return std::make_unique<ModToolsRunner>(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()),
+        _settings->getPythonExecutable());
+}
+
+void MainWindow::showAddSceneryDialog() {
+    auto runner = makeModToolsRunner();
+    if (!runner) {
+        return;
+    }
+    AddSceneryDialog dialog(runner.get(), this);
+    dialog.exec();
+    if (dialog.piecesMade() > 0) {
+        showStatusMessage(QString("%1 new piece(s) made. %2").arg(dialog.piecesMade()).arg(AFTER_APPLY));
+    }
+}
+
+void MainWindow::showCutBuildingDialog() {
+    auto runner = makeModToolsRunner();
+    if (!runner) {
+        return;
+    }
+    CutBuildingDialog dialog(runner.get(), this);
+    dialog.exec();
+    if (dialog.buildingsMade() > 0) {
+        showStatusMessage(QString("%1 building(s) cut into walls. Tools > Apply New Art puts them in the game; "
+                                  "then Edit > Stamp Pattern > Custom.")
+                              .arg(dialog.buildingsMade()));
+    }
+}
+
+void MainWindow::applyNewArt() {
+    auto runner = makeModToolsRunner();
+    if (!runner) {
+        return;
+    }
+    const ModToolResult info = runWithWaitCursor(*runner, { "info" });
+    if (!info.ok) {
+        QtDialogs::showWarning(this, "Apply New Art", "The mod tools didn't answer:\n\n" + info.error);
+        return;
+    }
+    if (info.json.value("browse_session").toBool()) {
+        QtDialogs::showWarning(this, "Apply New Art",
+            "This gecko is open on another game (a gecko_browse launcher). Close it so your mod's "
+            "settings come back, then use Apply New Art from the gecko for your mod.");
+        return;
+    }
+    const QJsonArray running = info.json.value("games_running").toArray();
+    if (!running.isEmpty()) {
+        QStringList names;
+        for (const auto& name : running) {
+            names << name.toString();
+        }
+        QtDialogs::showWarning(this, "Apply New Art",
+            QString("The game is running (%1). Close it first: a deploy replaces the files it is reading.")
+                .arg(names.join(", ")));
+        return;
+    }
+
+    const int pending = info.json.value("pending").toInt();
+    const bool haveMap = hasActiveMap() && _currentEditorWidget->getMap();
+    QString question = pending > 0
+        ? QString("%1 new piece(s) or name change(s) are waiting to go in.").arg(pending)
+        : QString("Nothing new was made since the last Apply; this deploys the mod as it is.");
+    question += "\n\nGecko will " + QString(haveMap ? "save this map, " : "")
+        + "close, and deploy the mod in a console window (gen_ids, deploy, scenery_text, deploy, "
+          "repack_art, validate). Then it opens again"
+        + (haveMap ? QString(" on %1").arg(QString::fromStdString(_currentEditorWidget->getMap()->filename())) : QString())
+        + ".\n\nGo ahead?";
+    if (!QtDialogs::showQuestion(this, "Apply New Art", question)) {
+        return;
+    }
+
+    QString mapPath;
+    if (haveMap) {
+        if (_mapModified) {
+            if (!_currentEditorWidget->saveMap(writableMapsDir())) {
+                return; // save cancelled or failed: stay open, nothing started
+            }
+            handleMapSaved();
+        }
+        const std::filesystem::path path = _currentEditorWidget->getMap()->path();
+        std::error_code ec;
+        if (path.is_absolute() && std::filesystem::exists(path, ec)) {
+            mapPath = QString::fromStdU16String(path.u16string());
+        }
+    }
+
+    QString error;
+    if (!runner->startApply(QCoreApplication::applicationPid(), QCoreApplication::applicationFilePath(), mapPath, &error)) {
+        QtDialogs::showError(this, "Apply New Art", error);
+        return;
+    }
+    spdlog::info("Apply New Art started; closing so the deploy can run");
+    close();
+}
+
+void MainWindow::onModAssetAction(int action, quint32 pid) {
+    auto runner = makeModToolsRunner();
+    if (!runner) {
+        return;
+    }
+    switch (static_cast<ModAssetAction>(action)) {
+        case ModAssetAction::MirroredCopy:
+            makeMirroredCopy(*runner, pid);
+            break;
+        case ModAssetAction::ResizedCopy:
+            makeResizedCopy(*runner, pid);
+            break;
+        case ModAssetAction::NameAndText:
+            editNameAndText(*runner, pid);
+            break;
+    }
+}
+
+void MainWindow::makeMirroredCopy(ModToolsRunner& runner, quint32 pid) {
+    const ModToolResult suggestion = runWithWaitCursor(runner, { "suggest-name", "--pid", pidText(pid), "--suffix", "m" });
+    bool accepted = false;
+    const QString name = QInputDialog::getText(this, "Mirrored Copy",
+        "A left-right mirrored copy of this piece becomes a new piece; the original stays as it is.\n\n"
+        "File name for the copy (up to 8 letters):",
+        QLineEdit::Normal, suggestion.json.value("name").toString(), &accepted)
+                             .trimmed()
+                             .toLower();
+    if (!accepted || name.isEmpty()) {
+        return;
+    }
+    const ModToolResult result = runWithWaitCursor(runner, { "mirror", pidText(pid), "--name", name });
+    if (!result.ok) {
+        QtDialogs::showWarning(this, "Mirrored Copy", result.error);
+        return;
+    }
+    QtDialogs::showInfo(this, "Mirrored Copy",
+        QString("Made %1 (%2), mirrored from %3.\n\n%4").arg(name, result.json.value("pid").toString(), pidText(pid), AFTER_APPLY));
+}
+
+void MainWindow::makeResizedCopy(ModToolsRunner& runner, quint32 pid) {
+    const ModToolResult suggestion = runWithWaitCursor(runner, { "suggest-name", "--pid", pidText(pid), "--suffix", "x" });
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Bigger or Smaller Copy");
+    auto* form = new QFormLayout(&dialog);
+    auto* intro = new QLabel("A bigger or smaller copy of this piece becomes a new piece; the original stays as it is.");
+    intro->setWordWrap(true);
+    form->addRow(intro);
+    auto* size = new QSpinBox();
+    size->setRange(10, 800);
+    size->setSingleStep(10);
+    size->setValue(200);
+    size->setSuffix(" %");
+    form->addRow("Size:", size);
+    auto* nameEdit = new QLineEdit(suggestion.json.value("name").toString());
+    nameEdit->setMaxLength(8);
+    form->addRow("File name:", nameEdit);
+    auto* pixel = new QCheckBox("Keep hard pixels (no smoothing)");
+    form->addRow(pixel);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QString name = nameEdit->text().trimmed().toLower();
+    if (name.isEmpty()) {
+        return;
+    }
+    QStringList args{ "resize", pidText(pid), "--name", name, "--scale", QString::number(size->value() / 100.0, 'g', 4) };
+    if (pixel->isChecked()) {
+        args << "--pixel";
+    }
+    const ModToolResult result = runWithWaitCursor(runner, args);
+    if (!result.ok) {
+        QtDialogs::showWarning(this, "Bigger or Smaller Copy", result.error);
+        return;
+    }
+    QtDialogs::showInfo(this, "Bigger or Smaller Copy",
+        QString("Made %1 (%2), %3% of %4.\n\n%5")
+            .arg(name, result.json.value("pid").toString())
+            .arg(size->value())
+            .arg(pidText(pid), AFTER_APPLY));
+}
+
+void MainWindow::editNameAndText(ModToolsRunner& runner, quint32 pid) {
+    const ModToolResult current = runWithWaitCursor(runner, { "text", pidText(pid) });
+    if (!current.ok) {
+        QtDialogs::showWarning(this, "Name and Examine Text", current.error);
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Name and Examine Text");
+    dialog.setMinimumWidth(460);
+    auto* form = new QFormLayout(&dialog);
+    auto* intro = new QLabel(QString("What the game shows for every object made from proto %1. "
+                                     "Objects with the same name share one examine text.")
+                                 .arg(pidText(pid)));
+    intro->setWordWrap(true);
+    form->addRow(intro);
+    auto* titleEdit = new QLineEdit(current.json.value("title").toString());
+    form->addRow("Name:", titleEdit);
+    auto* textEdit = new QPlainTextEdit(current.json.value("text").toString());
+    textEdit->setFixedHeight(90);
+    form->addRow("Examine text:", textEdit);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const ModToolResult result = runWithWaitCursor(runner,
+        { "text", pidText(pid), "--title", titleEdit->text(), "--text", textEdit->toPlainText() });
+    if (!result.ok) {
+        QtDialogs::showWarning(this, "Name and Examine Text", result.error);
+        return;
+    }
+    showStatusMessage(QString("Saved the name and examine text for %1. %2").arg(pidText(pid), AFTER_APPLY));
 }
 
 void MainWindow::onPlayGame() {
@@ -2829,7 +3317,7 @@ void MainWindow::showSavePatternDialog() {
     }
 
     const QString path = QFileDialog::getSaveFileName(
-        this, "Save Selection as Pattern", pattern::PatternLibrary::rootDir(), "Gecko Pattern (*.json)");
+        this, "Save Selection as Pattern", pattern::PatternLibrary::customDir(), "Gecko Pattern (*.json)");
     if (path.isEmpty()) {
         return;
     }

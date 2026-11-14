@@ -11,6 +11,7 @@
 
 QT_BEGIN_NAMESPACE
 class QScrollArea;
+class QLineEdit;
 QT_END_NAMESPACE
 #include <QMap>
 #include <QColor>
@@ -71,6 +72,9 @@ private:
     void setupEditorTab();
     void setupColorsTab();
     void setupKeybindingsTab();
+    void setupModToolsTab();
+    /// Runs the mod tools' `info` with what is typed now (saved or not) and shows the answer.
+    void checkModTools();
     void updateColorButton(const QString& key) const;
     void setupButtonBox();
 
@@ -106,6 +110,12 @@ private:
     QWidget* _colorsTab = nullptr;
     QMap<QString, QColor> _selectionColors;     // current edited values, keyed by category
     QMap<QString, QPushButton*> _colorSwatches; // swatch button per category
+
+    // Mod Tools tab (the Tools menu's mod folder and Python)
+    QWidget* _modToolsTab = nullptr;
+    QLineEdit* _modToolsRootEdit = nullptr;
+    QLineEdit* _pythonEdit = nullptr;
+    QLabel* _modToolsStatus = nullptr;
 
     // Status and Controls
     QLabel* _statusLabel;

@@ -84,7 +84,15 @@ PatternBrowserDialog::PatternBrowserDialog(resource::GameResources& resources, Q
     connect(importButton, &QPushButton::clicked, this, &PatternBrowserDialog::onImport);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
-    populateGrid(root);
+    // Open on the user's own patterns. The tree lists folders only, so the root itself can't be
+    // picked; selecting Custom also stops the tree defaulting to its first (library) folder.
+    const QModelIndex custom = _folderModel->index(pattern::PatternLibrary::customDir());
+    if (custom.isValid()) {
+        _folderTree->setCurrentIndex(custom); // currentChanged fills the grid
+        _folderTree->scrollTo(custom);
+    } else {
+        populateGrid(root);
+    }
 }
 
 PatternBrowserDialog::~PatternBrowserDialog() = default;

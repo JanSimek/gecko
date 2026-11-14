@@ -45,6 +45,9 @@ add_executable(general_tests
     general/test_coordinates.cpp
     general/test_spatial_index.cpp
     general/test_object_queries.cpp
+    general/test_object_offset.cpp
+    general/test_object_order.cpp
+    general/test_black_edge.cpp
     general/test_reading_dat.cpp
     general/test_hex_geometry.cpp
     general/test_hex_line.cpp
@@ -52,6 +55,7 @@ add_executable(general_tests
     general/test_pattern_stamper.cpp
     general/test_pattern_builder.cpp
     general/test_fill_plan.cpp
+    general/test_map_clipboard.cpp
     general/test_floor_synth.cpp
     general/test_map_script_api.cpp
     general/test_map_completeness.cpp

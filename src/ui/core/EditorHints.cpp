@@ -76,6 +76,11 @@ QString hintForContext(EditorMode mode, bool hasSelection, const QString& active
             return joinHints({ QStringLiteral("R: cycle variant"),
                 QStringLiteral("Esc: cancel") });
 
+        case PasteClipboard:
+            // Each click drops another copy; the mode stays until Esc or right-click.
+            return joinHints({ QStringLiteral("Click: paste"),
+                QStringLiteral("Esc / right-click: exit") });
+
         case PluginTool:
             // A registered tool describes its own keys (ITool::statusHint, one item per
             // line); tools without a hint get the generic cancel line, which the host

@@ -129,6 +129,15 @@ set(GECK_APP_SOURCES
     ui/dialogs/FillDialog.cpp
     ui/dialogs/MapBrowserDialog.h
     ui/dialogs/MapBrowserDialog.cpp
+    ui/dialogs/AddSceneryDialog.h
+    ui/dialogs/AddSceneryDialog.cpp
+    ui/dialogs/CutBuildingDialog.h
+    ui/dialogs/CutBuildingDialog.cpp
+
+    # Mod tools (Tools menu): runs the mod's tools/gecko_assets.py
+    ui/assets/ModAssetAction.h
+    ui/assets/ModToolsRunner.h
+    ui/assets/ModToolsRunner.cpp
 
     # Qt6 UI Widgets
     ui/widgets/SFMLWidget.h
@@ -603,6 +612,12 @@ add_library(gecko_core STATIC
     editor/Hex.cpp
     editor/helper/ObjectQueries.h
     editor/helper/ObjectQueries.cpp
+    editor/helper/ObjectOrder.h
+    editor/helper/ObjectOrder.cpp
+    editor/helper/BlackEdge.h
+    editor/helper/BlackEdge.cpp
+    editor/helper/MapClipboard.h
+    editor/helper/MapClipboard.cpp
     editor/worldmap/WorldMapScene.h
     editor/worldmap/WorldMapScene.cpp
 )
@@ -664,6 +679,9 @@ add_library(gecko_editing STATIC
     editing/tools/ToolRegistry.h
     editing/tools/ToolRegistry.cpp
     editing/tools/FillBrushTool.h
+    editing/tools/AddBlockerTool.h
+    editing/tools/RemoveBlockerTool.h
+    editing/tools/BlackEdgeTool.h
     editing/commands/CommandHost.h
     editing/commands/ObjectCommandController.h
     editing/commands/ObjectCommandController.cpp
@@ -792,6 +810,8 @@ if(GECK_BUILD_CLI)
         cli/MapExamples.cpp
         cli/GvarRefs.h
         cli/GvarRefs.cpp
+        cli/MapEditTools.h
+        cli/MapEditTools.cpp
         cli/CritterCombatFlags.h
         cli/EngineTile.h
         cli/IntDisassembler.h

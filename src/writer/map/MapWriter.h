@@ -25,6 +25,7 @@ private:
     void writeObject(const MapObject& object);
 
     std::function<Pro*(int32_t PID)> _loadProCallback;
+    uint32_t _mapVersion = 20; // the version being written: 19 writes Fallout 1 ladders
 };
 
 } // namespace geck

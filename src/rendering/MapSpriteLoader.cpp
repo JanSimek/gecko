@@ -96,7 +96,20 @@ void MapSpriteLoader::loadObjectSprites(
             continue;
         }
 
-        std::string frmName = _resources.frmResolver().resolve(object->frm_pid);
+        // resolve() throws when the fid can't be mapped to art (e.g. a critter no longer in the
+        // mounted data) — MapLoader's own pass over the same objects already tolerates this
+        // (logs and renders blank); this pass must too, or one unresolvable object on a big map
+        // takes the whole editor down with an uncaught exception instead of just that object.
+        std::string frmName;
+        try {
+            frmName = _resources.frmResolver().resolve(object->frm_pid);
+        } catch (const std::exception& e) {
+            spdlog::error("Failed to resolve FRM for object at position {} (frm_pid=0x{:08X}, pro_pid=0x{:08X}): {}",
+                object->position, object->frm_pid, object->pro_pid, e.what());
+            _lastLoadErrors.failedObjects.emplace_back("fid " + std::to_string(object->frm_pid), object->position);
+            objectsSkipped++;
+            continue;
+        }
         if (frmName.empty()) {
             spdlog::error("Empty FRM name for object at position {} (frm_pid=0x{:08X}, pro_pid=0x{:08X})",
                 object->position, object->frm_pid, object->pro_pid);

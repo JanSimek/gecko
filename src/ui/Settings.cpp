@@ -2,10 +2,13 @@
 #include "resource/WritableDataRoot.h"
 #include "util/GameDataPathResolver.h"
 
+#include <QCoreApplication>
 #include <QStandardPaths>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonParseError>
+#include <QThread>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -65,11 +68,23 @@ QString Settings::getSettingsFilePath() const {
     QDir configDir;
 
     if (!configDir.mkpath(configPath)) {
+        // A transient failure here silently redirects every settings read/write to a path with
+        // no history (missing the organization subfolder) - looks exactly like "first run" to
+        // the caller (isFirstRun/getDataPaths().empty()), which is how a real, already-configured
+        // install can intermittently fall back to command-line defaults. Loud on purpose: this
+        // was previously silent and took a full log-mining session to even suspect.
+        spdlog::warn("Settings::getSettingsFilePath - mkpath failed for config root '{}', "
+                     "falling back to '{}' (no organization subfolder - settings history will "
+                     "appear missing)",
+            configPath.toStdString(), QDir(configPath).filePath(SETTINGS_FILENAME).toStdString());
         return QDir(configPath).filePath(SETTINGS_FILENAME);
     }
 
     const QString organizationPath = QDir(configPath).filePath(ORGANIZATION_NAME);
     if (!configDir.mkpath(organizationPath)) {
+        spdlog::warn("Settings::getSettingsFilePath - mkpath failed for organization path '{}', "
+                     "falling back to '{}' (settings history will appear missing)",
+            organizationPath.toStdString(), QDir(configPath).filePath(SETTINGS_FILENAME).toStdString());
         return QDir(configPath).filePath(SETTINGS_FILENAME);
     }
 
@@ -82,30 +97,102 @@ bool Settings::exists() const {
 
 void Settings::load() {
     QString filePath = getSettingsFilePath();
-    spdlog::debug("Loading settings from configuration path: {}", filePath.toStdString());
+    // Promoted from debug: cheap (once per launch), and this exact line is what would have
+    // shown the mkpath-fallback bug immediately instead of needing a special diagnostic build.
+    spdlog::info("Loading settings from configuration path: {}", filePath.toStdString());
 
     if (!QFile::exists(filePath)) {
         spdlog::debug("Settings file not found in {}, using defaults", filePath.toStdString());
         return;
     }
 
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        spdlog::error("Failed to open settings file for reading: {}", filePath.toStdString());
-        return;
+    auto readFileBytes = [&filePath]() -> QByteArray {
+        QFile f(filePath);
+        if (!f.open(QIODevice::ReadOnly)) {
+            spdlog::error("Failed to open settings file for reading: {}", filePath.toStdString());
+            return {};
+        }
+        return f.readAll();
+    };
+
+    // Confirmed, still-unexplained intermittent issue: a freshly-launched process has been
+    // observed reading back fewer/different bytes than the file's own on-disk mtime says were
+    // ever written - and this bad read can be perfectly STABLE for many seconds and across
+    // several relaunches, not a one-off flicker. That rules out "read twice and compare the two
+    // reads to each other": a consistently-wrong read passes that check immediately, since both
+    // reads agree with each other while both disagree with reality. The only signal that
+    // actually catches this is an INDEPENDENT ground truth - a fresh stat of the file's real
+    // on-disk size, taken right before the read, compared against what the read actually
+    // returned. Retry against THAT until they agree (or we give up), with backoff, since the
+    // bad window has been observed to last up to tens of seconds.
+    QByteArray data;
+    const int maxAttempts = 20;
+    for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
+        const qint64 statSize = QFileInfo(filePath).size();
+        data = readFileBytes();
+        if (data.size() == statSize) {
+            if (attempt > 1) {
+                spdlog::info("Settings::load - read agreed with on-disk size ({} bytes) on "
+                             "attempt {}", statSize, attempt);
+            }
+            break;
+        }
+        spdlog::warn("Settings::load - read {} bytes but a fresh stat of {} says it is {} bytes "
+                     "right now; retrying (attempt {}/{})",
+            data.size(), filePath.toStdString(), statSize, attempt, maxAttempts);
+        if (attempt == maxAttempts) {
+            spdlog::error("Settings::load - giving up after {} attempts, proceeding with a read "
+                          "that never matched the file's own reported size", maxAttempts);
+            break;
+        }
+        QThread::msleep(std::min(50 * attempt, 500));
     }
 
-    QByteArray data = file.readAll();
+    // FORENSIC DUMP: the retry above assumes a fresh stat is trustworthy ground truth, but a
+    // real occurrence showed the stat itself agreeing with a bad read on the very FIRST attempt
+    // (no retry ever fired) - meaning whatever is wrong here is wrong at the OS metadata level
+    // for this process, not just a lagging buffered read. A dump written NEXT TO the settings
+    // file itself proved useless: a confirmed occurrence logged a self-reported mtime that
+    // matched NEITHER the real %LOCALAPPDATA% copy NOR the one known package-redirected copy
+    // found so far, and its own dump file (same directory, same naming scheme) was never
+    // written where either of those locations could see it either - this process has a THIRD,
+    // still-unidentified view of this path. Dump instead next to the executable itself (F: drive,
+    // not under %LOCALAPPDATA%/%APPDATA% at all), which per-package AppData virtualization has
+    // no mechanism to redirect, so this location should be visible from every context equally.
+    {
+        const QFileInfo info(filePath);
+        const QString dumpPath = QCoreApplication::applicationDirPath() + "/settings_lastread_diag.json";
+        QFile dump(dumpPath);
+        if (dump.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            dump.write(data);
+        }
+        spdlog::info("Settings::load - final read: {} bytes, this process sees mtime {} "
+                     "(dumped to {})",
+            data.size(),
+            info.lastModified().toString(Qt::ISODateWithMs).toStdString(),
+            dumpPath.toStdString());
+    }
+    // DIAG: bytes actually read off disk, before any parsing - if this is ever suspiciously
+    // small (a concurrent save() truncating mid-write would show here) that's the smoking gun.
+    spdlog::info("Settings file read: {} bytes", data.size());
+
     QJsonParseError parseError;
     QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
 
     if (parseError.error != QJsonParseError::NoError) {
-        spdlog::error("Failed to parse settings JSON: {}", parseError.errorString().toStdString());
+        spdlog::error("Failed to parse settings JSON: {} (at offset {})",
+            parseError.errorString().toStdString(), parseError.offset);
         return;
     }
 
-    fromJson(doc.object());
-    spdlog::debug("Settings loaded from: {}", filePath.toStdString());
+    const QJsonObject obj = doc.object();
+    spdlog::info("Settings JSON parsed OK: top-level keys={}, has dataPaths={}, dataPaths array size={}, version={}",
+        obj.size(), obj.contains("dataPaths"),
+        obj.contains("dataPaths") ? obj["dataPaths"].toArray().size() : -1,
+        obj.contains("version") ? obj["version"].toString().toStdString() : "<missing>");
+
+    fromJson(obj);
+    spdlog::info("Settings loaded from: {} - _dataPaths now has {} entries", filePath.toStdString(), _dataPaths.size());
 }
 
 void Settings::save() {
@@ -181,6 +268,16 @@ QJsonObject Settings::toJson() const {
         selectionColors[it.key()] = it.value().name(); // "#rrggbb"
     }
     json["selectionColors"] = selectionColors;
+
+    // UTF-16 both ways: a path's narrow string() is the ANSI code page on Windows.
+    QJsonObject modTools;
+    if (!_modToolsRoot.empty()) {
+        modTools["root"] = QString::fromStdU16String(_modToolsRoot.u16string());
+    }
+    if (!_pythonExecutable.isEmpty()) {
+        modTools["python"] = _pythonExecutable;
+    }
+    json["modTools"] = modTools;
 
     // Overrides only — an action left at its default is simply absent, so a later release can
     // change that default and have it take effect.
@@ -297,6 +394,14 @@ void Settings::fromJson(const QJsonObject& json) {
         }
     }
 
+    _modToolsRoot.clear();
+    _pythonExecutable.clear();
+    if (json.contains("modTools") && json["modTools"].isObject()) {
+        const QJsonObject modTools = json["modTools"].toObject();
+        _modToolsRoot = std::filesystem::path(modTools["root"].toString().toStdU16String());
+        _pythonExecutable = modTools["python"].toString().trimmed();
+    }
+
     // An absent "keyBindings" means "no overrides".
     _keyBindings.clear();
     if (json.contains("keyBindings") && json["keyBindings"].isObject()) {
@@ -333,7 +438,11 @@ void Settings::addDataPath(const std::filesystem::path& path) {
 
     for (const auto& existingPath : _dataPaths) {
         if (util::pathsEquivalent(existingPath, normalizedPath)) {
-            spdlog::debug("Data path already exists: {}", normalizedPath.string());
+            // Promoted to warn: two configured paths resolving as "the same install" is rare
+            // enough, and silently dropping one surprising enough, that it belongs in the
+            // normal log rather than only at --debug.
+            spdlog::warn("Data path '{}' treated as equivalent to already-listed '{}' - not added",
+                normalizedPath.string(), existingPath.string());
             return;
         }
     }
@@ -473,6 +582,22 @@ void Settings::setCustomEditorPath(const QString& path) {
     _customEditorPath = path;
 }
 
+std::filesystem::path Settings::getModToolsRoot() const {
+    return _modToolsRoot;
+}
+
+void Settings::setModToolsRoot(const std::filesystem::path& root) {
+    _modToolsRoot = root;
+}
+
+QString Settings::getPythonExecutable() const {
+    return _pythonExecutable.isEmpty() ? QStringLiteral("python") : _pythonExecutable;
+}
+
+void Settings::setPythonExecutable(const QString& python) {
+    _pythonExecutable = python.trimmed();
+}
+
 QColor Settings::getSelectionColor(const QString& key, const QColor& fallback) const {
     return _selectionColors.value(key, fallback);
 }
@@ -501,7 +626,7 @@ bool Settings::validateDataPath(const std::filesystem::path& path) const {
         return true;
     }
 
-    if (normalizedPath.extension() == ".dat" && std::filesystem::is_regular_file(normalizedPath, ec)) {
+    if (util::hasDatExtension(normalizedPath) && std::filesystem::is_regular_file(normalizedPath, ec)) {
         return true;
     }
 
@@ -509,7 +634,7 @@ bool Settings::validateDataPath(const std::filesystem::path& path) const {
 }
 
 std::filesystem::path Settings::normalizeDataPath(const std::filesystem::path& path) {
-    if (path.extension() == ".dat") {
+    if (util::hasDatExtension(path)) {
         return path;
     }
     return util::resolveGameDataRoot(path).value_or(path);

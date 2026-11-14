@@ -1,0 +1,16 @@
+# Machine-specific and generated. Nothing here belongs in the repo.
+config.json
+base/
+corpus/
+_safety_backups/
+scripts_src/
+mod/data/
+mod/assets.csv
+ASSETS.md
+tools/gecko_browse/_clean/
+tools/gecko_browse/_fallback_art/
+tools/gecko_browse/launch.json
+tools/gecko_browse/*.bat
+tools/gecko_browse/Fallout*.ps1
+tools/gecko_browse/Nevada*.ps1
+__pycache__/

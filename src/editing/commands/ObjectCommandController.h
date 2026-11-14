@@ -96,6 +96,17 @@ public:
     bool registerObjectDeletion(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& removedObjects);
     bool registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
     bool registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
+    /// Undoable change of where objects stand: hex, pixel offset and flags ("Put on Top").
+    bool registerObjectSpotEdit(const std::vector<std::shared_ptr<Object>>& objects,
+        const std::vector<ObjectSpotState>& before,
+        const std::vector<ObjectSpotState>& after,
+        const std::string& description);
+    /// Undoable change of an elevation's object order, which is gecko's draw order (see
+    /// object_order in editor/helper/ObjectOrder.h). `after` must hold the same objects as `before`.
+    bool registerObjectReorder(int elevation,
+        const std::vector<std::shared_ptr<MapObject>>& before,
+        const std::vector<std::shared_ptr<MapObject>>& after,
+        const std::string& description);
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
     bool registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, uint32_t newFrmPid, const std::string& newFrmPath);
     bool registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation);
@@ -156,6 +167,8 @@ public:
     // scripts.lst line. attachScript replaces any existing script on the object.
     bool attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex);
     bool detachScript(const std::shared_ptr<MapObject>& object);
+    // Add ready-made object script records (undoable). See ScriptEditService::addObjectScripts.
+    bool addObjectScripts(const std::vector<MapScript>& scripts);
     bool addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
     // Edit / remove an existing spatial script by SID (undoable); findSpatialScript reads its
     // current values (e.g. to pre-fill an edit dialog). See ScriptEditService for details.

@@ -39,6 +39,10 @@ bool HexagonGrid::empty() const {
     return _grid.empty();
 }
 
+bool HexagonGrid::containsPosition(int position) const {
+    return position >= 0 && position < static_cast<int>(_grid.size());
+}
+
 uint32_t HexagonGrid::positionAt(uint32_t x, uint32_t y) const {
     // Find the closest hex by distance rather than using inaccurate rectangular bounds
     uint32_t closestPosition = static_cast<uint32_t>(Hex::HEX_OUT_OF_MAP);

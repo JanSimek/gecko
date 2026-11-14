@@ -91,10 +91,24 @@ bool ObjectCommandController::registerObjectMove(const std::vector<std::shared_p
     return _objectService.registerObjectMove(objects, moves);
 }
 
+bool ObjectCommandController::registerObjectSpotEdit(const std::vector<std::shared_ptr<Object>>& objects,
+    const std::vector<ObjectSpotState>& before,
+    const std::vector<ObjectSpotState>& after,
+    const std::string& description) {
+    return _objectService.registerObjectSpotEdit(objects, before, after, description);
+}
+
 bool ObjectCommandController::registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects,
     const std::vector<int>& beforeDirs,
     const std::vector<int>& afterDirs) {
     return _objectService.registerObjectRotation(objects, beforeDirs, afterDirs);
+}
+
+bool ObjectCommandController::registerObjectReorder(int elevation,
+    const std::vector<std::shared_ptr<MapObject>>& before,
+    const std::vector<std::shared_ptr<MapObject>>& after,
+    const std::string& description) {
+    return _objectService.registerObjectReorder(elevation, before, after, description);
 }
 
 void ObjectCommandController::applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath) {
@@ -166,6 +180,10 @@ bool ObjectCommandController::attachScript(const std::shared_ptr<MapObject>& obj
 
 bool ObjectCommandController::detachScript(const std::shared_ptr<MapObject>& object) {
     return _scriptService.detachScript(object);
+}
+
+bool ObjectCommandController::addObjectScripts(const std::vector<MapScript>& scripts) {
+    return _scriptService.addObjectScripts(scripts);
 }
 
 bool ObjectCommandController::addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius) {

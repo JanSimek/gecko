@@ -10,6 +10,7 @@
 #include "util/UndoStack.h"
 
 #include <algorithm>
+#include <unordered_map>
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -237,6 +238,42 @@ bool ObjectEditService::registerObjectMove(const std::vector<std::shared_ptr<Obj
     return _batcher.push(std::move(cmd));
 }
 
+void ObjectEditService::applyObjectSpots(const std::vector<std::shared_ptr<Object>>& objects,
+    const std::vector<ObjectSpotState>& spots) {
+    for (size_t i = 0; i < objects.size() && i < spots.size(); ++i) {
+        const auto& object = objects[i];
+        if (!object || !object->hasMapObject()) {
+            continue;
+        }
+        auto& mapObject = object->getMapObject();
+        mapObject.x = spots[i].x;
+        mapObject.y = spots[i].y;
+        mapObject.flags = spots[i].flags;
+        mapObject.position = spots[i].position;
+        if (auto hex = _hexgrid.getHexByPosition(static_cast<uint32_t>(spots[i].position)); hex.has_value()) {
+            object->setHexPosition(hex->get());
+        }
+    }
+    _refreshObjects();
+}
+
+bool ObjectEditService::registerObjectSpotEdit(const std::vector<std::shared_ptr<Object>>& objects,
+    const std::vector<ObjectSpotState>& before,
+    const std::vector<ObjectSpotState>& after,
+    const std::string& description) {
+    if (objects.empty() || before.size() != objects.size() || after.size() != objects.size()) {
+        spdlog::warn("registerObjectSpotEdit: Invalid input sizes - objects:{} before:{} after:{}",
+            objects.size(), before.size(), after.size());
+        return false;
+    }
+    UndoCommand cmd;
+    cmd.description = description;
+    cmd.undo = [this, objects, before]() { applyObjectSpots(objects, before); };
+    cmd.redo = [this, objects, after]() { applyObjectSpots(objects, after); };
+    cmd.redo();
+    return _batcher.push(std::move(cmd));
+}
+
 bool ObjectEditService::registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects,
     const std::vector<int>& beforeDirs,
     const std::vector<int>& afterDirs) {
@@ -251,6 +288,46 @@ bool ObjectEditService::registerObjectRotation(const std::vector<std::shared_ptr
     cmd.undo = [this, mapObjects = mapObjectsOf(objects), beforeDirs]() { applyObjectDirections(mapObjects, beforeDirs); };
     cmd.redo = [this, mapObjects = mapObjectsOf(objects), afterDirs]() { applyObjectDirections(mapObjects, afterDirs); };
 
+    return _batcher.push(std::move(cmd));
+}
+
+void ObjectEditService::applyObjectOrder(int elevation, const std::vector<std::shared_ptr<MapObject>>& order) {
+    if (!_map) {
+        return;
+    }
+    _map->getMapFile().map_objects[elevation] = order;
+
+    // _objects holds only the elevation on screen. Objects not in `order` (another elevation is
+    // showing) all rank last, and the stable sort then leaves the list as it was.
+    std::unordered_map<const MapObject*, std::size_t> rank;
+    rank.reserve(order.size());
+    for (std::size_t i = 0; i < order.size(); ++i) {
+        rank.emplace(order[i].get(), i);
+    }
+    const auto rankOf = [&rank](const std::shared_ptr<Object>& object) {
+        if (!object || !object->hasMapObject()) {
+            return rank.size();
+        }
+        const auto it = rank.find(object->getMapObjectPtr().get());
+        return it == rank.end() ? rank.size() : it->second;
+    };
+    std::ranges::stable_sort(_objects, [&rankOf](const auto& a, const auto& b) { return rankOf(a) < rankOf(b); });
+}
+
+bool ObjectEditService::registerObjectReorder(int elevation,
+    const std::vector<std::shared_ptr<MapObject>>& before,
+    const std::vector<std::shared_ptr<MapObject>>& after,
+    const std::string& description) {
+    if (before == after || before.size() != after.size()) {
+        return false;
+    }
+
+    UndoCommand cmd;
+    cmd.description = description;
+    cmd.undo = [this, elevation, before]() { applyObjectOrder(elevation, before); };
+    cmd.redo = [this, elevation, after]() { applyObjectOrder(elevation, after); };
+
+    cmd.redo();
     return _batcher.push(std::move(cmd));
 }
 

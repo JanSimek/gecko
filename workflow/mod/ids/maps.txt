@@ -1,0 +1,28 @@
+# FOC maps: "<id> <FILENAME.MAP> <Display Name> [key=value ...]". Map ids start at 200.
+# Ids here are explicit (maps.txt is keyed, not positional), so gaps are fine.
+#
+# The display name doubles as the worldmap lookup_name (city.txt entrances and
+# the [Map NNN] section both use it) unless lookup_name= overrides it.
+# tools/worldmap.py reads the optional key=value settings to generate
+# data\maps.txt + data\city.txt + text\english\game\map.msg on deploy; the
+# engine semantics behind them are documented in that file.
+#
+#   world_pos=x,y         worldmap pixel position (REQUIRED, else no marker)
+#   size=Small|Medium|Large   worldmap circle; the clickable rect is 12/25/49px
+#   music=17arroyo        music file under sound\music, without extension
+#   ambient=...           ambient_sfx list (default: village wind/birds)
+#   area_name=...         city.txt area name (defaults to display name)
+#   lookup_name=...       maps.txt lookup name (defaults to display name)
+#   start_state=On|Off    worldmap reveal state (default On)
+#   townmap_art_idx=-1    intrface.lst index for the town-map screen (-1=none,
+#                         so clicking the marker enters the map directly)
+#   townmap_label_art_idx=-1   worldmap tab label art (-1=none for now)
+#   entrance_0=...        override the entrance line (default maps to itself)
+#   map_msg_0/1/2=...     elevation names for map.msg (default name, empty, empty)
+#   area_of=<id>          join the worldmap area owned by map <id> instead of
+#                         making a new one (multi-map town, like Vault City)
+#   entrance=<n>          entrance slot within that area (dense from 0; the
+#                         FIRST On slot is the map entered when the city has
+#                         no town-map screen, and entering a map turns its
+#                         own slot On - see tools/worldmap.py)
+#   entrance_state=On|Off initial slot state (owner On, attached maps Off)

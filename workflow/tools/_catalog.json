@@ -1,0 +1,404 @@
+[
+  {
+    "group": "1. Look at the originals",
+    "blurb": "Read-only. Draw and measure the maps of Fallout 1, Fallout 2 and the total conversions, so a new map starts from how real ones are built.",
+    "tools": [
+      {
+        "tool": "render.py",
+        "what": "Draw a .map to a PNG, so a map can be looked at without launching the game."
+      },
+      {
+        "tool": "render_stamp.py",
+        "what": "Render gecko stamps (pattern JSON) with FOC's data, the way gecko would stamp them, to check them without opening the editor."
+      },
+      {
+        "tool": "render_building.py",
+        "what": "Render one building (a square box of a source map) with that source's own art, as find_buildings.py reports it."
+      },
+      {
+        "tool": "render_worldmap.py",
+        "what": "Draw the worldmap the way the engine draws it."
+      },
+      {
+        "tool": "preview_source.py",
+        "what": "Render any source game's map elevation with a square-grid overlay, to choose regions for compose_map.py to lift."
+      },
+      {
+        "tool": "frm_sheet.py",
+        "what": "Contact sheet of FOC art by name, first frame of direction 0."
+      },
+      {
+        "tool": "map_survey.py",
+        "what": "Measure how the maps of Fallout 1, Fallout 2 and the total conversions are laid out, so a generated FOC map can follow the same habits."
+      },
+      {
+        "tool": "map_survey_one.py",
+        "what": "Measure one FOC map the way map_survey.py measures the originals, next to the all-source town medians."
+      },
+      {
+        "tool": "map_survey_sheet.py",
+        "what": "Render the most typical town of each source (the one closest to its source's medians in build/map_survey/summary.json) so the numbers can be checked against real layouts."
+      },
+      {
+        "tool": "compare_map.py",
+        "what": "Measure a map against human-made ones."
+      },
+      {
+        "tool": "edge_survey.py",
+        "what": "How Fallout, Fallout 2 and the TCs place their Hi-Res Patch edge boxes (maps/<name>.edg), measured against each map's painted floor."
+      },
+      {
+        "tool": "exit_survey.py",
+        "what": "How vanilla and TC maps lay out their exit grids."
+      },
+      {
+        "tool": "exit_sheet.py",
+        "what": "Render maps with exit grids painted red and scroll blockers blue, to see how they are laid out."
+      },
+      {
+        "tool": "stairs_survey.py",
+        "what": "How Fallout 1, Fallout 2 and the total conversions (not Olympus) take the player between floors, measured over every map."
+      },
+      {
+        "tool": "story_survey.py",
+        "what": "How the original games and the total conversions tell stories with what they put on a map, measured over every map in every source."
+      },
+      {
+        "tool": "story_crops.py",
+        "what": "Render close-ups of the vignettes tools/story_survey.py found, so the scenes can be studied by eye."
+      },
+      {
+        "tool": "room_props.py",
+        "what": "How the originals and the total conversions furnish the rooms of a kind of place, measured room by room, so a FOC map can be furnished the way theirs are (owner, 2026-10-20: \"those objects you placed do not fit with those locat..."
+      },
+      {
+        "tool": "furniture_walls.py",
+        "what": "Where Fallout 1 and Fallout 2 put furniture against walls, measured over every map: for each scenery/item art that stands within two hexes of a wall, the offset from the object's hex to the nearest wall hexes, as a side (\"x-run..."
+      },
+      {
+        "tool": "wall_decor.py",
+        "what": "Where the originals hang things on their walls (vents, lights, pipes, windows, signs, machines set into the wall): for each family of scenery that shares a hex with a wall piece, which run it is on (x-run or y-run), whether tha..."
+      },
+      {
+        "tool": "wall_junctions.py",
+        "what": "Measure how Fallout 1 and 2 build one wall set's runs and junctions, in the form a wall builder can use (rework_clcourt.build_walls' JUNCTION table is the nec set's)."
+      },
+      {
+        "tool": "wall_sequences.py",
+        "what": "How the originals order the pieces of a wall set along a run: for every x-run (along x, on one row) and y-run (along y, on one column) of the set in every Fallout 1 and 2 map, the piece at each hex and the one after it, so a bu..."
+      },
+      {
+        "tool": "nec_corners.py",
+        "what": "How Fallout 1 and Fallout 2 join the nec wall set (the concrete-and-brick walls the owner's courthouse uses) at ends, corners, T-junctions and crossings, measured over every map of both games."
+      },
+      {
+        "tool": "floor_borders.py",
+        "what": "How Fallout 2 frames a room's floor with a border tile set (the vtgst strips along the walls of Gecko's tunnels and power plant, the vault sets), measured from the maps that use it."
+      },
+      {
+        "tool": "check_wall_sequences.py",
+        "what": "Check a FOC map's walls of one set against the originals' sequences (tools/wall_sequences.py's build/wall_sequences/<set>.json): every pair of neighbouring pieces along an x-run (x, x+1) and a y-run (y, y+1) should be a pair th..."
+      }
+    ]
+  },
+  {
+    "group": "2. Find things",
+    "blurb": "Search the games for art, protos, tiles, buildings and rooms; build the fragment corpus and the art index.",
+    "tools": [
+      {
+        "tool": "find_art.py",
+        "what": "List FOC art list entries (index, name) matching regexes."
+      },
+      {
+        "tool": "findart.py",
+        "what": "What art exists for a thing, across every source, with its cost."
+      },
+      {
+        "tool": "find_buildings.py",
+        "what": "Find buildings, in any source's maps, walled in given wall families (e.g."
+      },
+      {
+        "tool": "find_proto.py",
+        "what": "Search FOC's protos by display name or art name."
+      },
+      {
+        "tool": "find_rooms.py",
+        "what": "List the rooms of any source level, so compose_map.py can lift single rooms instead of whole levels."
+      },
+      {
+        "tool": "find_source_item.py",
+        "what": "Search every source game's item names (pro_item.msg) for words, to find something to port with port_item.py."
+      },
+      {
+        "tool": "find_tile.py",
+        "what": "List FOC floor/roof tile ids by name prefix (ids below 4096, the only ones gecko and the engine can address)."
+      },
+      {
+        "tool": "open_tiles.py",
+        "what": "List open floor hexes in a hex rectangle of a FOC map: no blocking object, no exit grid within 2 hexes, reachable on foot from the map's start, at least --spacing hexes apart."
+      },
+      {
+        "tool": "stamp_extent.py",
+        "what": "Print the hex footprint of gecko stamps (dx/dy range of their objects), for laying them out with compose_map.py."
+      },
+      {
+        "tool": "corpus.py",
+        "what": "Build a searchable library of human-composed map fragments."
+      },
+      {
+        "tool": "art_index.py",
+        "what": "A pixel-hash index of every piece of art we already own, so a new asset source can be checked for repeats by what the picture IS, not what it is called."
+      }
+    ]
+  },
+  {
+    "group": "3. Plan a site",
+    "blurb": "Draw a map to scale on paper before placing anything: the real place, the game references, the plan.",
+    "tools": [
+      {
+        "tool": "site_plan.py",
+        "what": "Draw a map's site plan to scale, check it, and (later) build from it, so a map is laid out on paper before anything is placed."
+      },
+      {
+        "tool": "real_site.py",
+        "what": "Fetch a real place's layout from OpenStreetMap (Overpass API) and draw it to scale, north up, as the reference a FOC site plan is adapted from."
+      },
+      {
+        "tool": "plan_refs.py",
+        "what": "The reference sheet that goes beside a site plan: the real place (tools/real_site.py) and the comparable maps from every original game and total conversion, rendered, with their measured layout numbers from build/map_survey/map..."
+      }
+    ]
+  },
+  {
+    "group": "4. Build the map",
+    "blurb": "Compose a map from a recipe, from stamps, from a grid, or from code; make stamps from the originals' buildings.",
+    "tools": [
+      {
+        "tool": "compose_map.py",
+        "what": "Build a FOC map from a recipe (mod/maps_src/<name>.compose.json) by lifting whole levels or boxes out of other games' maps, converting their ids into FOC's (port_stamp.Converter), and adding FOC's own exits."
+      },
+      {
+        "tool": "sitekit.py",
+        "what": "Design a FOC map in code and write it as a compose_map.py recipe."
+      },
+      {
+        "tool": "mapbuild.py",
+        "what": "Write a valid Fallout 2 .map from scratch."
+      },
+      {
+        "tool": "gridmap.py",
+        "what": "Compile a data-first map grid (JSON) into a Fallout 2 .map."
+      },
+      {
+        "tool": "groundkit.py",
+        "what": "Learn how Fallout 2 lays its ground tiles, and grow new ground for FOC maps that follows the same rules: broken asphalt with sand in its edges, kerbs and sidewalk fragments, dirt worn round buildings, the way the Den, Klamath a..."
+      },
+      {
+        "tool": "tilewfc.py",
+        "what": "Lay floor tiles the way Fallout 2's designers did."
+      },
+      {
+        "tool": "wallkit.py",
+        "what": "Learn how the original games and the total conversions build walls, so FOC's maps can draw their own buildings instead of copying them."
+      },
+      {
+        "tool": "wallsets.py",
+        "what": "Build walls of a Fallout wall set by the originals' own grammar."
+      },
+      {
+        "tool": "buildings.py",
+        "what": "Extract WHOLE buildings as prefabs."
+      },
+      {
+        "tool": "stamps.py",
+        "what": "Lift a multi-object STRUCTURE out of a real map so it can be stamped down elsewhere."
+      },
+      {
+        "tool": "building_stamps.py",
+        "what": "Cut every building out of the original Fallouts' maps as a gecko stamp, sorted into folders by construction and size."
+      },
+      {
+        "tool": "area_stamps.py",
+        "what": "Cut graveyards, junkyards and ruins out of the original Fallouts' maps as gecko stamps, beside building_stamps.py's buildings."
+      },
+      {
+        "tool": "sanitize_stamps.py",
+        "what": "De-stack the pattern stamps."
+      },
+      {
+        "tool": "rock_field.py",
+        "what": "Lay Fallout 2's underground rock field round the rooms of an underground map, the way the originals do."
+      },
+      {
+        "tool": "prop_footprints.py",
+        "what": "The blockers the originals put round a piece of scenery that is bigger than its own hex: for each art, over every placement in the given maps, the offsets (dx, dy) from the piece's hex at which a blocking hex (Secret Blocking H..."
+      },
+      {
+        "tool": "mapedit.py",
+        "what": "A prefab map editor for FOC."
+      }
+    ]
+  },
+  {
+    "group": "5. Finish the map",
+    "blurb": "Edges, scroll blockers, exits, links, trimming and cleanup, the way Fallout 2 does them.",
+    "tools": [
+      {
+        "tool": "map_edges.py",
+        "what": "Give FOC's maps Hi-Res Patch edge files (maps/<name>.edg), so the camera stops at the edge of the painted ground and the void beyond is never seen."
+      },
+      {
+        "tool": "map_edge_blockers.py",
+        "what": "Stop the player walking into the black edge of a map."
+      },
+      {
+        "tool": "scroll_ring.py",
+        "what": "Replace a map's scroll-blocker ring with one sized to the map's actual content, so the camera can't be scrolled out past it into undecorated wasteland or the void beyond."
+      },
+      {
+        "tool": "exit_layout.py",
+        "what": "Lay out each FOC map's exits and edge the way Fallout 2 does: Fallout 2's own exit prefabs (tools/exit_templates.json) at the edge box where each road leaves, a row of invisible block hexes along the rest of the box edge, and t..."
+      },
+      {
+        "tool": "exit_templates.py",
+        "what": "Copy exit-grid prefabs out of Fallout 2's own maps, object for object, into tools/exit_templates.json, for tools/exit_layout.py to stamp onto FOC's maps."
+      },
+      {
+        "tool": "exit_restyle.py",
+        "what": "Rebuild every exit-grid patch on FOC maps the way Fallout, Fallout 2 and the TCs lay them out."
+      },
+      {
+        "tool": "map_exits_to_edge.py",
+        "what": "Rebuild a map's exit-grid ring at the edge of its painted floor."
+      },
+      {
+        "tool": "map_link.py",
+        "what": "Link two maps with exit grids."
+      },
+      {
+        "tool": "check_links.py",
+        "what": "Check every way into and out of FOC maps."
+      },
+      {
+        "tool": "map_trim.py",
+        "what": "Trim a map to a clean edge: floor cut straight along the tile grid, a tidy exit band just inside it, and a camera ring."
+      },
+      {
+        "tool": "shift_map.py",
+        "what": "Move everything on a map (every elevation) by an even number of hexes, so a town that sits off to one side of the 200x200 grid ends up in the middle, where its edge box (maps/<name>.edg) has painted ground all round."
+      },
+      {
+        "tool": "paint_corners.py",
+        "what": "Paint ground into the void corners that a map's edge box (maps/<name>.edg, tools/map_edges.py) still takes in, the way the originals have floor painted out past their boxes."
+      },
+      {
+        "tool": "strip_blockers.py",
+        "what": "Remove stray invisible blocking hexes from a map."
+      },
+      {
+        "tool": "car_blockers.py",
+        "what": "Fill the footprint of car / caravan-cart scenery with invisible blocking hexes, so the sprite reads as solid instead of something you walk through."
+      },
+      {
+        "tool": "map_vehicle_blockers.py",
+        "what": "Make cars, trucks, wagons and carts solid on a map."
+      },
+      {
+        "tool": "remove_black_frames.py",
+        "what": "Take the black frame pieces (RPU's BLACK002 / BLACK003 scenery, drawn with gecko's Black Edge tool) off FOC's maps."
+      },
+      {
+        "tool": "map_header.py",
+        "what": "Set a FOC map's header script and/or player start, in place."
+      },
+      {
+        "tool": "sync_maps.py",
+        "what": "Copy a map you just edited in gecko back into the authored source tree, so it survives the next deploy.py run."
+      },
+      {
+        "tool": "swap_critters.py",
+        "what": "Turn critters of some protos on a map into another creature, keeping each one where it stands, its facing, its script and its inventory."
+      },
+      {
+        "tool": "bind_one.py",
+        "what": "Bind a script to one specific object on a map, by tile."
+      }
+    ]
+  },
+  {
+    "group": "6. Borrow from other games",
+    "blurb": "Browse another game in gecko, save stamps, and convert them into your mod's id space; port protos and art; make your own scenery.",
+    "tools": [
+      {
+        "tool": "build_gecko_browsers.py",
+        "what": "Generate tools/gecko_browse/, one launcher per TC."
+      },
+      {
+        "tool": "port.py",
+        "what": "Pull assets in from another Fallout 2 install and remap them into this project's ID space."
+      },
+      {
+        "tool": "port_bulk.py",
+        "what": "Port every distinct proto of the given types from one or more sources into FOC's own data in one pass, skipping anything whose ART is byte-identical to something FOC's data already has or that an earlier source in this same run..."
+      },
+      {
+        "tool": "port_stamp.py",
+        "what": "Convert a gecko stamp saved while browsing another game (via tools/gecko_browse) into FOC's ID space, so it stamps the same thing in the FOC editing profile."
+      },
+      {
+        "tool": "tile_slots.py",
+        "what": "New floor and roof tiles for FOC, in slots of tiles.lst that hold nothing FOC can lose."
+      },
+      {
+        "tool": "repack_art.py",
+        "what": "Move every piece of FOC art that something actually uses below the engine's 4096 art-index cap, swapping unused art up past it."
+      },
+      {
+        "tool": "fix_art_names.py",
+        "what": "Bring every FOC art filename within the engine's 12-char limit."
+      },
+      {
+        "tool": "fonline2_source.py",
+        "what": "Make the FOnline 2 client usable as an asset source, like the TC installs, without repeating anything we already have."
+      }
+    ]
+  },
+  {
+    "group": "7. Register and play",
+    "blurb": "Allocate ids, assemble the game's lists, register the map on the world map, check cross-references and deploy into the working copy of the game.",
+    "tools": [
+      {
+        "tool": "ids.py",
+        "what": "The project's ID space."
+      },
+      {
+        "tool": "gen_ids.py",
+        "what": "Turn mod/ids/*.txt into the generated header scripts_src/foc/foc_ids.h."
+      },
+      {
+        "tool": "lists.py",
+        "what": "Assemble the .lst / .gam files the game actually loads."
+      },
+      {
+        "tool": "questlog.py",
+        "what": "Build the Pip-Boy quest log (data\\quests.txt) from mod/quests.txt."
+      },
+      {
+        "tool": "worldmap.py",
+        "what": "Register FOC maps with the engine (maps.txt / city.txt / map.msg) and fit worldmap.txt to FOC's West Texas worldmap art."
+      },
+      {
+        "tool": "validate.py",
+        "what": "Check the mod's ID space and cross-references before it ever runs."
+      },
+      {
+        "tool": "deploy.py",
+        "what": "Assemble the mod into the working base install so it can be played."
+      },
+      {
+        "tool": "install-sfall.py",
+        "what": "Install an upstream sfall release into the working base."
+      }
+    ]
+  }
+]

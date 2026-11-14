@@ -72,6 +72,13 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             return;
         }
 
+        if (_mode == EditorMode::PasteClipboard) {
+            if (_callbacks.onPasteClipboard) {
+                _callbacks.onPasteClipboard(worldPos);
+            }
+            return;
+        }
+
         if (_mode == EditorMode::MarkExits) {
             // "Draw edge": a click appends a vertex, a double-click finalizes. Double-click detection
             // uses the RAW cursor (physical mouse stillness); with Shift held the appended vertex is
@@ -154,10 +161,17 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
                 _callbacks.onStampPatternCancel();
             }
             spdlog::debug("Stamp pattern mode cancelled with right-click");
+        } else if (_mode == EditorMode::PasteClipboard) {
+            _mode = EditorMode::Select;
+            if (_callbacks.onPasteClipboardCancel) {
+                _callbacks.onPasteClipboardCancel();
+            }
+            spdlog::debug("Paste mode cancelled with right-click");
         } else {
             _currentAction = EditorAction::PANNING;
             _mouseStartPos = event.position;
             _mouseLastPos = _mouseStartPos;
+            _panMoved = false;
         }
     }
 }
@@ -224,6 +238,9 @@ void InputHandler::handleMouseReleased(const sf::Event::MouseButtonReleased& eve
     } else if (event.button == sf::Mouse::Button::Right) {
         if (_currentAction == EditorAction::PANNING) {
             _currentAction = EditorAction::NONE;
+            if (!_panMoved && _mode == EditorMode::Select && _callbacks.onContextMenu) {
+                _callbacks.onContextMenu(worldPos, event.position);
+            }
         }
     }
 }
@@ -250,12 +267,20 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
 
     switch (_currentAction) {
         case EditorAction::PANNING: {
+            const sf::Vector2i fromStart = event.position - _mouseStartPos;
+            if (fromStart.x * fromStart.x + fromStart.y * fromStart.y > 25) { // 5 pixel drag threshold
+                _panMoved = true;
+            }
             sf::Vector2i delta = event.position - _mouseLastPos;
             if (_callbacks.onPan) {
                 _callbacks.onPan(sf::Vector2f(static_cast<float>(-delta.x),
                     static_cast<float>(-delta.y)));
             }
             _mouseLastPos = event.position;
+            if (!_panMoved) {
+                const sf::Vector2i moved = event.position - _mouseStartPos;
+                _panMoved = (moved.x * moved.x + moved.y * moved.y) > 25; // 5 pixel drag threshold
+            }
             break;
         }
 
@@ -333,6 +358,39 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
     } else if (event.code == sf::Keyboard::Key::Delete || event.code == sf::Keyboard::Key::Backspace) {
         if (_callbacks.onDeleteObjects) {
             _callbacks.onDeleteObjects();
+        }
+    } else if (event.code == sf::Keyboard::Key::Home || event.code == sf::Keyboard::Key::End
+        || event.code == sf::Keyboard::Key::PageUp || event.code == sf::Keyboard::Key::PageDown) {
+        if (_callbacks.onReorderObjects) {
+            using object_order::Step;
+            switch (event.code) {
+                case sf::Keyboard::Key::Home:
+                    _callbacks.onReorderObjects(Step::BringToFront);
+                    break;
+                case sf::Keyboard::Key::PageUp:
+                    _callbacks.onReorderObjects(Step::BringForward);
+                    break;
+                case sf::Keyboard::Key::PageDown:
+                    _callbacks.onReorderObjects(Step::SendBackward);
+                    break;
+                default:
+                    _callbacks.onReorderObjects(Step::SendToBack);
+                    break;
+            }
+        }
+    } else if (event.control && event.code == sf::Keyboard::Key::C) {
+        // The clipboard keys arrive here rather than as window shortcuts, so Ctrl+C in a text field
+        // or the log panel still copies text (SFMLWidget claims them only while the map has focus).
+        if (_callbacks.onCopy) {
+            _callbacks.onCopy();
+        }
+    } else if (event.control && event.code == sf::Keyboard::Key::X) {
+        if (_callbacks.onCut) {
+            _callbacks.onCut();
+        }
+    } else if (event.control && event.code == sf::Keyboard::Key::V) {
+        if (_callbacks.onPaste) {
+            _callbacks.onPaste();
         }
     } else if (event.code == sf::Keyboard::Key::R) {
         // The canvas "R" shortcut stands down while stamping (and while a registered tool runs),

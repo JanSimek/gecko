@@ -35,6 +35,7 @@ public:
     uint32_t positionAt(uint32_t x, uint32_t y) const;
 
     std::optional<std::reference_wrapper<const Hex>> getHexByPosition(uint32_t position) const;
+    bool containsPosition(int position) const;
     std::optional<GridCoordinates> coordinatesForPosition(int position) const;
     std::optional<int> positionForCoordinates(int x, int y) const;
     std::optional<int> tileIndexForPosition(int position) const;

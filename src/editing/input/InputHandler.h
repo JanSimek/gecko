@@ -7,6 +7,7 @@
 #include <functional>
 #include <vector>
 #include <spdlog/spdlog.h>
+#include "editor/helper/ObjectOrder.h"
 #include "editing/EditorMode.h"
 #include "util/Types.h"
 
@@ -67,6 +68,8 @@ public:
         std::function<void(sf::Vector2f worldPos)> onStampPattern;
         std::function<void()> onStampPatternCancel;
         std::function<void()> onStampCycleVariant;
+        std::function<void(sf::Vector2f worldPos)> onPasteClipboard;
+        std::function<void()> onPasteClipboardCancel;
 
         // Dynamic registered tool dispatch. The host owns the active tool registry; InputHandler only
         // does pixel->world conversion and forwards the event while EditorMode::PluginTool is active.
@@ -89,9 +92,19 @@ public:
         // Hover
         std::function<void(sf::Vector2f worldPos)> onMouseMove;
 
+        // A right-click released without dragging in Select mode (a right-drag pans instead).
+        // `screenPos` is the cursor in widget pixels, where the host opens its context menu.
+        std::function<void(sf::Vector2f worldPos, sf::Vector2i screenPos)> onContextMenu;
+        // Home / PgUp / PgDown / End: draw-order steps for the selected objects.
+        std::function<void(object_order::Step step)> onReorderObjects;
+
         // Keyboard
         std::function<void()> onEscape;
         std::function<void()> onDeleteObjects;
+        // Ctrl+C / Ctrl+X / Ctrl+V while the map has focus.
+        std::function<void()> onCopy;
+        std::function<void()> onCut;
+        std::function<void()> onPaste;
 
         // Mode cancellation
         std::function<void()> onMarkExitsModeCancelled;
@@ -144,6 +157,8 @@ public:
     void setPlayerPositionMode(bool enabled) { setActiveMode(enabled, EditorMode::SetPlayerPosition); }
     void setExitGridPlacementMode(bool enabled) { setActiveMode(enabled, EditorMode::PlaceExitGrid); }
     void setStampPatternMode(bool enabled) { setActiveMode(enabled, EditorMode::StampPattern); }
+    void setPasteClipboardMode(bool enabled) { setActiveMode(enabled, EditorMode::PasteClipboard); }
+    bool isInPasteClipboardMode() const { return _mode == EditorMode::PasteClipboard; }
     void setMarkExitsMode(bool enabled) { setActiveMode(enabled, EditorMode::MarkExits); }
     void setPluginToolMode(bool enabled) { setActiveMode(enabled, EditorMode::PluginTool); }
     void setTilePlacementMode(bool enabled, int tileIndex = -1);
@@ -198,6 +213,9 @@ private:
     sf::Vector2f _mouseLastWorldPos;
     sf::Vector2f _dragStartWorldPos;
     bool _isDragging = false;
+    // Set once a right-button press moves past the drag threshold: the release then ends a pan
+    // instead of opening the context menu.
+    bool _panMoved = false;
     bool _immediateSelectionPerformed = false;
     SelectionModifier _dragSelectionModifier = SelectionModifier::NONE; // modifier held when a drag-select began
 

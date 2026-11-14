@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cctype>
 
 namespace geck::util {
 
@@ -28,6 +29,12 @@ namespace {
     }
 
 } // namespace
+
+bool hasDatExtension(const std::filesystem::path& path) {
+    std::string ext = path.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return ext == ".dat";
+}
 
 bool hasFallout2DataLayout(const std::filesystem::path& path) {
     if (!isDirectory(path)) {
@@ -90,7 +97,7 @@ std::optional<std::filesystem::path> resolveGameDataRoot(const std::filesystem::
         return std::nullopt;
     }
 
-    if (path.extension() == ".dat") {
+    if (hasDatExtension(path)) {
         return path;
     }
 
@@ -139,7 +146,7 @@ bool pathsEquivalent(const std::filesystem::path& left, const std::filesystem::p
     }
 
     auto resolveOrIdentity = [](const std::filesystem::path& p) -> std::filesystem::path {
-        if (p.extension() == ".dat") {
+        if (hasDatExtension(p)) {
             return p;
         }
         if (auto resolved = resolveGameDataRoot(p)) {

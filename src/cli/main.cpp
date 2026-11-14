@@ -11,6 +11,7 @@
 #include "cli/Party.h"
 #include "cli/MapExamples.h"
 #include "cli/GvarRefs.h"
+#include "cli/MapEditTools.h"
 #include "cli/MapGenerator.h"
 #include "cli/MapRender.h"
 #include "cli/MapReachability.h"
@@ -135,6 +136,10 @@ void printUsage(const char* program) {
               << "      grid (row-major, 100 wide; emptyTile marks empty) and every object's\n"
               << "      {pid,number,type,name,hex,col,row,dir,flat}. The per-cell data behind analyze's\n"
               << "      adjacency/clusters — for learning exact tile placement + scatter density.\n"
+              << "  " << program << " map strip-exit-grids --map <path> --out <file.map>\n"
+              << "      --data <dir-or-.dat> [--data <...>]\n"
+              << "      Removes every exit-grid marker object from every elevation and writes the\n"
+              << "      result; nothing else about the map (tiles, scripts, other objects) is touched.\n"
               << "  " << program << " map graph [map ...] [--no-scripts] --data <dir-or-.dat> [--data <...>]\n"
               << "      The exit-grid connectivity graph: how maps link via exit grids WITHIN a location\n"
               << "      (+ worldmap hand-off edges), named via maps.txt/map.msg. Not inter-city travel\n"
@@ -1053,10 +1058,89 @@ int runProtoCommand(const std::vector<std::string>& args, const char* program) {
     return geck::cli::exportProtos(resources, opts, std::cout);
 }
 
+// --- mapedit subcommand -----------------------------------------------------------------------
+// One-off, narrowly-scoped map edits (currently just stripping exit grid markers) that don't fit
+// `map generate`'s script-driven model. Self-contained like `frm`/`resource`.
+struct MapEditArgs {
+    std::string action; // strip-exit-grids
+    std::string mapPath;
+    std::string outPath;
+    std::vector<std::string> dataPaths;
+};
+
+bool isMapEditAction(const std::string& action) {
+    return action == "strip-exit-grids";
+}
+
+bool parseMapEditArgs(const std::vector<std::string>& args, const char* program, MapEditArgs& out) {
+    for (std::size_t i = 2; i < args.size();) {
+        const std::string& arg = args[i];
+        const bool valueFlag = arg == "--data" || arg == "--map" || arg == "--out";
+        if (valueFlag && i + 1 >= args.size()) {
+            std::cerr << "error: " << arg << " needs a value\n";
+            printUsage(program);
+            return false;
+        }
+        if (arg == "--data") {
+            out.dataPaths.push_back(args[i + 1]);
+            i += 2;
+        } else if (arg == "--map") {
+            out.mapPath = args[i + 1];
+            i += 2;
+        } else if (arg == "--out") {
+            out.outPath = args[i + 1];
+            i += 2;
+        } else {
+            std::cerr << "error: unexpected argument: " << arg << "\n";
+            printUsage(program);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Run a `map strip-exit-grids ...` command end to end. Returns the exit code.
+int runMapEditCommand(const std::vector<std::string>& args, const char* program) {
+    MapEditArgs ma;
+    ma.action = args[1];
+    if (!parseMapEditArgs(args, program, ma)) {
+        return 2;
+    }
+    if (ma.mapPath.empty()) {
+        std::cerr << "error: map " << ma.action << " requires --map <path>\n";
+        printUsage(program);
+        return 2;
+    }
+    if (ma.outPath.empty()) {
+        std::cerr << "error: map " << ma.action << " requires --out <path>\n";
+        printUsage(program);
+        return 2;
+    }
+    if (ma.dataPaths.empty()) {
+        std::cerr << "error: at least one --data <path> is required\n";
+        printUsage(program);
+        return 2;
+    }
+
+    spdlog::set_level(spdlog::level::off);
+    geck::resource::GameResources resources;
+    geck::cli::mountDataPaths(resources, ma.dataPaths, program);
+
+    geck::cli::StripExitGridsOptions opts;
+    opts.mapPath = ma.mapPath;
+    opts.outPath = ma.outPath;
+    return geck::cli::stripExitGrids(resources, opts, std::cout);
+}
+
 // The command families that parse their own arguments; nullopt when `args` names none of them.
 std::optional<int> runCommandFamily(const std::vector<std::string>& args, const char* program) {
     if (args.size() < 2) {
         return std::nullopt;
+    }
+    // The `mapedit` actions live under the `map` prefix but are parsed on their own path (--map/
+    // --out flags, not the shared CliArgs), checked before the general `map` parser sees them.
+    if (args[0] == "map" && isMapEditAction(args[1])) {
+        return runMapEditCommand(args, program);
     }
     // The `frm` family is parsed and run on its own path (its own positional + flags), separate from
     // the `map` subcommands below; so is the `resource` family (data inspection).

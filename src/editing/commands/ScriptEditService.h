@@ -46,6 +46,10 @@ public:
     // 24 bits are the program index. Undoable; false for -1 or a type with no section.
     bool attachProtoScript(const std::shared_ptr<MapObject>& object, uint32_t protoSid);
     bool detachScript(const std::shared_ptr<MapObject>& object);
+    // Add ready-made object script records, each to the section its SID names, as one undoable
+    // command (undo erases them by SID). For a paste, whose new objects already carry these SIDs
+    // and OIDs; the records' SIDs must not be in use yet.
+    bool addObjectScripts(const std::vector<MapScript>& scripts);
     bool addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
     // Edit an existing spatial script in place, keeping its SID (pid) stable so a live selection
     // survives the edit; updates program index, position (tile+elevation) and radius. Undoable.

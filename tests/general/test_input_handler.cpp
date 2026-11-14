@@ -349,3 +349,92 @@ TEST_CASE("InputHandler's flip key does nothing outside Draw-edge mode, and rese
     h.handler.setMarkExitsMode(false); // back to Select
     CHECK_FALSE(h.handler.isMarkExitsFlipped());
 }
+
+TEST_CASE("InputHandler routes paste-mode clicks, and right-click leaves paste mode", "[input][clipboard]") {
+    Harness h;
+    int pastes = 0;
+    int cancels = 0;
+    InputHandler::Callbacks cb;
+    cb.onPasteClipboard = [&](sf::Vector2f) { ++pastes; };
+    cb.onPasteClipboardCancel = [&] { ++cancels; };
+    h.handler.setCallbacks(cb);
+    h.handler.setPasteClipboardMode(true);
+
+    // Each left-click drops another copy and stays in the mode.
+    h.leftClick(100, 100);
+    h.leftClick(140, 120);
+    CHECK(pastes == 2);
+    CHECK(h.handler.isInPasteClipboardMode());
+
+    h.rightClick(100, 100);
+    CHECK(cancels == 1);
+    CHECK_FALSE(h.handler.isInPasteClipboardMode());
+}
+
+TEST_CASE("InputHandler sends Ctrl+C, Ctrl+X and Ctrl+V to the clipboard callbacks", "[input][clipboard]") {
+    InputHandler handler;
+    int copies = 0;
+    int cuts = 0;
+    int pastes = 0;
+    InputHandler::Callbacks cb;
+    cb.onCopy = [&] { ++copies; };
+    cb.onCut = [&] { ++cuts; };
+    cb.onPaste = [&] { ++pastes; };
+    handler.setCallbacks(cb);
+
+    const auto press = [&handler](sf::Keyboard::Key key, bool control) {
+        sf::Event::KeyPressed event;
+        event.code = key;
+        event.control = control;
+        handler.handleKeyPressed(event);
+    };
+
+    // Without Ctrl the letters do nothing here.
+    press(sf::Keyboard::Key::C, false);
+    press(sf::Keyboard::Key::X, false);
+    press(sf::Keyboard::Key::V, false);
+    CHECK(copies + cuts + pastes == 0);
+
+    press(sf::Keyboard::Key::C, true);
+    press(sf::Keyboard::Key::X, true);
+    press(sf::Keyboard::Key::V, true);
+    CHECK(copies == 1);
+    CHECK(cuts == 1);
+    CHECK(pastes == 1);
+}
+
+TEST_CASE("InputHandler opens the context menu on a right-click but not on a right-drag", "[input][clipboard]") {
+    Harness h;
+    int menus = 0;
+    int pans = 0;
+    InputHandler::Callbacks cb;
+    cb.onContextMenu = [&](sf::Vector2f, sf::Vector2i) { ++menus; };
+    cb.onPan = [&](sf::Vector2f) { ++pans; };
+    h.handler.setCallbacks(cb);
+
+    const auto rightRelease = [&h](int x, int y) {
+        sf::Event::MouseButtonReleased release;
+        release.button = sf::Mouse::Button::Right;
+        release.position = { x, y };
+        h.handler.handleEvent(sf::Event(release), h.target, h.view);
+    };
+
+    // A click, even with a pixel or two of jitter, opens the menu.
+    h.rightClick(100, 100);
+    h.mouseMove(102, 101);
+    rightRelease(102, 101);
+    CHECK(menus == 1);
+
+    // A drag pans and does not.
+    h.rightClick(100, 100);
+    h.mouseMove(160, 140);
+    rightRelease(160, 140);
+    CHECK(menus == 1);
+    CHECK(pans == 2);
+
+    // Outside Select mode right-click belongs to the active tool.
+    h.handler.setStampPatternMode(true);
+    h.rightClick(100, 100);
+    rightRelease(100, 100);
+    CHECK(menus == 1);
+}

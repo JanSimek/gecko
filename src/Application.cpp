@@ -3,6 +3,8 @@
 
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/spdlog.h>
+#include <algorithm>
+#include <cctype>
 #include <QCommandLineParser>
 #include <QCommandLineOption>
 #include <QObject>
@@ -140,6 +142,10 @@ std::string Application::processCommandLineArgs() {
 
     parser.process(*_qtApp);
 
+    if (parser.isSet(dataOption)) {
+        _cliDataPathOverride = std::filesystem::path(parser.value(dataOption).toStdString());
+    }
+
     if (parser.isSet(debugOption)) {
         spdlog::set_pattern("[%H:%M:%S.%e] [%^%l%$] [thread %t] %v");
         spdlog::set_level(spdlog::level::debug);
@@ -209,6 +215,35 @@ bool Application::isRunning() const {
     return _mainWindow && _mainWindow->isVisible();
 }
 
+namespace {
+
+// Shared between loadDataPaths() (to refuse mounting it) and showStartupSettingsDialog()
+// (to refuse PERSISTING it) - a real, confirmed bug: the dialog's own save used to run
+// unconditionally after dialog.exec(), so whenever this exact placeholder shape was already
+// sitting in memory when the recovery dialog opened, closing that dialog wrote it straight
+// back to disk regardless of what the user did - permanently locking in a bad config that
+// would otherwise have been transient. Every occurrence traced so far shows the SAME frozen
+// mtime from the moment this first got saved, never updating again on its own.
+bool isPlaceholderOnlyDataPaths(const std::vector<std::filesystem::path>& dataPaths) {
+    if (dataPaths.empty()) {
+        return false;
+    }
+    const std::string resourcesPrefix = [] {
+        std::string s = Application::getResourcesPath().lexically_normal().string();
+        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
+        return s;
+    }();
+    const bool allUnderResources = !resourcesPrefix.empty()
+        && std::all_of(dataPaths.begin(), dataPaths.end(), [&resourcesPrefix](const std::filesystem::path& p) {
+               std::string s = p.lexically_normal().string();
+               std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
+               return s.rfind(resourcesPrefix, 0) == 0; // starts_with
+           });
+    return allUnderResources && dataPaths.size() <= 3;
+}
+
+} // namespace
+
 void Application::checkDataConfiguration() {
     auto& settings = *_settings;
     if (!settings.exists()) {
@@ -248,8 +283,18 @@ bool Application::showStartupSettingsDialog() {
     dialog.exec();
 
     // Save whether or not the dialog was accepted, so we keep at least the default data path
-    // from the command line and the app is usable either way.
-    _settings->save();
+    // from the command line and the app is usable either way - UNLESS what's currently in
+    // memory is the known placeholder-only pattern loadDataPaths() refuses to mount. Saving
+    // that unconditionally was the actual bug behind data paths "permanently" resetting: this
+    // dialog only ever opens because something is already wrong, so persisting whatever is
+    // sitting in memory at that moment (rather than what the user actually configured) writes
+    // the bad state right back to disk and locks it in for every future launch.
+    if (isPlaceholderOnlyDataPaths(_settings->getDataPaths())) {
+        spdlog::warn("showStartupSettingsDialog - not saving: in-memory data paths are still the "
+                     "placeholder-only pattern; saving this would freeze it to disk permanently");
+    } else {
+        _settings->save();
+    }
     return dataPathsChanged;
 }
 
@@ -269,12 +314,64 @@ void Application::loadDataPaths() {
         return;
     }
 
+    // Sanity check BEFORE mounting anything: if every configured path resolves under the
+    // bundled resources folder, this is the exact shape of a known, still-unexplained bug
+    // where settings intermittently appear wrong to this process and gecko silently
+    // substitutes its own bundled (vanilla-only) master.dat/critter.dat for the real
+    // configured install - producing a plausible-looking but WRONG session with no visible
+    // error (confirmed to have happened repeatedly). Confirmed via forensic capture: this isn't
+    // a one-off flicker, it's this process reading a permanently-stuck stale snapshot of the
+    // settings file that no in-app retry or resave can correct - the file this process sees
+    // never changes no matter what gets written through any other path. Rather than just refuse,
+    // fall back to an explicit --data argument when one was given: it comes from the command
+    // line, not this unreliable file, so it sidesteps the problem entirely.
+    if (isPlaceholderOnlyDataPaths(dataPaths)) {
+        if (_cliDataPathOverride) {
+            spdlog::warn("loadDataPaths - settings are the known placeholder-only pattern; "
+                         "falling back to the --data argument instead of refusing: {}",
+                _cliDataPathOverride->string());
+            dataPaths = util::expandDataPaths({ *_cliDataPathOverride });
+            // expandDataPaths only turns a bare game folder into itself + its master.dat/
+            // critter.dat - it has no idea a mods/ subfolder (any mod, not just this one)
+            // exists or needs to be mounted with higher priority than the base game. A settings
+            // file built through the normal Settings dialog carries those separately; this
+            // fallback has to rediscover them itself or a mod's own content silently vanishes
+            // with no error at all, which is worse than the dialog this is trying to avoid.
+            std::error_code ec;
+            const auto modsDir = *_cliDataPathOverride / "mods";
+            if (std::filesystem::is_directory(modsDir, ec)) {
+                for (const auto& entry : std::filesystem::directory_iterator(modsDir, ec)) {
+                    if (entry.is_directory()) {
+                        spdlog::info("loadDataPaths - fallback also mounting mod folder: {}",
+                            entry.path().string());
+                        dataPaths.push_back(entry.path());
+                    }
+                }
+            }
+            settings.setDataPaths(dataPaths);
+        } else {
+            spdlog::error("Refusing to load: all {} configured data path(s) resolve under the "
+                          "bundled resources folder instead of a real game install, and no "
+                          "--data argument was given to fall back to - not mounting.",
+                dataPaths.size());
+            QtDialogs::showError(_mainWindow.get(), "Data Configuration Problem",
+                "gecko's data paths appear to have reset to its own bundled placeholder data "
+                "instead of your real game install, and no --data argument was given to recover "
+                "with.\n\nNothing has been loaded. Please close gecko and launch it with "
+                "--data \"<path to your Fallout 2 install>\".");
+            return;
+        }
+    }
+
     // The editor's own assets (blank tile, overlay art, ...) live in the bundled resources
     // folder, not in the game data — keep it mounted (lowest priority) regardless of how the
     // user configured the data paths, or every map load fails on art/tiles/blank.frm.
     util::ensureFallbackDataPath(dataPaths, getResourcesPath());
 
     spdlog::info("Loading {} data paths with progress dialog", dataPaths.size());
+    for (const auto& path : dataPaths) {
+        spdlog::info("  data path: {}", path.string());
+    }
 
     // Load game data even without a map: GameResources, the file browser, and new-map
     // creation all need access to FRM/tile/object assets from the DAT files.
@@ -293,19 +390,25 @@ void Application::loadDataPaths() {
 }
 
 std::filesystem::path Application::getResourcesPath() {
+    // Always the EXECUTABLE's own directory, never the process's current working
+    // directory. current_path() depends on how gecko happened to be launched (a
+    // shortcut with an explicit "Start in", a taskbar pin, double-clicking the exe
+    // from Explorer, a debugger) and is not guaranteed to equal the exe's folder -
+    // when it doesn't, this path silently resolves to the wrong (or a nonexistent)
+    // location, which breaks both the bundled-resources fallback mount AND the
+    // loadDataPaths() safety check that string-compares configured paths against
+    // this same prefix (a mismatch here means that check can't recognize the exact
+    // bundled-placeholder pattern it exists to catch, and quietly lets it through).
+    QString appPath = QCoreApplication::applicationDirPath();
 #ifdef __APPLE__
     // Check if we're running from a macOS app bundle
-    QString appPath = QCoreApplication::applicationDirPath();
     if (appPath.contains(".app/Contents/MacOS")) {
         // Inside a bundle, resources live in ../Resources
         std::filesystem::path bundlePath = appPath.toStdString();
         return bundlePath.parent_path() / "Resources" / RESOURCES_DIR;
-    } else {
-        return std::filesystem::current_path() / RESOURCES_DIR;
     }
-#else
-    return std::filesystem::current_path() / RESOURCES_DIR;
 #endif
+    return std::filesystem::path(appPath.toStdString()) / RESOURCES_DIR;
 }
 
 bool Application::isDefaultResourcesPath(const std::filesystem::path& path) {

@@ -197,6 +197,39 @@ bool ScriptEditService::detachScript(const std::shared_ptr<MapObject>& object) {
     return recordScriptEdit("Detach Script", section, object, std::move(beforeSection), before);
 }
 
+bool ScriptEditService::addObjectScripts(const std::vector<MapScript>& scripts) {
+    if (!_map || scripts.empty()) {
+        return false;
+    }
+    for (const MapScript& script : scripts) {
+        const int section = MapScript::sidSection(script.pid);
+        if (section < 0 || section >= Map::SCRIPT_SECTIONS) {
+            return false;
+        }
+    }
+
+    const auto add = [this, scripts]() {
+        auto& mapFile = _map->getMapFile();
+        for (const MapScript& script : scripts) {
+            const int section = MapScript::sidSection(script.pid);
+            mapFile.map_scripts[section].push_back(script);
+            mapFile.scripts_in_section[section] = static_cast<int>(mapFile.map_scripts[section].size());
+        }
+    };
+    const auto remove = [this, scripts]() {
+        for (const MapScript& script : scripts) {
+            eraseScript(script.pid);
+        }
+    };
+
+    UndoCommand cmd;
+    cmd.description = "Add Scripts";
+    cmd.undo = remove;
+    cmd.redo = add;
+    cmd.redo();
+    return _batcher.push(std::move(cmd));
+}
+
 bool ScriptEditService::addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius) {
     if (!_map) {
         return false;

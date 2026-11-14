@@ -24,6 +24,9 @@
         <file alias="actions/select-all.svg">icons/tabler/actions/select-all.svg</file>
         <file alias="actions/deselect.svg">icons/tabler/actions/square-off.svg</file>
         <file alias="actions/scroll-blocker.svg">icons/tabler/actions/border-all.svg</file>
+        <file alias="actions/remove-wall-blocker.svg">icons/tabler/actions/ban.svg</file>
+        <file alias="actions/add-wall-blocker.svg">icons/tabler/actions/barrier-block.svg</file>
+        <file alias="actions/black-edge.svg">icons/tabler/actions/black-edge.svg</file>
         
         <!-- View Menu Actions -->
         <file alias="actions/view-objects.svg">icons/tabler/actions/box.svg</file>

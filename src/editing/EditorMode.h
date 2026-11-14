@@ -11,6 +11,7 @@ enum class EditorMode {
     MarkExits,         ///< Selecting exit grids to edit their properties.
     SetPlayerPosition, ///< One-shot hex pick (EditorWidget::beginHexPick), e.g. the player start hex.
     StampPattern,      ///< Placing a loaded prefab pattern by clicking hexes.
+    PasteClipboard,    ///< Dropping copies of the map clipboard by clicking hexes.
     PluginTool,        ///< Dynamic dispatch to the active ToolRegistry tool (object placement today; plugins later).
 };
 

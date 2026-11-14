@@ -8,6 +8,9 @@ namespace geck::util {
 
 /// Check whether a directory contains at least one Fallout 2 data marker
 /// (data/ subdirectory, master.dat, critter.dat, or patch000.dat).
+// ".dat" in any case (Fallout 1 ships MASTER.DAT).
+bool hasDatExtension(const std::filesystem::path& path);
+
 bool hasFallout2DataLayout(const std::filesystem::path& path);
 
 /// The loose game files of an install: `<gameRoot>/data`, or the root itself when it has no such

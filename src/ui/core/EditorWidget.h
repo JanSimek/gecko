@@ -17,6 +17,9 @@
 #include <QVBoxLayout>
 #include "editor/Object.h"
 #include "editor/HexagonGrid.h"
+#include "editor/helper/BlackEdge.h"
+#include "editor/helper/MapClipboard.h"
+#include "editor/helper/ObjectOrder.h"
 #include "util/Types.h"
 #include "format/map/Map.h"
 #include "format/pro/Pro.h"
@@ -135,6 +138,10 @@ public:
     // way (parity with the reference mappers). Editor UX only — touches no map data.
     void setEdgeScrollEnabled(bool enabled) { _edgeScrollEnabled = enabled; }
 
+    // Whether the mod tools are set up (Preferences > Mod Tools): only then does the right-click
+    // menu offer copies and names for the selected object (modAssetActionRequested).
+    void setModToolsAvailable(bool available) { _modToolsAvailable = available; }
+
     // User-configured selection highlight colours (from preferences); forwarded to the renderer.
     void setSelectionColors(const RenderingEngine::SelectionPalette& colors);
 
@@ -147,6 +154,12 @@ public:
     // (floor / roof / objects). Switches to ALL mode and keeps the current selection intact.
     void setActiveSelectionLayers(SelectionLayers layers);
     void rotateSelectedObject();
+    // Bring the selected objects forward/backward in gecko's draw order (undoable). In game the
+    // order only matters between objects on the same hex; see editor/helper/ObjectOrder.h.
+    void reorderSelectedObjects(object_order::Step step);
+    /// Makes each selected piece show on top of the table or shelf it sits on in the game, the
+    /// way gecko shows it (see the comment on the definition).
+    void putSelectedOnTop();
     void changeElevation(int elevation);
     void toggleScrollBlockerRectangleMode();
 
@@ -187,6 +200,16 @@ public:
     // Load the freehand fill brush with the palette's tile and activate it. False when the brush is
     // unavailable or no tile is selected.
     bool activateFillBrush(int tileId, bool isRoof);
+    // Activate a registered Add/Remove Blocker tool: click (or drag) a hex to place/delete one
+    // blocker of that kind. Wall blockers are every movement-blocking object (the set the "Show
+    // Wall Blockers" overlay highlights); scroll blockers are the exact-pid camera-scroll markers.
+    bool activateAddWallBlockerTool();
+    bool activateRemoveWallBlockerTool();
+    bool activateAddScrollBlockerTool();
+    bool activateRemoveScrollBlockerTool();
+    // Activate the black edge line tool (BlackEdgeTool): click corners to lay Fallout 2's black
+    // edge wall pieces along the map's edge.
+    bool activateBlackEdgeTool();
     // The active registered tool's id ("" when none) — lets MainWindow tell tool-backed
     // PluginTool sessions apart when syncing toolbar toggle state.
     [[nodiscard]] std::string activeToolId() const;
@@ -216,6 +239,15 @@ public:
     // variant, and cycleStampVariant() advances which orientation is placed.
     void beginStampPattern(pattern::Pattern pattern);
     void cycleStampVariant();
+
+    // Copy / cut / paste of map areas through the app-wide clipboard (MainWindow::mapClipboard), so
+    // a copy can be pasted on another elevation or into another map. Copy takes the selected floor
+    // and roof tiles and objects on the current elevation; Cut also deletes the selected objects
+    // (tiles stay, as with Delete). Paste enters PasteClipboard mode: a ghost follows the cursor and
+    // each click drops a copy as one undo entry, until right-click or Esc.
+    void copySelection();
+    void cutSelection();
+    void beginPaste();
 
     // --- Area fill over the current selection (driven by a Luau script) ---
     // The current selection as a sorted EditArea: selected floor/roof tiles, the hexes covering them
@@ -261,6 +293,8 @@ public:
         std::function<std::optional<std::pair<int, ObjectCategory>>(uint32_t pid)> revealProto;
     };
     void setObjectPaletteHooks(ObjectPaletteHooks hooks) { _objectPalette = std::move(hooks); }
+    /// The host's app-wide copy/paste clipboard, shared by every open map.
+    void setMapClipboard(MapClipboard* clipboard) { _mapClipboard = clipboard; }
 
     // Access to internal components for extracted managers
     selection::SelectionManager* getSelectionManager() const override { return _session.selectionManager(); }
@@ -411,6 +445,9 @@ signals:
     /// The contextual status-bar key-hint changed because the mode or the selection changed.
     /// MainWindow shows it on a permanent status-bar label (separate from transient messages).
     void hintChanged(const QString& hint);
+    /// Right-click asked the mod tools for something about the one selected object's proto: a
+    /// ModAssetAction (as int) and the PID. MainWindow runs it through ModToolsRunner.
+    void modAssetActionRequested(int action, quint32 pid);
 
 public slots:
     void onObjectFrmPathChanged(std::shared_ptr<Object> object, const std::string& newFrmPath);
@@ -477,6 +514,28 @@ private:
     void removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
 
+    // Add/Remove Blocker tool support (see AddBlockerTool::Host / RemoveBlockerTool::Host).
+    // "Wall" = every movement-blocking object (what "Show Wall Blockers" highlights); "scroll" =
+    // objects at the exact scroll-blocker pid. Placement skips a hex that already has one of that
+    // kind; removal deletes every match on the hex, undoably.
+    std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> wallBlockersAtHex(int hexIndex) const;
+    std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> scrollBlockersAtHex(int hexIndex) const;
+    void removeBlockers(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& blockers);
+    bool placeWallBlockerAtHex(int hexIndex);
+    bool placeScrollBlockerAtHex(int hexIndex);
+    // Places one object of `proPid` on a hex of the current elevation, undoably (no checks for what
+    // is already there).
+    bool placeProtoAtHex(int hexIndex, uint32_t proPid);
+    // BlackEdgeTool support. Placement is one undo step and skips a piece that's already there, so
+    // redrawing over a frame doesn't double it. The piece shapes come from their FRMs (cached once
+    // loaded); the floor centre is what the black faces away from by default.
+    int placeBlackEdgePieces(const std::vector<black_edge::Placement>& pieces);
+    std::optional<black_edge::Shapes> blackEdgeShapes();
+    sf::Vector2f floorCenter() const;
+    // Shared activation path for the four Add/Remove Blocker tools: activates the registered tool
+    // by id and posts the status-bar message, or reverts on failure.
+    bool activateBlockerTool(std::string_view toolId, const QString& statusMessage);
+
     void setupUI();
     void initializeSelectionSystem();
 
@@ -513,6 +572,10 @@ private:
     // populating its own slice.
     void setupInputCallbacks();
     void bindSelectionCallbacks(InputHandler::Callbacks& callbacks);
+    // Right-click without a drag: selects the object under the cursor if it isn't already part of
+    // the selection, then offers Cut / Copy for a selection, Paste when the clipboard holds
+    // something, and the draw-order commands for selected objects. Nothing opens when none apply.
+    void showObjectContextMenu(sf::Vector2f worldPos, sf::Vector2i screenPos);
     void bindInteractionCallbacks(InputHandler::Callbacks& callbacks);
     void bindToolModeCallbacks(InputHandler::Callbacks& callbacks);
     void registerNativeTools();
@@ -534,7 +597,9 @@ private:
     // UI Components
     QVBoxLayout* _layout;
     SFMLWidget* _sfmlWidget;
+    std::optional<black_edge::Shapes> _blackEdgeShapes; // BLACK002/003 frame sizes, once loaded
     ObjectPaletteHooks _objectPalette;
+    MapClipboard* _mapClipboard = nullptr; // the host's app-wide clipboard (setMapClipboard)
 
     // Owns the editor's per-map state and the Qt-free helpers acting on it. Declared before the
     // managers below so it outlives them - several hold references into it.
@@ -590,6 +655,7 @@ private:
     // Edge scrolling: auto-pan when the cursor rests near a viewport edge (see setEdgeScrollEnabled).
     // Default on to match both reference mappers; the View menu / Settings persist the user's choice.
     bool _edgeScrollEnabled = true;
+    bool _modToolsAvailable = false;
 
     // Map-edge (.edg) overlay editing state. _selectedEdgeZone indexes the current elevation's zones
     // (-1 = none); _activeEdgeSide is the side being dragged (0=left,1=top,2=right,3=bottom; -1 = none).
@@ -632,13 +698,21 @@ private:
     void stampPatternAt(sf::Vector2f worldPos);
 
     // Semi-transparent ghost of the current variant under the cursor (StampPattern mode):
-    // floor tiles (drawn under), objects, and roof tiles (drawn over).
+    // floor tiles (drawn under), objects, and roof tiles (drawn over). PasteClipboard mode draws its
+    // ghost through the same vectors; the two modes are never active together.
     std::vector<sf::Sprite> _stampPreviewFloorTiles;
     std::vector<std::shared_ptr<Object>> _stampPreviewObjects;
     std::vector<sf::Sprite> _stampPreviewRoofTiles;
     int _stampPreviewHex = -1;
     void updateStampPreview(sf::Vector2f worldPos);
     void clearStampPreview();
+
+    // Copy/paste: the app-wide clipboard (null without a MainWindow), and the snapshot of it being
+    // pasted in PasteClipboard mode. Every drop clones from the snapshot afresh.
+    MapClipboard* mapClipboard() const;
+    std::optional<MapClipboard> _pasteClipboard;
+    void pasteClipboardAt(sf::Vector2f worldPos);
+    void updatePastePreview(int hex);
 
     // Fill preview: a ghost of the previewed FillPlan drawn through the stamp-preview path, plus the
     // pristine plan replayed on Apply. Stamp and fill previews are never live at once.

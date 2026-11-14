@@ -104,11 +104,30 @@ void SFMLWidget::wheelEvent(QWheelEvent* event) {
     QWidget::wheelEvent(event);
 }
 
+bool SFMLWidget::event(QEvent* event) {
+    // Claim Ctrl+C/X/V while the map has focus so they arrive as key presses for the editor's
+    // copy/cut/paste, rather than firing a window-wide shortcut (the Log panel's Copy is one).
+    if (event->type() == QEvent::ShortcutOverride && _editorWidget) {
+        const auto* keyEvent = static_cast<QKeyEvent*>(event);
+        const bool controlOnly = (keyEvent->modifiers() & ~Qt::KeypadModifier) == Qt::ControlModifier;
+        if (controlOnly && (keyEvent->key() == Qt::Key_C || keyEvent->key() == Qt::Key_X || keyEvent->key() == Qt::Key_V)) {
+            event->accept();
+            return true;
+        }
+    }
+    return QWidget::event(event);
+}
+
 void SFMLWidget::keyPressEvent(QKeyEvent* event) {
     if (event && _editorWidget && !event->isAutoRepeat()) {
         const auto key = convertQtKeyToSf(event->key());
         if (key != sf::Keyboard::Key::Unknown) {
-            handleSFMLEvent(sf::Event::KeyPressed{ key });
+            sf::Event::KeyPressed pressed{ key };
+            pressed.alt = event->modifiers().testFlag(Qt::AltModifier);
+            pressed.control = event->modifiers().testFlag(Qt::ControlModifier);
+            pressed.shift = event->modifiers().testFlag(Qt::ShiftModifier);
+            pressed.system = event->modifiers().testFlag(Qt::MetaModifier);
+            handleSFMLEvent(pressed);
         }
     }
 

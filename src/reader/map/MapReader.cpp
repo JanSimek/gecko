@@ -97,6 +97,13 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
             switch (static_cast<SceneryType>(subtype_id)) {
                 case SceneryType::LadderDown:
                 case SceneryType::LadderUp:
+                    if (_mapVersion == 19) {
+                        // Fallout 1: the destination tile+elevation only; the ladder
+                        // always leads somewhere on the same map.
+                        object->map = 0;
+                        object->elevhex = read_be_u32();
+                        break;
+                    }
                     object->map = read_be_u32();
                     object->elevhex = read_be_u32();
                     break;
@@ -170,22 +177,24 @@ std::unique_ptr<MapObject> MapReader::readObjectAt(const std::vector<uint8_t>& d
     return object;
 }
 
+// An object's inventory: each entry is its stack count, then the item, which can
+// carry an inventory of its own (a bag in a pack). The engine reads it the same
+// way, recursively; reading one level only loses the stream on a nested bag.
 // TODO: split
 std::unique_ptr<Map> MapReader::read() {
 
     auto map = std::make_unique<Map>(_path);
     auto map_file = std::make_unique<Map::MapFile>();
 
-    // 19 or 20
+    // 19 (Fallout 1) or 20 (Fallout 2). The layout is the same apart from
+    // ladders, which carry one word in version 19 (fallout2-ce proto.cc
+    // objectDataRead reads both).
     auto version = read_be_u32();
 
-    if (version == 19) {
-        throw std::runtime_error{ "Fallout 1 maps are not supported yet" };
-    }
-
-    if (version != 20) {
+    if (version != 19 && version != 20) {
         throw std::runtime_error{ "Unknown map version " + std::to_string(version) };
     }
+    _mapVersion = version;
 
     map_file->header.version = version;
 

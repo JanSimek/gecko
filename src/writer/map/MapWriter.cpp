@@ -1,5 +1,7 @@
 #include "MapWriter.h"
 
+#include <algorithm>
+
 #include <spdlog/spdlog.h>
 
 #include "format/pro/Pro.h"
@@ -17,6 +19,7 @@ bool MapWriter::write(const Map::MapFile& map) {
 
         auto& utils = getBinaryUtils();
         spdlog::info("Saving map {} version {}", map.header.filename, map.header.version);
+        _mapVersion = map.header.version;
 
         // Write map header
         utils.writeWithLog(map.header.version, "map version");
@@ -191,10 +194,16 @@ void MapWriter::writeObject(const MapObject& object) {
     // Every field is emitted as a big-endian 32-bit word. The inventory count is the number of
     // records written after this object, so it comes from the inventory itself: a stale stored
     // count would make the reader take the wrong number and misread every object after this one.
+    // A container's capacity is written as at least what it holds: the engine allocates
+    // max_inventory_size slots and then reads objects_in_inventory items into them (fallout2-ce
+    // object.cc objectLoadAllInternal), so a container filled in the inventory editor, which only
+    // counts its items, corrupted the heap and crashed the game on entering the map.
     const auto inventoryCount = static_cast<uint32_t>(object.inventory.size());
     visitMapObjectCommonFields(object, [&utils, &object, inventoryCount](const auto& field) {
         if (static_cast<const void*>(&field) == static_cast<const void*>(&object.objects_in_inventory)) {
             utils.writeBE32(inventoryCount);
+        } else if (static_cast<const void*>(&field) == static_cast<const void*>(&object.max_inventory_size)) {
+            utils.writeBE32(std::max(object.max_inventory_size, inventoryCount));
         } else {
             utils.writeBE32(static_cast<uint32_t>(field));
         }
@@ -257,6 +266,10 @@ void MapWriter::writeObject(const MapObject& object) {
             switch (static_cast<SceneryType>(subtype_id)) {
                 case SceneryType::LadderDown:
                 case SceneryType::LadderUp:
+                    if (_mapVersion == 19) {
+                        utils.writeBE32(object.elevhex); // Fallout 1: destination only
+                        break;
+                    }
                     utils.writeBE32(object.map);
                     utils.writeBE32(object.elevhex);
                     break;

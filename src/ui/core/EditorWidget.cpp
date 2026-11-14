@@ -1,5 +1,6 @@
 #include "EditorWidget.h"
 #include "ui/core/EditorHints.h"
+#include "ui/assets/ModAssetAction.h"
 #include "ui/widgets/SFMLWidget.h"
 #include "editing/input/InputHandler.h"
 // The stamp library + MapScriptApi are used by both the (scripting-only) Console and the always-on
@@ -8,10 +9,12 @@
 #include "pattern/PatternLibrary.h"
 #include "pattern/PatternSerializer.h"
 #include "scripting/MapScriptApi.h"
+#include <QAction>
 #include <QCursor>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QMenu>
 #include <QPoint>
 #include <QSize>
 #include <QStringList>
@@ -22,12 +25,17 @@
 #include "util/BuiltTile.h"
 #include "rendering/MapEdgeOverlayGeometry.h"
 #include "rendering/MapSpriteLoader.h"
+#include "rendering/ObjectVisibility.h"
 #include "rendering/RenderingEngine.h"
 #include "ui/dragdrop/DragDropManager.h"
 #include "ui/tiles/TilePlacementManager.h"
+#include "editor/helper/ObjectQueries.h"
+#include "editing/tools/AddBlockerTool.h"
+#include "editing/tools/BlackEdgeTool.h"
 #include "ui/tools/ExitGridPlacementManager.h"
 #include "editing/tools/FillBrushTool.h"
 #include "editing/tools/ITool.h"
+#include "editing/tools/RemoveBlockerTool.h"
 #include "editing/tools/ToolRegistry.h"
 #include "viewport/EdgeScroll.h"
 #include "viewport/ViewportController.h"
@@ -37,6 +45,7 @@
 #include <spdlog/stopwatch.h>
 #include <cmath>
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <unordered_set>
 #include <cstdlib>
@@ -1092,6 +1101,59 @@ void EditorWidget::registerNativeTools() {
         .beginStroke = [this](const std::string& description) { _controller.commandController().beginBatch(description); },
         .endStroke = [this]() { _controller.commandController().endBatch(); },
     }));
+    // Wall blockers: deletes/places the movement-blocking objects on whatever hex the cursor is
+    // over (the same set the "Show Wall Blockers" overlay highlights); a drag covers every hex
+    // it crosses. Removal reuses the same undoable delete path as regular selection deletion.
+    _toolRegistry->registerTool(std::make_unique<RemoveBlockerTool>(RemoveBlockerTool::Host{
+        .blockersAtHex = [this](int hexIndex) { return wallBlockersAtHex(hexIndex); },
+        .removeObjects = [this](const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& blockers) { removeBlockers(blockers); },
+        .beginStroke = [this](const std::string& description) { _controller.commandController().beginBatch(description); },
+        .endStroke = [this]() { _controller.commandController().endBatch(); },
+        .id = BlockerTools::REMOVE_WALL_ID,
+        .hint = "Click: remove wall blocker on this hex\nDrag: clear a path\nEsc / right-click: done",
+        .strokeDescription = "Remove Wall Blocker",
+    }));
+    _toolRegistry->registerTool(std::make_unique<AddBlockerTool>(AddBlockerTool::Host{
+        .placeBlockerAtHex = [this](int hexIndex) { return placeWallBlockerAtHex(hexIndex); },
+        .beginStroke = [this](const std::string& description) { _controller.commandController().beginBatch(description); },
+        .endStroke = [this]() { _controller.commandController().endBatch(); },
+        .id = BlockerTools::ADD_WALL_ID,
+        .hint = "Click: place wall blocker\nDrag: stamp a path\nEsc / right-click: done",
+        .strokeDescription = "Add Wall Blocker",
+    }));
+    // Scroll blockers: the exact-pid camera-scroll markers (WallBlockers::SCROLL_BLOCKER_PID),
+    // a completely different set from wall blockers — see scrollBlockersAtHex/placeScrollBlockerAtHex.
+    _toolRegistry->registerTool(std::make_unique<RemoveBlockerTool>(RemoveBlockerTool::Host{
+        .blockersAtHex = [this](int hexIndex) { return scrollBlockersAtHex(hexIndex); },
+        .removeObjects = [this](const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& blockers) { removeBlockers(blockers); },
+        .beginStroke = [this](const std::string& description) { _controller.commandController().beginBatch(description); },
+        .endStroke = [this]() { _controller.commandController().endBatch(); },
+        .id = BlockerTools::REMOVE_SCROLL_ID,
+        .hint = "Click: remove scroll blocker on this hex\nDrag: clear a path\nEsc / right-click: done",
+        .strokeDescription = "Remove Scroll Blocker",
+    }));
+    _toolRegistry->registerTool(std::make_unique<AddBlockerTool>(AddBlockerTool::Host{
+        .placeBlockerAtHex = [this](int hexIndex) { return placeScrollBlockerAtHex(hexIndex); },
+        .beginStroke = [this](const std::string& description) { _controller.commandController().beginBatch(description); },
+        .endStroke = [this]() { _controller.commandController().endBatch(); },
+        .id = BlockerTools::ADD_SCROLL_ID,
+        .hint = "Click: place scroll blocker\nDrag: stamp a path\nEsc / right-click: done",
+        .strokeDescription = "Add Scroll Blocker",
+    }));
+    _toolRegistry->registerTool(std::make_unique<BlackEdgeTool>(BlackEdgeTool::Host{
+        .grid = &_session.hexgrid(),
+        .shapes = [this]() { return blackEdgeShapes(); },
+        .floorCenter = [this]() { return floorCenter(); },
+        .frmPidFor = [this](uint32_t proPid) -> uint32_t {
+            try {
+                const Pro* pro = _resources.loadPro(proPid);
+                return pro ? static_cast<uint32_t>(pro->header.FID) : 0;
+            } catch (const std::exception&) {
+                return 0;
+            }
+        },
+        .placePieces = [this](const std::vector<black_edge::Placement>& pieces) { return placeBlackEdgePieces(pieces); },
+    }));
     _toolRegistry->registerTool(std::make_unique<ObjectPlacementTool>(
         [this](sf::Vector2f worldPos) {
             placeObjectAtPosition(worldPos);
@@ -1139,6 +1201,39 @@ bool EditorWidget::activateFillBrush(int tileId, bool isRoof) {
     }
     Q_EMIT statusMessageRequested("Fill brush — hold left and drag to paint, Esc or right-click to stop");
     return true;
+}
+
+bool EditorWidget::activateBlockerTool(std::string_view toolId, const QString& statusMessage) {
+    if (!activateRegisteredTool(toolId)) {
+        return false;
+    }
+    Q_EMIT statusMessageRequested(statusMessage);
+    return true;
+}
+
+bool EditorWidget::activateAddWallBlockerTool() {
+    return activateBlockerTool(BlockerTools::ADD_WALL_ID,
+        "Add wall blocker — click a hex to place one, drag to stamp a path, Esc or right-click to stop");
+}
+
+bool EditorWidget::activateRemoveWallBlockerTool() {
+    return activateBlockerTool(BlockerTools::REMOVE_WALL_ID,
+        "Remove wall blocker — click a hex to clear it, drag to clear a path, Esc or right-click to stop");
+}
+
+bool EditorWidget::activateAddScrollBlockerTool() {
+    return activateBlockerTool(BlockerTools::ADD_SCROLL_ID,
+        "Add scroll blocker — click a hex to place one, drag to stamp a path, Esc or right-click to stop");
+}
+
+bool EditorWidget::activateRemoveScrollBlockerTool() {
+    return activateBlockerTool(BlockerTools::REMOVE_SCROLL_ID,
+        "Remove scroll blocker — click a hex to clear it, drag to clear a path, Esc or right-click to stop");
+}
+
+bool EditorWidget::activateBlackEdgeTool() {
+    return activateBlockerTool(BlackEdgeTool::ID,
+        "Black edge — click to start, click each corner, then click the last point again, press Enter or right-click to place");
 }
 
 ToolMouseEvent EditorWidget::buildToolMouseEvent(sf::Vector2f worldPos, std::optional<sf::Mouse::Button> button) const {
@@ -1370,6 +1465,15 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         cycleStampVariant();
     };
 
+    callbacks.onPasteClipboard = [this](sf::Vector2f worldPos) {
+        pasteClipboardAt(worldPos);
+    };
+
+    callbacks.onPasteClipboardCancel = [this]() {
+        setMode(EditorMode::Select);
+        Q_EMIT statusMessageRequested("Paste cancelled.");
+    };
+
     callbacks.onMarkExitsLinePreview = [this](const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide) {
         updateMarkExitsLinePreview(vertices, cursor, flipSide);
     };
@@ -1397,6 +1501,8 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         updateEdgeHoverCursor(worldPos);
         if (_mode == EditorMode::StampPattern) {
             updateStampPreview(worldPos);
+        } else if (_mode == EditorMode::PasteClipboard) {
+            updatePastePreview(_currentHoverHex);
         }
     };
 
@@ -1404,6 +1510,9 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         if (_mode == EditorMode::StampPattern) {
             setMode(EditorMode::Select);
             Q_EMIT statusMessageRequested("Pattern stamping cancelled.");
+        } else if (_mode == EditorMode::PasteClipboard) {
+            setMode(EditorMode::Select);
+            Q_EMIT statusMessageRequested("Paste cancelled.");
         } else if (_mode == EditorMode::PluginTool) {
             // Host-side cancel guarantee: a tool may consume Esc/right-click, but when it does not, leaving
             // the tool must still work - the hint promises cancel for every tool.
@@ -1439,6 +1548,16 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
             return;
         }
         deleteSelectedObjects();
+    };
+
+    callbacks.onCopy = [this]() { copySelection(); };
+    callbacks.onCut = [this]() { cutSelection(); };
+    callbacks.onPaste = [this]() { beginPaste(); };
+    callbacks.onContextMenu = [this](sf::Vector2f worldPos, sf::Vector2i screenPos) {
+        showObjectContextMenu(worldPos, screenPos);
+    };
+    callbacks.onReorderObjects = [this](object_order::Step step) {
+        reorderSelectedObjects(step);
     };
 
     callbacks.onMarkExitsModeCancelled = [this]() {
@@ -1736,6 +1855,363 @@ void EditorWidget::rotateSelectedObject() {
     }
 }
 
+namespace {
+    // Whether a sprite draws an opaque pixel at a world position (same mapping as ObjectPicker).
+    bool spriteOpaqueAt(const sf::Sprite& sprite, const sf::Image& image, sf::Vector2f worldPos) {
+        const auto bounds = sprite.getGlobalBounds();
+        const auto rect = sprite.getTextureRect();
+        const auto scale = sprite.getScale();
+        const int x = static_cast<int>((worldPos.x - bounds.position.x) / scale.x);
+        const int y = static_cast<int>((worldPos.y - bounds.position.y) / scale.y);
+        if (x < 0 || y < 0 || x >= rect.size.x || y >= rect.size.y) {
+            return false;
+        }
+        const auto texX = static_cast<unsigned int>(x + rect.position.x);
+        const auto texY = static_cast<unsigned int>(y + rect.position.y);
+        if (texX >= image.getSize().x || texY >= image.getSize().y) {
+            return false;
+        }
+        return image.getPixel({ texX, texY }).a > 0;
+    }
+
+    // Whether two drawn sprites cover a common pixel, so swapping their order changes the picture.
+    // Each texture is read back from the GPU once per command and kept in `images`.
+    bool spritesOverlap(const sf::Sprite& a, const sf::Sprite& b,
+        std::unordered_map<const sf::Texture*, sf::Image>& images) {
+        const auto overlap = a.getGlobalBounds().findIntersection(b.getGlobalBounds());
+        if (!overlap) {
+            return false;
+        }
+        const auto imageOf = [&images](const sf::Sprite& sprite) -> const sf::Image& {
+            const sf::Texture* texture = &sprite.getTexture();
+            auto it = images.find(texture);
+            if (it == images.end()) {
+                it = images.emplace(texture, texture->copyToImage()).first;
+            }
+            return it->second;
+        };
+        const sf::Image& imageA = imageOf(a);
+        const sf::Image& imageB = imageOf(b);
+        // Sample each pixel centre of the overlap; integer steps keep the count exact.
+        const int columns = static_cast<int>(std::ceil(overlap->size.x - 0.5f));
+        const int rows = static_cast<int>(std::ceil(overlap->size.y - 0.5f));
+        for (int row = 0; row < rows; ++row) {
+            const float y = overlap->position.y + 0.5f + static_cast<float>(row);
+            for (int column = 0; column < columns; ++column) {
+                const float x = overlap->position.x + 0.5f + static_cast<float>(column);
+                if (spriteOpaqueAt(a, imageA, { x, y }) && spriteOpaqueAt(b, imageB, { x, y })) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    const char* reorderDescription(object_order::Step step) {
+        switch (step) {
+            case object_order::Step::BringToFront:
+                return "Bring to Front";
+            case object_order::Step::BringForward:
+                return "Bring Forward";
+            case object_order::Step::SendBackward:
+                return "Send Backward";
+            case object_order::Step::SendToBack:
+                return "Send to Back";
+        }
+        return "Reorder Objects";
+    }
+} // namespace
+
+void EditorWidget::reorderSelectedObjects(object_order::Step step) {
+    auto* selectionManager = _session.selectionManager();
+    if (!_session.map() || !selectionManager) {
+        return;
+    }
+
+    std::vector<std::shared_ptr<MapObject>> selected;
+    for (const auto& object : selectionManager->getCurrentSelection().getObjects()) {
+        if (object && object->hasMapObject()) {
+            selected.push_back(object->getMapObjectPtr());
+        }
+    }
+    if (selected.empty()) {
+        Q_EMIT statusMessageRequested("Select an object to change its draw order");
+        return;
+    }
+
+    // Only objects drawn right now can be hopped over: moving past a hidden one changes nothing
+    // you can see, so Forward/Backward would look like it did nothing.
+    std::unordered_map<const MapObject*, const sf::Sprite*> drawn;
+    for (const auto& object : _session.objects()) {
+        if (object && object->hasMapObject() && isObjectVisible(object->getMapObject(), _session.visibility())) {
+            drawn.emplace(object->getMapObjectPtr().get(), &object->getSprite());
+        }
+    }
+    std::unordered_map<const sf::Texture*, sf::Image> images;
+    const auto overlaps = [&drawn, &images](const MapObject& a, const MapObject& b) {
+        const auto spriteA = drawn.find(&a);
+        const auto spriteB = drawn.find(&b);
+        return spriteA != drawn.end() && spriteB != drawn.end()
+            && spritesOverlap(*spriteA->second, *spriteB->second, images);
+    };
+
+    const int elevation = _session.currentElevation();
+    const auto before = getMapFile().map_objects[elevation];
+    const auto after = object_order::reordered(before, selected, step, overlaps);
+    const char* description = reorderDescription(step);
+    if (!_controller.commandController().registerObjectReorder(elevation, before, after, description)) {
+        Q_EMIT statusMessageRequested(QString("%1: already there").arg(description));
+        return;
+    }
+    Q_EMIT statusMessageRequested(QString("%1: %2 object(s)").arg(description).arg(selected.size()));
+}
+
+// "Put on Top". The engine draws an elevation's objects hex by hex in ascending hex number
+// (fallout2-ce object.cc _obj_render_pre_roof), while gecko draws them in file order, so a
+// stack of books gecko shows on a table is drawn under it in the game whenever the table's hex
+// comes later. This keeps the piece where it is drawn and moves its hex: it goes to the nearest
+// hex drawn after everything it sits on, and its own pixel offset (MapObject x/y, the engine's
+// obj->x/y, added wherever the engine draws or hit-tests the object and kept on load) takes it
+// back to the same spot. A piece that blocks goes to a hex that is blocked already (or has no
+// floor) within kReach px; failing that it keeps the nearest hex and stops blocking, as the
+// furniture under it blocks. An item keeps an open hex beside it to be picked up from. A piece
+// sits on another when it is less than half its size and its foot (the bottom middle of its
+// picture) is on the other's opaque pixels, above the other's own foot. The same rule as
+// FOCMod's tools/stand_on.py, which fixes maps outside the editor.
+void EditorWidget::putSelectedOnTop() {
+    auto* selectionManager = _session.selectionManager();
+    if (!_session.map() || !selectionManager) {
+        return;
+    }
+    constexpr uint32_t kFlat = 0x08;
+    constexpr uint32_t kNoBlock = 0x10;
+    constexpr int kReach = 96;
+    constexpr int kSearch = 12;
+    constexpr int kWidth = 200;
+    const int elevation = _session.currentElevation();
+    auto& mapFile = getMapFile();
+    const auto typeOf = [](const MapObject& o) { return static_cast<int>(o.pro_pid >> 24); };
+
+    // what blocks a hex, and which hexes have floor
+    std::set<int> blocked;
+    for (const auto& o : mapFile.map_objects[elevation]) {
+        const int type = typeOf(*o);
+        if ((type == 1 || type == 2 || type == 3) && !(o->flags & kNoBlock)) {
+            blocked.insert(o->position);
+        }
+    }
+    const auto tilesIt = mapFile.tiles.find(elevation);
+    const auto floored = [&](int hex) {
+        if (hex < 0 || hex >= kWidth * kWidth || tilesIt == mapFile.tiles.end()) {
+            return false;
+        }
+        const size_t square = static_cast<size_t>((hex / kWidth / 2) * 100 + (hex % kWidth) / 2);
+        return square < tilesIt->second.size() && tilesIt->second[square].getFloor() > 1;
+    };
+    const auto open = [&](int hex) { return floored(hex) && !blocked.contains(hex); };
+
+    std::vector<std::shared_ptr<Object>> drawn;
+    for (const auto& object : _session.objects()) {
+        if (object && object->hasMapObject() && isObjectVisible(object->getMapObject(), _session.visibility())) {
+            const auto& o = object->getMapObject();
+            if (static_cast<int>(o.elevation) == elevation && (typeOf(o) == 0 || typeOf(o) == 2) && !(o.flags & kFlat)) {
+                drawn.push_back(object);
+            }
+        }
+    }
+    std::unordered_map<const sf::Texture*, sf::Image> images;
+    const auto imageOf = [&images](const sf::Sprite& sprite) -> const sf::Image& {
+        const sf::Texture* texture = &sprite.getTexture();
+        auto it = images.find(texture);
+        if (it == images.end()) {
+            it = images.emplace(texture, texture->copyToImage()).first;
+        }
+        return it->second;
+    };
+    const auto sitsOn = [&](const Object& a, const Object& b) {
+        const auto ba = a.getSprite().getGlobalBounds();
+        const auto bb = b.getSprite().getGlobalBounds();
+        const sf::Vector2f foot{ ba.position.x + ba.size.x / 2.f, ba.position.y + ba.size.y - 0.5f };
+        return ba.size.x * ba.size.y * 2.f < bb.size.x * bb.size.y
+            && foot.y < bb.position.y + bb.size.y - 1.f
+            && spriteOpaqueAt(b.getSprite(), imageOf(b.getSprite()), foot);
+    };
+
+    std::vector<std::shared_ptr<Object>> moved;
+    std::vector<ObjectSpotState> before;
+    std::vector<ObjectSpotState> after;
+    int nothingUnder = 0;
+    for (const auto& object : selectionManager->getCurrentSelection().getObjects()) {
+        if (!object || !object->hasMapObject()) {
+            continue;
+        }
+        auto& o = object->getMapObject();
+        int last = -1; // the last hex drawn under it that it sits on
+        for (const auto& other : drawn) {
+            if (other != object && static_cast<int>(other->getMapObject().position) > o.position && sitsOn(*object, *other)) {
+                last = std::max(last, static_cast<int>(other->getMapObject().position));
+            }
+        }
+        const auto here = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(o.position));
+        if (last < 0 || !here.has_value()) {
+            ++nothingUnder;
+            continue;
+        }
+        const int hx = here->get().x();
+        const int hy = here->get().y();
+        std::vector<std::pair<int, int>> candidates; // (distance in px, hex)
+        const int ax = o.position % kWidth;
+        const int ay = o.position / kWidth;
+        for (int y = ay - kSearch; y <= ay + kSearch; ++y) {
+            for (int x = ax - kSearch; x <= ax + kSearch; ++x) {
+                const int hex = y * kWidth + x;
+                if (x < 0 || y < 0 || x >= kWidth || y >= kWidth || hex <= last) {
+                    continue;
+                }
+                if (auto h = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hex)); h.has_value()) {
+                    candidates.emplace_back(std::abs(h->get().x() - hx) + std::abs(h->get().y() - hy), hex);
+                }
+            }
+        }
+        if (candidates.empty()) {
+            ++nothingUnder;
+            continue;
+        }
+        std::ranges::sort(candidates);
+        const bool item = typeOf(o) == 0;
+        const bool blocks = !item && !(o.flags & kNoBlock);
+        // the six hexes round a hex (tools/stand_on.py DIRS): an even column's diagonals are a row down
+        const auto neighbours = [](int hex) {
+            const int d = (hex % kWidth) % 2 == 0 ? kWidth : -kWidth;
+            return std::array<int, 6>{ hex - 1, hex + 1, hex - kWidth, hex + kWidth, hex + d - 1, hex + d + 1 };
+        };
+        int pick = -1;
+        bool stopBlocking = false;
+        if (blocks) {
+            for (const auto& [distance, hex] : candidates) {
+                if (distance <= kReach && !open(hex)) {
+                    pick = hex;
+                    break;
+                }
+            }
+            if (pick < 0) {
+                pick = candidates.front().second;
+                stopBlocking = true;
+            }
+        } else {
+            for (const auto& [distance, hex] : candidates) {
+                bool reachable = !item || open(hex);
+                for (int n : neighbours(hex)) {
+                    reachable = reachable || open(n);
+                }
+                if (reachable) {
+                    pick = hex;
+                    break;
+                }
+            }
+            if (pick < 0) {
+                pick = candidates.front().second;
+            }
+        }
+        const auto target = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(pick));
+        ObjectSpotState from{ static_cast<int>(o.position), o.x, o.y, o.flags };
+        ObjectSpotState to = from;
+        to.position = pick;
+        to.x = static_cast<uint32_t>(static_cast<int32_t>(o.x) + hx - target->get().x());
+        to.y = static_cast<uint32_t>(static_cast<int32_t>(o.y) + hy - target->get().y());
+        if (stopBlocking) {
+            to.flags |= kNoBlock;
+        }
+        moved.push_back(object);
+        before.push_back(from);
+        after.push_back(to);
+    }
+    if (moved.empty()) {
+        Q_EMIT statusMessageRequested("Put on Top: nothing it sits on is drawn over it in the game");
+        return;
+    }
+    _controller.commandController().registerObjectSpotEdit(moved, before, after, "Put on Top");
+    Q_EMIT statusMessageRequested(QString("Put on Top: %1 object(s)%2").arg(moved.size())
+            .arg(nothingUnder ? QString(", %1 already on top").arg(nothingUnder) : QString()));
+}
+
+void EditorWidget::showObjectContextMenu(sf::Vector2f worldPos, sf::Vector2i screenPos) {
+    auto* selectionManager = _session.selectionManager();
+    if (!_session.map() || !selectionManager || !_sfmlWidget) {
+        return;
+    }
+
+    // Like most editors: right-clicking an object outside the selection selects just that object;
+    // right-clicking one inside it keeps the whole selection, so a group can be reordered at once.
+    const auto underCursor = getObjectsAtPosition(worldPos);
+    const auto& selection = selectionManager->getCurrentSelection();
+    const auto isSelected = [&selection](const std::shared_ptr<Object>& object) {
+        return std::ranges::any_of(selection.items, [&object](const selection::SelectedItem& item) {
+            return item.isObject() && item.getObject() == object;
+        });
+    };
+    if (!underCursor.empty() && !isSelected(underCursor.front())) {
+        selectionManager->setSelectedItems({ selection::SelectedItem{ selection::SelectionType::OBJECT, underCursor.front() } });
+    }
+
+    // Cut / Copy take objects and tiles; the draw order applies to objects only; Paste needs
+    // nothing selected, just a filled clipboard.
+    const auto& current = selectionManager->getCurrentSelection();
+    const bool canCopy = std::ranges::any_of(current.items, [](const selection::SelectedItem& item) {
+        return item.isObject() || item.type == selection::SelectionType::FLOOR_TILE
+            || item.type == selection::SelectionType::ROOF_TILE;
+    });
+    const bool canReorder = !current.getObjects().empty();
+    const MapClipboard* clipboard = mapClipboard();
+    const bool canPaste = clipboard && !clipboard->isEmpty();
+    if (!canCopy && !canPaste) {
+        return; // nothing under the cursor, nothing selected, nothing to paste: no menu
+    }
+
+    // The text after each tab is the key for the same command (see InputHandler).
+    QMenu menu(this);
+    if (canCopy) {
+        connect(menu.addAction("Cu&t\tCtrl+X"), &QAction::triggered, this, &EditorWidget::cutSelection);
+        connect(menu.addAction("&Copy\tCtrl+C"), &QAction::triggered, this, &EditorWidget::copySelection);
+    }
+    if (canPaste) {
+        connect(menu.addAction("&Paste\tCtrl+V"), &QAction::triggered, this, &EditorWidget::beginPaste);
+    }
+    if (canReorder) {
+        menu.addSeparator();
+        const auto addStep = [this, &menu](const QString& text, object_order::Step step) {
+            QAction* action = menu.addAction(text);
+            connect(action, &QAction::triggered, this, [this, step]() { reorderSelectedObjects(step); });
+        };
+        addStep("Bring to &Front\tHome", object_order::Step::BringToFront);
+        addStep("Bring F&orward\tPgUp", object_order::Step::BringForward);
+        addStep("Send &Backward\tPgDown", object_order::Step::SendBackward);
+        addStep("Send to Bac&k\tEnd", object_order::Step::SendToBack);
+        menu.addSeparator();
+        connect(menu.addAction("Put on &Top"), &QAction::triggered, this, &EditorWidget::putSelectedOnTop);
+    }
+    // Mod tools: new pieces made from the one selected object's proto (scenery), and the name and
+    // examine text of an item, critter or scenery proto. The PID is read now, not when clicked.
+    if (_modToolsAvailable && current.getObjects().size() == 1) {
+        const auto mapObject = current.getObjects().front()->getMapObjectPtr();
+        const uint32_t pid = mapObject ? mapObject->pro_pid : 0;
+        const uint32_t type = pid >> 24;
+        if (mapObject && type <= 2) {
+            menu.addSeparator();
+            const auto addModAction = [this, &menu, pid](const QString& text, ModAssetAction action) {
+                connect(menu.addAction(text), &QAction::triggered, this,
+                    [this, pid, action]() { Q_EMIT modAssetActionRequested(static_cast<int>(action), pid); });
+            };
+            if (type == 2) {
+                addModAction("&Mirrored Copy...", ModAssetAction::MirroredCopy);
+                addModAction("Bigger or &Smaller Copy...", ModAssetAction::ResizedCopy);
+            }
+            addModAction("&Name and Examine Text...", ModAssetAction::NameAndText);
+        }
+    }
+    menu.exec(_sfmlWidget->mapToGlobal(QPoint(screenPos.x, screenPos.y)));
+}
+
 void EditorWidget::changeElevation(int elevation) {
     if (elevation >= ELEVATION_1 && elevation <= ELEVATION_3) {
         // The selection holds the previous elevation's objects and tiles, so Delete or Rotate would
@@ -1783,8 +2259,12 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     _tilePlacementManager->setTilePlacementMode(false, -1, false);
     _exitGridPlacementManager->setExitGridPlacementMode(false);
     _exitGridPlacementManager->setMarkExitsMode(false);
-    if (mode != EditorMode::StampPattern) {
+    // Stamp and paste share the ghost vectors, so a switch between them drops the old ghost too.
+    if (mode != previousMode || (mode != EditorMode::StampPattern && mode != EditorMode::PasteClipboard)) {
         clearStampPreview();
+    }
+    if (mode != EditorMode::PasteClipboard) {
+        _pasteClipboard.reset();
     }
     if (mode != EditorMode::PluginTool) {
         // Leaving the tool mode deactivates the tool and drops its preview plus the object-placement
@@ -1807,6 +2287,7 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         _inputHandler->setMarkExitsMode(false);
         _inputHandler->setPlayerPositionMode(false);
         _inputHandler->setStampPatternMode(false);
+        _inputHandler->setPasteClipboardMode(false);
         _inputHandler->setPluginToolMode(false);
     }
 
@@ -1840,6 +2321,11 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         case EditorMode::StampPattern:
             if (_inputHandler) {
                 _inputHandler->setStampPatternMode(true);
+            }
+            break;
+        case EditorMode::PasteClipboard:
+            if (_inputHandler) {
+                _inputHandler->setPasteClipboardMode(true);
             }
             break;
         case EditorMode::PluginTool:
@@ -1999,6 +2485,176 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
         _stampPreviewObjects.push_back(std::move(object));
     }
 }
+
+// ---- Copy / cut / paste of map areas ------------------------------------------------------------
+
+namespace {
+    // "42 objects, 120 floor, 30 roof tiles" for the status bar.
+    QString clipboardCounts(std::size_t objects, std::size_t floorTiles, std::size_t roofTiles) {
+        return QString("%1 objects, %2 floor, %3 roof tiles").arg(objects).arg(floorTiles).arg(roofTiles);
+    }
+
+    QString clipboardCounts(const MapClipboard& clipboard) {
+        return clipboardCounts(clipboard.objects().size(), clipboard.floor().size(), clipboard.roof().size());
+    }
+} // namespace
+
+MapClipboard* EditorWidget::mapClipboard() const {
+    return _mapClipboard;
+}
+
+void EditorWidget::copySelection() {
+    MapClipboard* clipboard = mapClipboard();
+    if (!clipboard || !_session.map() || !_session.selectionManager()) {
+        return;
+    }
+    MapClipboard copy;
+    if (!copy.captureSelection(_session.selectionManager()->getCurrentSelection(), _session.map()->getMapFile(), _session.currentElevation())) {
+        Q_EMIT statusMessageRequested("Nothing to copy: select floor, roof or objects first.");
+        return;
+    }
+    *clipboard = std::move(copy);
+    Q_EMIT statusMessageRequested("Copied " + clipboardCounts(*clipboard));
+}
+
+void EditorWidget::cutSelection() {
+    MapClipboard* clipboard = mapClipboard();
+    if (!clipboard || !_session.map() || !_session.selectionManager()) {
+        return;
+    }
+    MapClipboard copy;
+    if (!copy.captureSelection(_session.selectionManager()->getCurrentSelection(), _session.map()->getMapFile(), _session.currentElevation())) {
+        Q_EMIT statusMessageRequested("Nothing to cut: select floor, roof or objects first.");
+        return;
+    }
+    *clipboard = std::move(copy);
+    // The same path (and single undo step) as Delete: the objects go, the tiles stay.
+    deleteSelectedObjects();
+    Q_EMIT statusMessageRequested(QString("Cut %1 objects; copied %2 floor, %3 roof tiles")
+                                      .arg(clipboard->objects().size())
+                                      .arg(clipboard->floor().size())
+                                      .arg(clipboard->roof().size()));
+}
+
+void EditorWidget::beginPaste() {
+    if (!_session.map()) {
+        return;
+    }
+    const MapClipboard* clipboard = mapClipboard();
+    if (!clipboard || clipboard->isEmpty()) {
+        Q_EMIT statusMessageRequested("Nothing to paste: copy part of a map first.");
+        return;
+    }
+    _pasteClipboard = *clipboard;
+    setMode(EditorMode::PasteClipboard);
+    // Pasting again while already pasting keeps the mode, so drop the old ghost here; then show the
+    // new one under the cursor without waiting for the mouse to move.
+    clearStampPreview();
+    updatePastePreview(_currentHoverHex);
+    Q_EMIT statusMessageRequested(
+        QString("Paste mode: click to place %1. Right-click or Esc to exit.").arg(clipboardCounts(*_pasteClipboard)));
+}
+
+void EditorWidget::pasteClipboardAt(sf::Vector2f worldPos) {
+    if (!_pasteClipboard || !_session.map()) {
+        return;
+    }
+    const int hex = _controller.viewport().worldPosToHexIndex(worldPos);
+    if (!_session.hexgrid().containsPosition(hex)) {
+        return;
+    }
+
+    const MapClipboard::Placement placement = _pasteClipboard->place(hex, _session.currentElevation(), _session.map()->getMapFile());
+
+    // Build every sprite before committing. An object whose art won't load is left out together with
+    // its script records, so no record is committed without its owner.
+    pattern::FillPlan plan;
+    plan.tiles = placement.tiles;
+    std::vector<MapScript> scripts;
+    int missingArt = 0;
+    for (const MapClipboard::Placement::Entry& entry : placement.objects) {
+        auto object = pattern::buildSpriteObject(_resources, _session.hexgrid(),
+            entry.object->frm_pid, entry.object->position, entry.object->direction);
+        if (!object) {
+            ++missingArt;
+            continue;
+        }
+        object->setMapObject(entry.object);
+        plan.objects.push_back({ entry.object, std::move(object) }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
+        scripts.insert(scripts.end(), entry.scripts.begin(), entry.scripts.end());
+    }
+
+    pattern::PlacementBatch::Result result;
+    {
+        // One undo entry for the whole drop: its objects, tiles and script records together.
+        ScopedUndoBatch batch(_controller.commandController(), "Paste");
+        result = pattern::PlacementBatch::replay(_controller.commandController(), plan, /*buildSprites*/ true, "Paste");
+        if (!scripts.empty()) {
+            _controller.commandController().addObjectScripts(scripts);
+        }
+    }
+    if (!scripts.empty()) {
+        Q_EMIT mapScriptsChanged();
+    }
+
+    const auto roofTiles = static_cast<std::size_t>(std::ranges::count_if(plan.tiles, [](const TileChange& t) { return t.isRoof; }));
+    QString message = "Pasted " + clipboardCounts(static_cast<std::size_t>(result.objectsPlaced), plan.tiles.size() - roofTiles, roofTiles);
+    if (missingArt + result.objectsFailed > 0) {
+        message += QString(" (%1 missing art)").arg(missingArt + result.objectsFailed);
+    }
+    if (placement.objectsDropped + placement.tilesDropped > 0) {
+        message += QString(" (%1 off-grid)").arg(placement.objectsDropped + placement.tilesDropped);
+    }
+    Q_EMIT statusMessageRequested(message);
+}
+
+void EditorWidget::updatePastePreview(int hex) {
+    if (!_pasteClipboard || _mode != EditorMode::PasteClipboard || !_session.hexgrid().containsPosition(hex)) {
+        clearStampPreview();
+        return;
+    }
+    // Placement moves in 2-hex steps, so the ghost only changes when the snapped anchor does.
+    const int anchor = MapClipboard::snapTarget(hex);
+    if (anchor == _stampPreviewHex) {
+        return;
+    }
+    _stampPreviewHex = anchor;
+    _stampPreviewFloorTiles.clear();
+    _stampPreviewObjects.clear();
+    _stampPreviewRoofTiles.clear();
+
+    const MapClipboard::Resolved resolved = _pasteClipboard->resolve(hex);
+    const auto ghostAlpha = sf::Color(255, 255, 255, ui::constants::sfml::DRAG_PREVIEW_ALPHA);
+    const auto addTiles = [&](const std::vector<MapClipboard::ClipTile>& tiles, const std::vector<int>& targets,
+                              bool isRoof, std::vector<sf::Sprite>& out) {
+        for (std::size_t i = 0; i < tiles.size(); ++i) {
+            if (targets[i] < 0) {
+                continue;
+            }
+            if (auto sprite = pattern::buildTileSprite(_resources, targets[i], isRoof, tiles[i].tileId)) {
+                sprite->setColor(ghostAlpha);
+                out.push_back(std::move(*sprite));
+            }
+        }
+    };
+    addTiles(_pasteClipboard->floor(), resolved.floorTiles, false, _stampPreviewFloorTiles);
+    addTiles(_pasteClipboard->roof(), resolved.roofTiles, true, _stampPreviewRoofTiles);
+
+    const auto& objects = _pasteClipboard->objects();
+    for (std::size_t i = 0; i < objects.size(); ++i) {
+        if (resolved.objectHexes[i] < 0) {
+            continue;
+        }
+        const MapObject& source = *objects[i].object;
+        auto object = pattern::buildSpriteObject(_resources, _session.hexgrid(), source.frm_pid, resolved.objectHexes[i], source.direction);
+        if (!object) {
+            continue;
+        }
+        object->getSprite().setColor(ghostAlpha);
+        _stampPreviewObjects.push_back(std::move(object));
+    }
+}
+
 
 // ---- Area fill over the current selection (driven by a Luau fill script) ------------------------
 
@@ -2939,6 +3595,281 @@ void EditorWidget::deleteSelectedObjects() {
     Q_EMIT selectionChanged(_session.selectionManager()->getCurrentSelection(), _session.currentElevation());
 
     spdlog::debug("EditorWidget::deleteSelectedObjects - Successfully deleted {} objects", removedObjects.size());
+}
+
+std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> EditorWidget::wallBlockersAtHex(int hexIndex) const {
+    std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> found;
+    if (hexIndex < 0 || !_session.map()) {
+        return found;
+    }
+
+    // _session.objects() holds the current elevation's visual objects; isWallBlocker() is the
+    // same movement-blocking check the "Show Wall Blockers" overlay renders from, so this tool
+    // only ever removes what that overlay highlighted.
+    for (const auto& object : _session.objects()) {
+        if (!object || !object->hasMapObject()) {
+            continue;
+        }
+        MapObject& mapObj = object->getMapObject();
+        if (mapObj.position != hexIndex) {
+            continue;
+        }
+        if (!object_query::blocksMovement(mapObj, _resources)) {
+            continue;
+        }
+        if (auto mapObjPtr = object->getMapObjectPtr()) {
+            found.emplace_back(mapObjPtr, object);
+        }
+    }
+    return found;
+}
+
+std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> EditorWidget::scrollBlockersAtHex(int hexIndex) const {
+    std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> found;
+    if (hexIndex < 0 || !_session.map()) {
+        return found;
+    }
+
+    // Scroll blockers are identified by the engine purely by exact pid (see
+    // WallBlockers::SCROLL_BLOCKER_PID's own doc comment) — unrelated to blocksMovement, so this
+    // is a completely different check from wallBlockersAtHex.
+    for (const auto& object : _session.objects()) {
+        if (!object || !object->hasMapObject()) {
+            continue;
+        }
+        MapObject& mapObj = object->getMapObject();
+        if (mapObj.position != hexIndex || mapObj.pro_pid != WallBlockers::SCROLL_BLOCKER_PID.pid()) {
+            continue;
+        }
+        if (auto mapObjPtr = object->getMapObjectPtr()) {
+            found.emplace_back(mapObjPtr, object);
+        }
+    }
+    return found;
+}
+
+void EditorWidget::removeBlockers(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& blockers) {
+    if (blockers.empty()) {
+        return;
+    }
+
+    // registerObjectDeletion expects the caller to have already removed the objects (see
+    // deleteSelectedObjects above) — it only records the undo/redo command.
+    for (const auto& [mapObj, object] : blockers) {
+        removePlacedObject(mapObj, object);
+    }
+    _controller.commandController().registerObjectDeletion(blockers);
+}
+
+bool EditorWidget::placeWallBlockerAtHex(int hexIndex) {
+    if (!_session.map() || !_session.hexgrid().containsPosition(hexIndex)) {
+        return false;
+    }
+
+    // Don't stack a marker on a hex that already blocks movement — whether that's an earlier
+    // marker or real wall/scenery art. Same query the overlay and RemoveBlockerTool use.
+    if (!wallBlockersAtHex(hexIndex).empty()) {
+        return false;
+    }
+
+    return placeProtoAtHex(hexIndex, WallBlockers::SECRET_BLOCKING_HEX_PID.pid());
+}
+
+int EditorWidget::placeBlackEdgePieces(const std::vector<black_edge::Placement>& pieces) {
+    if (!_session.map() || pieces.empty()) {
+        return 0;
+    }
+
+    ScopedUndoBatch batch(_controller.commandController(), "Draw Black Edge");
+    int placed = 0;
+    for (const auto& piece : pieces) {
+        // Drawing over an earlier frame must not stack a second copy of the same piece.
+        const bool alreadyThere = std::ranges::any_of(_session.objects(), [&piece](const auto& object) {
+            return object && object->hasMapObject() && object->getMapObject().position == piece.hex
+                && object->getMapObject().pro_pid == piece.pid;
+        });
+        if (!alreadyThere && _session.hexgrid().containsPosition(piece.hex) && placeProtoAtHex(piece.hex, piece.pid)) {
+            ++placed;
+        }
+    }
+    Q_EMIT statusMessageRequested(QString("Black edge: %1 piece(s) placed").arg(placed));
+    return placed;
+}
+
+std::optional<black_edge::Shapes> EditorWidget::blackEdgeShapes() {
+    if (_blackEdgeShapes) {
+        return _blackEdgeShapes;
+    }
+    const auto shapeOf = [this](uint32_t proPid) -> std::optional<black_edge::PieceShape> {
+        try {
+            const Pro* pro = _resources.loadPro(proPid);
+            if (!pro) {
+                return std::nullopt;
+            }
+            const std::string frmPath = _resources.frmResolver().resolve(static_cast<uint32_t>(pro->header.FID));
+            const Frm* frm = _resources.repository().find<Frm>(frmPath);
+            if (!frm) {
+                frm = _resources.repository().load<Frm>(frmPath);
+            }
+            if (!frm || frm->directions().empty() || frm->directions().at(0).frames().empty()) {
+                return std::nullopt;
+            }
+            const auto& direction = frm->directions().at(0);
+            return black_edge::PieceShape{
+                .width = direction.frames().at(0).width(),
+                .height = direction.frames().at(0).height(),
+                .shiftX = direction.shiftX(),
+                .shiftY = direction.shiftY(),
+            };
+        } catch (const std::exception& e) {
+            spdlog::warn("EditorWidget::blackEdgeShapes - can't load the art for proto {:#010x}: {}", proPid, e.what());
+            return std::nullopt;
+        }
+    };
+    const auto row = shapeOf(black_edge::ROW_PID);
+    const auto column = shapeOf(black_edge::COLUMN_PID);
+    if (!row || !column) {
+        Q_EMIT statusMessageRequested("Black edge: the BLACK002/BLACK003 scenery art isn't in the loaded data");
+        return std::nullopt;
+    }
+    _blackEdgeShapes = black_edge::Shapes{ .row = *row, .column = *column };
+    return _blackEdgeShapes;
+}
+
+sf::Vector2f EditorWidget::floorCenter() const {
+    // The middle of the current elevation's floor, from the drawn floor tiles; the grid's middle
+    // when the elevation has no floor.
+    const auto* map = _session.map();
+    const auto& sprites = _session.floorSprites();
+    if (map) {
+        const auto tiles = map->getMapFile().tiles.find(_session.currentElevation());
+        if (tiles != map->getMapFile().tiles.end()) {
+            float minX = std::numeric_limits<float>::max();
+            float minY = std::numeric_limits<float>::max();
+            float maxX = std::numeric_limits<float>::lowest();
+            float maxY = std::numeric_limits<float>::lowest();
+            for (std::size_t i = 0; i < tiles->second.size() && i < sprites.size(); ++i) {
+                if (tiles->second[i].getFloor() <= 1) {
+                    continue; // empty, or the blank placeholder tile
+                }
+                const auto bounds = sprites[i].getGlobalBounds();
+                minX = std::min(minX, bounds.position.x);
+                minY = std::min(minY, bounds.position.y);
+                maxX = std::max(maxX, bounds.position.x + bounds.size.x);
+                maxY = std::max(maxY, bounds.position.y + bounds.size.y);
+            }
+            if (minX <= maxX) {
+                return { (minX + maxX) / 2.f, (minY + maxY) / 2.f };
+            }
+        }
+    }
+    const int middle = (HexagonGrid::GRID_HEIGHT / 2) * HexagonGrid::GRID_WIDTH + HexagonGrid::GRID_WIDTH / 2;
+    if (const auto hex = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(middle))) {
+        return { static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()) };
+    }
+    return {};
+}
+
+bool EditorWidget::placeProtoAtHex(int hexIndex, uint32_t proPid) {
+    Pro* pro = nullptr;
+    try {
+        pro = _resources.loadPro(proPid);
+    } catch (const std::exception& e) {
+        spdlog::warn("EditorWidget::placeProtoAtHex - failed to load PRO {}: {}", proPid, e.what());
+        return false;
+    }
+    if (!pro) {
+        spdlog::warn("EditorWidget::placeProtoAtHex - no PRO data for pid {}", proPid);
+        return false;
+    }
+
+    auto mapObject = std::make_shared<MapObject>();
+    mapObject->position = hexIndex;
+    mapObject->elevation = _session.currentElevation();
+    mapObject->direction = 0;
+    mapObject->frame_number = 0;
+    mapObject->pro_pid = proPid;
+    mapObject->frm_pid = static_cast<uint32_t>(pro->header.FID);
+    mapObject->x = 0;
+    mapObject->y = 0;
+    mapObject->sx = 0;
+    mapObject->sy = 0;
+    mapObject->flags = 0;
+    mapObject->critter_index = -1;
+    mapObject->light_radius = 0;
+    mapObject->light_intensity = 0;
+    mapObject->outline_color = 0;
+    mapObject->map_scripts_pid = -1;
+    mapObject->script_id = -1;
+    mapObject->objects_in_inventory = 0;
+    mapObject->max_inventory_size = 0;
+    mapObject->amount = 1;
+    mapObject->unknown10 = 0;
+    mapObject->unknown11 = 0;
+    mapObject->applyProtoDefaults(*pro); // flags, light and item data, as the engine seeds a new object
+
+    try {
+        std::string frmPath = _resources.frmResolver().resolve(mapObject->frm_pid);
+        auto frm = _resources.repository().find<Frm>(frmPath);
+        if (!frm) {
+            frm = _resources.repository().load<Frm>(frmPath);
+        }
+
+        auto object = std::make_shared<Object>(frm);
+        object->setMapObject(mapObject);
+        if (frm) {
+            sf::Sprite sprite{ _resources.textures().get(frmPath) };
+            object->setSprite(std::move(sprite));
+            object->setDirection(static_cast<Rotation>(mapObject->direction));
+        }
+        if (auto hex = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexIndex)); hex.has_value()) {
+            object->setHexPosition(hex->get());
+        }
+
+        registerObjectPlacement(mapObject, object);
+        return true;
+    } catch (const std::exception& e) {
+        spdlog::warn("EditorWidget::placeProtoAtHex - failed to create visual object at hex {}: {}", hexIndex, e.what());
+        return false;
+    }
+}
+
+bool EditorWidget::placeScrollBlockerAtHex(int hexIndex) {
+    if (!_session.map() || !_session.hexgrid().containsPosition(hexIndex)) {
+        return false;
+    }
+
+    // Don't stack a second scroll blocker on a hex that already has one.
+    if (!scrollBlockersAtHex(hexIndex).empty()) {
+        return false;
+    }
+
+    auto mapObject = createScrollBlockerObject(hexIndex);
+
+    try {
+        std::string frmPath = _resources.frmResolver().resolve(mapObject->frm_pid);
+        auto frm = _resources.repository().find<Frm>(frmPath);
+        if (!frm) {
+            frm = _resources.repository().load<Frm>(frmPath);
+        }
+
+        auto object = std::make_shared<Object>(frm);
+        object->setMapObject(mapObject);
+        if (frm) {
+            sf::Sprite sprite{ _resources.textures().get(frmPath) };
+            object->setSprite(std::move(sprite));
+            object->setDirection(static_cast<Rotation>(mapObject->direction));
+        }
+        if (auto hex = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexIndex)); hex.has_value()) {
+            object->setHexPosition(hex->get());
+        }
+
+        registerObjectPlacement(mapObject, object);
+        return true;
+    } catch (const std::exception& e) {
+        spdlog::warn("EditorWidget::placeScrollBlockerAtHex - failed to create visual object at hex {}: {}", hexIndex, e.what());
+        return false;
+    }
 }
 
 } // namespace geck

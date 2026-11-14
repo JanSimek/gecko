@@ -53,6 +53,22 @@ bool QtDialogs::showQuestion(QWidget* parent, const QString& title, const QStrin
     return msgBox.exec() == QMessageBox::Yes;
 }
 
+QString QtDialogs::openFile(QWidget* parent, const QString& title, const QString& filter) {
+    QString fileName = QFileDialog::getOpenFileName(parent, title, getLastDirectory(), filter);
+    if (!fileName.isEmpty()) {
+        setLastDirectory(QFileInfo(fileName).absolutePath());
+    }
+    return fileName;
+}
+
+QString QtDialogs::selectDirectory(QWidget* parent, const QString& title) {
+    QString dirName = QFileDialog::getExistingDirectory(parent, title, getLastDirectory());
+    if (!dirName.isEmpty()) {
+        setLastDirectory(dirName);
+    }
+    return dirName;
+}
+
 QString QtDialogs::saveFile(QWidget* parent, const QString& title, const QString& filter, const QString& suggestedName) {
     // Seed the dialog with the last directory and, when given, a default file name
     // (e.g. the current map). getLastDirectory() always returns a directory, so the

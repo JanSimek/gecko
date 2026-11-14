@@ -1,0 +1,12 @@
+# FOC's Pip-Boy quest log. tools/questlog.py turns this into data\quests.txt
+# at deploy (FOC ships only its own quests; the base's are all vanilla).
+#
+#   <map>, <line>, <GVAR>, <shown at>, <done at>
+#
+# <map>   a map in mod/ids/maps.txt; the entry is filed under that map's
+#         worldmap area (its name comes from map.msg 1500 + area).
+# <line>  the entry's text in mod/data/text/english/game/quests.msg.
+# <GVAR>  a name from mod/ids/gvars.txt.
+# The entry shows once the variable is at least <shown at> and is struck
+# through once it is at least <done at>. Several entries may share one
+# variable: that is a quest with steps, each line struck as the next appears.

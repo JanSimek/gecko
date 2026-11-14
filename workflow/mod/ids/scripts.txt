@@ -1,0 +1,4 @@
+# FOC script indices. First line = 1600 (FOC_START['script']).
+# Each line is the .int filename as it will appear in scripts.lst.
+# NEVER reorder or delete a line once anything references it.
+# A blank line is a retired slot: it keeps its index so later IDs do not shift.

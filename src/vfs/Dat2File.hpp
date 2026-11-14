@@ -137,7 +137,9 @@ private:
             }
         }
 
-        if (m_datEntry->getCompressed()) {
+        if (m_datEntry->getLzss()) {
+            DatReader::unpackLzss(packed.data(), packed.size(), m_Data.data(), m_Data.size());
+        } else if (m_datEntry->getCompressed()) {
             // A corrupt or truncated archive entry is a real error, not success with partial data.
             m_Data = geck::inflateStream(packed, geck::DeflateContainer::Zlib, m_datEntry->getDecompressedSize());
         }

@@ -67,6 +67,7 @@ bool Object::hasMapObject() const noexcept {
 
 void Object::setMapObject(std::shared_ptr<MapObject> newMapObject) {
     _mapObject = newMapObject;
+    refreshPosition(); // the new object's own pixel offset
 }
 
 void Object::setSprite(sf::Sprite sprite) {
@@ -83,15 +84,36 @@ sf::Sprite& Object::getSprite() noexcept {
 }
 
 void Object::setHexPosition(const Hex& hex) {
-
-    // center on the hex
-    WorldCoords position(
-        static_cast<float>(hex.x() - (width() / 2) + shiftX()),
-        static_cast<float>(hex.y() - height() + shiftY()));
-
-    _sprite.setPosition(position.toVector());
+    _hexX = hex.x();
+    _hexY = hex.y();
+    _hasHex = true;
+    placeSprite();
     if (_mapObject != nullptr) {
         _mapObject->position = hex.position();
+    }
+}
+
+void Object::placeSprite() {
+    // centre on the hex, then add the object's own pixel offset (MapObject x/y, the engine's
+    // obj->x/y), which the engine adds wherever it draws or hit-tests an object
+    // (fallout2-ce object.cc _obj_render_object, objectGetRect) and keeps on load
+    WorldCoords position(
+        static_cast<float>(_hexX - (width() / 2) + shiftX() + offsetX()),
+        static_cast<float>(_hexY - height() + shiftY() + offsetY()));
+    _sprite.setPosition(position.toVector());
+}
+
+int Object::offsetX() const {
+    return _mapObject ? static_cast<int32_t>(_mapObject->x) : 0;
+}
+
+int Object::offsetY() const {
+    return _mapObject ? static_cast<int32_t>(_mapObject->y) : 0;
+}
+
+void Object::refreshPosition() {
+    if (_hasHex) {
+        placeSprite();
     }
 }
 

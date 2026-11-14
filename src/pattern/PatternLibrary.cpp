@@ -13,4 +13,10 @@ QString PatternLibrary::rootDir() {
     return patternsPath;
 }
 
+QString PatternLibrary::customDir() {
+    const QString customPath = QDir(rootDir()).filePath(QStringLiteral("Custom"));
+    QDir().mkpath(customPath);
+    return customPath;
+}
+
 } // namespace geck::pattern

@@ -24,6 +24,8 @@ public:
         const QString& filter = "All Files (*.*)",
         const QString& suggestedName = QString());
     static QString openMapFile(QWidget* parent, const QString& title = "Open Map File");
+    static QString openFile(QWidget* parent, const QString& title, const QString& filter);
+    static QString selectDirectory(QWidget* parent, const QString& title);
 
 private:
     QtDialogs() = delete; // Static utility class

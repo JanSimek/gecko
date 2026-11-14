@@ -26,6 +26,7 @@
 #include <SFML/Window/Event.hpp>
 
 #include "editing/EditorMode.h"
+#include "editor/helper/MapClipboard.h"
 
 QT_BEGIN_NAMESPACE
 class QVBoxLayout;
@@ -61,6 +62,7 @@ class LogModel;
 class CompletenessView;
 class ThumbnailPrewarmer;
 class Map;
+class ModToolsRunner;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -94,6 +96,10 @@ public:
     void raiseTilePalette();
 
     resource::GameResources& resources() const { return *_resourcesShared; }
+
+    // The copy/paste clipboard for map areas. It lives here rather than in an EditorWidget so a copy
+    // survives opening another map and can be pasted into it.
+    MapClipboard& mapClipboard() { return _mapClipboard; }
 
     // Attach the application-wide log record store to the Log panel (the model outlives this
     // window; the in-app spdlog sink feeds it from application startup on).
@@ -147,6 +153,20 @@ private slots:
     /// Help > Keyboard Shortcuts: the Preferences page listing every binding.
     void showKeyboardShortcuts();
     void showAbout();
+
+    // Tools menu: new art through the mod's tools/gecko_assets.py (ui/assets/ModToolsRunner.h).
+    [[nodiscard]] bool modToolsConfigured() const;
+    /// A runner for the configured mod folder, or nullptr after explaining how to set one up.
+    std::unique_ptr<ModToolsRunner> makeModToolsRunner();
+    void showAddSceneryDialog();
+    void showCutBuildingDialog();
+    /// Save the map, start the deploy in its own console (it waits for gecko to exit and opens
+    /// gecko again on the map), and close gecko.
+    void applyNewArt();
+    void onModAssetAction(int action, quint32 pid);
+    void makeMirroredCopy(ModToolsRunner& runner, quint32 pid);
+    void makeResizedCopy(ModToolsRunner& runner, quint32 pid);
+    void editNameAndText(ModToolsRunner& runner, quint32 pid);
     void onPlayGame();
     void showSavePatternDialog();
     void showStampPatternDialog();
@@ -178,6 +198,10 @@ private:
     // Toolbar Fill Brush toggle: on = activate the registered brush with the palette's
     // current tile (reverting the toggle when none is selected), off = back to Select.
     void applyFillBrushTool(bool checked);
+    // Unified Add/Remove Blocker toggle: on = activate whichever of the four registered
+    // blocker tools the dropdown currently has checked (Add/Remove x Wall/Scroll), off = back
+    // to Select. Updates the toolbar button text/icon to match. See setupToolModeActions.
+    void applyBlockerTool(bool checked);
     void syncToolModeActions(EditorMode mode);
     /// Stand down every canvas shortcut whose key the mode handles itself (see InputHandler).
     void syncCanvasShortcutsForMode(EditorMode mode);
@@ -304,6 +328,7 @@ private:
     QMenu* _viewMenu;
     QMenu* _panelsMenu;
     QMenu* _elevationMenu;
+    QMenu* _toolsMenu = nullptr;
     QMenu* _helpMenu;
 
     // Toolbar
@@ -313,6 +338,12 @@ private:
     // sub-mode. Toggling the button on activates the chosen sub-mode; off returns to Select.
     QAction* _exitGridsAction = nullptr;
     QAction* _fillBrushAction = nullptr;
+    // Unified Add/Remove Blocker tool: one checkable toolbar button plus a dropdown that picks
+    // which of the four registered blocker tools (Add/Remove x Wall/Scroll) the button activates.
+    QAction* _blockerAction = nullptr;
+    QMenu* _blockerMenu = nullptr;
+    // Black edge line tool (BlackEdgeTool): checked while it is the active registered tool.
+    QAction* _blackEdgeAction = nullptr;
     QMenu* _exitGridsMenu = nullptr;
     QAction* _rotateAction = nullptr;
     QAction* _fillSelectionAction = nullptr;
@@ -414,6 +445,8 @@ private:
     QAction* _worldMapAction = nullptr;
     QAction* _mergeOutlinesAction;
     QAction* _edgeScrollAction;
+
+    MapClipboard _mapClipboard;
 
     bool _isRunning;
 };

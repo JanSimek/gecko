@@ -25,6 +25,13 @@ void DataFileSystem::clear() {
 
 namespace {
 
+    // ".dat" in any case: Fallout 1 ships MASTER.DAT and CRITTER.DAT.
+    bool isDatArchive(const std::filesystem::path& path) {
+        std::string ext = path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+        return ext == ".dat";
+    }
+
     // Resolves a user-supplied data path to the directory or archive to mount. nullopt when it cannot
     // be used: a macOS .app without a recognised Fallout 2 layout, or an unresolvable path.
     //
@@ -32,7 +39,7 @@ namespace {
     // here is data-relative ("proto/scenery/scenery.lst"), so mounting the root would hide those files
     // under "/data/..." and let the packaged DATs answer in their place.
     std::optional<std::filesystem::path> resolveMountRoot(const std::filesystem::path& path) {
-        if (path.extension() == ".dat") {
+        if (isDatArchive(path)) {
             return path;
         }
         if (auto resolved = util::resolveLooseDataDirectory(path)) {
@@ -78,7 +85,7 @@ void DataFileSystem::addDataPath(const std::filesystem::path& path) {
         // Mount only this directory's loose files; its master.dat/critter.dat are explicit data-path
         // entries of their own (see util::expandDataPaths) rather than silently nested-mounted here.
         fileSystem = std::make_shared<vfspp::NativeFileSystem>("/", mountRoot->string());
-    } else if (mountRoot->extension() == ".dat") {
+    } else if (isDatArchive(*mountRoot)) {
         fileSystem = std::shared_ptr<geck::GeckDat2FileSystem>(new geck::GeckDat2FileSystem("/", mountRoot->string()));
     } else {
         spdlog::error("Unsupported data location: {}", mountRoot->string());
