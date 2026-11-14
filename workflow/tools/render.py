@@ -436,7 +436,7 @@ def main() -> int:
     else:
         if not args.map:
             sys.exit("give a .map, or --art / --sheet")
-        data = inside(args.map).read_bytes()
+        data = inside(args.map).read_bytes()  # NOSONAR - path checked by foclib.paths.inside()
         m = MapFile.parse(data, gi.proto)
         render_map(gi, m, args.elevation, not args.no_objects).save(out)
 

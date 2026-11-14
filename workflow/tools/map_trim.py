@@ -735,7 +735,7 @@ def main() -> int:
     if d.is_file() and d.read_bytes() != raw:
         sys.exit(f"{args.map}: the mod/data and base/mods/foc copies differ (an unsynced gecko save?) - stopping")
     if args.source:
-        raw = inside(args.source).read_bytes()
+        raw = inside(args.source).read_bytes()  # NOSONAR - path checked by foclib.paths.inside()
     gi = GameIndex(pristine=False)
     m = MapFile.parse(raw, gi.proto)
     arrivals = [(s.split("=")[0], int(s.split("=")[1])) for s in args.arrive]

@@ -204,7 +204,7 @@ def render(path, out, box=None, crop=None):
     for d in ["base/master.dat", "base/critter.dat"] + [f"base/mods/{n}" for n in order] + ["base/mods/foc"]:
         if (ROOT / d).exists():
             D += ["--data", str(ROOT / d)]
-    r = subprocess.run([str(_config.gecko_cli()), "map", "render",
+    r = subprocess.run([str(_config.gecko_cli()), "map", "render",  # NOSONAR - paths checked by foclib.paths.inside() and bare_name()
                         "--map", str(path), "--elevation", "0", "--out", str(out), "--max-dim", "2000", "--full"] + D,
                        capture_output=True, text=True)
     import re
@@ -246,8 +246,8 @@ def main() -> int:
             print(r)
         if args.preview:
             d = inside(args.preview)
-            d.mkdir(parents=True, exist_ok=True)
-            (d / f"new_{name}").write_bytes(data)
+            d.mkdir(parents=True, exist_ok=True)  # NOSONAR - path checked by foclib.paths.inside()
+            (d / f"new_{name}").write_bytes(data)  # NOSONAR - path checked by foclib.paths.inside()
             render(AUTH / name, d / f"{Path(name).stem}_before.png", box)
             render(d / f"new_{name}", d / f"{Path(name).stem}_after.png", box)
         else:

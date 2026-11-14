@@ -40,6 +40,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from foclib.paths import inside  # noqa: E402
 from foclib import GameIndex, TYPE_NAME  # noqa: E402
 
 # --------------------------------------------------------------------------- ranges
@@ -223,7 +224,7 @@ def main() -> int:
     ap.add_argument("--base", type=Path, default=None)
     args = ap.parse_args()
 
-    gi = GameIndex(args.base)
+    gi = GameIndex(inside(args.base) if args.base else None)
     problems = check(gi)
 
     if args.check:

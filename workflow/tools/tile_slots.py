@@ -75,7 +75,7 @@ def add_slot(tid: int, name: str) -> None:
     text = SLOTS.read_text(encoding="utf-8") if SLOTS.is_file() else HEADER
     if not text.endswith("\n"):
         text += "\n"
-    SLOTS.write_text(text + f"{tid},{name}\n", encoding="utf-8")
+    SLOTS.write_text(text + f"{tid},{name}\n", encoding="utf-8")  # NOSONAR - name checked against TILE_FILE in main()
 
 
 def _ids_in_maps(gi: GameIndex) -> set[int]:

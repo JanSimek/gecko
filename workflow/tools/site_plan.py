@@ -536,7 +536,7 @@ def main() -> int:
     ap.add_argument("plan")
     args = ap.parse_args()
     p = inside(args.plan)
-    plan = json.loads(p.read_text(encoding="utf-8"))
+    plan = json.loads(p.read_text(encoding="utf-8"))  # NOSONAR - path checked by foclib.paths.inside()
     for b in plan.get("buildings", []):
         place_building(b)
     out = OUT / (p.name.split(".")[0] + ".png")

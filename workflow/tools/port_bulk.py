@@ -156,7 +156,7 @@ def main() -> int:
     if args.log:
         log = inside(args.log)
         log.parent.mkdir(parents=True, exist_ok=True)
-        log.write_text(log_buf.getvalue(), encoding="utf-8")
+        log.write_text(log_buf.getvalue(), encoding="utf-8")  # NOSONAR - path checked by foclib.paths.inside()
         print(f"per-item log: {args.log}")
 
     print("\nRun tools/gen_ids.py, tools/validate.py, then tools/deploy.py next.")

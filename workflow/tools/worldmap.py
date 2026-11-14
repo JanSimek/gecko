@@ -69,6 +69,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from foclib.paths import inside  # noqa: E402
 from foclib import GameIndex  # noqa: E402
 from foclib import config as _config  # noqa: E402
 from ids import FOC_START  # noqa: E402
@@ -793,7 +794,7 @@ def main() -> int:
     ap.add_argument("--base", type=Path, default=None)
     args = ap.parse_args()
 
-    gi = GameIndex(args.base)
+    gi = GameIndex(inside(args.base) if args.base else None)
     registry = read_maps_registry()
     problems = check(gi, registry)
 

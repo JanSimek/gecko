@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lists  # noqa: E402
 import questlog  # noqa: E402
 import worldmap  # noqa: E402
+from foclib.paths import inside  # noqa: E402
 from foclib import FOC_LAYER, GameIndex, TYPE_NAME  # noqa: E402
 from gen_ids import read_registry  # noqa: E402
 from ids import ART_KEY, PROTO_KEY  # noqa: E402
@@ -210,7 +211,7 @@ def main() -> int:
     ap.add_argument("--base", type=Path, default=None)
     args = ap.parse_args()
 
-    gi = GameIndex(args.base)          # pristine: the baseline our IDs sit on
+    gi = GameIndex(inside(args.base) if args.base else None)          # pristine: the baseline our IDs sit on
     data = gi.base / "mods" / FOC_LAYER
 
     # Before anything else touches the deployed tree: pull forward any map gecko
